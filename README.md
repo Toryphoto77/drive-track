@@ -10,7 +10,7 @@
 
 ## 版本
 
-当前：1.1.1（versionCode 23），包名 `com.chixi.drive_track`，arm64。
+当前：1.1.3（versionCode 25），包名 `com.chixi.drive_track`，arm64。
 
 ## 在线更新
 

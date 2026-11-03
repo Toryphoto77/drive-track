@@ -53,4 +53,19 @@ void main() {
     expect(AppIconChoice.assetFor(AppIconChoice.red),
         isNot(AppIconChoice.assetFor(AppIconChoice.blue)));
   });
+
+  test('v1.1.3 app icon choice: rb17 and valkyrie keys valid, distinct assets/labels', () {
+    expect(AppIconChoice.isValid('rb17'), isTrue);
+    expect(AppIconChoice.isValid('valkyrie'), isTrue);
+    expect(AppIconChoice.normalize('rb17'), 'rb17');
+    expect(AppIconChoice.normalize('valkyrie'), 'valkyrie');
+    expect(AppIconChoice.assetFor('rb17'), 'assets/app_icon_rb17.png');
+    expect(AppIconChoice.assetFor('valkyrie'), 'assets/app_icon_valkyrie.png');
+    expect(AppIconChoice.labelFor('rb17'), 'RB17');
+    expect(AppIconChoice.labelFor('valkyrie'), '女武神');
+    expect(AppIconChoice.assetFor('rb17'),
+        isNot(AppIconChoice.assetFor('valkyrie')));
+    expect(AppIconChoice.assetFor('rb17'),
+        isNot(AppIconChoice.assetFor(AppIconChoice.red)));
+  });
 }

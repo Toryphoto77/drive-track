@@ -73,6 +73,33 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
+        <!-- v1.1.3 新增图标：RB17 / 女武神，默认禁用，切换走 setAppIcon。 -->
+        <activity-alias
+            android:name=".LauncherRb17"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_rb17"
+            android:roundIcon="@mipmap/ic_launcher_rb17"
+            android:label="驰迹"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LauncherValkyrie"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_valkyrie"
+            android:roundIcon="@mipmap/ic_launcher_valkyrie"
+            android:label="驰迹"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
         <service
             android:name=".TrackService"
             android:foregroundServiceType="location"
