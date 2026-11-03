@@ -199,8 +199,10 @@ class _BigActionButtonsState extends State<BigActionButtons>
     final accent = Theme.of(context).colorScheme.primary;
     final (calBg, calBorder) = switch (widget.calibrationState) {
       // 未标定：深色默认态（不是主题色，避免与开始记录混淆）。
+      // v1.0.9 方案 A：底色与导航栏一致的 #2A2A2A、边框白 14%，
+      // 与导航炭灰玻璃同风格；圆角/高度/禁用变暗逻辑不动。
       CalibrationButtonState.uncalibrated =>
-        (const Color(0xFF161B26), Colors.white24),
+        (const Color(0xFF2A2A2A), Colors.white.withValues(alpha: 0.14)),
       // 标定中：琥珀色底 + 脉动（脉动幅度由 _pulse 在内容层做，
       // 底色本身保持琥珀，避免整块闪烁刺眼）。
       CalibrationButtonState.calibrating =>

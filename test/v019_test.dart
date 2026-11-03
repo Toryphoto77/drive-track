@@ -5,15 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('v1.0.4 nav alignment: mode row stays 192, pill nav is one notch smaller at 176', () {
+  test('v1.0.9 nav alignment: mode row stays 192, pill nav is 216x56', () {
     // v0.1.10 模式行 192（图标 36 + 每项左右 margin 14，节距 64），
     // 整行在屏幕内居中，不再撑满屏宽减 32。
-    // v1.0.4 导航栏与模式行解耦、小一档：176x52（任务明确要求，
-    // 不再同长，旧“同宽”断言同步改为新规格）。
+    // v1.0.9 方案 A 导航栏与模式行解耦、加宽：216x56（旧 176x52
+    // 已作废，断言同步改为新规格）。
     expect(kModeRowWidth, 192.0);
-    expect(kPillNavWidth, 176.0);
+    expect(kPillNavWidth, 216.0);
     expect(kModeRowItemPitch, 64.0);
-    expect(kPillNavHeight, 52.0);
+    expect(kPillNavHeight, 56.0);
     for (final w in [320.0, 360.0, 390.0, 412.0, 768.0]) {
       final centers = tripleCenters(w);
       expect(centers.length, 3);

@@ -1404,8 +1404,8 @@ class _HomePageState extends State<HomePage>
       // 只给大方块外层 Padding 加底部留白，不把主框架 Positioned.fill
       // 的底部 padding 加回去，不动滚动页（我的页/记录页仍从药丸下方
       // 划过、透过毛玻璃可见）。
-      // 底部留白 = 药丸高 52 + 药丸底部 12 + 系统底部 inset + 间隙 12
-      //          = 76 + MediaQuery.of(context).padding.bottom（实时算，
+      // 底部留白 = 药丸高 56 + 药丸底部 12 + 系统底部 inset + 间隙 12
+      //          = 80 + MediaQuery.of(context).padding.bottom（实时算，
       //            不写死固定数）；大方块本身 128 高、圆角、内容、逻辑不动。
       Padding(
         padding: EdgeInsets.fromLTRB(16, 4, 16, kPillNavHeight + 12 + MediaQuery.of(context).padding.bottom + 12),
@@ -1996,68 +1996,103 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildIdleHome() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        // v0.1.2：天气条与标定已移到上方正常流（见 _buildModePages），
-        // 首页滚动区不再放天气按钮、大标定卡、演示入口。
-        const SizedBox(height: 12),
-        Center(child: Text('本次实时：${(rec.curSpeed * 3.6).toStringAsFixed(0)} km/h · G ${rec.curLongG.toStringAsFixed(2)} / ${rec.curLatG.toStringAsFixed(2)}',
-            style: const TextStyle(color: Colors.white70))),
-        // v1.0.0：两颗药丸同宽 kTogglePillWidth = 280（见 satellite_pill.dart），
-        // 之间 SizedBox 高 10；开关逻辑与默认值不动。
-        // （CompactTogglePill：视觉高 32 / 字 14 / 整行可点区 44），
-        // 两颗药丸上下排在同一区域、同一 Column 内居中对齐；只改
-        // 开关组件与布局，视频录制逻辑（videoEnabled → _beginRecording
-        // 的相机/录像流程）原封不动，默认仍关闭。
-        if (rec.mode != TripMode.bike)
-          Center(
-            child: CompactTogglePill(
-              icon: Icons.videocam,
-              label: '同步视频记录',
-              value: videoEnabled,
-              onChanged: (v) => setState(() => videoEnabled = v),
-            ),
-          ),
-        // v1.0.0：两颗药丸之间明确间距 10（框线/阴影只在各自药丸
-        // 容器内，不再视觉挤在一起）；骑行模式无视频药丸时此间距
-        // 不出现，卫星药丸直接接在实时行下方。
-        if (rec.mode != TripMode.bike) const SizedBox(height: 10),
-        if (videoEnabled && rec.mode != TripMode.bike)
-          const Center(child: Text('同步视频：已开启（开始后以后置摄像头录像）', style: TextStyle(color: Colors.white54, fontSize: 12))),
-        if (videoError != null)
-          Center(child: Text('视频提示：$videoError', style: const TextStyle(color: Colors.orange, fontSize: 12))),
-        // v0.1.5：开始前快速开关改成与定位子页同款紧凑 pill
-        // （视觉高 32 / 字 14 / 整行可点区 44）。AnimatedBuilder 跟随
-        // SatelliteService，卫星数实时更新；暂无快照时显示“—”，不编数。
+    // v1.0.8：两颗药丸下移到本页屏幕中间。做法不是固定大间距
+    // （小屏会溢出、大屏仍偏上），而是三段式真居中：
+    // 本页是 PageView 里 Expanded 的一页、高度有界，LayoutBuilder
+    // 拿到该页高度后，SingleChildScrollView 内用 ConstrainedBox
+    //（minHeight = 页高 − 纵向 padding 8+24）把 Column 撑满整页，
+    // Column 用 spaceBetween 在“实时行 / 药丸组 / 底部组”三段间
+    // 均分剩余空间：顶部组约 32 高、底部组汽车/摩托约 20 高，
+    // 药丸组中心因此只比页中心低约 6px，上下留白大致均衡；
+    // 骑行模式底部组多了传感器按钮，偏移仍在 20px 内。
+    // 内容高于一页时 ConstrainedBox 不再撑高、Column 自然变长，
+    // 仍可滚动，不溢出。药丸顺序、间距、开关逻辑、默认值、
+    // 骑行隐藏视频药丸、提示文案、卫星实时数、切换失败提示全不动。
+    final topGroup = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      // v0.1.2：天气条与标定已移到上方正常流（见 _buildModePages），
+      // 首页滚动区不再放天气按钮、大标定卡、演示入口。
+      const SizedBox(height: 12),
+      Center(child: Text('本次实时：${(rec.curSpeed * 3.6).toStringAsFixed(0)} km/h · G ${rec.curLongG.toStringAsFixed(2)} / ${rec.curLatG.toStringAsFixed(2)}',
+          style: const TextStyle(color: Colors.white70))),
+    ]);
+    // v1.0.0：两颗药丸同宽 kTogglePillWidth = 280（见 satellite_pill.dart），
+    // 之间 SizedBox 高 10；开关逻辑与默认值不动。
+    // （CompactTogglePill：视觉高 32 / 字 14 / 整行可点区 44），
+    // 两颗药丸上下排在同一区域、同一 Column 内居中对齐；只改
+    // 开关组件与布局，视频录制逻辑（videoEnabled → _beginRecording
+    // 的相机/录像流程）原封不动，默认仍关闭。
+    final pillsGroup = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (rec.mode != TripMode.bike)
         Center(
-          child: AnimatedBuilder(
-            animation: SatelliteService.instance,
-            builder: (_, __) {
-              final svc = SatelliteService.instance;
-              return CompactSatellitePill(
-                value: appPrefs.directSatellite,
-                satelliteCount: svc.latest == null ? null : svc.visibleCount,
-                onChanged: (v) async {
-                  final r = await SatelliteService.instance.setDirectMode(v);
-                  if ((r['ok'] as bool?) == true) {
-                    await appPrefs.setDirectSatellite(v);
-                    if (mounted) setState(() {});
-                  } else if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('直连卫星切换失败：${r['error'] ?? '请先授予定位权限'}')));
-                  }
-                },
-              );
-            },
+          child: CompactTogglePill(
+            icon: Icons.videocam,
+            label: '同步视频记录',
+            value: videoEnabled,
+            onChanged: (v) => setState(() => videoEnabled = v),
           ),
         ),
-        const SizedBox(height: 20),
-        if (rec.mode == TripMode.bike)
-          OutlinedButton.icon(icon: const Icon(Icons.bluetooth), label: const Text('骑行传感器'), onPressed: _showSensors),
-        if (rec.bleBatteryNote != null)
-          Text(rec.bleBatteryNote!, style: const TextStyle(color: Colors.orange, fontSize: 12)),
-      ]),
-    );
+      // v1.0.0：两颗药丸之间明确间距 10（框线/阴影只在各自药丸
+      // 容器内，不再视觉挤在一起）；骑行模式无视频药丸时此间距
+      // 不出现，卫星药丸直接接在实时行下方。
+      if (rec.mode != TripMode.bike) const SizedBox(height: 10),
+      if (videoEnabled && rec.mode != TripMode.bike)
+        const Center(child: Text('同步视频：已开启（开始后以后置摄像头录像）', style: TextStyle(color: Colors.white54, fontSize: 12))),
+      if (videoError != null)
+        Center(child: Text('视频提示：$videoError', style: const TextStyle(color: Colors.orange, fontSize: 12))),
+      // v0.1.5：开始前快速开关改成与定位子页同款紧凑 pill
+      // （视觉高 32 / 字 14 / 整行可点区 44）。AnimatedBuilder 跟随
+      // SatelliteService，卫星数实时更新；暂无快照时显示“—”，不编数。
+      Center(
+        child: AnimatedBuilder(
+          animation: SatelliteService.instance,
+          builder: (_, __) {
+            final svc = SatelliteService.instance;
+            return CompactSatellitePill(
+              value: appPrefs.directSatellite,
+              satelliteCount: svc.latest == null ? null : svc.visibleCount,
+              onChanged: (v) async {
+                final r = await SatelliteService.instance.setDirectMode(v);
+                if ((r['ok'] as bool?) == true) {
+                  await appPrefs.setDirectSatellite(v);
+                  if (mounted) setState(() {});
+                } else if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('直连卫星切换失败：${r['error'] ?? '请先授予定位权限'}')));
+                }
+              },
+            );
+          },
+        ),
+      ),
+    ]);
+    final bottomGroup = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const SizedBox(height: 20),
+      if (rec.mode == TripMode.bike)
+        OutlinedButton.icon(icon: const Icon(Icons.bluetooth), label: const Text('骑行传感器'), onPressed: _showSensors),
+      if (rec.bleBatteryNote != null)
+        Text(rec.bleBatteryNote!, style: const TextStyle(color: Colors.orange, fontSize: 12)),
+    ]);
+    return LayoutBuilder(builder: (context, constraints) {
+      final centered = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [topGroup, pillsGroup, bottomGroup],
+      );
+      // PageView 约束有界时才做撑满居中；无界时退回普通滚动列，
+      // 避免 Expanded/撑满约束在无界高度下报错。
+      if (!constraints.maxHeight.isFinite) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: centered,
+        );
+      }
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
+          child: centered,
+        ),
+      );
+    });
   }
 
   Widget _buildRecording() {

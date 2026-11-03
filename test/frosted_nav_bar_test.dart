@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('v1.0.5 frosted nav: 176x52, tap switches, icons only, no scale animation widgets, no SafeArea inside pill', (tester) async {
-    expect(kPillNavWidth, 176.0);
-    expect(kPillNavHeight, 52.0);
+  testWidgets('v1.0.9 frosted nav: 216x56, tap switches, icons only, no scale animation widgets, no SafeArea inside pill', (tester) async {
+    expect(kPillNavWidth, 216.0);
+    expect(kPillNavHeight, 56.0);
     var selected = 0;
     await tester.pumpWidget(
       MaterialApp(
@@ -23,7 +23,7 @@ void main() {
         ),
       ),
     );
-    // 176 宽药丸存在、三个图标都在、只留图标无文字。
+    // 216 宽药丸存在、三个图标都在、只留图标无文字。
     expect(find.byType(FrostedGlassNavBar), findsOneWidget);
     // v1.0.5：药丸内不再用 SafeArea垫空底色区，底部位置由调用方 Positioned 直接算。
     expect(find.byType(SafeArea), findsNothing);

@@ -1,9 +1,16 @@
-/// v1.0.5 毛玻璃底部导航栏：改回最初版药丸毛玻璃，无液态玻璃动画。
+/// v1.0.9 方案 A 深色炭灰玻璃底部导航栏（v1.0.8 白色玻璃的问题：
+/// 白药丸在 #121212 深色底上像一张贴纸，白边 0.40 过硬，透过的
+/// 内容还会跟深色图标打架；176 宽塞 3 图标也显挤）。
 ///
 /// 规格：
-/// - 独立悬浮药丸：176px 宽、52px 高、全圆角；
-/// - BackdropFilter 高斯模糊 28 + 半透明深色渐变（顶部 0.45、底部 0.35）
-///   + 细亮边框（透明度 0.18、宽 1px）与顶部高光；
+/// - 独立悬浮药丸：216px 宽、56px 高、全圆角（圆角 = 高 / 2）；
+/// - BackdropFilter 高斯模糊 28 + 深色炭灰渐变（#2A2A2A，顶部
+///   alpha 0.68、底部 alpha 0.62，约 0.65——比 #121212 背景亮一档，
+///   是深色玻璃，不是白玻璃也不是纯黑块）+ 白色细边框
+///   （透明度 0.14、宽 1px）与弱化顶部高光；
+/// - 图标随玻璃改色：未选中白色 70%（深色玻璃上可读，v1.0.8 的
+///   黑 87% 已删——在深色玻璃上看不见），选中主题色法拉利红，
+///   选中圆底主题色 22% + 主题色光晕；
 /// - 绝无液态玻璃行为：无滚动放大、无切换拉伸、无选中放大；
 /// - 图标只留图标无文字；悬浮位置由调用方 Positioned 直接定
 ///   （底部 12px + 系统底部 inset），本组件内不再用 SafeArea，
@@ -57,32 +64,33 @@ class FrostedGlassNavBar extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          const Color(0xFF1A1A1A).withValues(alpha: 0.45),
-                          const Color(0xFF121212).withValues(alpha: 0.35),
+                          const Color(0xFF2A2A2A).withValues(alpha: 0.68),
+                          const Color(0xFF2A2A2A).withValues(alpha: 0.62),
                         ],
                       ),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.18),
+                        color: Colors.white.withValues(alpha: 0.14),
                         width: 1,
                       ),
                     ),
                   ),
                 ),
-                // 顶部高光：上沿一道微亮渐变，玻璃感更明显（静态装饰，无动画）。
+                // 顶部高光：弱化到与深色玻璃协调（v1.0.8 的 0x33 过亮
+                // 显硬边，改 0x14），静态装饰，无动画。
                 Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.center,
                       colors: [
-                        Color(0x33FFFFFF),
+                        Color(0x14FFFFFF),
                         Color(0x00FFFFFF),
                       ],
                     ),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
                       for (var i = 0; i < _tabs.length; i++)

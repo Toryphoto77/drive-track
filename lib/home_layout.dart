@@ -20,12 +20,13 @@ const double kModeRowItemPitch = 64.0;
 /// 模式切换行宽度 = 底部导航栏宽度（v0.1.10 两行同长）。
 const double kModeRowWidth = 3 * kModeRowItemPitch; // 192.0
 
-/// v1.0.4：底部导航栏比模式行小一档（与模式行解耦，不再同长）。
-/// 底部导航栏宽度 176、高度 52；模式行仍为 192（不动）。
-const double kPillNavWidth = 176.0;
+/// v1.0.9 方案 A：底部导航栏加宽到 216×56（与模式行解耦，不再同长；
+/// v1.0.4 的 176×52 已作废）。模式行仍为 192（不动）。
+/// 216 宽 / 3 图标 = 每项 72 节距，图标不再挤在一起。
+const double kPillNavWidth = 216.0;
 
-/// 底部导航栏药丸高度 52：IconButton 48 + 上下 padding 2 × 2。
-const double kPillNavHeight = 52.0;
+/// 底部导航栏药丸高度 56：图标可点区 48 + 上下 padding 4 × 2。
+const double kPillNavHeight = 56.0;
 
 /// 三颗按钮的中心点 x（相对屏幕左边缘），行本身在屏幕内居中。
 List<double> tripleCenters(double width) {
