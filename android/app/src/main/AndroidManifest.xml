@@ -42,7 +42,7 @@
              v1.0.4 起 application 图标本身也改为红赛车（此前为旧转速表
              ic_launcher，导致应用信息/部分启动器仍显示旧图）；旧转速表
              资源文件仅作未引用回落保留，不再被任何启动路径引用。
-             灰仪表默认禁用；切换走 PackageManager.setComponentEnabledSetting
+             蓝仪表默认禁用；切换走 PackageManager.setComponentEnabledSetting
              + DONT_KILL_APP（见 MainActivity 的 setAppIcon）。旧转速表
              资源文件仅作未引用回落保留，不在切换列表里。
              升级注意：旧版桌面入口指向主 Activity，
@@ -61,11 +61,11 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".LauncherGray"
+            android:name=".LauncherBlue"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_gray"
-            android:roundIcon="@mipmap/ic_launcher_gray"
+            android:icon="@mipmap/ic_launcher_blue"
+            android:roundIcon="@mipmap/ic_launcher_blue"
             android:label="驰迹"
             android:targetActivity=".MainActivity">
             <intent-filter>

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'track_catalog.dart';
+import 'card_style.dart';
+import 'track_guide.dart';
 import 'track_widgets.dart';
 
 /// 赛道图鉴（v1.0.2：第 9 项，由赛道目录扩充而来）。
@@ -450,20 +452,39 @@ class _TrackEncyclopediaPageState extends State<TrackEncyclopediaPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     final list = _filtered;
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(title: const Text('赛道图鉴')),
+      backgroundColor: const Color(0xFF121212),
+      appBar: AppBar(
+        title: const Text('赛道图鉴'),
+        backgroundColor: const Color(0xFF121212),
+      ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: TextField(
               controller: _searchCtrl,
-              decoration: const InputDecoration(
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
                 hintText: '搜索赛道名 / 位置',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+                hintStyle: const TextStyle(color: Colors.white38),
+                prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                filled: true,
+                fillColor: const Color(0xFF1E1E1E),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.14),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.14),
+                  ),
+                ),
               ),
               onChanged: (v) => setState(() => _query = v),
             ),
@@ -472,12 +493,15 @@ class _TrackEncyclopediaPageState extends State<TrackEncyclopediaPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                const Text('国家/地区', style: TextStyle(fontSize: 13)),
+                const Text('国家/地区',
+                    style: TextStyle(fontSize: 13, color: Colors.white70)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButton<String>(
                     value: _region,
                     isExpanded: true,
+                    dropdownColor: const Color(0xFF1E1E1E),
+                    style: const TextStyle(color: Colors.white),
                     items: [
                       for (final r in _regions)
                         DropdownMenuItem(value: r, child: Text(r)),
@@ -499,6 +523,10 @@ class _TrackEncyclopediaPageState extends State<TrackEncyclopediaPage> {
                     child: ChoiceChip(
                       label: Text(e),
                       selected: _event == e,
+                      selectedColor: accent.withValues(alpha: 0.25),
+                      labelStyle: TextStyle(
+                        color: _event == e ? accent : Colors.white70,
+                      ),
                       onSelected: (_) => setState(() => _event = e),
                     ),
                   ),
@@ -510,8 +538,7 @@ class _TrackEncyclopediaPageState extends State<TrackEncyclopediaPage> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '共 ${encyclopediaTracks.length} 条（目录 14 条 + 新增 7 条），'
-                '当前显示 ${list.length} 条',
+                '共 ${encyclopediaTracks.length} 条，当前显示 ${list.length} 条',
                 style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ),
@@ -528,72 +555,113 @@ class _TrackEncyclopediaPageState extends State<TrackEncyclopediaPage> {
     );
   }
 
-  Widget _card(EncyclopediaTrack t) {
+  Widget _thumbnail(EncyclopediaTrack t) {
+    final osm = trackOsmOutlines[t.id];
     final catalog = t.catalog;
-    return Card(
+    if (osm != null) {
+      return SizedBox(
+        width: 88,
+        height: 60,
+        child: OutlineDiagram(outline: osm, height: 60),
+      );
+    }
+    if (catalog != null && t.hasOutline) {
+      return SizedBox(
+        width: 88,
+        height: 60,
+        child: TrackSchematicDiagram(
+          track: catalog,
+          height: 60,
+          showCaption: false,
+        ),
+      );
+    }
+    return Container(
+      width: 88,
+      height: 60,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: const Center(
+        child: Text('轮廓待补',
+            style: TextStyle(color: Colors.white54, fontSize: 12)),
+      ),
+    );
+  }
+
+  Widget _card(EncyclopediaTrack t) {
+    return DriveTrackCard(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(t.nameCn,
-                style:
-                    const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(t.nameEn, style: const TextStyle(color: Colors.white54)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TrackDetailPage(
+              track: t,
+              onSelectCatalogTrack: widget.onSelectCatalogTrack,
+            ),
+          ),
+        );
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _thumbnail(t),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Chip(label: Text(t.location)),
-                Chip(label: Text(t.lengthLabel)),
-                Chip(label: Text(t.cornerLabel)),
+                Text(t.nameCn,
+                    style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+                const SizedBox(height: 2),
+                Text(t.nameEn,
+                    style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    _miniChip(t.location),
+                    _miniChip(t.lengthLabel),
+                    _miniChip(t.cornerLabel),
+                  ],
+                ),
+                if (t.eventTags.isNotEmpty && t.eventTags.first != '待核')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      t.eventTags.join(' · '),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('历史：${t.history}'),
-            const SizedBox(height: 4),
-            Text('赛事：${t.events}'),
-            const SizedBox(height: 4),
-            Text('来源：${t.source}',
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            const SizedBox(height: 12),
-            if (catalog != null && t.hasOutline)
-              TrackSchematicDiagram(track: catalog, height: 110)
-            else
-              Container(
-                height: 110,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0A0A0A),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF2A2A2A)),
-                ),
-                child: const Center(
-                  child: Text('轮廓待补',
-                      style: TextStyle(color: Colors.white54, fontSize: 14)),
-                ),
-              ),
-            if (catalog != null && t.hasOutline)
-              const SizedBox(height: 4),
-            if (catalog == null)
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text('未按公开布局重绘，暂不展示示意图，以免编造轮廓。',
-                    style: TextStyle(color: Colors.white38, fontSize: 11)),
-              ),
-            if (catalog != null && widget.onSelectCatalogTrack != null)
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => widget.onSelectCatalogTrack!(catalog),
-                  child: const Text('选为本次赛道'),
-                ),
-              ),
-          ],
-        ),
+          ),
+          const Icon(Icons.chevron_right, color: Colors.white38),
+        ],
       ),
+    );
+  }
+
+  Widget _miniChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Text(label,
+          style: const TextStyle(color: Colors.white, fontSize: 12)),
     );
   }
 }

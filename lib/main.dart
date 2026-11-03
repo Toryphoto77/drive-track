@@ -101,7 +101,7 @@ class AppPrefs extends ChangeNotifier {
   // 记录地图 3D 透视（默认开启，关闭为 2D 俯视示意，存 profile.json）。
   bool keepScreenOn = true;
   bool recordingMap3d = true;
-  // v1.0.3：可切换启动图标（profile.json 'appIcon'，'red' 默认 / 'gray'）。
+  // v1.0.3：可切换启动图标（profile.json 'appIcon'，'red' 默认 / 'blue'）。
   String appIcon = 'red';
   // v1.0.7：安全守则“今日内不再弹出”（按日期 + 模式 + 街道/赛道记，
   // 只存本机 profile.json，不上传）。
@@ -1240,8 +1240,21 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildMenuPanel() {
-    // 菜单在 Scaffold 外，需自带 Material 祖先，否则 ListTile 报错。
-    return Material(
+    // v1.1.0 菜单底部描述溢出根因与修法：
+    // 根因：面板在 Stack 里没有宽度约束，ListView 把面板撑到全屏宽，
+    // 副标题按全屏宽排版成单行；但主界面只右移 280px，面板实际只露
+    // 左边 280px 一条，底部较长的副标题（如性能测试、设备管理）在主
+    // 界面边缘被硬裁，看起来就是“底部描述超出显示范围”。不是底部
+    // inset 或药丸遮挡：SafeArea 已处理系统 inset，药丸随主界面右移、
+    // 并不压在菜单上；也不是 ListTile 本身不换行——它在 280px 内会换行，
+    // 只是之前从没拿到过 280px 的约束。
+    // 修法：面板定宽 280（与主界面右移量 menuW 一致），副标题在 280px
+    // 内自动换行，列表本身已是 ListView（可滚动），小屏与大字体下
+    // 最后一项也可滚出来，不再被裁切。
+    const menuW = 280.0;
+    return SizedBox(
+      width: menuW,
+      child: Material(
       color: const Color(0xFF0B0E13),
       child: Container(
       child: SafeArea(
@@ -1282,6 +1295,7 @@ class _HomePageState extends State<HomePage>
             ]),
           ),
         ]),
+      ),
       ),
       ),
     );

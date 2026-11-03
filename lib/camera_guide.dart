@@ -4,10 +4,11 @@ import 'package:flutter/services.dart';
 /// Insta360 与 DJI 的向导式连接说明数据与页面。
 ///
 /// 铁律：本页绝不显示假的已连接状态。
-/// - Insta360 / DJI 目前没有品牌官方 SDK 接入本 App，也没有原生层
-///   WiFi 检测方法（现有 MainActivity.kt 没有 getConnectedWifiSsid
-///   之类的方法），所以“已连接”只能以品牌 App 内显示与系统 Wi-Fi
-///   实际连接为准，本页只给向导步骤，不宣称本 App 已连上相机。
+/// - Insta360 / DJI 目前没有品牌官方 SDK 接入本 App；原生层已有
+///   getConnectedWifiSsid（返回当前系统 Wi-Fi SSID），向导页的检测按钮
+///   实际调用它。但它只证明手机连了某个 Wi-Fi，不证明连的是相机热点、
+///   更不证明品牌 App 已连上相机，所以“已连接”仍只能以品牌 App 内显示
+///   与系统 Wi-Fi 实际连接为准，本页只给向导步骤，不宣称本 App 已连上相机。
 /// - 页面顶部的 Beta 横幅与状态行必须保留；删掉它们就等于在造假连接。
 
 enum CameraGuideBrand { insta360, dji }
@@ -108,8 +109,8 @@ class CameraGuidePage extends StatefulWidget {
 class _CameraGuidePageState extends State<CameraGuidePage> {
   String? _detectNote;
 
-  /// 尝试实际检测当前 Wi-Fi。原生层目前没有对应方法，
-  /// 必然走到 catch 分支，界面如实显示“暂不可用”，绝不假装测到了。
+  /// 尝试实际检测当前 Wi-Fi：调用原生层已有的 getConnectedWifiSsid，
+  /// 返回当前系统 SSID 或 null；失败时如实显示检测失败，不假装测到了。
   Future<void> _tryDetectWifi() async {
     setState(() => _detectNote = '正在检测…');
     try {
@@ -121,11 +122,11 @@ class _CameraGuidePageState extends State<CameraGuidePage> {
             : '当前 Wi-Fi：$ssid（仅为系统当前连接，不代表本 App 已连接相机，请以品牌 App 显示为准。）';
       });
     } on MissingPluginException {
-      setState(() => _detectNote = '该设备连接需原生支持，暂不可用：原生层暂无 Wi-Fi 检测方法，请按下方步骤手动确认。');
+      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接，仍以品牌 App 显示为准。');
     } on PlatformException {
-      setState(() => _detectNote = '该设备连接需原生支持，暂不可用：原生层暂无 Wi-Fi 检测方法，请按下方步骤手动确认。');
+      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接，仍以品牌 App 显示为准。');
     } catch (_) {
-      setState(() => _detectNote = '该设备连接需原生支持，暂不可用：原生层暂无 Wi-Fi 检测方法，请按下方步骤手动确认。');
+      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接，仍以品牌 App 显示为准。');
     }
   }
 

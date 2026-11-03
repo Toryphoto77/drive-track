@@ -37,7 +37,7 @@ class AboutPage extends StatefulWidget {
   final String displayFont;
   final UpdateConfig updateConfig;
 
-  /// v1.0.3：当前启动图标选择（'red' 默认 / 'gray'），顶部大卡的
+  /// v1.0.3：当前启动图标选择（'red' 默认 / 'blue'），顶部大卡的
   /// 图标与“图标”行与桌面 alias 同步，不再固定显示旧转速表图。
   final String appIconKey;
 

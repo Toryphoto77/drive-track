@@ -343,7 +343,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     "getFilesDir" -> result.success(filesDir.absolutePath)
                     // v1.0.3：切换桌面启动图标 alias。Manifest 里主 Activity
                     // 不带 LAUNCHER 过滤器，两个 alias（LauncherRed 默认
-                    // 启用、LauncherGray 默认禁用）各带 LAUNCHER 过滤器
+                    // 启用、LauncherBlue 默认禁用）各带 LAUNCHER 过滤器
                     // 与对应图标；此处启用选中 alias、禁用另一个。
                     // DONT_KILL_APP：切换瞬间不杀 App、不丢数据，桌面
                     // 图标由启动器在刷新后变化（部分厂商 ROM 有延迟，
@@ -353,8 +353,8 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                         try {
                             val pm = packageManager
                             val redAlias = ComponentName(this, "com.chixi.drive_track.LauncherRed")
-                            val grayAlias = ComponentName(this, "com.chixi.drive_track.LauncherGray")
-                            val (enable, disable) = if (icon == "gray") grayAlias to redAlias else redAlias to grayAlias
+                            val blueAlias = ComponentName(this, "com.chixi.drive_track.LauncherBlue")
+                            val (enable, disable) = if (icon == "blue") blueAlias to redAlias else redAlias to blueAlias
                             pm.setComponentEnabledSetting(enable, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
                             pm.setComponentEnabledSetting(disable, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
                             result.success(true)

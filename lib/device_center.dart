@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'blediy_gps.dart';
 import 'camera_guide.dart';
@@ -531,10 +530,12 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
                                 : Colors.orangeAccent,
                             fontSize: 12,
                             fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(p.note,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 12)),
+                    if (p.kind == _kind) ...[
+                      const SizedBox(height: 4),
+                      Text(p.note,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 12)),
+                    ],
                   ],
                 ),
               ),
@@ -700,6 +701,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
 
   DeviceLinkStatus _goproStatus = DeviceLinkStatus.disconnected;
   int? _goproBattery; // 仅当原生层未来回传电量事件时才有值，否则始终为 null。
+  bool _goproScanning = false;
 
   StreamSubscription<Map<String, dynamic>>? _devSub;
   StreamSubscription<Map<String, dynamic>>? _dataSub;
@@ -738,6 +740,15 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             _statusByAddress[k] = DeviceLinkStatus.disconnected;
           }
           _gpsFeed.reset();
+        } else if (type == 'bleNotification') {
+          // GoPro 响应特征 GP-0073：原生层通用通知原样转发，Dart 侧按
+          // 特征 UUID 分发；收到响应才算 GoPro 链路通，之前只算“已下发查询”。
+          final cu = (e['characteristicUuid'] ?? '').toString().toLowerCase();
+          if (cu.contains('0073')) {
+            _goproStatus = DeviceLinkStatus.connected;
+            _notice = 'GoPro 已响应 Get Version 查询（GP-0073）：Open GoPro '
+                '链路通。快门等控制命令仍须在相机实际响应后核对，不先宣称可用。';
+          }
         } else if (type == 'battery' && addr.isNotEmpty) {
           // 原生层目前的 battery 事件不带 address（见 MainActivity），
           // 这里只在带 address 时记录；不带 address 时不乱贴到某台设备。
@@ -803,7 +814,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       await Native.setBleAutoReconnect(true);
       await Native.connectBle(addr);
       setState(() => _notice = '正在连接“${device.name}”…结果以蓝牙事件为准；'
-          '若是 UART 类设备，数据订阅仍需原生支持（见下方说明）。');
+          'UART 类设备重连后仍需在外接 GPS 区订阅 NMEA 特征。');
     } catch (e) {
       setState(() {
         _statusByAddress[addr] = DeviceLinkStatus.disconnected;
@@ -812,47 +823,79 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     }
   }
 
-  /// GoPro 连接：尝试调用原生层应有、但目前没有的通用写特征方法。
-  /// 现有 MainActivity.kt 的 MethodChannel 只有 connectBle 等固定方法，
-  /// 没有 writeBleCharacteristic，因此必然走到 catch 分支，界面如实显示
-  /// “该设备连接需原生支持，暂不可用”，绝不假装已连接。
-  /// 注意：这里用 Get Version（[0x01, 0x51]，只读查询）作调用载荷，
-  /// 绝不用快门命令作探测，避免原生补齐后一次探测就误触发录像。
-  Future<void> _connectGoPro() async {
+  /// GoPro 扫描：原生层 scanBleWithServices（v0.1.3 起已有）带 FEA6
+  /// 过滤扫描；扫描结果走页面通用 bleDeviceStream，进下方扫描列表，
+  /// 在该行点“GoPro 连接”才真正连接并下发查询。
+  Future<void> _scanGoPro() async {
+    try {
+      if (_goproScanning) {
+        await Native.stopBleScan();
+        setState(() {
+          _goproScanning = false;
+          _notice = '已停止 GoPro 扫描。';
+        });
+      } else {
+        await Native.scanBleWithServices([goproAdvertisedServiceUuid]);
+        setState(() {
+          _goproScanning = true;
+          _notice = '正在扫描广播 FEA6 的 GoPro 设备…结果出现在下方扫描列表，'
+              '在 GoPro 设备行点“GoPro 连接”下发 Get Version 查询。';
+        });
+      }
+    } catch (e) {
+      setState(() => _notice = 'GoPro 扫描失败：$e');
+    }
+  }
+
+  /// GoPro 连接（v1.1.0 打通）：先 connectBle，再订阅响应特征
+  /// GP-0073（原生层只自动订阅功率/踏频/心率/电量，不自动订阅 GoPro
+  /// 响应，不订阅就收不到回复），最后用原生层已有的通用写特征方法
+  /// 下发 Get Version 只读查询（[0x01, 0x51]），绝不用快门命令作探测。
+  /// 旧版直接裸调 MethodChannel 且不带地址、不先连接，必然失败；
+  /// 本版走 Native.writeBleCharacteristic（带地址），失败原因如实显示。
+  Future<void> _connectGoProDevice(String address) async {
     setState(() {
       _goproStatus = DeviceLinkStatus.connecting;
-      _notice = null;
+      _notice = '正在连接 GoPro（$address）…连接成功后订阅响应特征并下发查询。';
     });
     try {
-      await const MethodChannel('drivetrack/native').invokeMethod(
-        'writeBleCharacteristic',
-        <String, dynamic>{
-          'serviceUuid': goproAdvertisedServiceUuid,
-          'characteristicUuid': goproCommandWriteUuid,
-          'bytes': buildGoProGetVersion(),
-        },
+      await Native.setBleAutoReconnect(true);
+      await Native.connectBle(address);
+      final sub = await Native.subscribeBleCharacteristic(
+        address,
+        goproAdvertisedServiceUuid,
+        goproCommandResponseUuid,
       );
-      // 只有原生层真正补齐并返回成功时才走到这里；目前不会发生。
+      if ((sub['ok'] as bool?) != true) {
+        setState(() {
+          _goproStatus = DeviceLinkStatus.unavailable;
+          _notice = 'GoPro 响应特征订阅失败：${sub['error'] ?? 'unknown'}。'
+              '常见原因：GATT 服务发现未完成，或该设备不是 Open GoPro 兼容设备。';
+        });
+        return;
+      }
+      final r = await Native.writeBleCharacteristic(
+        address,
+        goproAdvertisedServiceUuid,
+        goproCommandWriteUuid,
+        buildGoProGetVersion(),
+      );
+      if (!mounted) return;
       setState(() {
-        _goproStatus = DeviceLinkStatus.connected;
-        _notice = '原生层已返回成功：请以相机实际响应为准核对，电量仍以响应事件为准。';
+        if ((r['ok'] as bool?) == true) {
+          _goproStatus = DeviceLinkStatus.connecting;
+          _notice = 'Get Version 查询已下发：等待 GoPro 经 GP-0073 响应，'
+              '收到响应后状态才变“已连接”；电量仍以响应/电量事件为准，不编造。';
+        } else {
+          _goproStatus = DeviceLinkStatus.unavailable;
+          _notice = 'GoPro 查询下发失败：${r['error'] ?? 'unknown'}。';
+        }
       });
-    } on MissingPluginException {
+    } catch (e) {
+      if (!mounted) return;
       setState(() {
         _goproStatus = DeviceLinkStatus.unavailable;
-        _notice = '该设备连接需原生支持，暂不可用：原生层暂无通用写特征方法，'
-            'GoPro 命令无法下发（需补的方法见总协调回执规格表）。';
-      });
-    } on PlatformException {
-      setState(() {
-        _goproStatus = DeviceLinkStatus.unavailable;
-        _notice = '该设备连接需原生支持，暂不可用：原生层暂无通用写特征方法，'
-            'GoPro 命令无法下发（需补的方法见总协调回执规格表）。';
-      });
-    } catch (_) {
-      setState(() {
-        _goproStatus = DeviceLinkStatus.unavailable;
-        _notice = '该设备连接需原生支持，暂不可用。';
+        _notice = 'GoPro 连接失败：$e';
       });
     }
   }
@@ -908,9 +951,9 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF121212),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
@@ -935,14 +978,15 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           _cameraCard(
             accent: accent,
             name: 'GoPro',
-            subtitle: 'Open GoPro BLE：命令写特征 GP-0072 / 响应 GP-0073，'
-                '快门命令字节已就绪（见 gopro_protocol.dart）。',
+            subtitle: 'Open GoPro BLE：先点下方按钮扫描 FEA6 设备，再在扫描列表的 '
+                'GoPro 行点“GoPro 连接”，依次完成连接 → 订阅响应特征 GP-0073 → '
+                '下发 Get Version 只读查询；收到响应后状态才变已连接。',
             status: _goproStatus,
             batteryText: _goproBattery == null
                 ? '电量：—（未收到电量事件，不显示假数值）'
                 : '电量：$_goproBattery%',
-            actionLabel: '连接（需原生支持）',
-            onAction: _connectGoPro,
+            actionLabel: _goproScanning ? '停止扫描 GoPro' : '扫描 GoPro 设备',
+            onAction: _scanGoPro,
           ),
           _cameraCard(
             accent: accent,
@@ -977,74 +1021,83 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             ),
           ),
           const SizedBox(height: 8),
-          _sectionTitle('RaceChrono BleDIY 外部 GPS'),
+          _sectionTitle('外接 GPS 模块'),
           const Text(
-            '解析器已就绪（blediy_gps.dart：GGA / RMC / VTG，校验和不符、'
-            '无效定位、非 A 状态一律丢弃并计数，绝不造假点）。数据订阅需原生支持，'
-            '暂不可用：现有原生层连接后只订阅功率 / 踏频 / 心率，不订阅 UART，'
-            '因此即使 GATT 连上也不会有 NMEA 数据流进来。',
+            '链路：扫描（NUS 过滤）→ 连接 → 订阅 NUS TX（…0003）→ main.dart '
+            '全局监听把有效定位注入 Recorder，5 秒无新定位自动回落手机 GPS。'
+            'Dragy / DEXIAN 协议未公开 / 未实测验证，仅通用 NMEA 兼容，'
+            '不解析其私有数据流。',
             style: TextStyle(color: Colors.white60, fontSize: 12),
           ),
           const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _runGpsDemo,
-            icon: const Icon(Icons.bug_report, size: 18),
-            label: const Text('用示例语句自测 NMEA 解析'),
-          ),
+          const ExternalGpsSection(),
           const SizedBox(height: 8),
-          // v0.1.9：外部 GPS 可视化配置页（连接状态卡 + 卫星可视化 +
-          // 连接步骤 + 参数卡），与设置页“定位”入口为同一页，不另起一套。
-          OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SatelliteSettingsPage()),
+          Row(children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _runGpsDemo,
+                icon: const Icon(Icons.bug_report, size: 18),
+                label: const Text('用示例语句自测 NMEA 解析'),
+              ),
             ),
-            icon: const Icon(Icons.satellite_alt, size: 18),
-            label: const Text('打开可视化外部 GPS 配置'),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const SatelliteSettingsPage()),
+                ),
+                icon: const Icon(Icons.satellite_alt, size: 18),
+                label: const Text('可视化外部 GPS 配置'),
+              ),
+            ),
+          ]),
           if (_gpsDemoResult != null) ...[
             const SizedBox(height: 8),
             Text(_gpsDemoResult!,
                 style: const TextStyle(color: Colors.white60, fontSize: 12)),
           ],
-          const Text(
-            '回落逻辑：外部源从未出点或超过 5 秒无新定位时，调用方必须切回手机 GPS，'
-            '并把之后轨迹点标记为 source=phone；断线时立即重置解析器，不要等超时。',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
-          ),
           const SizedBox(height: 16),
-          _sectionTitle('外接 GPS 模块'),
-          const ExternalGpsSection(),
-          const SizedBox(height: 16),
-          _sectionTitle('其他传感器：通用 BLE 添加'),
-          _textField(_nameCtrl, '名称，如：我的功率计'),
-          _textField(_serviceCtrl, '服务 UUID（完整或 4/8 位短 UUID）'),
-          _textField(_charCtrl, '特征 UUID（完整或 4/8 位短 UUID）'),
-          _textField(_addressCtrl, '蓝牙地址（可选，用于下次重连，如 AA:BB:CC:DD:EE:FF）'),
-          DropdownButton<String>(
-            value: _formType,
-            dropdownColor: const Color(0xFF1A1A1A),
-            style: const TextStyle(color: Colors.white),
-            isExpanded: true,
-            items: customSensorTypes
-                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                .toList(),
-            onChanged: (v) => setState(() => _formType = v ?? _formType),
+          _sectionTitle('传感器：自定义 BLE 设备'),
+          ExpansionTile(
+            title: const Text('添加自定义传感器',
+                style: TextStyle(color: Colors.white, fontSize: 14)),
+            subtitle: const Text('名称 / 类型 / 服务 / 特征 / 地址（必填前四项）',
+                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            iconColor: Colors.white70,
+            collapsedIconColor: Colors.white70,
+            children: [
+              _textField(_nameCtrl, '名称，如：我的功率计'),
+              _textField(_serviceCtrl, '服务 UUID（完整或 4/8 位短 UUID）'),
+              _textField(_charCtrl, '特征 UUID（完整或 4/8 位短 UUID）'),
+              _textField(_addressCtrl, '蓝牙地址（可选，用于下次重连，如 AA:BB:CC:DD:EE:FF）'),
+              DropdownButton<String>(
+                value: _formType,
+                dropdownColor: const Color(0xFF1A1A1A),
+                style: const TextStyle(color: Colors.white),
+                isExpanded: true,
+                items: customSensorTypes
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
+                onChanged: (v) => setState(() => _formType = v ?? _formType),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _saveForm,
+                icon: const Icon(Icons.save, size: 18),
+                label: const Text('保存到本机'),
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _saveForm,
-            icon: const Icon(Icons.save, size: 18),
-            label: const Text('保存到本机'),
-          ),
-          const SizedBox(height: 16),
-          _sectionTitle('已连 / 已保存设备（下次重连）'),
+          _sectionTitle('传感器：已保存设备（点重连）'),
           if (_saved.isEmpty)
             const Text('还没有保存的设备：用上方表单添加，地址填了才能重连。',
                 style: TextStyle(color: Colors.white54, fontSize: 12)),
           for (final device in _saved)
             _savedRow(accent, device),
           const SizedBox(height: 16),
-          _sectionTitle('附近扫描结果（现有原生扫描）'),
+          _sectionTitle('传感器：附近扫描结果'),
           FilledButton.icon(
             onPressed: _toggleScan,
             icon: Icon(_scanning ? Icons.stop : Icons.bluetooth_searching,
@@ -1060,21 +1113,35 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               title: Text((dev['name'] ?? '').toString(),
                   style: const TextStyle(color: Colors.white)),
               subtitle: Text(
-                  '${dev['address']} · ${dev['type']} · RSSI ${dev['rssi']}',
+                  '${dev['address']} · ${dev['type']} · RSSI ${dev['rssi']}'
+                  '${_isGoProScanned(dev) ? ' · GoPro（广播含 FEA6）' : ''}',
                   style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              trailing: TextButton(
-                onPressed: () async {
-                  final addr = (dev['address'] ?? '').toString();
-                  if (addr.isEmpty) return;
-                  try {
-                    setState(
-                        () => _statusByAddress[addr] = DeviceLinkStatus.connecting);
-                    await Native.connectBle(addr);
-                  } catch (e) {
-                    setState(() => _notice = '连接失败：$e');
-                  }
-                },
-                child: const Text('连接'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isGoProScanned(dev))
+                    TextButton(
+                      onPressed: () {
+                        final addr = (dev['address'] ?? '').toString();
+                        if (addr.isNotEmpty) _connectGoProDevice(addr);
+                      },
+                      child: const Text('GoPro 连接'),
+                    ),
+                  TextButton(
+                    onPressed: () async {
+                      final addr = (dev['address'] ?? '').toString();
+                      if (addr.isEmpty) return;
+                      try {
+                        setState(() => _statusByAddress[addr] =
+                            DeviceLinkStatus.connecting);
+                        await Native.connectBle(addr);
+                      } catch (e) {
+                        setState(() => _notice = '连接失败：$e');
+                      }
+                    },
+                    child: const Text('连接'),
+                  ),
+                ],
               ),
             ),
         ],
@@ -1158,6 +1225,17 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         ],
       ),
     );
+  }
+
+  /// 扫描行是否为 GoPro：广播服务含 FEA6，或名称含 GoPro（名称仅提示，
+  /// 不作身份断言；真正连接仍走 FEA6 服务下的 GP-0072/0073 特征查找，
+  /// 找不到特征时如实报 characteristic_not_found）。
+  bool _isGoProScanned(Map<String, dynamic> dev) {
+    final uuids = ((dev['serviceUuids'] as List?) ?? [])
+        .map((e) => e.toString())
+        .toList();
+    if (isGoProAdvertisement(uuids)) return true;
+    return (dev['name'] ?? '').toString().toLowerCase().contains('gopro');
   }
 
   Widget _savedRow(Color accent, SavedDevice device) {

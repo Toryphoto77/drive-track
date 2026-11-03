@@ -183,8 +183,8 @@ class Native {
 
   static Future<void> ttsStop() => _m.invokeMethod('ttsStop');
 
-  /// v1.0.3：切换桌面启动图标 alias（'red' / 'gray'，见 AndroidManifest
-  /// 的 LauncherRed / LauncherGray）。原生侧用 DONT_KILL_APP，不在
+  /// v1.0.3：切换桌面启动图标 alias（'red' / 'blue'，见 AndroidManifest
+  /// 的 LauncherRed / LauncherBlue）。原生侧用 DONT_KILL_APP，不在
   /// 切换瞬间杀 App、不丢数据；部分厂商启动器刷新有延迟，见主题页
   /// 回落说明。返回 false = 原生切换未成功（选择本身仍已持久化，
   /// 下次冷启动会按持久化选择重新同步一次）。

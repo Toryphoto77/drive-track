@@ -42,14 +42,15 @@ void main() {
     expect(selected, 1);
   });
 
-  test('v1.0.3 app icon choice: red default, gray asset/label differ, invalid normalizes to red', () {
+  test('v1.0.3 app icon choice: red default, blue asset/label differ, invalid normalizes to red', () {
     expect(AppIconChoice.normalize(null), AppIconChoice.red);
     expect(AppIconChoice.normalize('bogus'), AppIconChoice.red);
+    expect(AppIconChoice.normalize('gray'), AppIconChoice.blue);
     expect(AppIconChoice.assetFor(AppIconChoice.red), 'assets/app_icon_red.png');
-    expect(AppIconChoice.assetFor(AppIconChoice.gray), 'assets/app_icon_gray.png');
+    expect(AppIconChoice.assetFor(AppIconChoice.blue), 'assets/app_icon_blue.png');
     expect(AppIconChoice.labelFor(AppIconChoice.red), '红赛车');
-    expect(AppIconChoice.labelFor(AppIconChoice.gray), '灰仪表');
+    expect(AppIconChoice.labelFor(AppIconChoice.blue), '蓝仪表');
     expect(AppIconChoice.assetFor(AppIconChoice.red),
-        isNot(AppIconChoice.assetFor(AppIconChoice.gray)));
+        isNot(AppIconChoice.assetFor(AppIconChoice.blue)));
   });
 }

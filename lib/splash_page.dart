@@ -27,7 +27,7 @@ import 'app_icon_choice.dart';
 /// - 原生侧不动：launch_background（drawable 与 drawable-v21 两份）
 ///   与 LaunchTheme/NormalTheme 在 v1.0.0 已是纯黑父主题，Flutter
 ///   首帧背景亦为纯黑（本页 Scaffold + 全局黑色主题），不改回白。
-/// - 图标：当前选择的启动图标（assets/app_icon_red/gray.png，
+/// - 图标：当前选择的启动图标（assets/app_icon_red/blue.png，
 ///   与桌面 alias 同源 SVG 生成），不再固定用旧转速表图；
 /// - 文字“驰迹 DriveTrack”淡入，slogan“记录每一次出发”随后淡入；
 /// - 总时长约 1.2 秒，缓动 easeOut；动画跑完才切首页，启动页不留
@@ -36,7 +36,7 @@ class SplashPage extends StatefulWidget {
   /// 动画完成后的回调；不传时默认走命名路由 '/home'（main.dart 已注册）。
   final VoidCallback? onFinished;
 
-  /// v1.0.3：启动图标选择（'red' 默认 / 'gray'），与桌面 alias 同步；
+  /// v1.0.3：启动图标选择（'red' 默认 / 'blue'），与桌面 alias 同步；
   /// 由 DriveTrackApp 在 build 时传当前 appPrefs.appIcon，load 完成
   /// 后 AnimatedBuilder 重建会同步刷新（动画 1.2 秒内通常已加载完）。
   final String appIconKey;

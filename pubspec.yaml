@@ -1,7 +1,7 @@
 name: drive_track
 description: "驰迹 DriveTrack：极简风轨迹记录 App（汽车 / 摩托 / 骑行）"
 publish_to: 'none'
-version: 1.0.9+21
+version: 1.1.1+23
 
 environment:
   sdk: ^3.13.7
@@ -18,7 +18,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/app_icon_red.png
-    - assets/app_icon_gray.png
+    - assets/app_icon_blue.png
   fonts:
     - family: DriveTrackDisplay
       fonts:

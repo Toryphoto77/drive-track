@@ -272,7 +272,7 @@ class ThemeSettingsPage extends StatefulWidget {
   final VehicleMarkerSelection vehicleMarkerInitial;
   final ValueChanged<VehicleMarkerSelection>? onVehicleMarkerChanged;
 
-  /// v1.0.3：APP 图标选择（只两张：红赛车 / 灰仪表，不含旧转速表图）。
+  /// v1.0.3：APP 图标选择（只两张：红赛车 / 蓝仪表，不含旧转速表图）。
   /// 总协调接线：appIconInitial 传 appPrefs.appIcon，
   /// onAppIconChanged 传持久化 + Native.setAppIcon 的回调。
   final String appIconInitial;
@@ -518,7 +518,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 ),
               ),
             ),
-            // v1.0.3：APP 图标分区（只红赛车 / 灰仪表两张，点选即切换）。
+            // v1.0.3：APP 图标分区（只红赛车 / 蓝仪表两张，点选即切换）。
             _sectionTitle('APP 图标'),
             Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -531,7 +531,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                       children: [
                         _appIconOption(AppIconChoice.red),
                         const SizedBox(width: 12),
-                        _appIconOption(AppIconChoice.gray),
+                        _appIconOption(AppIconChoice.blue),
                       ],
                     ),
                     const SizedBox(height: 12),
