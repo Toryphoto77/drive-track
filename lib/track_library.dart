@@ -502,6 +502,25 @@ Future<String> _defaultFetcher(Uri uri) async {
 /// 合并规则（纯函数，可单测）：
 /// 内置迁移包 → 打包种子包（版本更高才覆盖）→ 本地覆盖层
 /// （用户改动无条件胜出；远端包仅当版本高于本地才覆盖；用户赛道
+/// 编辑器保存时的分段注记规则（纯函数，可单测）：
+/// - 分段没动 → 原注记不动（只改轮廓/起终点不影响分段来源）；
+/// - 分段被改动 → 实测口径（用户手动落点覆盖推导值，注记必须同步，
+///   否则界面仍会把实测点标成“模拟器数据推导”）；
+/// - 分段被清空 → 待补口径。
+String sectorNoteAfterEdit({
+  required List<GeoPoint> original,
+  required List<GeoPoint> edited,
+  required String originalNote,
+}) {
+  final changed = edited.length != original.length ||
+      edited.asMap().entries.any((e) =>
+          e.value.lat != original[e.key].lat ||
+          e.value.lon != original[e.key].lon);
+  if (!changed) return originalNote;
+  if (edited.isEmpty) return '分段点待核：用户已清除原分段，待重新落点';
+  return '用户实测分段点（编辑器手动落点），以实测为准';
+}
+
 /// 绝不进入官方列表）。
 List<TrackPackage> mergePackages({
   required List<TrackPackage> builtin,

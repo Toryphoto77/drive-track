@@ -1,159 +1,159 @@
 {
- "dataVersion": "1.0",
- "updatedAt": "2026-11-05",
- "attribution": "© OpenStreetMap contributors，ODbL（http://osm.org/copyright）",
- "packages": [
-  {
-   "id": "shanghai",
-   "nameCn": "上海国际赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "zhuhai",
-   "nameCn": "珠海国际赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zhuhai.json",
-   "source": "osm",
-   "verification": "pending"
-  },
-  {
-   "id": "ningbo",
-   "nameCn": "宁波国际赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/ningbo.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "zhejiang",
-   "nameCn": "浙江国际赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zhejiang.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "tianma",
-   "nameCn": "上海天马山赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/tianma.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "ordos",
-   "nameCn": "鄂尔多斯国际赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/ordos.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "nordschleife",
-   "nameCn": "纽博格林北环",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/nordschleife.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "spa",
-   "nameCn": "斯帕",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/spa.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "monza",
-   "nameCn": "蒙扎",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/monza.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "suzuka",
-   "nameCn": "铃鹿",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/suzuka.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "laguna_seca",
-   "nameCn": "拉古纳塞卡",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/laguna_seca.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "cota",
-   "nameCn": "美洲赛道",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/cota.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "fuji",
-   "nameCn": "富士",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/fuji.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "goldenport",
-   "nameCn": "北京金港国际赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/goldenport.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "guangdong_gic",
-   "nameCn": "广东国际赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/guangdong_gic.json",
-   "source": "osm",
-   "verification": "pending"
-  },
-  {
-   "id": "monaco",
-   "nameCn": "摩纳哥赛道",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/monaco.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "le_mans",
-   "nameCn": "勒芒萨尔特赛道",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/le_mans.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "sepang",
-   "nameCn": "雪邦国际赛车场",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/sepang.json",
-   "source": "osm",
-   "verification": "verified"
-  },
-  {
-   "id": "bathurst",
-   "nameCn": "巴瑟斯特全景山赛道",
-   "version": 1,
-   "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/bathurst.json",
-   "source": "osm",
-   "verification": "verified"
-  }
- ]
+  "dataVersion": "V1.0.1",
+  "updatedAt": "2026-11-05",
+  "attribution": "© OpenStreetMap contributors，ODbL（http://osm.org/copyright）",
+  "packages": [
+    {
+      "id": "shanghai",
+      "nameCn": "上海国际赛车场",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "zhuhai",
+      "nameCn": "珠海国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zhuhai.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "ningbo",
+      "nameCn": "宁波国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/ningbo.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "zhejiang",
+      "nameCn": "浙江国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zhejiang.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "tianma",
+      "nameCn": "上海天马山赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/tianma.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "ordos",
+      "nameCn": "鄂尔多斯国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/ordos.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "nordschleife",
+      "nameCn": "纽博格林北环",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/nordschleife.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "spa",
+      "nameCn": "斯帕",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/spa.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "monza",
+      "nameCn": "蒙扎",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/monza.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "suzuka",
+      "nameCn": "铃鹿",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/suzuka.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "laguna_seca",
+      "nameCn": "拉古纳塞卡",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/laguna_seca.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "cota",
+      "nameCn": "美洲赛道",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/cota.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "fuji",
+      "nameCn": "富士",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/fuji.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "goldenport",
+      "nameCn": "北京金港国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/goldenport.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "guangdong_gic",
+      "nameCn": "广东国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/guangdong_gic.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "monaco",
+      "nameCn": "摩纳哥赛道",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/monaco.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "le_mans",
+      "nameCn": "勒芒萨尔特赛道",
+      "version": 2,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/le_mans.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "sepang",
+      "nameCn": "雪邦国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/sepang.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "bathurst",
+      "nameCn": "巴瑟斯特全景山赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/bathurst.json",
+      "source": "osm",
+      "verification": "verified"
+    }
+  ]
 }

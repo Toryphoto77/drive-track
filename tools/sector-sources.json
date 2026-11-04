@@ -1,0 +1,776 @@
+{
+  "_note": "DriveTrack sector step 1 (2026-11-05): sector-END fractions of lap (S3=1.0=finish, dropped when writing sectorPoints because LapTimer takes the first 2 points). Lovely Sim Racing track data: CC BY-NC-SA 4.0 (README footer; repo root has no LICENSE file). track-atlas: MIT code, data under ODbL (OSM geometry) + upstream terms; its start_finish anchors and Laguna Seca measured sector-end lines are used as anchors/cross-checks. Sector data in packages is always pending (sectorNote), never verified/official. Anchors are track-atlas start_finish for all 9 mapped packages: 5 of our own starts were proven misplaced (see startCorrection) and are corrected together with the sector write, because LapTimer sectors only work when the lap origin equals the sector origin.",
+  "_pending": {
+    "ordos": "no Lovely entry (Chinese circuits are absent from simulator data)",
+    "guangdong_gic": "no Lovely entry (Chinese circuits are absent from simulator data)",
+    "goldenport": "no Lovely entry (Chinese circuits are absent from simulator data)",
+    "ningbo": "no Lovely entry (Chinese circuits are absent from simulator data)",
+    "sepang": "no Lovely entry (F1 games 2024/2025 dropped Sepang; no iRacing/LMU entry); track-atlas has no sepang either; step 2 telemetry also unavailable (last F1 GP 2017, before OpenF1/FastF1 archives). Own start unchecked (same seed issue as the 5 corrected starts) — left untouched, no sectors to map.",
+    "tianma": "no Lovely entry (Chinese circuits are absent from simulator data)",
+    "zhejiang": "no Lovely entry (Chinese circuits are absent from simulator data)",
+    "zhuhai": "no Lovely entry (Chinese circuits are absent from simulator data)"
+  },
+  "bathurst": {
+    "file": "assettocorsacompetizione/mount-panorama.json",
+    "length": 6213,
+    "note": "no start anchor in our package nor in track-atlas (track-atlas has no bathurst); ACC 3-sector (0.316/0.764) conflicts with iRacing 6-sector (0.182/0.36/0.521/0.594/0.629/1.0); pending regardless",
+    "sectors": [
+      0.316,
+      0.764,
+      1.0
+    ]
+  },
+  "cota": {
+    "anchor": {
+      "from": "track-atlas circuit-of-the-americas start_finish (measured line, txgio-2021-caparea, accuracy 0.88m)",
+      "lat": 30.1335239,
+      "lon": -97.6422581
+    },
+    "file": "f12024/texas.json",
+    "length": 5514,
+    "lovelyMarkers": [
+      0.1203,
+      0.1658,
+      0.2149,
+      0.2308,
+      0.2465,
+      0.2773,
+      0.3135,
+      0.349,
+      0.3604,
+      0.397,
+      0.4702,
+      0.6877,
+      0.7286,
+      0.7463,
+      0.7813,
+      0.822,
+      0.8359,
+      0.855,
+      0.917,
+      0.972
+    ],
+    "sectorNote": "分段：模拟器数据推导（Lovely Sim Racing track data，F1 2024 分段比例，CC BY-NC-SA 4.0），起终点锚点取自 track-atlas（实测起终点线），映射至本包 OSM 中心线；待实测核对。",
+    "sectors": [
+      0.3014,
+      0.7118,
+      1.0
+    ],
+    "startCorrection": {
+      "distanceM": 296.1,
+      "old": {
+        "lat": 30.131891,
+        "lon": -97.639826
+      }
+    }
+  },
+  "fuji": {
+    "anchor": {
+      "from": "track-atlas fuji start_finish",
+      "lat": 35.372405,
+      "lon": 138.927423
+    },
+    "file": "lmu/fuji-speedway.json",
+    "length": 4535,
+    "sectorNote": "分段：模拟器数据推导（Lovely Sim Racing track data，LMU 分段比例，CC BY-NC-SA 4.0；LMU 数值按 0.01 圈取整，单点量化约 ±23m），起终点锚点取自 track-atlas，映射至本包 OSM 中心线；待实测核对。",
+    "sectorSourceNote": "LMU markers are rounded to 0.01 lap (45m steps at Fuji), so each boundary carries about +/-23m quantization; track-atlas fuji timing_sectors are identical (0.41/0.66)",
+    "sectors": [
+      0.41,
+      0.66,
+      1.0
+    ],
+    "taCorners": [
+      [
+        0.17,
+        35.375891,
+        138.9338
+      ],
+      [
+        0.2,
+        35.374733,
+        138.9334
+      ],
+      [
+        0.29,
+        35.371754,
+        138.931108
+      ],
+      [
+        0.34,
+        35.369812,
+        138.93155
+      ],
+      [
+        0.39,
+        35.369313,
+        138.92949
+      ],
+      [
+        0.44,
+        35.370459,
+        138.927834
+      ],
+      [
+        0.47,
+        35.369287,
+        138.927535
+      ],
+      [
+        0.52,
+        35.367311,
+        138.927264
+      ],
+      [
+        0.56,
+        35.365964,
+        138.926169
+      ],
+      [
+        0.63,
+        35.36529,
+        138.923683
+      ],
+      [
+        0.64,
+        35.365253,
+        138.923196
+      ],
+      [
+        0.66,
+        35.365499,
+        138.922266
+      ],
+      [
+        0.7,
+        35.366641,
+        138.922287
+      ],
+      [
+        0.72,
+        35.367239,
+        138.922914
+      ],
+      [
+        0.75,
+        35.367952,
+        138.922175
+      ],
+      [
+        0.82,
+        35.36779,
+        138.920374
+      ]
+    ],
+    "startAdded": true
+  },
+  "laguna_seca": {
+    "accAlternative": [
+      0.254,
+      0.636,
+      1.0
+    ],
+    "anchor": {
+      "from": "track-atlas laguna-seca start_finish",
+      "lat": 36.5864713,
+      "lon": -121.7566627
+    },
+    "conflict": "track-atlas laguna-seca timing_sectors S1 end 0.37671, S2 end 0.64227 (measured end lines, NAIP) vs Lovely ACC 0.254/0.636: S1 differs by ~442m; S2 agrees within ~23m. Chosen: track-atlas measured lines, because both boundaries coincide with iRacing's independent sector boundaries (0.377/0.643) while ACC S1 (0.254) matches no other source.",
+    "file": "track-atlas laguna-seca timing_sectors (chosen over ACC)",
+    "iracingReference": [
+      0.184,
+      0.377,
+      0.643,
+      0.804,
+      1.0
+    ],
+    "length": 3602,
+    "sectorEndLines": [
+      {
+        "lat": 36.581743,
+        "lon": -121.75393
+      },
+      {
+        "lat": 36.583542,
+        "lon": -121.749131
+      }
+    ],
+    "sectorNote": "分段：track-atlas 实测分段线（S1/S2 结束线中点，NAIP 航拍核对）按圈长比例映射至本包 OSM 中心线；与 ACC 模拟器分段 S1（0.254）不一致，已取实测线；待实测核对。",
+    "sectors": [
+      0.37671,
+      0.64227,
+      1.0
+    ],
+    "startAdded": true
+  },
+  "le_mans": {
+    "anchor": {
+      "from": "track-atlas circuit-de-la-sarthe start_finish (measured line, ign-bdortho-2022, accuracy 1.45m)",
+      "lat": 47.9509022,
+      "lon": 0.2075668
+    },
+    "file": "lmu/circuit-de-la-sarthe.json",
+    "length": 13623,
+    "lovelyMarkers": [
+      0.05,
+      0.06,
+      0.07,
+      0.11,
+      0.12,
+      0.14,
+      0.3,
+      0.45,
+      0.57,
+      0.7,
+      0.72,
+      0.74,
+      0.82,
+      0.85,
+      0.87,
+      0.89,
+      0.91,
+      0.97,
+      0.98,
+      0.99
+    ],
+    "sectorNote": "分段：模拟器数据推导（Lovely Sim Racing track data，LMU 分段比例，CC BY-NC-SA 4.0；LMU 数值按 0.01 圈取整，单点量化约 ±68m），起终点锚点取自 track-atlas（实测起终点线），映射至本包 OSM 中心线；待实测核对。",
+    "sectorSourceNote": "LMU markers are rounded to 0.01 lap (136m steps at Le Mans), so each boundary carries about +/-68m quantization",
+    "sectors": [
+      0.14,
+      0.57,
+      1.0
+    ],
+    "startCorrection": {
+      "distanceM": 114.6,
+      "old": {
+        "lat": 47.949872,
+        "lon": 0.20754
+      }
+    }
+  },
+  "monaco": {
+    "anchor": {
+      "from": "track-atlas monaco start_finish",
+      "lat": 43.737802,
+      "lon": 7.428037
+    },
+    "file": "f12024/monaco.json",
+    "length": 3323,
+    "sectorNote": "分段：模拟器数据推导（Lovely Sim Racing track data，F1 2024 分段比例，CC BY-NC-SA 4.0），起终点锚点取自 track-atlas，映射至本包 OSM 中心线；待实测核对。",
+    "sectors": [
+      0.3195,
+      0.7442,
+      1.0
+    ],
+    "startCorrection": {
+      "distanceM": 625.5,
+      "old": {
+        "lat": 43.735027,
+        "lon": 7.421265
+      }
+    },
+    "taCorners": [
+      [
+        0.0663,
+        43.739184,
+        7.429926
+      ],
+      [
+        0.1559,
+        43.74089,
+        7.429354
+      ],
+      [
+        0.2318,
+        43.74095,
+        7.428562
+      ],
+      [
+        0.269,
+        43.740058,
+        7.427647
+      ],
+      [
+        0.3427,
+        43.738186,
+        7.427645
+      ],
+      [
+        0.3817,
+        43.73782,
+        7.426153
+      ],
+      [
+        0.4062,
+        43.737538,
+        7.425222
+      ],
+      [
+        0.4333,
+        43.737371,
+        7.424136
+      ],
+      [
+        0.5267,
+        43.736115,
+        7.421255
+      ],
+      [
+        0.6322,
+        43.733053,
+        7.422
+      ],
+      [
+        0.6377,
+        43.732914,
+        7.422121
+      ],
+      [
+        0.7176,
+        43.733221,
+        7.422547
+      ],
+      [
+        0.7634,
+        43.734439,
+        7.422378
+      ],
+      [
+        0.7766,
+        43.734826,
+        7.422279
+      ],
+      [
+        0.8115,
+        43.735742,
+        7.421769
+      ],
+      [
+        0.8237,
+        43.736104,
+        7.421813
+      ],
+      [
+        0.883,
+        43.73693,
+        7.423626
+      ],
+      [
+        0.9086,
+        43.737034,
+        7.424674
+      ],
+      [
+        0.9165,
+        43.737062,
+        7.424997
+      ]
+    ]
+  },
+  "monza": {
+    "anchor": {
+      "from": "track-atlas monza start_finish",
+      "lat": 45.6172,
+      "lon": 9.280916
+    },
+    "file": "f12024/monza.json",
+    "length": 5798,
+    "sectorNote": "分段：模拟器数据推导（Lovely Sim Racing track data，F1 2024 分段比例，CC BY-NC-SA 4.0），起终点锚点取自 track-atlas，映射至本包 OSM 中心线；待实测核对。",
+    "sectors": [
+      0.3274,
+      0.6428,
+      1.0
+    ],
+    "startCorrection": {
+      "distanceM": 197.1,
+      "old": {
+        "lat": 45.618963,
+        "lon": 9.281173
+      }
+    },
+    "taCorners": [
+      [
+        0.16,
+        45.625132,
+        9.28231
+      ],
+      [
+        0.17,
+        45.625638,
+        9.282134
+      ],
+      [
+        0.24,
+        45.629041,
+        9.2834
+      ],
+      [
+        0.37,
+        45.63066,
+        9.292397
+      ],
+      [
+        0.38,
+        45.630814,
+        9.293108
+      ],
+      [
+        0.44,
+        45.630464,
+        9.296616
+      ],
+      [
+        0.49,
+        45.628133,
+        9.296122
+      ],
+      [
+        0.68,
+        45.621831,
+        9.285852
+      ],
+      [
+        0.69,
+        45.621406,
+        9.285439
+      ],
+      [
+        0.71,
+        45.620493,
+        9.284911
+      ],
+      [
+        0.9,
+        45.612166,
+        9.281617
+      ]
+    ]
+  },
+  "nordschleife": {
+    "file": "iracing/nurburgring-nordschleife.json",
+    "length": 20640,
+    "note": "iRacing 10-sector split does not fit the app's 2-point (3-sector) model, and no start anchor exists in our package nor in track-atlas; pending regardless. ACC nurburgring-24h is the GP+Nordschleife combined layout (~25km) and must NOT be used for the pure Nordschleife package.",
+    "sectors": [
+      0.104,
+      0.232,
+      0.309,
+      0.41,
+      0.506,
+      0.599,
+      0.69,
+      0.789,
+      0.953,
+      1.0
+    ]
+  },
+  "shanghai": {
+    "anchor": {
+      "from": "track-atlas shanghai start_finish",
+      "lat": 31.337665,
+      "lon": 121.222328
+    },
+    "file": "f12024/shanghai.json",
+    "length": 5441,
+    "sectorNote": "分段：模拟器数据推导（Lovely Sim Racing track data，F1 2024 分段比例，CC BY-NC-SA 4.0），起终点锚点取自 track-atlas，映射至本包 OSM 中心线；待实测核对。",
+    "sectorSourceNote": "S3 marker in Lovely file is 0.1 (should be 1.0=finish); treated as data error, ignored since S3 ends at finish by definition",
+    "sectors": [
+      0.2607,
+      0.5486,
+      1.0
+    ],
+    "startCorrection": {
+      "distanceM": 167.6,
+      "old": {
+        "lat": 31.337319,
+        "lon": 121.22061
+      }
+    },
+    "taCorners": [
+      [
+        0.1075,
+        31.336949,
+        121.216383
+      ],
+      [
+        0.1488,
+        31.337771,
+        121.217174
+      ],
+      [
+        0.1645,
+        31.337126,
+        121.217324
+      ],
+      [
+        0.1902,
+        31.338102,
+        121.217779
+      ],
+      [
+        0.2458,
+        31.340184,
+        121.215719
+      ],
+      [
+        0.2933,
+        31.342246,
+        121.215219
+      ],
+      [
+        0.3859,
+        31.33971,
+        121.218951
+      ],
+      [
+        0.4307,
+        31.341262,
+        121.220582
+      ],
+      [
+        0.4693,
+        31.340142,
+        121.222108
+      ],
+      [
+        0.4903,
+        31.340985,
+        121.222647
+      ],
+      [
+        0.578,
+        31.344413,
+        121.219906
+      ],
+      [
+        0.591,
+        31.344089,
+        121.21933
+      ],
+      [
+        0.6237,
+        31.345405,
+        121.219293
+      ],
+      [
+        0.8817,
+        31.335849,
+        121.227703
+      ],
+      [
+        0.897,
+        31.33627,
+        121.226983
+      ],
+      [
+        0.9501,
+        31.338246,
+        121.225114
+      ]
+    ]
+  },
+  "spa": {
+    "anchor": {
+      "from": "track-atlas spa-francorchamps start_finish (identical to our own start)",
+      "lat": 50.444064,
+      "lon": 5.965163
+    },
+    "file": "f12024/spa.json",
+    "length": 7007,
+    "sectorNote": "分段：模拟器数据推导（Lovely Sim Racing track data，F1 2024 分段比例，CC BY-NC-SA 4.0），起终点锚点取自 track-atlas（与本包原起终点一致），映射至本包 OSM 中心线；待实测核对。",
+    "sectors": [
+      0.3317,
+      0.7229,
+      1.0
+    ],
+    "taCorners": [
+      [
+        0.04,
+        50.446248,
+        5.963439
+      ],
+      [
+        0.08,
+        50.445065,
+        5.966882
+      ],
+      [
+        0.13,
+        50.442723,
+        5.97017
+      ],
+      [
+        0.15,
+        50.441906,
+        5.971642
+      ],
+      [
+        0.17,
+        50.440711,
+        5.972201
+      ],
+      [
+        0.21,
+        50.438589,
+        5.974322
+      ],
+      [
+        0.33,
+        50.431343,
+        5.97751
+      ],
+      [
+        0.34,
+        50.43092,
+        5.976808
+      ],
+      [
+        0.36,
+        50.429703,
+        5.977027
+      ],
+      [
+        0.42,
+        50.427806,
+        5.972403
+      ],
+      [
+        0.45,
+        50.429079,
+        5.973976
+      ],
+      [
+        0.54,
+        50.434182,
+        5.971747
+      ],
+      [
+        0.63,
+        50.430406,
+        5.96641
+      ],
+      [
+        0.65,
+        50.430698,
+        5.964555
+      ],
+      [
+        0.69,
+        50.428795,
+        5.96211
+      ],
+      [
+        0.72,
+        50.429766,
+        5.959727
+      ],
+      [
+        0.82,
+        50.434116,
+        5.965888
+      ]
+    ]
+  },
+  "suzuka": {
+    "anchor": {
+      "from": "track-atlas suzuka start_finish",
+      "lat": 34.844546,
+      "lon": 136.539083
+    },
+    "file": "f12024/suzuka.json",
+    "length": 5817,
+    "sectorNote": "分段：模拟器数据推导（Lovely Sim Racing track data，F1 2024 分段比例，CC BY-NC-SA 4.0），起终点锚点取自 track-atlas，映射至本包 OSM 中心线；待实测核对。",
+    "sectors": [
+      0.3821,
+      0.8173,
+      1.0
+    ],
+    "taCorners": [
+      [
+        0.1193,
+        34.839572,
+        136.543331
+      ],
+      [
+        0.1458,
+        34.839135,
+        136.542134
+      ],
+      [
+        0.1928,
+        34.84071,
+        136.540106
+      ],
+      [
+        0.2113,
+        34.841358,
+        136.539355
+      ],
+      [
+        0.2376,
+        34.842298,
+        136.538361
+      ],
+      [
+        0.2682,
+        34.843134,
+        136.537022
+      ],
+      [
+        0.303,
+        34.84474,
+        136.536852
+      ],
+      [
+        0.396,
+        34.843194,
+        136.531889
+      ],
+      [
+        0.4241,
+        34.843765,
+        136.530668
+      ],
+      [
+        0.4809,
+        34.846645,
+        136.530482
+      ],
+      [
+        0.5042,
+        34.846866,
+        136.530021
+      ],
+      [
+        0.5487,
+        34.845384,
+        136.528024
+      ],
+      [
+        0.6574,
+        34.848371,
+        136.522892
+      ],
+      [
+        0.6861,
+        34.847403,
+        136.52205
+      ],
+      [
+        0.8577,
+        34.844008,
+        136.531841
+      ],
+      [
+        0.9301,
+        34.845686,
+        136.535526
+      ],
+      [
+        0.939,
+        34.845974,
+        136.535969
+      ]
+    ],
+    "trackAtlasCheck": "track-atlas tracks.jsonl suzuka timing_sectors S1 end 0.3821, S2 end 0.8173, start_finish [136.539083,34.844546] — identical to Lovely; track-atlas adds anchor only, no independent sector values",
+    "startAdded": true
+  }
+}

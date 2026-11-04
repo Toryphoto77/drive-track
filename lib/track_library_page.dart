@@ -4,8 +4,8 @@
 ///   附操作（检查更新 / 更新 / 删除 / 导出 / 编辑）。
 /// - 本页不显示赛道图、历史、最快圈等任何浏览信息（浏览收进
 ///   选赛道列表的 ⓘ 简介页）。
-/// - 顶部显示赛道库数据总版本；每条包自带自己的版本；更新按条进行。
-/// - 提交入口必须隐藏：连点数据总版本 7 次才解锁策展模式，常规界面
+/// - 顶部版本卡片显示赛道库数据总版本；每条包自带自己的版本；更新按条进行。
+/// - 提交入口必须隐藏：连点当前版本文本 7 次才解锁策展模式，常规界面
 ///   绝不出现它；本轮策展模式含包导出，完整发布流（应用内直发仓库）
 ///   暂未接入，见策展区说明。
 
@@ -19,6 +19,25 @@ import 'native.dart';
 import 'store.dart';
 import 'track_library.dart';
 import 'track_package_editor.dart';
+
+/// 策展模式 gate（纯逻辑，可单测）：2 秒内连点版本文本 7 次解锁。
+/// tap() 返回此次点击后是否达到解锁条件；页面负责在首次解锁时
+/// 置策展态并提示（仅本页会话有效由页面生命周期保证）。
+class VersionTapGate {
+  int _tapCount = 0;
+  DateTime? _lastTap;
+
+  bool tap({DateTime? now}) {
+    final at = now ?? DateTime.now();
+    if (_lastTap != null && at.difference(_lastTap!).inSeconds < 2) {
+      _tapCount++;
+    } else {
+      _tapCount = 1;
+    }
+    _lastTap = at;
+    return _tapCount >= 7;
+  }
+}
 
 /// 赛道库页。
 class TrackLibraryPage extends StatefulWidget {
@@ -47,8 +66,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
 
   // 策展模式 gate：2 秒内连点数据总版本 7 次解锁，仅本页会话有效。
   bool _curation = false;
-  int _tapCount = 0;
-  DateTime? _lastTap;
+  final _versionTapGate = VersionTapGate();
 
   @override
   void initState() {
@@ -63,14 +81,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   }
 
   void _onVersionTap() {
-    final now = DateTime.now();
-    if (_lastTap != null && now.difference(_lastTap!).inSeconds < 2) {
-      _tapCount++;
-    } else {
-      _tapCount = 1;
-    }
-    _lastTap = now;
-    if (_tapCount >= 7 && !_curation) {
+    if (_versionTapGate.tap() && !_curation) {
       setState(() => _curation = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('策展模式已解锁')),
@@ -397,80 +408,18 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
-                // 顶部：数据总版本 + 检查更新。
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: _onVersionTap,
-                        child: Text(
-                          '赛道库数据 v${snap.dataVersion}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$kOsmAttribution；OSM 数据遵循 ODbL，署名见本页。',
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          FilledButton(
-                            onPressed: _checking ? null : _checkUpdates,
-                            child: Text(_checking ? '检查中…' : '检查更新'),
-                          ),
-                          const SizedBox(width: 8),
-                          OutlinedButton(
-                            onPressed: _importFromTrip,
-                            child: const Text('从行程导入'),
-                          ),
-                        ],
-                      ),
-                      if (check != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          check.message,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                          ),
-                        ),
-                        if (check.skippedUserModified.isNotEmpty)
-                          Text(
-                            '${check.skippedUserModified.length} 个包因本地改动未列入更新（远端不覆盖本地改动）',
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                        if (check.updates.length > 1)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _applying ? null : _applyAll,
-                              child: const Text('全部更新'),
-                            ),
-                          ),
-                      ],
-                    ],
-                  ),
+                // 顶部：赛道库版本卡片（标题 + 当前版本 + 状态行 + 两个主按钮）。
+                // 显示的全部是本 App 真实数据：版本取 manifest 的 dataVersion，
+                // 状态与包数取真实检查结果。版本文本仍可点，策展 gate 不变。
+                LibraryVersionCard(
+                  dataVersion: snap.dataVersion,
+                  check: check,
+                  checking: _checking,
+                  applying: _applying,
+                  onVersionTap: _onVersionTap,
+                  onCheck: _checkUpdates,
+                  onUpdateAll: _applyAll,
+                  onImport: _importFromTrip,
                 ),
                 if (check != null && check.updates.isNotEmpty) ...[
                   const SizedBox(height: 16),
@@ -544,7 +493,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                         const SizedBox(height: 6),
                         const Text(
                           '发布流（当前）：导出包 JSON → 提交到仓库 data/packages/ → '
-                          '更新 data/tracks-manifest.json（dataVersion +1、包版本 +1）→ '
+                          '更新 data/tracks-manifest.json（dataVersion 升一档，如 V1.0.1 → V1.0.2；包版本 +1）→ '
                           '用户在库页检查更新即收到。应用内直发仓库需 GitHub 凭证，暂未接入，'
                           '不得伪装已发布。',
                           style: TextStyle(
@@ -685,6 +634,187 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       child: Text(
         label,
         style: const TextStyle(color: Colors.white70, fontSize: 11),
+      ),
+    );
+  }
+}
+
+/// 顶部版本卡片（截图样式，纯渲染，不碰服务与磁盘，可直接 widget 测试）：
+/// 标题“赛道库” + 当前版本（manifest dataVersion，原样显示）+
+/// 状态行（绿点已是最新 / 橙点有更新 / 灰点未检查或失败）+
+/// [赛道库版本检测]（描边）与 [更新赛道库]（实心，有更新时可用）+
+/// [从行程导入]（原样保留）。
+class LibraryVersionCard extends StatelessWidget {
+  final String dataVersion;
+  final UpdateCheckResult? check;
+  final bool checking;
+  final bool applying;
+  final VoidCallback onVersionTap;
+  final VoidCallback onCheck;
+  final VoidCallback onUpdateAll;
+  final VoidCallback onImport;
+
+  const LibraryVersionCard({
+    super.key,
+    required this.dataVersion,
+    required this.check,
+    required this.checking,
+    required this.applying,
+    required this.onVersionTap,
+    required this.onCheck,
+    required this.onUpdateAll,
+    required this.onImport,
+  });
+
+  /// 状态行文案（三态：未检查 / 已是最新 / 有更新；检查失败时显示
+  /// 错误信息原文）。
+  String get statusText {
+    if (checking) return '正在检测…';
+    final c = check;
+    if (c == null) return '尚未检测';
+    switch (c.status) {
+      case UpdateCheckStatus.upToDate:
+        return '赛道库已是最新版本';
+      case UpdateCheckStatus.available:
+        return '${c.updates.length} 个包可更新';
+      case UpdateCheckStatus.error:
+        return c.message;
+    }
+  }
+
+  /// 状态行圆点颜色：已是最新为绿、有更新为橙、其余为灰。
+  Color get statusDotColor {
+    final c = check;
+    if (!checking && c != null) {
+      switch (c.status) {
+        case UpdateCheckStatus.upToDate:
+          return Colors.green;
+        case UpdateCheckStatus.available:
+          return Colors.orange;
+        case UpdateCheckStatus.error:
+          return Colors.white54;
+      }
+    }
+    return Colors.white54;
+  }
+
+  /// [更新赛道库] 按钮可用条件：检查出可更新包且不在检测/更新中。
+  bool get updateButtonEnabled {
+    final c = check;
+    return !checking &&
+        !applying &&
+        c != null &&
+        c.status == UpdateCheckStatus.available &&
+        c.updates.isNotEmpty;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = check;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.map_outlined,
+                color: Colors.white70,
+                size: 22,
+              ),
+              SizedBox(width: 8),
+              Text(
+                '赛道库',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: onVersionTap,
+            child: Text(
+              '当前版本：$dataVersion',
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: statusDotColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  statusText,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (c != null && c.skippedUserModified.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${c.skippedUserModified.length} 个包因本地改动未列入更新（远端不覆盖本地改动）',
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: checking ? null : onCheck,
+              child: Text(checking ? '检测中…' : '赛道库版本检测'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: updateButtonEnabled ? onUpdateAll : null,
+              child: Text(applying ? '更新中…' : '更新赛道库'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton(
+            onPressed: onImport,
+            child: const Text('从行程导入'),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$kOsmAttribution；OSM 数据遵循 ODbL，署名见本页。',
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }

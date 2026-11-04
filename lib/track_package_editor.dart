@@ -145,12 +145,20 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
     final lengthM = _centerline.length >= 2
         ? polylineLengthM(_centerline).round()
         : widget.package.lengthM;
+    // 实测替换规则：用户改动了分段点，分段来源就不再是推导值，必须同步
+    // 改写 sectorNote，否则界面仍会把实测点标成“模拟器数据推导”。
+    final sectorNote = sectorNoteAfterEdit(
+      original: widget.package.sectorPoints,
+      edited: _sectors,
+      originalNote: widget.package.sectorNote,
+    );
     final updated = widget.package.copyWith(
       centerline: _centerline,
       start: _start,
       finish: _finish,
       gantry: _gantry,
       sectorPoints: _sectors,
+      sectorNote: sectorNote,
       lengthM: lengthM,
       verification: TrackPackageVerification.pending,
       verificationNote: '用户编辑，待核对',
