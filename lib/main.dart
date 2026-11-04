@@ -473,12 +473,11 @@ class _HomePageState extends State<HomePage>
   int myTab = 0; // 0 行程 1 动态 2 收藏 3 成就
   // v1.2.0：车辆档案（设置页入口加载，默认车辆用于新行程绑定）、
   // 赛道行程最佳圈（列表卡片用，加载失败为 null 即“暂无圈速”）、
-  // 列表筛选 / 多选删除 / 油耗分组区间状态。
+  // 列表多选删除 / 油耗分组区间状态。
   VehicleLibrary? vehicleLibrary;
   Map<String, int?> trackBestLapMs = {};
   bool _listSelecting = false;
   final Set<String> _selectedTripIds = {};
-  int _listFilter = 0; // 0 全部 1 街道 2 赛道
 
   @override
   void initState() {
@@ -662,7 +661,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.2.4',
+          versionName: '1.2.7',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1294,11 +1293,13 @@ class _HomePageState extends State<HomePage>
         leading: SizedBox(
           width: 44,
           height: 44,
-          child: IconButton(
-            icon: const Icon(Icons.menu, size: 22),
-            tooltip: '菜单',
-            padding: EdgeInsets.zero,
-            onPressed: _toggleMenu,
+          child: Semantics(
+            label: '菜单',
+            child: IconButton(
+              icon: const Icon(Icons.menu, size: 22),
+              padding: EdgeInsets.zero,
+              onPressed: _toggleMenu,
+            ),
           ),
         ),
         centerTitle: true,
@@ -1308,11 +1309,13 @@ class _HomePageState extends State<HomePage>
           SizedBox(
             width: 44,
             height: 44,
-            child: IconButton(
-              icon: const Icon(Icons.settings, size: 22),
-              tooltip: '设置',
-              padding: EdgeInsets.zero,
-              onPressed: _openSettings,
+            child: Semantics(
+              label: '设置',
+              child: IconButton(
+                icon: const Icon(Icons.settings, size: 22),
+                padding: EdgeInsets.zero,
+                onPressed: _openSettings,
+              ),
             ),
           ),
         ],
@@ -2262,6 +2265,10 @@ class _HomePageState extends State<HomePage>
     final cLon = rec.curLon != 0 ? rec.curLon : (rec.points.isNotEmpty ? rec.points.last.lon : 121.4737);
     final now = DateTime.now().millisecondsSinceEpoch;
     final trail = rec.gHistory.where((g) => now - g.timeMs <= 5000).toList();
+    // 赛道面板判定只看模式选择，不看 liveLapTimer：计时器是首个 GPS 点
+    // 到达后才异步建成，旧条件（timer != null）会让赛道模式开局回落
+    // 到街道 3D 地图，这就是“很大概率还是街道界面”的根因。
+    final isTrackPage = trackMode && selectedTrack != null;
     return Column(children: [
       RippleTap(
         onTap: _openWeatherPage,
@@ -2292,8 +2299,12 @@ class _HomePageState extends State<HomePage>
         ),
       ),
       // v1.0.4：记录页性能测试小入口已删，入口只在左拉菜单（红字加粗）。
-      // v0.1.3 赛道实时圈速条（仅赛道模式）：当前圈/上一圈/最快圈/Delta。
-      if (trackMode && selectedTrack != null && liveLapTimer != null)
+      // 职业赛道面板顶部小字：只给赛道名、圈数、本节用时，安静待着。
+      // Delta 不再放这里：旧的 currentDeltaMs 是“当前圈已用 - 最佳圈
+      // 总时长”，开圈不久时恒为很大的负值，会误导；真正的实时 Delta
+      // （分段级）放在下方 TrackSessionDisplay 主角区。
+      // 计时器未建成时显示“等待定位”，不回落街道面板。
+      if (isTrackPage)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           color: const Color(0xFF111111),
@@ -2302,11 +2313,11 @@ class _HomePageState extends State<HomePage>
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                '${selectedTrack!.nameCn} · 第 ${liveLapTimer!.currentLapNumber} 圈'
-                '${liveLapTimer!.currentLapMs == null ? '' : ' · 当前 ${LapTimer.formatLapTime(liveLapTimer!.currentLapMs!)}'}'
-                '${liveLapTimer!.bestLap == null ? '' : ' · 最快 ${LapTimer.formatLapTime(liveLapTimer!.bestLap!.durationMs)}'}'
-                '${liveLapTimer!.currentDeltaMs == null ? '' : ' · Delta ${LapTimer.formatDelta(liveLapTimer!.currentDeltaMs!)}'}'
-                '${liveLapTimer!.isPaused ? ' · 已自动暂停' : ''}',
+                liveLapTimer == null
+                    ? '${selectedTrack!.nameCn} · 等待定位，计时即将开始'
+                    : '${selectedTrack!.nameCn} · ${liveLapTimer!.currentLapNumber <= 0 ? '发车圈' : '第 ${liveLapTimer!.currentLapNumber} 圈'}'
+                        ' · 本节用时 ${fmtDur(rec.elapsedMs)}'
+                        '${liveLapTimer!.isPaused ? ' · 已自动暂停' : ''}',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -2328,15 +2339,16 @@ class _HomePageState extends State<HomePage>
       // completed 恒为空、分段格全为 '--'，见 track_timing.dart
       // 的 currentCompletedSectorsMs 注释）；目录归一化轮廓点
       // 不是经纬度，绝不能换算成 GeoPoint 冒充扇区点。
-      if (trackMode && selectedTrack != null && liveLapTimer != null)
+      if (isTrackPage)
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(12),
             child: Builder(builder: (_) {
+              final timer = liveLapTimer;
               final sectorData = sectorDataFor(selectedTrack!.id);
               final labels = sectorData?.sectorLabels ?? const [];
-              final timer = liveLapTimer!;
-              final completedDeltas = timer.currentSectorDeltasVsBest;
+              final completedDeltas =
+                  timer?.currentSectorDeltasVsBest ?? const <int?>[];
               final count = labels.length > completedDeltas.length
                   ? labels.length
                   : completedDeltas.length;
@@ -2345,16 +2357,58 @@ class _HomePageState extends State<HomePage>
                   (i) => i < completedDeltas.length
                       ? completedDeltas[i]
                       : null);
-              return TrackSessionDisplay(
-                currentLapNumber: timer.currentLapNumber,
-                currentLapMs: timer.currentLapMs,
-                sectorDeltasMs: sectorDeltasMs,
-                sectorLabels: labels,
-                lastLapMs: timer.lastLap?.durationMs,
-                bestLapMs: timer.bestLap?.durationMs,
-                predictedLapMs: timer.predictedLapMsVsBest,
-                sectorSourceNote: sectorData?.sourceLabel ?? '扇区待核',
-                isPaused: timer.isPaused,
+              final laps = timer?.laps ?? const <Lap>[];
+              final bestMs = timer?.bestLap?.durationMs;
+              // 职业面板接线（诚实口径，见 track_session_display.dart）：
+              // - 实时 Delta 只认真实扇区点：_buildLapTimer 目前不传
+              //   sectorPoints（目录轮廓点不是经纬度，绝不能冒充），
+              //   故直播中分段完成数据恒为空，Delta 传 null 显示 '--'；
+              //   扇区点接入后，Delta = 预测圈 - 最佳圈（分段级）。
+              // - 最优圈复用 sessionOptimalLapMs（内部先按最佳圈的
+              //   分段长度过滤，避免退化半圈与真实分段按下标混算）。
+              final completedTimes =
+                  timer?.currentCompletedSectorsMs ?? const <int>[];
+              final hasSectorPoints =
+                  timer != null && timer.sectorPoints.isNotEmpty;
+              final predictedMs = timer?.predictedLapMsVsBest;
+              final liveDelta = liveDeltaMsFor(
+                predictedLapMs: predictedMs,
+                bestLapMs: bestMs,
+                hasSectorPoints: hasSectorPoints,
+              );
+              final currentSectorIndex =
+                  hasSectorPoints && completedTimes.length < labels.length
+                      ? completedTimes.length
+                      : null;
+              final optimalLapMs = sessionOptimalLapMs(laps);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TrackSessionDisplay(
+                    currentLapNumber: timer?.currentLapNumber ?? 0,
+                    currentLapMs: timer?.currentLapMs,
+                    // 大计时直播刷新：独立 ticker 插值，只重建大数字；
+                    // 暂停须合并 LapTimer 自动暂停与记录手动暂停，
+                    // 否则手动暂停期间显示仍会插值往前跑。
+                    timerLive: true,
+                    timerPaused: (timer?.isPaused ?? false) ||
+                        rec.state == RecState.paused,
+                    sectorDeltasMs: sectorDeltasMs,
+                    sectorTimesMs: completedTimes,
+                    currentSectorIndex: currentSectorIndex,
+                    liveDeltaMs: liveDelta,
+                    sectorLabels: labels,
+                    bestLapMs: bestMs,
+                    predictedLapMs: predictedMs,
+                    optimalLapMs: optimalLapMs,
+                    sectorSourceNote: sectorData?.sourceLabel ?? '扇区待核',
+                    isPaused: timer?.isPaused ?? false,
+                  ),
+                  const SizedBox(height: 12),
+                  _trackLapListCard(laps, bestMs),
+                  const SizedBox(height: 12),
+                  _trackSpeedCard(),
+                ],
               );
             }),
           ),
@@ -2387,7 +2441,9 @@ class _HomePageState extends State<HomePage>
         padding: const EdgeInsets.all(12),
         color: CardStyle.cardColor,
         child: Column(children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // 赛道面板不用街道的速度/G 值区，只留标记/暂停/结束。
+          if (!isTrackPage) ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('${(rec.curSpeed * 3.6).toStringAsFixed(0)}', style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold, color: _speedColor(rec.curSpeed * 3.6))),
@@ -2416,8 +2472,9 @@ class _HomePageState extends State<HomePage>
                 size: 110,
               ),
             ),
-          ]),
-          const SizedBox(height: 10),
+            ]),
+            const SizedBox(height: 10),
+          ],
           // v1.2.0 标记事件：街道/赛道记录页共用，醒目全宽按钮，位于
           // 暂停/长按结束上方；标记时可写标题、选类型、可选照片与备注，
           // 无照片也可先标记，之后在详情时间线附照片。
@@ -2475,6 +2532,91 @@ class _HomePageState extends State<HomePage>
     ]);
   }
 
+  /// 赛道面板：圈速列表卡（最新圈在上；最快圈红字标“最快”；
+  /// 停留不计圈的圈标“不计圈”，不参与最快圈比较）。
+  Widget _trackLapListCard(List<Lap> laps, int? bestMs) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141414),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2A2A2A)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('圈速列表',
+            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        if (laps.isEmpty)
+          const Text('暂无完成圈', style: TextStyle(color: Colors.white54, fontSize: 13))
+        else
+          for (final lap in laps.reversed)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(children: [
+                Text('第 ${lap.number} 圈',
+                    style: const TextStyle(color: Colors.white, fontSize: 14)),
+                const Spacer(),
+                if (!lap.counted)
+                  const Text('不计圈 ',
+                      style: TextStyle(color: Colors.white54, fontSize: 12))
+                else if (bestMs != null && lap.durationMs == bestMs)
+                  const Text('最快 ',
+                      style: TextStyle(
+                          color: Color(0xFFE10600),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold)),
+                Text(LapTimer.formatLapTime(lap.durationMs),
+                    style: TextStyle(
+                        color: (lap.counted && bestMs != null && lap.durationMs == bestMs)
+                            ? const Color(0xFFE10600)
+                            : Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold)),
+              ]),
+            ),
+      ]),
+    );
+  }
+
+  /// 赛道面板：速度 / 里程 / 用时卡。不用街道面板的 G 值圆与
+  /// 速度区间图例，只给赛道关心的三项 + 定位精度。职业面板里
+  /// 它降级放在圈速列表下面：内边距与字号都缩小，不抢计时区风头。
+  Widget _trackSpeedCard() {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141414),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2A2A2A)),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${(rec.curSpeed * 3.6).toStringAsFixed(0)}',
+                style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: _speedColor(rec.curSpeed * 3.6))),
+            const Text('km/h', style: TextStyle(color: Colors.white60)),
+          ]),
+        ),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km',
+                style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 4),
+            Text('用时 ${fmtDur(rec.elapsedMs)}',
+                style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 4),
+            Text(
+                '定位精度 ${rec.curHAcc >= 999 ? '—' : '${rec.curHAcc.toStringAsFixed(0)} m'}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ]),
+        ),
+      ]),
+    );
+  }
+
   /// v1.2.0：单条删除确认（长按卡片触发）与批量删除确认共用
   /// 文案：删除行程文件 + 索引 + 收藏孤儿 id，视频文件保留。
   Future<void> _confirmDeleteTrips(List<String> ids) async {
@@ -2508,38 +2650,18 @@ class _HomePageState extends State<HomePage>
   ///   油耗汇总只留在油耗页 / 车辆档案相关页与我的页（_monthlyFuelSummary
   ///   仍供我的页共用，不动）。
   /// - 排版：深色底 #121212 + 法拉利红 #E10600 点缀，统一卡片、
-  ///   字号层级与按钮样式；分区清晰：顶部筛选（全部/街道/赛道）
-  ///   + 分析入口、赛道专区入口、列表；不再并排一堆小按钮。
+  ///   字号层级与按钮样式；分区清晰：标题 + 分析入口、赛道专区入口、
+  ///   列表；不再并排一堆小按钮。
   /// - 列表卡片统一为“模式或赛道名 + 日期 + 里程/时长 + 关键指标
   ///   （街道给评分，赛道给最佳圈，无圈速写暂无圈速）”。
   /// - 单条长按删除、多选批量删除保留（v1.2.0 已有，不丢）；
   ///   空态写“暂无行程”。底部导航本身（216×56 方案 A 悬浮药丸）
-  ///   与主题色不动。记录页顶部的“赛道”只是筛选，赛道详情 /
-  ///   图鉴 / 分析统一走赛道页（_openTrackHome）。
+  ///   与主题色不动。赛道行程的详情 / 图鉴 / 分析统一走赛道页
+  ///   （_openTrackHome）。
   Widget _buildList() {
     const red = Color(0xFFE10600);
     // 演示行程排除在外：不再出现在列表里。
     final realTrips = trips.where((m) => !m.demo).toList();
-    final filtered = realTrips.where((m) {
-      if (_listFilter == 1) return !m.isTrackMode;
-      if (_listFilter == 2) return m.isTrackMode;
-      return true;
-    }).toList();
-
-    Widget filterChip(String label, int value) {
-      final selected = _listFilter == value;
-      return ChoiceChip(
-        label: Text(label,
-            style: TextStyle(
-                color: selected ? Colors.white : Colors.white70,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
-        selected: selected,
-        selectedColor: red,
-        backgroundColor: const Color(0xFF1E1E1E),
-        side: BorderSide(color: selected ? red : Colors.white24),
-        onSelected: (_) => setState(() => _listFilter = value),
-      );
-    }
 
     String cardTitle(TripMeta m) =>
         m.isTrackMode ? (m.trackName.isEmpty ? '赛道行程' : m.trackName) : m.mode.label;
@@ -2555,18 +2677,12 @@ class _HomePageState extends State<HomePage>
     return Container(
       color: const Color(0xFF121212),
       child: Column(children: [
-        // 分区一：顶部筛选 + 分析入口。
+        // 分区一：标题 + 分析入口。
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('行程记录',
                 style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Wrap(spacing: 8, children: [
-              filterChip('全部', 0),
-              filterChip('街道', 1),
-              filterChip('赛道', 2),
-            ]),
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
@@ -2646,7 +2762,7 @@ class _HomePageState extends State<HomePage>
         ),
         // 分区四：行程列表。
         Expanded(
-          child: filtered.isEmpty
+          child: realTrips.isEmpty
               ? const Center(
                   child: Text('暂无行程\n去首页开始一次记录',
                       textAlign: TextAlign.center,
@@ -2654,9 +2770,9 @@ class _HomePageState extends State<HomePage>
                 )
               : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 24),
-                  itemCount: filtered.length,
+                  itemCount: realTrips.length,
                   itemBuilder: (ctx, i) {
-                    final m = filtered[i];
+                    final m = realTrips[i];
                     final selected = _selectedTripIds.contains(m.id);
                     return DriveTrackCard(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -3259,9 +3375,9 @@ class _TripDetailPageState extends State<TripDetailPage> {
                     // 系统播放器与分享作为备用入口保留；HUD 未烧录进视频文件。
                     subtitle: const Text('点回顾进应用内播放（画面叠加速度/G 值），系统播放与分享为备用'),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      IconButton(icon: const Icon(Icons.ondemand_video), tooltip: '视频回顾（应用内叠加）', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VideoReviewPage(trip: t, initialSegment: t.videoPaths.indexOf(vp))))),
-                      IconButton(icon: const Icon(Icons.play_arrow), tooltip: '系统播放器播放', onPressed: () => Native.playVideo(vp)),
-                      IconButton(icon: const Icon(Icons.share), tooltip: '分享视频', onPressed: () => Native.shareFiles([vp], 'video/mp4', '驰迹行程视频')),
+                      Semantics(label: '视频回顾（应用内叠加）', child: IconButton(icon: const Icon(Icons.ondemand_video), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VideoReviewPage(trip: t, initialSegment: t.videoPaths.indexOf(vp)))))),
+                      Semantics(label: '系统播放器播放', child: IconButton(icon: const Icon(Icons.play_arrow), onPressed: () => Native.playVideo(vp))),
+                      Semantics(label: '分享视频', child: IconButton(icon: const Icon(Icons.share), onPressed: () => Native.shareFiles([vp], 'video/mp4', '驰迹行程视频'))),
                     ]),
                   ),
               ],
@@ -3276,13 +3392,15 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   selected: t.isPublic,
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: Icon(t.liked ? Icons.favorite : Icons.favorite_border, color: t.liked ? Colors.red : null),
-                  tooltip: '点赞（本机计数）',
-                  onPressed: () async {
-                    final nt = await widget.store.updateTripSocial(t.id, toggleLike: true);
-                    if (nt != null && mounted) setState(() => trip = nt);
-                  },
+                Semantics(
+                  label: '点赞（本机计数）',
+                  child: IconButton(
+                    icon: Icon(t.liked ? Icons.favorite : Icons.favorite_border, color: t.liked ? Colors.red : null),
+                    onPressed: () async {
+                      final nt = await widget.store.updateTripSocial(t.id, toggleLike: true);
+                      if (nt != null && mounted) setState(() => trip = nt);
+                    },
+                  ),
                 ),
                 Text('${t.likes}'),
               ]),

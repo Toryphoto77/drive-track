@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_haptics.dart';
+
 /// v1.0.2 统一导入 UI（只管外观与文案排版，不管导入逻辑），
 /// v1.0.3 强调色改回主题色。
 ///
@@ -153,7 +155,12 @@ class ImportPrimaryButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      onPressed: onPressed,
+      onPressed: onPressed == null
+          ? null
+          : () {
+              AppHaptics.tap();
+              onPressed!();
+            },
       child: icon == null
           ? Text(label)
           : Row(
@@ -190,7 +197,12 @@ class ImportSecondaryButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      onPressed: onPressed,
+      onPressed: onPressed == null
+          ? null
+          : () {
+              AppHaptics.tap();
+              onPressed!();
+            },
       child: Text(label),
     );
     if (!expanded) return button;
@@ -234,10 +246,12 @@ class ImportFileRow extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         if (onClear != null)
-          IconButton(
-            icon: const Icon(Icons.clear, size: 20, color: Colors.white54),
-            tooltip: '清除',
-            onPressed: onClear,
+          Semantics(
+            label: '清除',
+            child: IconButton(
+              icon: const Icon(Icons.clear, size: 20, color: Colors.white54),
+              onPressed: onClear,
+            ),
           ),
         ImportPrimaryButton(label: pickLabel, onPressed: onPick, expanded: false),
       ]),

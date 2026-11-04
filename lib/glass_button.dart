@@ -2,6 +2,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'app_haptics.dart';
+
 /// 毛玻璃圆形按钮（v0.1.4 外壳 UI 分工）。
 ///
 /// 供顶部菜单钮、设置钮、各页返回钮复用，统一外观与手感：
@@ -32,7 +34,8 @@ class GlassButton extends StatelessWidget {
   /// 直径，默认 44。
   final double size;
 
-  /// 无障碍提示，如 '菜单' / '设置' / '返回'。
+  /// 无障碍语义标签，如 '菜单' / '设置' / '返回'。
+  /// 只供读屏使用，不包 Tooltip，长按不再弹文本。
   final String? tooltip;
 
   const GlassButton({
@@ -81,7 +84,12 @@ class GlassButton extends StatelessWidget {
             color: Colors.transparent,
             child: InkWell(
               customBorder: const CircleBorder(),
-              onTap: onPressed,
+              onTap: onPressed == null
+                  ? null
+                  : () {
+                      AppHaptics.tap();
+                      onPressed!();
+                    },
               child: Icon(
                 icon,
                 size: 22,
@@ -92,8 +100,9 @@ class GlassButton extends StatelessWidget {
         ),
       ),
     );
+    // 长按不弹文本：不用 Tooltip，语义标签只给读屏。
     if (tooltip == null || tooltip!.isEmpty) return button;
-    return Tooltip(message: tooltip!, child: button);
+    return Semantics(label: tooltip, child: button);
   }
 }
 

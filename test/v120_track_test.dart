@@ -2,6 +2,7 @@
 /// 方案 A 赛中显示与赛道分析页冒烟。
 
 import 'package:drive_track/models.dart';
+import 'package:drive_track/rolling_digit.dart';
 import 'package:drive_track/track_analysis_page.dart';
 import 'package:drive_track/track_sector_data.dart';
 import 'package:drive_track/track_session_display.dart';
@@ -172,18 +173,30 @@ void main() {
               currentLapNumber: 2,
               currentLapMs: 61234,
               sectorDeltasMs: [-1234, null, 2500],
-              lastLapMs: 90000,
+              sectorTimesMs: [30000],
+              liveDeltaMs: -500,
               bestLapMs: 88000,
               predictedLapMs: 89500,
+              optimalLapMs: 87000,
               sectorSourceNote: '估算分段',
             ),
           ),
         ),
       );
-      expect(find.text('1:01.234'), findsOneWidget);
+      // 大数字计时现为里程表式滚动组件，不再是单支 Text。
+      expect(
+          tester
+              .widget<RollingNumberText>(find.byType(RollingNumberText))
+              .value,
+          '1:01.234');
       expect(find.text('-0:01.234'), findsOneWidget);
       expect(find.text('+0:02.500'), findsOneWidget);
-      expect(find.text('--'), findsOneWidget); // 未完成分段
+      expect(find.text('--'), findsNWidgets(3)); // 未完成分段的用时与 delta
+      expect(find.text('实时 Delta'), findsOneWidget);
+      expect(find.text('-0:00.500'), findsOneWidget);
+      expect(find.text('0:30.000'), findsOneWidget); // 已完成分段的绝对用时
+      expect(find.text('最优圈'), findsOneWidget);
+      expect(find.text('1:27.000'), findsOneWidget);
       expect(find.text('参照圈：本节最佳圈'), findsOneWidget);
       expect(find.text('估算分段'), findsOneWidget);
       expect(find.textContaining('快'), findsNothing);

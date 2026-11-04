@@ -15,8 +15,31 @@
 /// - 本 widget 不做计时、不算 delta、不碰 GPS：全部输入由调用方
 ///   （收口接线方）从 LapTimer / 轨迹算好传入，接线时只替换录制页
 ///   的地图区即可。
+///
+/// 职业赛道面板布局（用户 2026-11-04 定，参考 RaceChrono / Garmin
+/// Catalyst 等专业软件的信息架构，不照搬皮肤）：
+/// - 主角是当前圈大计时，其下是大的实时 Delta 数字 + 一条细的红绿
+///   Delta 条；分段行每段给分段用时 + Delta，当前段高亮；目标行
+///   并排预测圈 / 最佳圈 / 最优圈（最优圈 = 各段历史最快相加，
+///   调用方用 track_sector_data.dart 的 theoreticalBestLapMs 算）。
+/// - 诚实口径（绝不冒充）：
+///   实时 Delta 是分段级的：[liveDeltaMs] = 预测圈 - 最佳圈，即已
+///   完成分段 delta 之和，只在分段点触发时变化，不是基于距离的
+///   连续 Delta；计时器未配置真实扇区点时调用方传 null，显示
+///   '--'。绝不拿“当前圈已用 - 最佳圈总时长”冒充——开圈不久时
+///   那个数恒为很大的负值，会误导。
+///   最优圈只认调用方算好的值；无计入圈或分段数据不足时为 null，
+///   显示占位，不拼假圈。
+///
+/// 大计时显示刷新（用户 2026-11-04 反馈“数字根本不滚动”后的修复）：
+/// 大数字不用父级重建驱动，改由 [LiveLapTimeText] 的独立 vsync
+/// Ticker 按屏幕刷新率插值刷新，只重建大数字本身；锚点仍是调用方
+/// 传入的权威 currentLapMs，暂停/完成一圈/新 GPS 点到达时的行为
+/// 见 live_lap_timer_text.dart。分段格与 Delta 是分段级数据，
+/// 本来就只在分段点触发时变化，不走 ticker。
 
 import 'package:flutter/material.dart';
+import 'live_lap_timer_text.dart';
 
 import 'track_timing.dart';
 
@@ -33,6 +56,85 @@ Color sectorDeltaColor(int? deltaMs) {
   return deltaMs < 0 ? _kGreen : _kRed;
 }
 
+/// 实时 Delta（ms，分段级，纯函数）：预测圈 - 最佳圈，即已完成
+/// 分段 delta 之和。仅当计时器配置了真实扇区点时有效；无扇区点
+/// 时返回 null（调用方显示 '--'），因为此时预测圈恒等于最佳圈、
+/// 算出的 0 只是“尚无偏差数据”，不是“正好跑在最佳节奏上”。
+int? liveDeltaMsFor({
+  required int? predictedLapMs,
+  required int? bestLapMs,
+  required bool hasSectorPoints,
+}) {
+  if (!hasSectorPoints || predictedLapMs == null || bestLapMs == null) {
+    return null;
+  }
+  return predictedLapMs - bestLapMs;
+}
+
+/// 细的红绿 Delta 条：中心为 0，左红（比参照慢）、右绿（比参照快）。
+/// 满格 = 10 秒（分段级 Delta 通常在几秒内，10 秒满格既能看清小幅
+/// 变化、又不至于让一次大失误直接顶满）；null 或 0 时只画底条与中心刻度。
+class _DeltaBar extends StatelessWidget {
+  final int? deltaMs;
+  const _DeltaBar(this.deltaMs);
+
+  @override
+  Widget build(BuildContext context) {
+    const fullScaleMs = 10000;
+    return LayoutBuilder(builder: (context, constraints) {
+      final w = constraints.maxWidth;
+      final d = deltaMs;
+      final frac = d == null ? 0.0 : (d.abs() / fullScaleMs).clamp(0.0, 1.0);
+      final half = w / 2;
+      final fillW = half * frac;
+      return SizedBox(
+        height: 6,
+        child: Stack(children: [
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2A2A),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          if (d != null && d < 0)
+            Positioned(
+              left: half,
+              top: 0,
+              bottom: 0,
+              width: fillW,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _kGreen,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          if (d != null && d > 0)
+            Positioned(
+              left: half - fillW,
+              top: 0,
+              bottom: 0,
+              width: fillW,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _kRed,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          Positioned(
+            left: half - 1,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            child: Container(color: Colors.white38),
+          ),
+        ]),
+      );
+    });
+  }
+}
+
 /// 赛中显示方案 A：可直接嵌入录制页、替换原地图区的 widget。
 class TrackSessionDisplay extends StatelessWidget {
   /// 当前圈号；0 表示还在发车圈（未第一次穿越起终点）。
@@ -46,12 +148,22 @@ class TrackSessionDisplay extends StatelessWidget {
   /// [sectorLabels] 长度补灰框）。负 = 更快，0 = 持平，正 = 更慢。
   final List<int?> sectorDeltasMs;
 
+  /// 已完成分段的绝对用时（ms），第 i 项对应第 i 段；未完成分段
+  /// 不在列表里（按 [sectorLabels] 长度补 '--'）。与 [sectorDeltasMs]
+  /// 下标口径一致，均来自 LapTimer.currentCompletedSectorsMs。
+  final List<int> sectorTimesMs;
+
+  /// 当前正在跑的分段下标（0 起）；无真实扇区点、或无法确定时为
+  /// null（不做高亮，不猜当前段）。
+  final int? currentSectorIndex;
+
+  /// 实时 Delta（ms，分段级，见 [liveDeltaMsFor]）；为 null 时显示
+  /// '--'，不冒充连续 Delta。
+  final int? liveDeltaMs;
+
   /// 分段标签；默认 S1/S2/S3。扇区待核的赛道调用方应传
   /// [] 或通用标签并配 [sectorSourceNote]，不得硬标 S1/S2/S3。
   final List<String> sectorLabels;
-
-  /// 上一圈圈速（ms）；无上一圈时为 null，显示占位。
-  final int? lastLapMs;
 
   /// 最佳圈圈速（ms，本节最佳圈）；无时为 null，显示占位。
   final int? bestLapMs;
@@ -59,6 +171,10 @@ class TrackSessionDisplay extends StatelessWidget {
   /// 预测圈圈速（ms）；调用方按“已跑部分 + 参照圈剩余分段”算好
   /// 传入，本 widget 不反推；无时为 null，显示占位。
   final int? predictedLapMs;
+
+  /// 最优圈圈速（ms）= 各段历史最快相加；调用方用
+  /// theoreticalBestLapMs 算好传入，无数据时为 null，显示占位。
+  final int? optimalLapMs;
 
   /// 参照圈说明；默认“参照圈：本节最佳圈”。
   final String referenceNote;
@@ -70,18 +186,31 @@ class TrackSessionDisplay extends StatelessWidget {
   /// 是否因停车处于自动暂停中；为 true 时显示暂停提示行。
   final bool isPaused;
 
+  /// 大计时是否为直播显示；为 true 时大数字走独立 ticker 插值
+  /// 刷新（见 live_lap_timer_text.dart），缺省 false 即静态显示。
+  final bool timerLive;
+
+  /// 大计时是否暂停（调用方须把 LapTimer 自动暂停与记录手动
+  /// 暂停合并后传入）；为 true 时 ticker 停走、显示冻结。
+  final bool timerPaused;
+
   const TrackSessionDisplay({
     super.key,
     required this.currentLapNumber,
     required this.currentLapMs,
     required this.sectorDeltasMs,
+    this.sectorTimesMs = const [],
+    this.currentSectorIndex,
+    this.liveDeltaMs,
     this.sectorLabels = const ['S1', 'S2', 'S3'],
-    required this.lastLapMs,
     required this.bestLapMs,
     required this.predictedLapMs,
+    this.optimalLapMs,
     this.referenceNote = '参照圈：本节最佳圈',
     this.sectorSourceNote,
     this.isPaused = false,
+    this.timerLive = false,
+    this.timerPaused = false,
   });
 
   @override
@@ -104,9 +233,14 @@ class TrackSessionDisplay extends StatelessWidget {
             style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 2),
-          // 大数字当前圈计时（方案 A 的地图区替代主体）。
-          Text(
-            LapTimer.formatLapTime(currentLapMs),
+          // 大数字当前圈计时（方案 A 的地图区替代主体）：每位瞬间切换
+          // （视频对齐：无滑动、无拖影），不变位静止；刷新节奏由
+          // 独立 ticker 插值驱动，不再依赖 GPS 点到达才刷新。
+          LiveLapTimeText(
+            anchorMs: currentLapMs,
+            lapNumber: currentLapNumber,
+            paused: timerPaused,
+            live: timerLive,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 48,
@@ -121,8 +255,32 @@ class TrackSessionDisplay extends StatelessWidget {
                 style: TextStyle(color: _kRed, fontSize: 12),
               ),
             ),
+          const SizedBox(height: 8),
+          // 职业面板主角之二：大的实时 Delta 数字 + 细的红绿 Delta 条。
+          // Delta 为分段级（见 liveDeltaMsFor），无扇区点时为 '--'。
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text(
+                '实时 Delta',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                LapTimer.formatDelta(liveDeltaMs),
+                style: TextStyle(
+                  color: sectorDeltaColor(liveDeltaMs),
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _DeltaBar(liveDeltaMs),
           const SizedBox(height: 10),
-          // 一行分段色块：格里写带正负号的 delta 数字。
+          // 一行分段色块：每段给分段用时 + 带正负号的 delta 数字；
+          // 当前跑的段白边高亮；未完成分段两项均为 '--'，不补数。
           if (labels.isEmpty)
             const Text(
               '分段：扇区待核',
@@ -143,13 +301,18 @@ class TrackSessionDisplay extends StatelessWidget {
                                 i < sectorDeltasMs.length
                                     ? sectorDeltasMs[i]
                                     : null)
-                            .withValues(alpha: 0.18),
+                            .withValues(
+                                alpha: currentSectorIndex == i
+                                    ? 0.30
+                                    : 0.18),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: sectorDeltaColor(
-                              i < sectorDeltasMs.length
-                                  ? sectorDeltasMs[i]
-                                  : null),
+                          color: currentSectorIndex == i
+                              ? Colors.white
+                              : sectorDeltaColor(
+                                  i < sectorDeltasMs.length
+                                      ? sectorDeltasMs[i]
+                                      : null),
                         ),
                       ),
                       child: Column(
@@ -158,6 +321,19 @@ class TrackSessionDisplay extends StatelessWidget {
                             labels[i],
                             style: const TextStyle(
                               color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            i < sectorTimesMs.length
+                                ? LapTimer.formatLapTime(sectorTimesMs[i])
+                                : '--',
+                            style: TextStyle(
+                              color: i < sectorTimesMs.length
+                                  ? Colors.white
+                                  : Colors.white54,
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
                             ),
@@ -183,12 +359,13 @@ class TrackSessionDisplay extends StatelessWidget {
               ],
             ),
           const SizedBox(height: 10),
-          // 下方小字：上一圈、最佳圈、预测圈。
+          // 目标行：预测圈、最佳圈、最优圈（上一圈已在下方圈速列表
+          // 最新一行，不在这里重复占位）。
           Row(
             children: [
               Expanded(
                 child: _smallStat(
-                    '上一圈', LapTimer.formatLapTime(lastLapMs)),
+                    '预测圈', LapTimer.formatLapTime(predictedLapMs)),
               ),
               Expanded(
                 child: _smallStat(
@@ -196,7 +373,7 @@ class TrackSessionDisplay extends StatelessWidget {
               ),
               Expanded(
                 child: _smallStat(
-                    '预测圈', LapTimer.formatLapTime(predictedLapMs)),
+                    '最优圈', LapTimer.formatLapTime(optimalLapMs)),
               ),
             ],
           ),

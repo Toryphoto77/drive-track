@@ -193,8 +193,11 @@ List<RoadWay> parseOverpassWays(Map<String, dynamic> data) {
         ? tags['highway'] as String
         : '';
     ways.add(RoadWay(pts, highway: highway));
-    if (ways.length >= 200) break;
   }
+  // 不在此处截断：旧 200 条硬截断按回包顺序取，在稠密城区会随机
+  // 丢掉车脚下的路（“乱编”感的来源之一）；取舍统一交给
+  // [prioritizeRoadWays]（近处 + 主干优先），调用方在拿到中心
+  // 点后做，见 fetchRoadWaysAround。
   return ways;
 }
 
@@ -287,8 +290,11 @@ String roadStatusLabel({
   required bool neighborCache,
   required bool hasRoads,
   String? errorKind,
+  bool fromAmap = false,
 }) {
-  if (loaded) return '路网：OpenStreetMap';
+  // v1.2.5：高德兜底路网必须与 OSM 路网在文案上区分（仅主干路，
+  // 非全量路网），不能冒充成 OSM 数据。
+  if (loaded) return fromAmap ? '路网：高德兜底（仅主干路）' : '路网：OpenStreetMap';
   if (fromCache && hasRoads) {
     final base = neighborCache ? '附近缓存路网' : '缓存路网';
     final suffix = (errorKind != null && errorKind != 'empty')
@@ -352,7 +358,57 @@ List<RoadWay> parseOsmApiMap(String xml) {
   }
   ways.sort((a, b) =>
       roadTierForHighway(b.highway).compareTo(roadTierForHighway(a.highway)));
-  return ways.length > 250 ? ways.sublist(0, 250) : ways;
+  // 不在此处截断 250 条：取舍统一交给 [prioritizeRoadWays]，避免
+  // 按回包顺序硬截断在稠密城区随机丢路；调用方在拿到中心点后做。
+  return ways;
+}
+
+/// 路网去“乱编”感：回包顺序与距离无关，旧硬截断会在稠密城区
+/// 随机丢掉车脚下的路、留下远处的路。取舍规则（纯函数，可单测）：
+/// ① 中心 200 米内的路全留；② 高速/主干（tier 0）全留（定向用）；
+/// ③ 其余按离中心从近到远补满上限；最后按等级倒序排回绘制顺序
+/// （步行先画、高速压上层，与旧绘制顺序一致）。
+List<RoadWay> prioritizeRoadWays(List<RoadWay> ways, double lat, double lon,
+    [int limit = 400]) {
+  if (ways.length <= limit) {
+    final sorted = [...ways];
+    sorted.sort((a, b) =>
+        roadTierForHighway(b.highway).compareTo(roadTierForHighway(a.highway)));
+    return sorted;
+  }
+  final scored =
+      ways.map((w) => (w, _wayMinDistM(w.points, lat, lon))).toList();
+  final kept = <RoadWay>[];
+  final used = <RoadWay>{};
+  void add(RoadWay w) {
+    if (kept.length < limit && used.add(w)) kept.add(w);
+  }
+
+  for (final (w, d) in scored) {
+    if (d <= 200) add(w);
+  }
+  for (final (w, _) in scored) {
+    if (roadTierForHighway(w.highway) == 0) add(w);
+  }
+  final rest = scored.where((e) => !used.contains(e.$1)).toList()
+    ..sort((a, b) => a.$2.compareTo(b.$2));
+  for (final (w, _) in rest) {
+    add(w);
+  }
+  kept.sort((a, b) =>
+      roadTierForHighway(b.highway).compareTo(roadTierForHighway(a.highway)));
+  return kept;
+}
+
+double _wayMinDistM(List<(double, double)> pts, double lat, double lon) {
+  var best = double.infinity;
+  for (final (pLat, pLon) in pts) {
+    final dx = (pLon - lon) * math.cos(lat * math.pi / 180) * 111320;
+    final dy = (pLat - lat) * 110540;
+    final d = dx * dx + dy * dy;
+    if (d < best) best = d;
+  }
+  return math.sqrt(best);
 }
 
 /// 路网修复：缓存 v2（{v, savedAt, ways}，savedAt 为毫秒 epoch），
@@ -412,8 +468,15 @@ class RoadFetchResult {
   /// none=成功有数据，empty=成功但周边无道路，offline=无网络，
   /// timeout=超时，busy=服务器繁忙（HTTP 429/502/503/504），other=其他失败。
   final String errorKind;
-  const RoadFetchResult(this.ways, this.errorKind);
+  /// v1.2.5：数据来源，'osm'（默认，Overpass / OSM 主站）或
+  /// 'amap'（高德交通态势兜底，仅主干路，GCJ-02 已转 WGS-84）。
+  final String source;
+  const RoadFetchResult(this.ways, this.errorKind, {this.source = 'osm'});
 }
+
+/// v1.2.5：高德 Web 服务 Key，构建时经 --dart-define=AMAP_KEY 注入；
+/// 未注入时为空串，高德兜底禁用；绝不硬编码进源码。
+const String amapKey = String.fromEnvironment('AMAP_KEY', defaultValue: '');
 
 /// v1.0.7：按中心点周边向 Overpass 拉取 highway 道路线。
 /// v1.2.0：4 个公开镜像并行竞速、先到者胜（成功有数据或成功空
@@ -439,6 +502,7 @@ Future<RoadFetchResult> fetchRoadWaysAround(double lat, double lon) async {
   var total = mirrors.length;
   var done = 0;
   var fallbackStarted = false;
+  var amapStarted = false;
   // 兜底定时器必须可取消：否则 widget 释放时仍有 pending Timer，
   // widget 测试会因此失败（真实 App 里则是无用的空转回调）。
   Timer? fallbackTimer;
@@ -457,11 +521,16 @@ Future<RoadFetchResult> fetchRoadWaysAround(double lat, double lon) async {
   // 调用它，之后再赋值实现（赋值在 handleResult 声明之后，故闭包
   // 内引用 handleResult 合法）。
   late void Function() startFallback;
+  late void Function() startAmap;
 
   void handleResult(HttpClient client, RoadFetchResult result) {
     if (completer.isCompleted) return;
     if (result.ways.isNotEmpty || result.errorKind == 'empty') {
-      completer.complete(result);
+      // 胜出后才按中心点取舍：近处 + 主干优先，不再按回包顺序硬截断。
+      // 来源透传：高德兜底胜出时调用方据此区分文案、不写入缓存。
+      completer.complete(RoadFetchResult(
+          prioritizeRoadWays(result.ways, lat, lon), result.errorKind,
+          source: result.source));
       cancelFallbackTimer();
       closeOthers(client);
       return;
@@ -472,6 +541,11 @@ Future<RoadFetchResult> fetchRoadWaysAround(double lat, double lon) async {
       if (!fallbackStarted) {
         // 镜像全部快速失败：不等 3 秒，直接起兜底。
         startFallback();
+      } else if (!amapStarted && amapKey.isNotEmpty) {
+        // v1.2.5：OSM（含 /map 兜底）全失败，最后才试高德兜底；
+        // 无 Key 时直接按旧逻辑报失败，不发无 Key 请求。
+        amapStarted = true;
+        startAmap();
       } else {
         completer.complete(
             RoadFetchResult(const [], pickRoadErrorKind(failures)));
@@ -489,6 +563,19 @@ Future<RoadFetchResult> fetchRoadWaysAround(double lat, double lon) async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
     clients.add(client);
     _fetchOsmApiRoads(client, lat, lon)
+        .timeout(const Duration(seconds: 20),
+            onTimeout: () => const RoadFetchResult([], 'timeout'))
+        .then((result) => handleResult(client, result));
+  };
+
+  // v1.2.5：高德兜底只在 OSM 全失败后起一次；其结果同样走
+  // handleResult（胜出透传 source，失败计入原因聚合后报失败）。
+  startAmap = () {
+    if (completer.isCompleted) return;
+    total++;
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    clients.add(client);
+    _fetchAmapTrafficRoads(client, lat, lon)
         .timeout(const Duration(seconds: 20),
             onTimeout: () => const RoadFetchResult([], 'timeout'))
         .then((result) => handleResult(client, result));
@@ -567,6 +654,146 @@ Future<RoadFetchResult> _fetchOsmApiRoads(
     }
     final ways = parseOsmApiMap(body);
     return RoadFetchResult(ways, ways.isEmpty ? 'empty' : 'none');
+  } on SocketException {
+    return const RoadFetchResult([], 'offline');
+  } on TimeoutException {
+    return const RoadFetchResult([], 'timeout');
+  } catch (_) {
+    return const RoadFetchResult([], 'other');
+  } finally {
+    client.close();
+  }
+}
+
+/// v1.2.5：高德交通态势矩形接口的 bbox（与 osmApiBbox 同范围，
+/// 约 1 公里），格式为 minLon,minLat;maxLon,maxLat。
+String amapTrafficRectangle(double lat, double lon) {
+  final minLat = (lat - 0.005).toStringAsFixed(6);
+  final maxLat = (lat + 0.005).toStringAsFixed(6);
+  final minLon = (lon - 0.005).toStringAsFixed(6);
+  final maxLon = (lon + 0.005).toStringAsFixed(6);
+  return '$minLon,$minLat;$maxLon,$maxLat';
+}
+
+/// v1.2.5：GCJ-02 → WGS-84 逆转换（公开标准近似算法，误差米级；
+/// 不是编造数据：高德坐标系与 GPS 坐标系的系统性偏移必须消除，
+/// 否则兜底路网会整体偏移几百米）。中国境外直接返回原值。
+(double, double) gcj02ToWgs84(double gcjLat, double gcjLon) {
+  if (gcjLon < 72.004 ||
+      gcjLon > 137.8347 ||
+      gcjLat < 0.8293 ||
+      gcjLat > 55.8271) {
+    return (gcjLat, gcjLon);
+  }
+  const a = 6378245.0;
+  const ee = 0.00669342162296594323;
+  double transformLat(double x, double y) {
+    var ret = -100.0 +
+        2.0 * x +
+        3.0 * y +
+        0.2 * y * y +
+        0.1 * x * y +
+        0.2 * math.sqrt(x.abs());
+    ret += (20.0 * math.sin(6.0 * x * math.pi) +
+            20.0 * math.sin(2.0 * x * math.pi)) *
+        2.0 /
+        3.0;
+    ret += (20.0 * math.sin(y * math.pi) +
+            40.0 * math.sin(y * math.pi / 3.0)) *
+        2.0 /
+        3.0;
+    ret += (160.0 * math.sin(y * math.pi / 12.0) +
+            320 * math.sin(y * math.pi / 30.0)) *
+        2.0 /
+        3.0;
+    return ret;
+  }
+
+  double transformLon(double x, double y) {
+    var ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.sqrt(x.abs());
+    ret += (20.0 * math.sin(6.0 * x * math.pi) +
+            20.0 * math.sin(2.0 * x * math.pi)) *
+        2.0 /
+        3.0;
+    ret += (20.0 * math.sin(x * math.pi) +
+            40.0 * math.sin(x * math.pi / 3.0)) *
+        2.0 /
+        3.0;
+    ret += (150.0 * math.sin(x * math.pi / 12.0) +
+            300 * math.sin(x * math.pi / 30.0)) *
+        2.0 /
+        3.0;
+    return ret;
+  }
+
+  final dLat = transformLat(gcjLon - 105.0, gcjLat - 35.0);
+  final dLon = transformLon(gcjLon - 105.0, gcjLat - 35.0);
+  final radLat = gcjLat / 180.0 * math.pi;
+  var magic = math.sin(radLat);
+  magic = 1 - ee * magic * magic;
+  final sqrtMagic = math.sqrt(magic);
+  final dLatDeg =
+      dLat * 180.0 / ((a * (1 - ee)) / (magic * sqrtMagic) * math.pi);
+  final dLonDeg =
+      dLon * 180.0 / (a / sqrtMagic * math.cos(radLat) * math.pi);
+  return (gcjLat - dLatDeg, gcjLon - dLonDeg);
+}
+
+/// v1.2.5：高德交通态势响应解析（纯函数，可单测，不含网络）。
+/// 只取 roads[].polyline（GCJ-02 的 lng,lat 串），逐点转 WGS-84；
+/// 少于 2 点的折线丢弃；status != '1'、无 roads 时返回空。
+/// highway 置空（交通态势不给等级，不冒充分类，绘制走一般道路）。
+List<RoadWay> parseAmapTrafficRoads(Map<String, dynamic> data) {
+  if (data['status']?.toString() != '1') return const [];
+  final traffic = data['trafficinfo'];
+  final roads = traffic is Map ? (traffic['roads'] as List?) : null;
+  if (roads == null) return const [];
+  final ways = <RoadWay>[];
+  for (final r in roads) {
+    if (r is! Map) continue;
+    final polyline = r['polyline'];
+    if (polyline is! String) continue;
+    final pts = <(double, double)>[];
+    for (final pair in polyline.split(';')) {
+      final parts = pair.split(',');
+      if (parts.length != 2) continue;
+      final lng = double.tryParse(parts[0]);
+      final lat = double.tryParse(parts[1]);
+      if (lng == null || lat == null) continue;
+      pts.add(gcj02ToWgs84(lat, lng));
+    }
+    if (pts.length >= 2) ways.add(RoadWay(pts));
+  }
+  return ways;
+}
+
+/// v1.2.5：高德交通态势兜底（bbox 约 1 公里，只取主干路折线，
+/// 失败分档与 OSM 一致，不抛异常）。仅在 OSM（含 /map 兜底）
+/// 全失败时由 fetchRoadWaysAround 触发，不做常规数据源；
+/// 无 Key 时不发请求，直接返回 other。
+Future<RoadFetchResult> _fetchAmapTrafficRoads(
+    HttpClient client, double lat, double lon) async {
+  if (amapKey.isEmpty) return const RoadFetchResult([], 'other');
+  try {
+    final uri = Uri.parse(
+        'https://restapi.amap.com/v3/traffic/status/rectangle?rectangle=${amapTrafficRectangle(lat, lon)}&extensions=all&key=$amapKey');
+    final req = await client.getUrl(uri);
+    final resp = await req.close().timeout(const Duration(seconds: 10));
+    final body =
+        await resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 10));
+    if (resp.statusCode == 429 ||
+        resp.statusCode == 502 ||
+        resp.statusCode == 503 ||
+        resp.statusCode == 504) {
+      return const RoadFetchResult([], 'busy');
+    }
+    if (resp.statusCode != 200) {
+      return const RoadFetchResult([], 'other');
+    }
+    final ways =
+        parseAmapTrafficRoads(jsonDecode(body) as Map<String, dynamic>);
+    return RoadFetchResult(ways, ways.isEmpty ? 'empty' : 'none',
+        source: 'amap');
   } on SocketException {
     return const RoadFetchResult([], 'offline');
   } on TimeoutException {
@@ -679,6 +906,8 @@ class _Recording3dMapState extends State<Recording3dMap> {
   bool _roadLoaded = false;
   bool _roadFromCache = false;
   bool _roadNeighborCache = false;
+  // v1.2.5：当前显示的路网是否来自高德兜底（仅主干路），文案区分用。
+  bool _roadFromAmap = false;
   String? _roadError;
   bool _fetching = false;
   double? _fetchLat;
@@ -744,8 +973,11 @@ class _Recording3dMapState extends State<Recording3dMap> {
           _roadLoaded = true;
           _roadFromCache = false;
           _roadNeighborCache = false;
+          _roadFromAmap = result.source == 'amap';
           _roadError = null;
-          _saveCachedRoads(lat, lon, result.ways);
+          // v1.2.5：高德兜底是仅主干路的补充，不写入 OSM 缓存格，
+          // 否则日后断网会把主干路当成缓存路网误标。
+          if (result.source != 'amap') _saveCachedRoads(lat, lon, result.ways);
         } else {
           // 失败不记 _fetchLat（下次 30 秒后可重试）；成功但无道路时
           // 同样不记位置，避免把“无数据”误当成已拉取。失败原因存
@@ -775,6 +1007,7 @@ class _Recording3dMapState extends State<Recording3dMap> {
         neighborCache: _roadNeighborCache,
         hasRoads: _roads.isNotEmpty,
         errorKind: _roadError,
+        fromAmap: _roadFromAmap,
       );
 
   @override
@@ -789,6 +1022,7 @@ class _Recording3dMapState extends State<Recording3dMap> {
             points: widget.points,
             photoPoints: widget.photoPoints,
             roadWays: _roads,
+            roadsDimmed: _roadNeighborCache,
             is3d: widget.is3d,
             headingUp: widget.headingUp,
             zoom: widget.zoom,
@@ -887,6 +1121,10 @@ class _Recording3dPainter extends CustomPainter {
   final List<Recording3dPoint> points;
   final List<PhotoPoint> photoPoints;
   final List<RoadWay> roadWays;
+
+  /// 邻格缓存路网是否正被显示：为 true 时道路画暗一档，与实时
+  /// 拉取的路网肉眼可分，避免把 1~2 公里外邻格的路当成本地路。
+  final bool roadsDimmed;
   final bool is3d, headingUp;
   final Color accentColor, vehicleColor;
   final CustomPainter? vehicleMarkerPainter;
@@ -898,6 +1136,7 @@ class _Recording3dPainter extends CustomPainter {
     required this.points,
     required this.photoPoints,
     this.roadWays = const [],
+    this.roadsDimmed = false,
     required this.is3d,
     required this.headingUp,
     required this.zoom,
@@ -1000,11 +1239,6 @@ class _Recording3dPainter extends CustomPainter {
           colors: [Colors.transparent, accentColor.withValues(alpha: 0.18), Colors.transparent],
         ).createShader(Rect.fromLTWH(0, horizonY - 30, size.width, 60));
       canvas.drawRect(Rect.fromLTWH(0, horizonY - 30, size.width, 60), glow);
-      for (var i = 0; i < 5; i++) {
-        final cx = size.width * (0.12 + i * 0.19);
-        final blob = Paint()..color = Colors.white.withValues(alpha: 0.03);
-        canvas.drawCircle(Offset(cx, horizonY - 6), 26 + i * 4, blob);
-      }
     }
 
     // 透视网格地面（风格化网格线，非路网）。
@@ -1045,6 +1279,8 @@ class _Recording3dPainter extends CustomPainter {
     // 缩放线宽与亮度但不低于下限，远处压缩处仍可见；道路仍暗
     // 于亮红轨迹带（轨迹在后绘制，压在道路之上）；无数据时
     // 本段自然不画。出视野同侧的段跳过。
+    // 邻格缓存时整体画暗一档（alpha × 0.55），与实时路网肉眼可分。
+    final dim = roadsDimmed ? 0.55 : 1.0;
     for (final way in roadWays) {
       final style = roadStyleForHighway(way.highway);
       final proj = <(Offset, double)>[];
@@ -1063,7 +1299,8 @@ class _Recording3dPainter extends CustomPainter {
             a.$1,
             b.$1,
             Paint()
-              ..color = style.mainColor.withValues(alpha: style.glowAlpha)
+              ..color =
+                  style.mainColor.withValues(alpha: style.glowAlpha * dim)
               ..strokeWidth = glowW
               ..strokeCap = StrokeCap.round
               ..style = PaintingStyle.stroke);
@@ -1071,7 +1308,7 @@ class _Recording3dPainter extends CustomPainter {
             a.$1,
             b.$1,
             Paint()
-              ..color = style.mainColor.withValues(alpha: mainAlpha)
+              ..color = style.mainColor.withValues(alpha: mainAlpha * dim)
               ..strokeWidth = mainW
               ..strokeCap = StrokeCap.round
               ..style = PaintingStyle.stroke);
@@ -1163,6 +1400,7 @@ class _Recording3dPainter extends CustomPainter {
       old.centerLon != centerLon ||
       old.headingDeg != headingDeg ||
       old.roadWays != roadWays ||
+      old.roadsDimmed != roadsDimmed ||
       old.points != points ||
       old.photoPoints != photoPoints ||
       old.is3d != is3d ||

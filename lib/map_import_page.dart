@@ -323,16 +323,18 @@ class _MapImportPageState extends State<MapImportPage> {
                           }
                         },
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: '删除',
-                        onPressed: () {
-                          setState(() => _resources.removeWhere((e) => e.id == r.id));
-                          widget.onDelete?.call(r);
-                          if (widget.onDelete == null) {
-                            _show('已从本页列表删除，文件清理与持久化待总协调接线。');
-                          }
-                        },
+                      Semantics(
+                        label: '删除',
+                        child: IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () {
+                            setState(() => _resources.removeWhere((e) => e.id == r.id));
+                            widget.onDelete?.call(r);
+                            if (widget.onDelete == null) {
+                              _show('已从本页列表删除，文件清理与持久化待总协调接线。');
+                            }
+                          },
+                        ),
                       ),
                     ],
                   ),

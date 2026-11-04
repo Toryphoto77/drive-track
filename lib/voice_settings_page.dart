@@ -65,6 +65,8 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   bool _ttsSettingsBusy = false;
   late final TextEditingController _endpointCtrl = TextEditingController();
   late final TextEditingController _keyCtrl = TextEditingController();
+  String _provider = 'generic';
+  String _mimoVoice = '冰糖';
 
   @override
   void initState() {
@@ -79,6 +81,8 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
       final c = VoiceService.instance.customVoice;
       _endpointCtrl.text = c.endpoint;
       _keyCtrl.text = c.apiKey;
+      _provider = c.provider;
+      _mimoVoice = c.mimoVoice;
       setState(() {
         _s = VoiceService.instance.settings;
         _loaded = true;
@@ -136,6 +140,8 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
       enabled: VoiceService.instance.customVoice.enabled,
       endpoint: _endpointCtrl.text.trim(),
       apiKey: _keyCtrl.text,
+      provider: _provider,
+      mimoVoice: _mimoVoice,
     );
     await VoiceService.instance.updateCustomVoice(next);
     if (mounted) {
@@ -418,23 +424,65 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 8),
                         const Text(
-                          '默认仍走系统原生 TTS。自定义服务（讯飞/阿里/腾讯等）音质更好，'
+                          '默认仍走系统原生 TTS。自定义服务（小米 MiMo、讯飞/阿里/腾讯等）音质更好，'
                           '但需要你自己的 Key、需要联网、可能按量计费，Key 有保管风险，'
                           '因此不内置任何 Key、不预填示例 Key。未填时完全走原生；填了也只在'
                           '你明确开启下方开关后才用，失败时回落原生并记录原因。',
                           style: TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                         const SizedBox(height: 12),
-                        ImportBorderedTextField(
-                          controller: _endpointCtrl,
-                          label: '接口地址（你自己的服务地址）',
+                        DropdownButton<String>(
+                          value: _provider,
+                          isExpanded: true,
+                          dropdownColor: const Color(0xFF2A2A2A),
+                          items: const [
+                            DropdownMenuItem(value: 'generic', child: Text('通用接口', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'mimo', child: Text('小米 MiMo（mimo-v2.5-tts）', style: TextStyle(fontSize: 13))),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() => _provider = v);
+                          },
                         ),
                         const SizedBox(height: 8),
-                        ImportBorderedTextField(
-                          controller: _keyCtrl,
-                          label: 'API Key（只存本机，不上传）',
-                          obscureText: true,
-                        ),
+                        if (_provider == 'mimo') ...[
+                          const Text(
+                            '固定接口：https://api.xiaomimimo.com/v1/chat/completions（无需手填）\n'
+                            'Key 在小米 MiMo 开放平台自行申请，只存本机，不上传；'
+                            '模型 mimo-v2.5-tts，失败时回落原生 TTS。',
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                          ImportBorderedTextField(
+                            controller: _keyCtrl,
+                            label: 'MiMo API Key（只存本机，不上传）',
+                            obscureText: true,
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButton<String>(
+                            value: mimoTtsVoices.contains(_mimoVoice) ? _mimoVoice : '冰糖',
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF2A2A2A),
+                            items: mimoTtsVoices
+                                .map((v) => DropdownMenuItem(value: v, child: Text('音色：$v', style: const TextStyle(fontSize: 13))))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setState(() => _mimoVoice = v);
+                            },
+                          ),
+                        ] else ...[
+                          ImportBorderedTextField(
+                            controller: _endpointCtrl,
+                            label: '接口地址（你自己的服务地址）',
+                          ),
+                          const SizedBox(height: 8),
+                          ImportBorderedTextField(
+                            controller: _keyCtrl,
+                            label: 'API Key（只存本机，不上传）',
+                            obscureText: true,
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         SwitchListTile(
                           title: const Text('启用自定义语音服务'),
@@ -445,6 +493,8 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                               enabled: v,
                               endpoint: _endpointCtrl.text.trim(),
                               apiKey: _keyCtrl.text,
+                              provider: _provider,
+                              mimoVoice: _mimoVoice,
                             ));
                             if (mounted) setState(() {});
                           },
@@ -472,10 +522,13 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                           ),
                         ],
                         const SizedBox(height: 8),
-                        const Text(
-                          '通用接口约定：POST JSON {"text": "..."}、Authorization: Bearer <Key>，'
-                          '期望返回音频流；各厂商协议不同，协议不符时测试会明确报错。',
-                          style: TextStyle(color: Colors.white54, fontSize: 11),
+                        Text(
+                          _provider == 'mimo'
+                              ? 'MiMo 约定：POST chat/completions、目标文本放 assistant 消息、'
+                                  '回包 JSON 内嵌 base64 wav；与通用接口不互通，选错提供方会明确报错。'
+                              : '通用接口约定：POST JSON {"text": "..."}、Authorization: Bearer <Key>，'
+                                  '期望返回音频流；各厂商协议不同，协议不符时测试会明确报错。',
+                          style: const TextStyle(color: Colors.white54, fontSize: 11),
                         ),
                       ]),
                     ),

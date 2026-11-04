@@ -182,10 +182,12 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
         backgroundColor: const Color(0xFF121212),
         title: const Text('车辆档案'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: '新增车辆',
-            onPressed: () => _editVehicle(),
+          Semantics(
+            label: '新增车辆',
+            child: IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () => _editVehicle(),
+            ),
           ),
         ],
       ),
@@ -806,10 +808,12 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
                   if (l.pricePerLiter != null) '单价 ${_fmtNum(l.pricePerLiter!)} 元/L',
                   if (l.effectiveAmount != null) '金额 ${_fmtNum(l.effectiveAmount!)} 元',
                 ].join(' · ')),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: '删除记录',
-                  onPressed: () => _deleteLog(l),
+                trailing: Semantics(
+                  label: '删除记录',
+                  child: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _deleteLog(l),
+                  ),
                 ),
               ),
             ),

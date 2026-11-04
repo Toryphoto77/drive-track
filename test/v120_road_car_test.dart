@@ -116,7 +116,7 @@ void main() {
       expect(ways[1].highway, '');
     });
 
-    test('caps at 200 ways', () {
+    test('parse no longer truncates; prioritization owns the cap', () {
       final elements = List.generate(
           201,
           (_) => {
@@ -127,7 +127,9 @@ void main() {
                   {'lat': 31.01, 'lon': 121.0},
                 ],
               });
-      expect(parseOverpassWays({'elements': elements}).length, 200);
+      final parsed = parseOverpassWays({'elements': elements});
+      expect(parsed.length, 201);
+      expect(prioritizeRoadWays(parsed, 31.0, 121.0, 200).length, 200);
     });
   });
 

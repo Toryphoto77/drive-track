@@ -48,7 +48,7 @@ void main() {
       expect(ways[2].points, [(31.2314, 121.4737), (31.2314, 121.4747)]);
     });
 
-    test('caps at 250 ways', () {
+    test('parse no longer truncates; prioritization owns the cap', () {
       final buf = StringBuffer('<osm version="0.6">'
           '<node id="1" lat="31.2304" lon="121.4737"/>'
           '<node id="2" lat="31.2314" lon="121.4737"/>');
@@ -57,7 +57,7 @@ void main() {
             '<tag k="highway" v="residential"/></way>');
       }
       buf.write('</osm>');
-      expect(parseOsmApiMap(buf.toString()).length, 250);
+      expect(parseOsmApiMap(buf.toString()).length, 300);
     });
   });
 
@@ -139,6 +139,59 @@ void main() {
           '路网：服务器繁忙（点按重拉）');
       expect(label(errorKind: 'offline'), '路网：无网络（点按重拉）');
       expect(label(), '路网加载中…（点按重拉）');
+    });
+  });
+
+  group('prioritize road ways', () {
+    const centerLat = 31.2304;
+    const centerLon = 121.4737;
+
+    List<RoadWay> farWays(int n) => List.generate(
+        n,
+        (i) => RoadWay([
+              (31.5 + i * 0.001, 121.9),
+              (31.5 + i * 0.001, 121.901),
+            ], highway: 'residential'));
+
+    test('near road survives the cap while far roads are dropped', () {
+      const near = RoadWay([
+        (centerLat, centerLon),
+        (centerLat + 0.0005, centerLon),
+      ], highway: 'residential');
+      final ways = [...farWays(500), near];
+      final kept = prioritizeRoadWays(ways, centerLat, centerLon, 400);
+      expect(kept.length, 400);
+      expect(kept, contains(near));
+    });
+
+    test('far trunk road survives the cap for orientation', () {
+      const trunk = RoadWay([
+        (31.5, 121.9),
+        (31.5, 121.901),
+      ], highway: 'trunk');
+      final ways = [...farWays(500), trunk];
+      final kept = prioritizeRoadWays(ways, centerLat, centerLon, 400);
+      expect(kept.length, 400);
+      expect(kept, contains(trunk));
+    });
+
+    test('draw order stays tier-desc: walk first, highway on top', () {
+      const motorway = RoadWay([
+        (centerLat, centerLon),
+        (centerLat + 0.001, centerLon),
+      ], highway: 'motorway');
+      const footway = RoadWay([
+        (centerLat, centerLon),
+        (centerLat, centerLon + 0.001),
+      ], highway: 'footway');
+      const residential = RoadWay([
+        (centerLat, centerLon),
+        (centerLat + 0.001, centerLon + 0.001),
+      ], highway: 'residential');
+      final kept =
+          prioritizeRoadWays([motorway, residential, footway], centerLat, centerLon);
+      expect(kept.map((w) => w.highway).toList(),
+          ['footway', 'residential', 'motorway']);
     });
   });
 }

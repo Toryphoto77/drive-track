@@ -16,10 +16,10 @@ import 'package:flutter/services.dart';
 /// （否则会多弹一层路由）。
 ///
 /// 震动说明（必须如实传达）：Flutter 的 HapticFeedback 没有时长参数，
-/// “短震动”用 HapticFeedback.lightImpact()，“长震动”用最强的
-/// HapticFeedback.heavyImpact() 近似，没有原生震动马达或系统关闭触感
-/// 反馈时无震动但不崩（全部 try/catch）。如需真正可控时长的长震动
-/// （如 500ms），总协调需补一个原生震动方法，本页再换调该方法。
+/// 开始记录倒数全程用最强的 HapticFeedback.heavyImpact()（用户要求
+/// 倒数用强震动），没有原生震动马达或系统关闭触感反馈时无震动但不崩
+/// （全部 try/catch）。如需真正可控时长的长震动（如 500ms），总协调
+/// 需补一个原生震动方法，本页再换调该方法。
 /// [vibrationEnabled] 为 false 时全程不震动。
 
 class CountdownPage extends StatefulWidget {
@@ -76,15 +76,6 @@ class _CountdownPageState extends State<CountdownPage> {
     super.dispose();
   }
 
-  void _vibrateShort() {
-    if (!widget.vibrationEnabled) return;
-    try {
-      HapticFeedback.lightImpact();
-    } catch (_) {
-      // 无震动马达 / 系统关闭触感反馈时静默，不崩。
-    }
-  }
-
   void _vibrateLong() {
     if (!widget.vibrationEnabled) return;
     try {
@@ -99,7 +90,8 @@ class _CountdownPageState extends State<CountdownPage> {
     if (_done || !mounted) return;
     if (_remaining > 1) {
       setState(() => _remaining--);
-      _vibrateShort();
+      // 倒数每拍都用强震动（用户要求），不再轻震。
+      _vibrateLong();
     } else if (_remaining == 1) {
       setState(() => _remaining = 0);
       _vibrateLong();

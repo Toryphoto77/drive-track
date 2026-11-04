@@ -156,7 +156,7 @@ class WeatherPage extends StatelessWidget {
         ),
         actions: [
           if (onRefresh != null)
-            IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: onRefresh, tooltip: '刷新'),
+            Semantics(label: '刷新', child: IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: onRefresh)),
         ],
       ),
       body: w == null

@@ -299,6 +299,18 @@ int? theoreticalBestLapMs(List<Lap> laps, {int sectorCount = 0}) {
   return sum;
 }
 
+/// 本节最优圈（直播面板用）：先按最佳圈的分段长度过滤参与拼合
+/// 的圈，保证分段口径一致——退化半圈（无扇区点时的前后半圈）
+/// 绝不与真实分段按下标混算；再调 theoreticalBestLapMs。
+/// 无最佳圈时为 null，不拼假圈。
+int? sessionOptimalLapMs(List<Lap> laps) {
+  final best = sessionBestLap(laps);
+  if (best == null) return null;
+  return theoreticalBestLapMs(laps
+      .where((l) => l.sectorsMs.length == best.sectorsMs.length)
+      .toList());
+}
+
 /// 本节最佳圈：计入成绩的圈里最快的一圈；无计入圈时为 null。
 /// 与 LapTimer.bestLap 口径一致（只看 counted），供不持有 LapTimer
 /// 的分析页复用。

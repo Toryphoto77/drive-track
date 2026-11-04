@@ -310,7 +310,8 @@ class _RefinedMapState extends State<RefinedMap> with TickerProviderStateMixin {
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           ),
-          child: Tooltip(message: tooltip ?? '', child: Icon(icon, size: 20, color: Colors.white)),
+          // 长按不弹文本：不用 Tooltip，语义标签只给读屏。
+          child: Semantics(label: tooltip, child: Icon(icon, size: 20, color: Colors.white)),
         ),
       ),
     );

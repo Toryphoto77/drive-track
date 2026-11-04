@@ -412,10 +412,12 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
           ),
           // ---- 播放控制 ----
           Row(children: [
-            IconButton(
-              icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
-              tooltip: _playing ? '暂停' : '播放',
-              onPressed: hasVideo && _prepared ? _togglePlay : null,
+            Semantics(
+              label: _playing ? '暂停' : '播放',
+              child: IconButton(
+                icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+                onPressed: hasVideo && _prepared ? _togglePlay : null,
+              ),
             ),
             Expanded(
               child: Slider(

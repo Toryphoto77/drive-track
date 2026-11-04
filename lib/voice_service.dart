@@ -138,18 +138,45 @@ double _clamp(double v, double lo, double hi) => v < lo ? lo : (v > hi ? hi : v)
 /// 通用接口约定（各厂商协议不同，未逐一实现）：POST JSON
 /// {"text": "..."}、Authorization: Bearer <Key>，期望返回音频流；
 /// 协议不符时测试按钮会明确报错，而不是静默失败。
+///
+/// v1.2.5：新增提供方 'mimo'（小米 MiMo-V2.5-TTS 云端模型，
+/// OpenAI 兼容接口，见 [mimoChatRequest]）。MiMo 不是系统 TTS
+/// 引擎、也不是通用接口：它要求 POST chat/completions、目标文本
+/// 放在 assistant 消息里、回包是 JSON 内嵌 base64 音频——按通用
+/// 接口填必然报“未返回音频”，这就是用户“填写会报错”的根因。
+/// MiMo 的 Key 须用户在小米 MiMo 开放平台自行申请，本 App 不
+/// 内置任何 Key、不预填；端点固定写死，不让用户手填。
 class CustomVoiceConfig {
   final bool enabled;
   final String endpoint;
   final String apiKey;
-  const CustomVoiceConfig({this.enabled = false, this.endpoint = '', this.apiKey = ''});
 
-  bool get configured => endpoint.trim().isNotEmpty && apiKey.isNotEmpty;
+  /// 提供方：'generic'（通用接口，默认）或 'mimo'（小米 MiMo）。
+  final String provider;
+
+  /// MiMo 音色（仅 provider == 'mimo' 时用），默认 '冰糖'。
+  final String mimoVoice;
+
+  const CustomVoiceConfig({
+    this.enabled = false,
+    this.endpoint = '',
+    this.apiKey = '',
+    this.provider = 'generic',
+    this.mimoVoice = '冰糖',
+  });
+
+  bool get isMimo => provider == 'mimo';
+
+  /// MiMo 只需 Key（端点固定）；通用接口需地址与 Key 都填。
+  bool get configured =>
+      isMimo ? apiKey.isNotEmpty : endpoint.trim().isNotEmpty && apiKey.isNotEmpty;
 
   Map<String, dynamic> toJson() => {
         'enabled': enabled,
         'endpoint': endpoint,
         'apiKey': apiKey,
+        'provider': provider,
+        'mimoVoice': mimoVoice,
       };
 
   static CustomVoiceConfig fromJson(Map<String, dynamic>? j) {
@@ -158,8 +185,61 @@ class CustomVoiceConfig {
       enabled: (j['enabled'] as bool?) ?? false,
       endpoint: (j['endpoint'] as String?) ?? '',
       apiKey: (j['apiKey'] as String?) ?? '',
+      provider: (j['provider'] as String?) ?? 'generic',
+      mimoVoice: (j['mimoVoice'] as String?) ?? '冰糖',
     );
   }
+}
+
+/// 小米 MiMo-V2.5-TTS 接入点与模型（OpenAI 兼容接口，官方文档
+/// mimo.mi.com 语音合成章；纯函数，可单测）。
+const mimoTtsEndpoint = 'https://api.xiaomimimo.com/v1/chat/completions';
+const mimoTtsModel = 'mimo-v2.5-tts';
+
+/// MiMo 预置中文音色（官方内置音色表；mimo_default 在中国集群
+/// 默认即冰糖，故默认音色取冰糖）。
+const mimoTtsVoices = ['冰糖', '茉莉', '苏打', '白桦'];
+
+/// MiMo 非流式请求体：目标文本必须放在 assistant 消息里，user
+/// 消息可选（风格指令），驾驶播报不写风格指令、只传目标文本；
+/// audio.format 取 wav（回包 base64 可直接存 wav 播放）。
+Map<String, Object> mimoChatRequest(String text, String voice) => {
+      'model': mimoTtsModel,
+      'messages': [
+        {'role': 'assistant', 'content': text},
+      ],
+      'audio': {'format': 'wav', 'voice': voice},
+    };
+
+/// 从 MiMo 非流式回包里取 base64 音频；结构不对返回 null。
+String? mimoAudioDataFromJson(Map<String, dynamic> json) {
+  try {
+    final choices = json['choices'];
+    if (choices is! List || choices.isEmpty) return null;
+    final first = choices.first;
+    if (first is! Map) return null;
+    final message = first['message'];
+    if (message is! Map) return null;
+    final audio = message['audio'];
+    if (audio is! Map) return null;
+    final data = audio['data'];
+    if (data is! String || data.isEmpty) return null;
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// 从 MiMo 错误回包里取可读原因；取不到返回 null。
+String? mimoErrorFromJson(Map<String, dynamic> json) {
+  try {
+    final error = json['error'];
+    if (error is Map) {
+      final msg = error['message'];
+      if (msg is String && msg.isNotEmpty) return msg;
+    }
+  } catch (_) {}
+  return null;
 }
 
 /// 播报事件种类（与 models.dart 的 TripEvent.kind 对应，外加圈与压弯）。
@@ -536,16 +616,92 @@ class VoiceService extends ChangeNotifier {
   /// v0.1.9 自定义服务测试：只测用户自己填的端点，不用示例 Key。
   Future<(bool, String)> testCustomVoice() async {
     if (!customVoice.configured) {
-      return (false, '请先填写接口地址与 Key（Key 只存本机，不上传）。');
+      return (
+        false,
+        customVoice.isMimo
+            ? '请先填写小米 MiMo 的 API Key（小米 MiMo 开放平台申请，只存本机，不上传）。'
+            : '请先填写接口地址与 Key（Key 只存本机，不上传）。'
+      );
     }
     final r = await _speakViaCustom('自定义语音服务测试，当前语速正常。');
     return r;
   }
 
+  /// 自定义语音分发：MiMo 走 [_speakViaMimo]，其余走通用端点。
+  Future<(bool, String)> _speakViaCustom(String text) async {
+    if (customVoice.isMimo) return _speakViaMimo(text);
+    return _speakViaGeneric(text);
+  }
+
+  /// 小米 MiMo-V2.5-TTS 调用：POST chat/completions（OpenAI 兼容），
+  /// 回包 JSON 内嵌 base64 wav，解码后存 wav 播放；失败原因如实
+  /// 返回，不伪装成功（调用方失败时回落原生 TTS）。
+  Future<(bool, String)> _speakViaMimo(String text) async {
+    final key = customVoice.apiKey;
+    if (key.isEmpty) {
+      return (false, '请先填写小米 MiMo 的 API Key（小米 MiMo 开放平台申请，只存本机）。');
+    }
+    final voice = mimoTtsVoices.contains(customVoice.mimoVoice)
+        ? customVoice.mimoVoice
+        : '冰糖';
+    try {
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+      try {
+        final req = await client.postUrl(Uri.parse(mimoTtsEndpoint));
+        req.headers.contentType = ContentType.json;
+        req.headers.set('Authorization', 'Bearer $key');
+        req.write(jsonEncode(mimoChatRequest(text, voice)));
+        final resp = await req.close().timeout(const Duration(seconds: 30));
+        final body = await resp
+            .transform(utf8.decoder)
+            .join()
+            .timeout(const Duration(seconds: 10));
+        if (resp.statusCode != 200) {
+          String? detail;
+          try {
+            final decoded = jsonDecode(body);
+            if (decoded is Map<String, dynamic>) {
+              detail = mimoErrorFromJson(decoded);
+            }
+          } catch (_) {}
+          return (
+            false,
+            '小米 MiMo 返回 HTTP ${resp.statusCode}'
+                '${detail == null ? '，请检查 Key 是否正确' : '：$detail'}'
+          );
+        }
+        final decoded = jsonDecode(body);
+        final data = decoded is Map<String, dynamic>
+            ? mimoAudioDataFromJson(decoded)
+            : null;
+        if (data == null) {
+          return (false, '小米 MiMo 未返回音频数据，请检查模型与音色是否可用。');
+        }
+        late final List<int> bytes;
+        try {
+          bytes = base64Decode(data);
+        } catch (_) {
+          return (false, '小米 MiMo 返回的音频解码失败。');
+        }
+        if (bytes.isEmpty) return (false, '小米 MiMo 返回了空音频。');
+        final dir = await Native.getFilesDir();
+        final path = '$dir/custom_voice_last.wav';
+        await File(path).writeAsBytes(bytes);
+        final played = await Native.playAudioFile(path);
+        if (!played) return (false, '小米 MiMo 返回了音频，但本机播放失败。');
+        return (true, '小米 MiMo 播报成功。');
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      return (false, '小米 MiMo 调用失败：$e');
+    }
+  }
+
   /// 通用自定义端点调用：POST JSON {"text": ...}、Bearer 鉴权，
   /// 期望返回音频流；返回 (成功, 原因)。协议不符、非音频响应、
   /// 超时、网络错误一律返回明确原因，不伪装成功。
-  Future<(bool, String)> _speakViaCustom(String text) async {
+  Future<(bool, String)> _speakViaGeneric(String text) async {
     final endpoint = customVoice.endpoint.trim();
     try {
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);

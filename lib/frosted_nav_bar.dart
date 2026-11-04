@@ -25,6 +25,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'app_haptics.dart';
 import 'home_layout.dart';
 
 class FrostedGlassNavBar extends StatelessWidget {
@@ -122,7 +123,10 @@ class FrostedGlassNavBar extends StatelessWidget {
                                 button: true,
                                 child: InkWell(
                                   customBorder: const CircleBorder(),
-                                  onTap: () => onTap(i),
+                                  onTap: () {
+                                    AppHaptics.tap();
+                                    onTap(i);
+                                  },
                                   child: SizedBox(
                                     width: 48,
                                     height: 48,

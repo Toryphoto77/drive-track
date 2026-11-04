@@ -624,11 +624,13 @@ class _MyPageState extends State<MyPage> {
           ),
         ),
         const SizedBox(width: 8),
-        IconButton(
-          icon: Icon(item.isFavorite ? Icons.star : Icons.star_border,
-              color: item.isFavorite ? widget.accentColor : Colors.white54),
-          tooltip: '收藏',
-          onPressed: item.onToggleFavorite,
+        Semantics(
+          label: '收藏',
+          child: IconButton(
+            icon: Icon(item.isFavorite ? Icons.star : Icons.star_border,
+                color: item.isFavorite ? widget.accentColor : Colors.white54),
+            onPressed: item.onToggleFavorite,
+          ),
         ),
         if (showPublicToggle)
           _pillButton(
