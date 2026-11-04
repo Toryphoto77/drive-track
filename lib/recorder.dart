@@ -91,6 +91,9 @@ class Recorder extends ChangeNotifier {
 
   // 实时
   double curLongG = 0, curLatG = 0, curVertG = 0;
+  // 原始陀螺仪（rad/s，机体系，原生透传；只存诊断与后续融合精修，
+  // 不参与 lg/tg 计算——姿态仍走 rotation vector）。
+  double curGyroX = 0, curGyroY = 0, curGyroZ = 0;
   double smoothLong = 0, smoothLat = 0;
   double peakHoldLong = 0, peakHoldLat = 0;
   int _peakHoldMs = 0;
@@ -146,6 +149,16 @@ class Recorder extends ChangeNotifier {
     final ay = (e['ay'] as num?)?.toDouble() ?? 0;
     final az = (e['az'] as num?)?.toDouble() ?? 0;
     final rv = ((e['rv'] as List?) ?? []).map((v) => (v as num).toDouble()).toList();
+    // 陀螺仪是原始机体系数据，与标定无关，放标定检查之前解析：
+    // 即使未标定也照常存（老版本原生不发 gx/gy/gz 时保持旧值）。
+    final gx = (e['gx'] as num?)?.toDouble();
+    final gy = (e['gy'] as num?)?.toDouble();
+    final gz = (e['gz'] as num?)?.toDouble();
+    if (gx != null && gy != null && gz != null) {
+      curGyroX = gx;
+      curGyroY = gy;
+      curGyroZ = gz;
+    }
     if (rv.length >= 3) _latestQ = Quat.fromRotationVector(rv);
     _latestPressure = (e['pressure'] as num?)?.toDouble() ?? _latestPressure;
     if (_latestQ == null || !calibrated) {

@@ -249,6 +249,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                         SwitchListTile(title: const Text('事件播报'), subtitle: const Text('急加速、急刹车、过弯完成、压弯超阈值'), value: _s.announceEvents, onChanged: (v) => _apply(_s.copyWith(announceEvents: v))),
                         SwitchListTile(title: const Text('圈速播报'), subtitle: const Text('每圈完成与最快圈'), value: _s.announceLaps, onChanged: (v) => _apply(_s.copyWith(announceLaps: v))),
                         SwitchListTile(title: const Text('结束总结播报'), subtitle: const Text('里程、时长、评分、最快圈'), value: _s.announceSummary, onChanged: (v) => _apply(_s.copyWith(announceSummary: v))),
+                        SwitchListTile(title: const Text('开始语音'), subtitle: const Text('开始记录时播报安全注意事项，倒数时报数（3、2、1、开始）'), value: _s.announceStart, onChanged: (v) => _apply(_s.copyWith(announceStart: v))),
                       ]),
                     ),
                     _slider('语速', _s.rate, 0.5, 2.0, (v) => _apply(_s.copyWith(rate: v))),

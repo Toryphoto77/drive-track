@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'voice_service.dart';
+
 /// 全屏倒计时页（v0.1.3 新建文件，不改旧文件）。
 ///
 /// 流程：3-2-1-GO，每秒一次短震动，GO 时一次长震动（见下方震动说明），
@@ -41,6 +43,12 @@ class CountdownPage extends StatefulWidget {
   /// GO 亮起后、调用 onFinish 前的停留时长，默认 800ms。
   final Duration goHold;
 
+  /// 倒数语音开关：总协调从语音设置页的“开始语音”开关传入。
+  /// 为 true 时：进入本页先停掉未播完的安全播报，再按节拍报数
+  /// （进页报起始数字，每拍报新数字，GO 时报“开始”）；为 false
+  /// 时全程不发声、不停其他语音，倒计时本身完全不变。
+  final bool speakCountdown;
+
   const CountdownPage({
     super.key,
     required this.onFinish,
@@ -48,6 +56,7 @@ class CountdownPage extends StatefulWidget {
     this.vibrationEnabled = true,
     this.countFrom = 3,
     this.goHold = const Duration(milliseconds: 800),
+    this.speakCountdown = true,
   });
 
   @override
@@ -66,7 +75,29 @@ class _CountdownPageState extends State<CountdownPage> {
   @override
   void initState() {
     super.initState();
+    // 倒数语音：进页先停掉未播完的安全播报（beginCountdown 内含
+    // 停原生 + 推进世代），再报起始数字；两个都是 fire-and-forget，
+    // 任何失败都不阻塞倒计时本身。顺序必须先停后报，否则“3”
+    // 会被停安全播报的动作连带掐掉。
+    if (widget.speakCountdown) {
+      unawaited(_startCountdownVoice());
+    }
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  /// 进页语音序列：先停安全播报，再报起始数字（如 3）。
+  Future<void> _startCountdownVoice() async {
+    try {
+      await VoiceService.instance.beginCountdown();
+    } catch (_) {
+      // 停失败不阻塞：报数照常入队，原生队列本身是串行的。
+    }
+    if (!mounted) return;
+    try {
+      await VoiceService.instance.speakCountdown('$_remaining');
+    } catch (_) {
+      // 报数失败静默，倒计时视觉与震动完全不受影响。
+    }
   }
 
   @override
@@ -92,9 +123,17 @@ class _CountdownPageState extends State<CountdownPage> {
       setState(() => _remaining--);
       // 倒数每拍都用强震动（用户要求），不再轻震。
       _vibrateLong();
+      // 报数与视觉节拍对齐：数字变到几就报几。
+      if (widget.speakCountdown) {
+        unawaited(VoiceService.instance.speakCountdown('$_remaining'));
+      }
     } else if (_remaining == 1) {
       setState(() => _remaining = 0);
       _vibrateLong();
+      // GO 时报“开始”，与屏幕上的 GO / 出发同步。
+      if (widget.speakCountdown) {
+        unawaited(VoiceService.instance.speakCountdown('开始'));
+      }
       _tickTimer?.cancel();
       _tickTimer = null;
       _goTimer = Timer(widget.goHold, _finish);
@@ -116,6 +155,11 @@ class _CountdownPageState extends State<CountdownPage> {
     _done = true;
     _tickTimer?.cancel();
     _goTimer?.cancel();
+    // 取消返回时停掉未播完的倒数报数；完成（_finish）时不调，
+    // 让“开始”播完，不掐尾音。
+    if (widget.speakCountdown) {
+      unawaited(VoiceService.instance.cancelAll());
+    }
     if (!mounted) return;
     Navigator.pop(context);
     widget.onCancel?.call();

@@ -111,6 +111,12 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     private lateinit var locationManager: LocationManager
     private var latestRv: FloatArray? = null
     private var latestPressure: Float = 0f
+    // 原始陀螺仪（rad/s，机体系）：startSensors 本就注册了
+    // TYPE_GYROSCOPE，但 onSensorChanged 原先没有分支接它，
+    // 事件一直被丢弃；此处起存下来并随加速度事件一起发给 Dart
+    // （供 Recorder.curGyroX/Y/Z 诊断与后续融合精修；姿态仍走
+    // rotation vector，不改现有 G 值计算）。
+    private var latestGyro: FloatArray? = null
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var gatt: BluetoothGatt? = null
@@ -1304,14 +1310,19 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         when (event.sensor.type) {
             Sensor.TYPE_ROTATION_VECTOR -> latestRv = event.values.copyOf()
             Sensor.TYPE_PRESSURE -> latestPressure = event.values[0]
+            Sensor.TYPE_GYROSCOPE -> latestGyro = event.values.copyOf()
             Sensor.TYPE_LINEAR_ACCELERATION -> {
                 val rv = latestRv
+                val gyro = latestGyro
                 val map = mapOf<String, Any>(
                     "ax" to event.values[0].toDouble(),
                     "ay" to event.values[1].toDouble(),
                     "az" to event.values[2].toDouble(),
                     "rv" to (rv?.map { it.toDouble() } ?: emptyList<Double>()),
                     "pressure" to latestPressure.toDouble(),
+                    "gx" to (gyro?.getOrNull(0)?.toDouble() ?: 0.0),
+                    "gy" to (gyro?.getOrNull(1)?.toDouble() ?: 0.0),
+                    "gz" to (gyro?.getOrNull(2)?.toDouble() ?: 0.0),
                     "timeMs" to System.currentTimeMillis()
                 )
                 runOnUiThread { senSink?.success(map) }

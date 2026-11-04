@@ -2,7 +2,8 @@
 // - 纯函数：暂停冻结、插值、空锚点、下限钳制；
 // - widget：ticker 在无父重建时推进显示、暂停停走、恢复续走
 //   （暂停时长不计入）、完成一圈归零、新锚点以权威值校正、
-//   非直播不插值。数值仍瞬间切换，不加回滑动动画。
+//   非直播不插值。显示为整串纯 Text 原地换字，不再用竖条
+//   切片（行高对不上会上下错位）。
 import 'package:drive_track/live_lap_timer_text.dart';
 import 'package:drive_track/rolling_digit.dart';
 import 'package:flutter/material.dart';
@@ -74,9 +75,10 @@ void main() {
           ),
         );
 
-    String shownValue(WidgetTester tester) => tester
-        .widget<RollingNumberText>(find.byType(RollingNumberText))
-        .value;
+    // 大计时是整串一个纯 Text：子树里只有一个 Text，其 data
+    // 即整串计时字符串。
+    String shownValue(WidgetTester tester) =>
+        tester.widget<Text>(find.byType(Text)).data!;
 
     testWidgets('ticker advances display without parent rebuild',
         (tester) async {
@@ -163,6 +165,36 @@ void main() {
       expect(shownValue(tester), '--:--.---');
       await tester.pump(const Duration(milliseconds: 1000));
       expect(shownValue(tester), '--:--.---');
+    });
+
+    testWidgets(
+        'regression: big timer is one plain Text, no strip widgets, '
+        'even with enlarged system font', (tester) async {
+      // 回归（用户 21:12 录屏：数字上下错位）：竖条切片的高度取自
+      // 裸 TextPainter，不含系统字号缩放，实际行高一放大就对不上、
+      // 误差随数字值增大；纯 Text 单段落共用同一基线，缩放也
+      // 不可能再切出上下错位的数字。直接用 MediaQuery 供缩放，
+      // 不经 MaterialApp（它会按 view 重建 MediaQuery、吃掉外层缩放）。
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: LiveLapTimeText(
+              anchorMs: 61234,
+              lapNumber: 1,
+              paused: false,
+              live: false,
+              style: style,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('1:01.234'), findsOneWidget);
+      expect(find.byType(RollingNumberText), findsNothing);
+      expect(find.byType(ClipRect), findsNothing);
+      expect(find.byType(Positioned), findsNothing);
     });
   });
 }

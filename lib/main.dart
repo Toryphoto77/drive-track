@@ -47,6 +47,7 @@ import 'voice_service.dart';
 import 'satellite_service.dart';
 import 'track_settings_page.dart';
 import 'track_session_display.dart';
+import 'track_live_g.dart';
 import 'track_sector_data.dart';
 import 'track_analysis_page.dart';
 import 'trip_analytics_page.dart';
@@ -397,6 +398,30 @@ List<String> safetyItems(TripMode m, {bool isTrack = false}) {
   return ['不要在公开道路上追逐竞技驾驶', '不要超速驾驶', ...base];
 }
 
+/// 口播版安全注意事项（开始记录语音用）：与 [safetyItems] 同源，
+/// 红字置顶声明原样播出，其余条目只改说法不改意思（口语化压缩，
+/// 如“不开车时操作手机”→“行车中不操作手机”），再加开录锁定提示。
+/// 守则改了，口播跟着变，不另维护一份平行文案。
+const _safetySpeechShort = {
+  '手机已固定在支架上': '手机已固定',
+  '不开车时操作手机': '行车中不操作手机',
+  '出发前已检查车况': '车况已检查',
+  '手机支架已锁紧': '支架已锁紧',
+  '已检查刹车与轮胎': '刹车轮胎已检查',
+  '夜骑已准备灯光': '夜骑灯光已准备',
+};
+
+String safetySpeechText(TripMode m, {bool isTrack = false}) {
+  final items = safetyItems(m, isTrack: isTrack);
+  final redCount = isTrack ? 1 : 2;
+  final red = items.take(redCount).join('，');
+  final rest = items
+      .skip(redCount)
+      .map((e) => _safetySpeechShort[e] ?? e)
+      .join('，');
+  return '安全提醒：$red。$rest。开录后界面锁定，只留暂停和结束。';
+}
+
 Future<void> unawaitedSaveBle(String address) async {
   try {
     final dir = await Native.getFilesDir();
@@ -661,7 +686,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.2.7',
+          versionName: '1.2.8',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -906,9 +931,17 @@ class _HomePageState extends State<HomePage>
     var goCalibrate = false;
     final mode = rec.mode;
     final isTrack = trackMode && mode != TripMode.bike;
+    // 开始语音是否已触发过（本轮 _showSafety 只触发一次，防重复播报）。
+    var safetySpoken = false;
     // v1.0.7：今日同一模式 + 同一档位已确认过，直接进倒计时，不再弹守则。
     if (!appPrefs.safetyAckedToday(mode, isTrack: isTrack)) {
       final items = safetyItems(mode, isTrack: isTrack);
+      // 开始语音：弹窗出现时即开始口播安全注意事项（不 await、不阻塞
+      // 弹窗，用户边看边听）；点确认后进倒计时页时由倒计时页停掉
+      // 未播完部分。开关关闭时 speakSafety 内部直接返回，不发声。
+      unawaited(VoiceService.instance
+          .speakSafety(safetySpeechText(mode, isTrack: isTrack)));
+      safetySpoken = true;
       // 街道前两条、赛道首条为红字置顶声明，其余正常显示。
       final redCount = isTrack ? 1 : 2;
       var skipToday = false;
@@ -994,12 +1027,20 @@ class _HomePageState extends State<HomePage>
     // v0.1.3：安全守则 + 权限通过后不立刻开录，先推全屏倒计时页；
     // 倒计时页自己 pop 后调 onFinish，取消则什么都不做、不开录。
     if (!mounted) return;
+    if (!safetySpoken) {
+      // 今日已确认、跳过弹窗：点开始时仍播一次安全注意事项；
+      // 倒计时页进入即停（播不完只听到开头，符合“当日已确认”的语义）。
+      unawaited(VoiceService.instance
+          .speakSafety(safetySpeechText(mode, isTrack: isTrack)));
+    }
     final countdownMode = mode;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => CountdownPage(
           vibrationEnabled: appPrefs.countdownVibration,
+          // 开始语音开关：安全播报与倒数报数共用，语音设置页可关。
+          speakCountdown: VoiceService.instance.settings.announceStart,
           onFinish: () => _beginRecording(countdownMode),
           onCancel: () {},
         ),
@@ -2403,6 +2444,14 @@ class _HomePageState extends State<HomePage>
                     optimalLapMs: optimalLapMs,
                     sectorSourceNote: sectorData?.sourceLabel ?? '扇区待核',
                     isPaused: timer?.isPaused ?? false,
+                    liveGSource: LiveGSource(
+                      listenable: rec,
+                      longG: () => rec.smoothLong,
+                      latG: () => rec.smoothLat,
+                      calibrated: () => rec.calibrated,
+                      peakLong: () => rec.tripPeakLong,
+                      peakLat: () => rec.tripPeakLat,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _trackLapListCard(laps, bestMs),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import 'rolling_digit.dart';
 import 'track_timing.dart';
 
 /// 显示层插值（纯函数，可单测，与 LapTimer 的权威计时严格分工）：
@@ -27,8 +26,13 @@ int? interpolatedLapMs({
 
 /// 赛道大计时显示：以调用方传入的权威 currentLapMs 为锚点，
 /// 用独立 vsync Ticker 按屏幕刷新率插值刷新，只重建本 widget，
-/// 不再依赖 GPS 点到达（约 1Hz）才刷新；数值仍瞬间切换
-/// （视频结论不变，不加回滑动动画）。
+/// 不再依赖 GPS 点到达（约 1Hz）才刷新。
+///
+/// 显示层是整串一个纯 Text、原地换字：不再用 0–9 竖条 +
+/// 偏移切片（旧做法的切片高度取自裸 TextPainter，与 Text
+/// widget 实际行高——含系统字号缩放——对不上，误差随数字值
+/// 增大，导致不同数字落在不同高度）；单段落内所有字符共用
+/// 同一条基线，上下错位在结构上不可能再出现。
 ///
 /// 正确性边界（调用方必须遵守，见 TrackSessionDisplay 接线）：
 /// - 锚点只来自 LapTimer.currentLapMs，本 widget 不算圈速；
@@ -164,8 +168,9 @@ class _LiveLapTimeTextState extends State<LiveLapTimeText>
 
   @override
   Widget build(BuildContext context) {
-    return RollingNumberText(
-      value: LapTimer.formatLapTime(_displayMs),
+    // 整串一个纯 Text：只换字符，不做任何竖直位移。
+    return Text(
+      LapTimer.formatLapTime(_displayMs),
       style: widget.style,
     );
   }

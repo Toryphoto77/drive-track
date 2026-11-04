@@ -41,6 +41,7 @@
 import 'package:flutter/material.dart';
 import 'live_lap_timer_text.dart';
 
+import 'track_live_g.dart';
 import 'track_timing.dart';
 
 const Color _kCard = Color(0xFF141414);
@@ -194,6 +195,13 @@ class TrackSessionDisplay extends StatelessWidget {
   /// 暂停合并后传入）；为 true 时 ticker 停走、显示冻结。
   final bool timerPaused;
 
+  /// 实时 G 值数据源（可选，见 track_live_g.dart 的 [LiveGSource]）。
+  /// 接线时调用方应传 Recorder（listenable）+ smoothLong/smoothLat
+  /// + tripPeakLong/tripPeakLat + calibrated；为 null 时 G 值行整
+  /// 行不显示，面板其余部分完全不变。G 值行内部用 ListenableBuilder
+  /// 只重建自身，不重建整个面板、不干扰大计时 ticker。
+  final LiveGSource? liveGSource;
+
   const TrackSessionDisplay({
     super.key,
     required this.currentLapNumber,
@@ -211,6 +219,7 @@ class TrackSessionDisplay extends StatelessWidget {
     this.isPaused = false,
     this.timerLive = false,
     this.timerPaused = false,
+    this.liveGSource,
   });
 
   @override
@@ -233,9 +242,10 @@ class TrackSessionDisplay extends StatelessWidget {
             style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 2),
-          // 大数字当前圈计时（方案 A 的地图区替代主体）：每位瞬间切换
-          // （视频对齐：无滑动、无拖影），不变位静止；刷新节奏由
-          // 独立 ticker 插值驱动，不再依赖 GPS 点到达才刷新。
+          // 大数字当前圈计时（方案 A 的地图区替代主体）：整串一个
+          // 纯 Text 原地换字，所有字符共用同一基线，不做任何竖直
+          // 位移（旧竖条切片法会因行高对不上而上下错位，已弃用）；
+          // 刷新节奏由独立 ticker 插值驱动，不再依赖 GPS 点到达才刷新。
           LiveLapTimeText(
             anchorMs: currentLapMs,
             lapNumber: currentLapNumber,
@@ -279,6 +289,13 @@ class TrackSessionDisplay extends StatelessWidget {
           const SizedBox(height: 6),
           _DeltaBar(liveDeltaMs),
           const SizedBox(height: 10),
+          // 实时 G 值行（G 圆 + 纵向/横向数值 + 本节峰值）：放在主角
+          // 区（大计时 + Delta）下方、分段块上方，驾驶中一抬眼就能
+          // 看到；不传 liveGSource 时整行不显示。
+          if (liveGSource != null) ...[
+            TrackLiveGRow(source: liveGSource!),
+            const SizedBox(height: 10),
+          ],
           // 一行分段色块：每段给分段用时 + 带正负号的 delta 数字；
           // 当前跑的段白边高亮；未完成分段两项均为 '--'，不补数。
           if (labels.isEmpty)

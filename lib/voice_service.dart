@@ -63,6 +63,10 @@ class VoiceSettings {
   /// 是否播报行程结束总结。默认 true。
   final bool announceSummary;
 
+  /// 是否播报开始语音：开始记录时的安全注意事项 + 倒数报数，
+  /// 两项共用这一个开关。默认 true；旧配置文件无此键时同样默认 true。
+  final bool announceStart;
+
   const VoiceSettings({
     required this.enabled,
     required this.rate,
@@ -71,6 +75,7 @@ class VoiceSettings {
     required this.announceEvents,
     required this.announceLaps,
     required this.announceSummary,
+    required this.announceStart,
   });
 
   /// 默认值：总开关开启，其余全部开启，语速/音调 1.0，音量 1.0。
@@ -82,6 +87,7 @@ class VoiceSettings {
     announceEvents: true,
     announceLaps: true,
     announceSummary: true,
+    announceStart: true,
   );
 
   VoiceSettings copyWith({
@@ -92,6 +98,7 @@ class VoiceSettings {
     bool? announceEvents,
     bool? announceLaps,
     bool? announceSummary,
+    bool? announceStart,
   }) =>
       VoiceSettings(
         enabled: enabled ?? this.enabled,
@@ -101,6 +108,7 @@ class VoiceSettings {
         announceEvents: announceEvents ?? this.announceEvents,
         announceLaps: announceLaps ?? this.announceLaps,
         announceSummary: announceSummary ?? this.announceSummary,
+        announceStart: announceStart ?? this.announceStart,
       );
 
   Map<String, dynamic> toJson() => {
@@ -111,6 +119,7 @@ class VoiceSettings {
         'announceEvents': announceEvents,
         'announceLaps': announceLaps,
         'announceSummary': announceSummary,
+        'announceStart': announceStart,
       };
 
   static VoiceSettings fromJson(Map<String, dynamic> j) => VoiceSettings(
@@ -121,6 +130,7 @@ class VoiceSettings {
         announceEvents: (j['announceEvents'] as bool?) ?? true,
         announceLaps: (j['announceLaps'] as bool?) ?? true,
         announceSummary: (j['announceSummary'] as bool?) ?? true,
+        announceStart: (j['announceStart'] as bool?) ?? true,
       );
 }
 
@@ -251,11 +261,14 @@ enum VoiceEventKind {
   lapDone,
 }
 
-/// 队列里的一条语音。
+/// 队列里的一条语音。[epoch] 是入队时的播报世代：倒计时页进入
+/// 时世代 +1，旧世代的安全播报即使在倒计时进入后才落地，也会在
+/// 轮到它时直接丢弃，不与倒数报数重叠（见 [VoiceService.beginCountdown]）。
 class _QueuedSpeech {
   final String text;
   final String utteranceId;
-  _QueuedSpeech(this.text, this.utteranceId);
+  final int epoch;
+  _QueuedSpeech(this.text, this.utteranceId, this.epoch);
 }
 
 class VoiceService extends ChangeNotifier {
@@ -318,6 +331,20 @@ class VoiceService extends ChangeNotifier {
   final List<_QueuedSpeech> _queue = [];
   bool _speaking = false;
   int _seq = 0;
+
+  /// 播报世代：倒计时页进入时 [beginCountdown] 将其 +1。安全播报
+  /// 在调用时记下当时的世代，入队与自定义音频播放前都会核对：
+  /// 世代已变说明倒计时已进入，该条安全播报直接丢弃，不与倒数
+  /// 报数重叠。正常播报（事件/圈/总结/倒数）都在当前世代入队，
+  /// 不受影响。
+  int _speechEpoch = 0;
+
+  /// 安全播报去重：同一文本 10 秒内只播一次，防重复点开始导致
+  /// 同一段安全注意事项排队播两遍。取消后 10 秒内再点开始，
+  /// 同样跳过（刚听过一遍，不重复打扰）。
+  String? _lastSafetyText;
+  int _lastSafetyAtMs = 0;
+
   Timer? _watchdog;
   StreamSubscription<Map<String, dynamic>>? _ttsSub;
 
@@ -542,6 +569,9 @@ class VoiceService extends ChangeNotifier {
   Future<bool> speakText(String text) async {
     if (!settings.enabled || manualMuted) return false;
     if (text.trim().isEmpty) return false;
+    // 调用时记下世代：自定义调用耗时（HTTP）期间若倒计时已进入，
+    // 回落的原生入队仍带旧世代，轮到它时会被 _pump 直接丢弃。
+    final epoch = _speechEpoch;
     if (await isMuted()) return false;
     if (usesCustomVoice) {
       final r = await _speakViaCustom(text);
@@ -549,8 +579,49 @@ class VoiceService extends ChangeNotifier {
       lastError = '${r.$2}，已回落原生 TTS。';
       notifyListeners();
     }
+    _enqueue(text, epoch: epoch);
+    return true;
+  }
+
+  /// 开始记录时的安全播报：走用户已选引擎（自定义 MiMo/通用 或
+  /// 原生 TTS，与 speakText 完全相同的失败回落），受开始语音开关
+  /// [VoiceSettings.announceStart] 与总开关门控。调用方一律不 await
+  /// （fire-and-forget），TTS 失败绝不卡住开始记录流程。
+  /// 同一文本 10 秒内重复调用直接跳过，防重复点开始导致播两遍。
+  Future<bool> speakSafety(String text) async {
+    if (!settings.announceStart) return false;
+    if (text.trim().isEmpty) return false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_lastSafetyText == text && now - _lastSafetyAtMs < 10000) {
+      return false;
+    }
+    _lastSafetyText = text;
+    _lastSafetyAtMs = now;
+    return speakText(text);
+  }
+
+  /// 倒数报数（3、2、1、开始）：只走原生 TTS 队列，不走自定义
+  /// HTTP 路径——云端往返对不准 1 秒节拍，数字会滞后甚至堆叠；
+  /// 节拍对齐优先于音色统一。受开始语音开关与总开关门控，
+  /// 失败静默（内部全部 catch），绝不卡住倒计时流程。
+  Future<bool> speakCountdown(String text) async {
+    if (!settings.announceStart) return false;
+    if (!settings.enabled || manualMuted) return false;
+    if (text.trim().isEmpty) return false;
+    if (await isMuted()) return false;
     _enqueue(text);
     return true;
+  }
+
+  /// 倒计时页进入时调用：停掉未播完的安全播报（清队列 + 停原生
+  /// 当前播报），并推进播报世代，使此后才落地的旧安全播报
+  /// （自定义音频播放前、原生入队后）直接丢弃，不与倒数报数重叠。
+  /// 已在播的自定义音频文件原生侧没有停止方法，属已知残留风险：
+  /// 该音频只能靠世代拦截“尚未开始播”的情形，见 _speakViaMimo /
+  /// _speakViaGeneric 播放前的世代核对。
+  Future<void> beginCountdown() async {
+    _speechEpoch++;
+    await cancelAll();
   }
 
   /// v1.2.1 试听：不再入队即报成功。返回 (是否播完, 结果说明)，
@@ -579,7 +650,8 @@ class VoiceService extends ChangeNotifier {
     final waiter = Completer<(String, int?, String?)>();
     _utteranceWaiters[utteranceId] = waiter;
     _listenTtsEvents();
-    _queue.add(_QueuedSpeech('语音播报已开启，当前语速正常。', utteranceId));
+    _queue.add(
+        _QueuedSpeech('语音播报已开启，当前语速正常。', utteranceId, _speechEpoch));
     _pump();
     late final (String, int?, String?) result;
     try {
@@ -637,6 +709,8 @@ class VoiceService extends ChangeNotifier {
   /// 回包 JSON 内嵌 base64 wav，解码后存 wav 播放；失败原因如实
   /// 返回，不伪装成功（调用方失败时回落原生 TTS）。
   Future<(bool, String)> _speakViaMimo(String text) async {
+    // 调用时记下世代：HTTP 往返期间若倒计时已进入，音频到手后也不播。
+    final epoch = _speechEpoch;
     final key = customVoice.apiKey;
     if (key.isEmpty) {
       return (false, '请先填写小米 MiMo 的 API Key（小米 MiMo 开放平台申请，只存本机）。');
@@ -687,6 +761,10 @@ class VoiceService extends ChangeNotifier {
         final dir = await Native.getFilesDir();
         final path = '$dir/custom_voice_last.wav';
         await File(path).writeAsBytes(bytes);
+        if (epoch != _speechEpoch) {
+          // HTTP 期间倒计时已进入：这段安全播报不再播，不与倒数报数重叠。
+          return (false, '已被倒计时打断，不再播放。');
+        }
         final played = await Native.playAudioFile(path);
         if (!played) return (false, '小米 MiMo 返回了音频，但本机播放失败。');
         return (true, '小米 MiMo 播报成功。');
@@ -702,6 +780,8 @@ class VoiceService extends ChangeNotifier {
   /// 期望返回音频流；返回 (成功, 原因)。协议不符、非音频响应、
   /// 超时、网络错误一律返回明确原因，不伪装成功。
   Future<(bool, String)> _speakViaGeneric(String text) async {
+    // 调用时记下世代：HTTP 往返期间若倒计时已进入，音频到手后也不播。
+    final epoch = _speechEpoch;
     final endpoint = customVoice.endpoint.trim();
     try {
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
@@ -732,6 +812,10 @@ class VoiceService extends ChangeNotifier {
         final dir = await Native.getFilesDir();
         final path = '$dir/custom_voice_last.$ext';
         await File(path).writeAsBytes(bytes);
+        if (epoch != _speechEpoch) {
+          // HTTP 期间倒计时已进入：这段安全播报不再播，不与倒数报数重叠。
+          return (false, '已被倒计时打断，不再播放。');
+        }
         final played = await Native.playAudioFile(path);
         if (!played) return (false, '自定义服务返回了音频，但本机播放失败。');
         return (true, '自定义服务播报成功。');
@@ -827,9 +911,9 @@ class VoiceService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _enqueue(String text) {
+  void _enqueue(String text, {int? epoch}) {
     _listenTtsEvents();
-    _queue.add(_QueuedSpeech(text, 'dt_${++_seq}'));
+    _queue.add(_QueuedSpeech(text, 'dt_${++_seq}', epoch ?? _speechEpoch));
     _pump();
   }
 
@@ -870,6 +954,13 @@ class VoiceService extends ChangeNotifier {
   Future<void> _pump() async {
     if (_speaking || _queue.isEmpty) return;
     final next = _queue.removeAt(0);
+    if (next.epoch != _speechEpoch) {
+      // 旧世代的安全播报（如倒计时进入后才落地的入队）：直接丢弃，
+      // 不播、不报错，继续推进队列里的倒数报数。
+      notifyListeners();
+      _pump();
+      return;
+    }
     _speaking = true;
     notifyListeners();
     try {

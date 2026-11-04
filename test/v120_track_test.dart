@@ -2,7 +2,6 @@
 /// 方案 A 赛中显示与赛道分析页冒烟。
 
 import 'package:drive_track/models.dart';
-import 'package:drive_track/rolling_digit.dart';
 import 'package:drive_track/track_analysis_page.dart';
 import 'package:drive_track/track_sector_data.dart';
 import 'package:drive_track/track_session_display.dart';
@@ -183,12 +182,8 @@ void main() {
           ),
         ),
       );
-      // 大数字计时现为里程表式滚动组件，不再是单支 Text。
-      expect(
-          tester
-              .widget<RollingNumberText>(find.byType(RollingNumberText))
-              .value,
-          '1:01.234');
+      // 大数字计时现为整串一个纯 Text 原地换字（竖条切片会上下错位，已弃用）。
+      expect(find.text('1:01.234'), findsOneWidget);
       expect(find.text('-0:01.234'), findsOneWidget);
       expect(find.text('+0:02.500'), findsOneWidget);
       expect(find.text('--'), findsNWidgets(3)); // 未完成分段的用时与 delta
