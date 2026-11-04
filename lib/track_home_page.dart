@@ -1,14 +1,13 @@
 /// v1.2.1：赛道专门入口页（新建）。
 ///
 /// 赛道相关的信息全部收进这一个页面，记录页只留一个醒目的
-/// “赛道”入口跳过来，不再把赛道卡片、赛道分析、赛道图鉴散落
-/// 在记录页各处；左抽屉的赛道图鉴入口也指向本页，避免两个
-/// 赛道入口说法不一。
+/// “赛道”入口跳过来，不再把赛道卡片、赛道分析、赛道库散落
+/// 在记录页各处；左抽屉的赛道库入口直推库页，本页的库按钮亦然。
 ///
 /// 内容：
 /// - 我的赛道行程列表：按赛道分组，每组含该赛道的最佳圈
 ///   （组内各行程最佳圈的最小值；无计入圈时写“暂无圈速”，不编数）。
-/// - 赛道图鉴入口、赛道分析入口（最新赛道行程分析；点组内
+/// - 赛道库入口、赛道分析入口（最新赛道行程分析；点组内
 ///   某条行程进该行程的赛道分析页，即赛道结束页）。
 /// - 赛道模式说明（含 OBD 未连接提示与扇区诚实口径）。
 ///
@@ -25,8 +24,7 @@ import 'package:flutter/material.dart';
 import 'models.dart';
 import 'store.dart';
 import 'track_analysis_page.dart';
-import 'track_catalog.dart';
-import 'track_encyclopedia.dart';
+import 'track_library_page.dart';
 import 'track_sector_data.dart';
 import 'track_timing.dart';
 
@@ -44,18 +42,14 @@ class TrackHomePage extends StatelessWidget {
   /// 的 _refreshTrackBestLaps 维护，加载中/无圈时均为 null。
   final Map<String, int?> bestLapMsByTripId;
 
-  /// 按行程 id 加载完整 Trip（用于进赛道分析页）。
+  /// 按行程 id 加载完整 Trip（用于进赛道分析页与从行程导入赛道）。
   final Future<Trip?> Function(String tripId) loadTrip;
-
-  /// 图鉴里点“选为本次赛道”时的回传（复用原有选赛道流程）。
-  final ValueChanged<TrackInfo>? onSelectCatalogTrack;
 
   const TrackHomePage({
     super.key,
     required this.metas,
     required this.bestLapMsByTripId,
     required this.loadTrip,
-    this.onSelectCatalogTrack,
   });
 
   List<TripMeta> get _trackTrips {
@@ -84,12 +78,13 @@ class TrackHomePage extends StatelessWidget {
     );
   }
 
-  void _openEncyclopedia(BuildContext context) {
+  void _openLibrary(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => TrackEncyclopediaPage(
-          onSelectCatalogTrack: onSelectCatalogTrack,
+        builder: (_) => TrackLibraryPage(
+          metas: metas,
+          loadTrip: loadTrip,
         ),
       ),
     );
@@ -141,10 +136,10 @@ class TrackHomePage extends StatelessWidget {
                           backgroundColor: _kRed,
                           foregroundColor: Colors.white),
                       icon: const Icon(Icons.flag),
-                      label: const Text('赛道图鉴',
+                      label: const Text('赛道库',
                           style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.bold)),
-                      onPressed: () => _openEncyclopedia(context),
+                      onPressed: () => _openLibrary(context),
                     ),
                   ),
                   const SizedBox(height: 8),

@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'card_style.dart';
 import 'track_catalog.dart';
 import 'track_encyclopedia.dart';
+import 'track_library.dart';
 import 'track_widgets.dart';
 
-/// 赛道图鉴详情数据（v1.1.0 图鉴重做）。
+/// 赛道库详情数据（v1.1.0 图鉴重做，现为选赛道 ⓘ 简介页的数据源）。
 ///
 /// 口径（防编造，与图鉴页一致）：
 /// - 历史段落全部用自己的话重写，不原文搬运任何来源；
@@ -578,14 +579,35 @@ class _OutlinePainter extends CustomPainter {
       old.outline != outline;
 }
 
-/// 赛道图鉴详情页（v1.1.0 新 UI：深色 #121212 + 法拉利红，与 App 一致）。
+/// 最快圈速的车型分栏键：赛事系列去掉场次后缀（排位赛 / 冲刺排位赛 /
+/// 表演 / 非正赛），使同一车型类别的正赛纪录与绝对最快归入同一栏；
+/// 每条纪录仍保留完整系列名与正赛 / 绝对口径，不混淆。
+String lapRecordCategory(String series) {
+  const suffixes = [' 冲刺排位赛', ' 排位赛', ' 表演（非正赛）', '（非正赛）', ' 表演'];
+  var out = series;
+  for (final s in suffixes) {
+    if (out.endsWith(s)) {
+      out = out.substring(0, out.length - s.length);
+      break;
+    }
+  }
+  out = out.trim();
+  return out.isEmpty ? series : out;
+}
+
+/// 赛道简介详情页（v1.1.0 新 UI：深色 #121212 + 法拉利红，与 App 一致；
+/// 现为选赛道列表 ⓘ 的简介页，点“在赛道模式中使用该赛道”时以该条目
+/// 作为结果返回，调用方负责设为本次赛道并关闭选择器）。
 class TrackDetailPage extends StatelessWidget {
   final EncyclopediaTrack track;
-  final ValueChanged<TrackInfo>? onSelectCatalogTrack;
+
+  /// 赛道库数据包（有经纬度中心线时，顶部轮廓用包的真实中心线画）。
+  final TrackPackage? package;
+
   const TrackDetailPage({
     super.key,
     required this.track,
-    this.onSelectCatalogTrack,
+    this.package,
   });
 
   @override
@@ -595,6 +617,18 @@ class TrackDetailPage extends StatelessWidget {
     final guide = guideFor(track);
     final osm = trackOsmOutlines[track.id];
     final corners = track.resolvedCorners;
+    // 最快圈速按车型分栏：同一车型类别（系列去场次后缀）的正赛纪录与
+    // 绝对最快归入同一栏；两条纪录均保留，不得互相顶替。
+    final lapGroups = <String, List<({String kind, TrackLapRecord record})>>{};
+    void addLap(String kind, TrackLapRecord? r) {
+      if (r == null) return;
+      (lapGroups[lapRecordCategory(r.series)] ??= [])
+          .add((kind: kind, record: r));
+    }
+
+    addLap('正赛纪录', guide.lapRecord);
+    addLap('绝对最快', guide.outrightLap);
+    final lapGroupList = lapGroups.entries.toList();
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
@@ -606,8 +640,14 @@ class TrackDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 顶部大轮廓图。
-            if (osm != null)
+            // 顶部大轮廓图：有经纬度中心线的包优先用真实中心线画。
+            if (package != null && package!.hasCenterline)
+              OutlineDiagram(
+                outline: normalizeLatLon(package!.centerline),
+                height: 220,
+                caption: '轮廓来源：赛道库数据包（经纬度中心线归一化显示）',
+              )
+            else if (osm != null)
               OutlineDiagram(
                 outline: osm,
                 height: 220,
@@ -637,7 +677,9 @@ class TrackDetailPage extends StatelessWidget {
                   ),
                 ),
               ),
-            if (catalog == null && osm == null)
+            if (catalog == null &&
+                osm == null &&
+                !(package?.hasCenterline ?? false))
               const Padding(
                 padding: EdgeInsets.only(top: 4),
                 child: Text(
@@ -705,68 +747,57 @@ class TrackDetailPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (guide.lapRecord != null) ...[
+                  if (lapGroupList.isEmpty)
                     const Text(
-                      '正赛纪录',
-                      style: TextStyle(color: Colors.white54, fontSize: 13),
+                      '最快圈速：待核',
+                      style: TextStyle(color: Colors.white54, fontSize: 15),
                     ),
+                  for (var gi = 0; gi < lapGroupList.length; gi++) ...[
+                    if (gi > 0) const SizedBox(height: 14),
                     Text(
-                      guide.lapRecord!.lapTime,
-                      style: TextStyle(
-                        color: accent,
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${guide.lapRecord!.series} · ${guide.lapRecord!.year}',
+                      lapGroupList[gi].key,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 15,
-                      ),
-                    ),
-                    Text(
-                      '${guide.lapRecord!.driver} · ${guide.lapRecord!.car}',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ] else
-                    const Text(
-                      '正赛纪录：待核',
-                      style: TextStyle(color: Colors.white54, fontSize: 15),
-                    ),
-                  if (guide.outrightLap != null) ...[
-                    const SizedBox(height: 12),
-                    const Text(
-                      '绝对最快（排位 / 测试 / 表演，非正赛纪录）',
-                      style: TextStyle(color: Colors.white54, fontSize: 13),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      guide.outrightLap!.lapTime,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      '${guide.outrightLap!.series} · ${guide.outrightLap!.year}',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
+                    for (final lap in lapGroupList[gi].value) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        lap.record.lapTime,
+                        style: TextStyle(
+                          color: lap.kind == '正赛纪录'
+                              ? accent
+                              : Colors.white,
+                          fontSize: lap.kind == '正赛纪录' ? 30 : 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '${guide.outrightLap!.driver} · ${guide.outrightLap!.car}',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
+                      Text(
+                        '${lap.record.series} · ${lap.record.year}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                        ),
                       ),
-                    ),
+                      Text(
+                        '${lap.record.driver} · ${lap.record.car}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        lap.kind == '正赛纪录'
+                            ? '正赛纪录'
+                            : '绝对最快（排位 / 测试 / 表演，非正赛纪录）',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ],
                   if (guide.lapNote.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -827,22 +858,11 @@ class TrackDetailPage extends StatelessWidget {
               '参考来源：${guide.sources}',
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
-            if (catalog != null && onSelectCatalogTrack != null) ...[
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () {
-                  onSelectCatalogTrack!(catalog);
-                  Navigator.of(context).pop();
-                },
-                child: const Text('在赛道模式中使用该赛道'),
-              ),
-            ] else if (catalog == null) ...[
-              const SizedBox(height: 20),
-              const Text(
-                '该赛道尚未接入赛道模式，选赛道仍走原有赛道选择器（目录 14 条）。',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
-              ),
-            ],
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(track),
+              child: const Text('在赛道模式中使用该赛道'),
+            ),
           ],
         ),
       ),

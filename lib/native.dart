@@ -8,6 +8,8 @@ class Native {
   static const EventChannel _sen = EventChannel('drivetrack/sensors');
   static const EventChannel _bleDev = EventChannel('drivetrack/bleDevices');
   static const EventChannel _bleData = EventChannel('drivetrack/bleData');
+  static const EventChannel _btGpsDev =
+      EventChannel('drivetrack/btGpsDevices');
   static const EventChannel _gnss = EventChannel('drivetrack/gnss');
   static const EventChannel _tts = EventChannel('drivetrack/tts');
 
@@ -21,6 +23,14 @@ class Native {
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
   static Stream<Map<String, dynamic>> get bleDataStream => _bleData
+      .receiveBroadcastStream()
+      .map((e) => Map<String, dynamic>.from(e as Map));
+
+  /// 外置蓝牙 GPS 专用发现流：无过滤 BLE 扫描与经典蓝牙发现的
+  /// 结果（{type: 'ble'|'classic', address, name, rssi, serviceUuids}）。
+  /// 与页级 bleDeviceStream 分离，避免 GPS 扫描结果污染页级
+  /// “附近扫描结果”列表、造成同一设备出现两条。
+  static Stream<Map<String, dynamic>> get btGpsDeviceStream => _btGpsDev
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
 
@@ -120,6 +130,26 @@ class Native {
 
   static Future<void> scanBleWithServices(List<String> serviceUuids) =>
       _m.invokeMethod('scanBleWithServices', {'serviceUuids': serviceUuids});
+
+  /// 外置蓝牙 GPS（BtGpsManager）：经典蓝牙 SPP + 经典蓝牙发现 +
+  /// 无过滤 BLE 扫描。SPP 数据事件走 bleData 流（sppNmea 等），
+  /// 发现事件走 btGpsDeviceStream；返回值除已注明外均为 ok 布尔。
+  static Future<List<Map<String, dynamic>>> listBondedSppDevices() async {
+    final r = await _m.invokeMethod('listBondedSppDevices');
+    return (r as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  static Future<void> connectSpp(String address) =>
+      _m.invokeMethod('connectSpp', {'address': address});
+  static Future<void> disconnectSpp() => _m.invokeMethod('disconnectSpp');
+  static Future<bool> startClassicDiscovery() async =>
+      await _m.invokeMethod('startClassicDiscovery') as bool;
+  static Future<void> stopClassicDiscovery() =>
+      _m.invokeMethod('stopClassicDiscovery');
+  static Future<bool> scanBleUnfiltered() async =>
+      await _m.invokeMethod('scanBleUnfiltered') as bool;
 
   static Future<String?> getConnectedWifiSsid() async {
     final r = await _m.invokeMethod('getConnectedWifiSsid');

@@ -49,7 +49,7 @@ void main() {
     // （底部药丸导航仍有这三个图标入口，故图标断言仍成立，
     // 但菜单文本入口已删）；工具箱新结构在树里。
     // v0.1.7：菜单再简化去重——配置类入口全部只留设置页，菜单只留
-    // 内容类快捷（赛道图鉴/连接的设备管理/数据导出/备份/免责声明），
+    // 内容类快捷（赛道库/连接的设备管理/数据导出/备份/免责声明），
     // 旧“工具”/“设置快捷”分组已删，断言同步更新。
     // v1.0.3：关于从设置页移入左拉菜单，菜单新增“关于”一项。
     expect(find.text('首页'), findsNothing);
@@ -57,7 +57,7 @@ void main() {
     expect(find.text('我的'), findsNothing);
     expect(find.text('工具'), findsNothing);
     expect(find.text('设置快捷'), findsNothing);
-    expect(find.text('赛道图鉴'), findsOneWidget);
+    expect(find.text('赛道库'), findsOneWidget);
     expect(find.text('连接的设备管理'), findsOneWidget);
     expect(find.text('数据导出/备份'), findsOneWidget);
     expect(find.text('免责声明'), findsOneWidget);

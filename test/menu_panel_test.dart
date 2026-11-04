@@ -21,9 +21,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.byIcon(Icons.menu).first);
     await tester.pump(const Duration(milliseconds: 300));
-    // 面板 Material 是“赛道图鉴”菜单项的 Material 祖先。
+    // 面板 Material 是“赛道库”菜单项的 Material 祖先。
     final panel = find.ancestor(
-      of: find.text('赛道图鉴'),
+      of: find.text('赛道库'),
       matching: find.byType(Material),
     );
     expect(panel, findsOneWidget);

@@ -29,6 +29,15 @@
 // 先清失败原因。Overpass 各镜像沙箱实测全部不可达（对照站正常），
 // 故本次不新增未经验证的镜像；真机结论以用户手机网络为准。
 //
+// 地理图层：路网之下叠加 OSM 矢量图层——水体（暗蓝填充 + 河流线）、
+// 绿地（暗绿填充）、建筑（深灰扁平 footprint，不做 3D 拉伸）、山峰
+// （HUD 风格小三角 + 名字/海拔）。整体风格不改：背景、道路分级着
+// 色、3D 透视、HUD 字体原样不动；新图层只用暗色调，与道路走同一套
+// 投影/透视变换。真实地形起伏阴影（等高线/山体阴影）需要高程数据
+// 源，另算独立工程，本批只做山峰标记。图层拉取与路网独立：
+// Overpass 拉不到时图层优雅缺失（只显示路网），高德兜底只覆盖主
+// 干路、不提供水体与建筑。
+//
 // 视角：跟随车头的 3D 俯视透视，俯仰角约 60-70 度（地平线在画面
 // 约 16% 高处、车标在约 72% 高处，近大远小）；车头朝上为默认跟随
 // 模式（headingUp=true 时场景按车头朝向旋转，车标恒朝上；
@@ -44,9 +53,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'map_layers.dart';
 import 'native.dart';
 import 'photo_points.dart';
 
@@ -861,6 +872,144 @@ Future<void> _saveCachedRoads(double lat, double lon, List<RoadWay> ways) async 
   } catch (_) {}
 }
 
+/// 地理图层拉取结果：ok=true 表示某镜像 HTTP 200 且解析完成
+/// （即使周边确实无图层、layers 为空也算成功，调用方据此覆盖旧
+/// 图层）；ok=false 表示全部镜像失败，调用方保留旧图层、不记位置。
+class LayerFetchResult {
+  final MapLayers layers;
+  final bool ok;
+  const LayerFetchResult(this.layers, this.ok);
+}
+
+/// 按中心点周边向 Overpass 拉取地理图层（水体/绿地/建筑/山峰）。
+/// 与路网管线独立：同 4 个镜像并行竞速（先成功者胜，成功空结果
+/// 同样胜出）、单站连接 5 秒 + 响应 8 秒 + 整站 15 秒兜底；无 hedged
+/// /map 兜底、无高德兜底（高德交通态势只给主干路，不提供水体与
+/// 建筑）；全部失败返回 ok=false。无 Timer，widget 测试里无
+/// pending 回调。
+Future<LayerFetchResult> fetchMapLayersAround(double lat, double lon) async {
+  const mirrors = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.nchc.org.tw/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+  ];
+  final query = buildLayerOverpassQuery(lat, lon);
+  final completer = Completer<LayerFetchResult>();
+  var failures = 0;
+  void handle(LayerFetchResult result) {
+    if (completer.isCompleted) return;
+    if (result.ok) {
+      completer.complete(result);
+      return;
+    }
+    failures++;
+    if (failures >= mirrors.length) {
+      completer.complete(const LayerFetchResult(MapLayers.empty(), false));
+    }
+  }
+
+  for (final base in mirrors) {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    _fetchOneLayerMirror(client, base, query, lat, lon)
+        .timeout(const Duration(seconds: 15),
+            onTimeout: () => const LayerFetchResult(MapLayers.empty(), false))
+        .then(handle);
+  }
+  return completer.future;
+}
+
+/// 单站图层拉取（供并行竞速调用；失败原因不分档、不抛异常，
+/// 调用方只区分成功与失败，失败时图层静默缺失）。
+Future<LayerFetchResult> _fetchOneLayerMirror(HttpClient client, String base,
+    String query, double lat, double lon) async {
+  try {
+    final req = await client.postUrl(Uri.parse(base));
+    req.headers.set('User-Agent', 'DriveTrack');
+    req.headers.contentType = ContentType('application', 'x-www-form-urlencoded');
+    req.write('data=${Uri.encodeQueryComponent(query)}');
+    final resp = await req.close().timeout(const Duration(seconds: 8));
+    final body =
+        await resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 8));
+    if (resp.statusCode == 429 ||
+        resp.statusCode == 502 ||
+        resp.statusCode == 503 ||
+        resp.statusCode == 504) {
+      return const LayerFetchResult(MapLayers.empty(), false);
+    }
+    if (resp.statusCode != 200) {
+      return const LayerFetchResult(MapLayers.empty(), false);
+    }
+    final data = jsonDecode(body) as Map<String, dynamic>;
+    final layers =
+        parseOverpassLayers(data, centerLat: lat, centerLon: lon);
+    return LayerFetchResult(layers, true);
+  } on SocketException {
+    return const LayerFetchResult(MapLayers.empty(), false);
+  } on TimeoutException {
+    return const LayerFetchResult(MapLayers.empty(), false);
+  } catch (_) {
+    return const LayerFetchResult(MapLayers.empty(), false);
+  } finally {
+    client.close();
+  }
+}
+
+/// 地理图层缓存文件：与道路缓存同分格（0.01 度一格），但文件名前
+/// 缀不同（layer_ vs road_）且内容版本为 v3，旧缓存绝不串味。
+String layerCacheCellKey(double lat, double lon) =>
+    'layer_${lat.toStringAsFixed(2)}_${lon.toStringAsFixed(2)}.json';
+
+Future<String?> _layerCachePath(double lat, double lon) async {
+  try {
+    final dir = await Native.getCacheDir();
+    return '$dir/${layerCacheCellKey(lat, lon)}';
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<MapLayers?> _readLayerCacheFile(String path) async {
+  try {
+    final f = File(path);
+    if (!await f.exists()) return null;
+    final layers = mapLayersFromCacheJson(jsonDecode(await f.readAsString()));
+    return layers.isEmpty ? null : layers;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// 先本格、再邻格（与路网同环序）找最近的非空图层缓存；都没有返回 null。
+Future<MapLayers?> _loadBestCachedLayers(double lat, double lon) async {
+  try {
+    final dir = await Native.getCacheDir();
+    final baseLat = double.parse(lat.toStringAsFixed(2));
+    final baseLon = double.parse(lon.toStringAsFixed(2));
+    String keyFor(int dLat, int dLon) => layerCacheCellKey(
+        baseLat + dLat * 0.01, baseLon + dLon * 0.01);
+    final self = await _readLayerCacheFile('$dir/${keyFor(0, 0)}');
+    if (self != null) return self;
+    for (final (dLat, dLon) in neighborCellOffsets()) {
+      final hit = await _readLayerCacheFile('$dir/${keyFor(dLat, dLon)}');
+      if (hit != null) return hit;
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> _saveCachedLayers(
+    double lat, double lon, MapLayers layers) async {
+  try {
+    final path = await _layerCachePath(lat, lon);
+    if (path == null || layers.isEmpty) return;
+    await File(path).writeAsString(jsonEncode(
+        mapLayersToCacheJson(layers, DateTime.now().millisecondsSinceEpoch)));
+  } catch (_) {}
+}
+
 class Recording3dMap extends StatefulWidget {
   final double centerLat;
   final double centerLon;
@@ -913,6 +1062,14 @@ class _Recording3dMapState extends State<Recording3dMap> {
   double? _fetchLat;
   double? _fetchLon;
   DateTime? _lastAttempt;
+  // 地理图层：与路网独立的状态与门限追踪（路网失败不拖住图层、
+  // 图层失败不影响路网；失败不记位置，30 秒后可重试）。
+  MapLayers _layers = const MapLayers.empty();
+  bool _layersLoaded = false;
+  bool _fetchingLayers = false;
+  double? _layerFetchLat;
+  double? _layerFetchLon;
+  DateTime? _layerLastAttempt;
 
   @override
   void initState() {
@@ -935,6 +1092,8 @@ class _Recording3dMapState extends State<Recording3dMap> {
   void _maybeFetch({bool force = false}) {
     if (!mounted) return;
     if (widget.centerLat == 0 && widget.centerLon == 0) return;
+    // 图层与路网独立触发：路网拉取进行中也不挡住图层。
+    _maybeFetchLayers(force: force);
     if (_fetching) return;
     // v1.0.7：失败不记 _fetchLat；成功有数据才记位置。静止时只要距
     // 上次尝试超过 30 秒就重试，不再出现“失败一次、400 米内永不重拉”。
@@ -992,6 +1151,51 @@ class _Recording3dMapState extends State<Recording3dMap> {
     });
   }
 
+  /// 地理图层拉取：与路网同一套 400 米 / 30 秒门限，但独立追踪。
+  /// 成功（含成功空结果）即覆盖旧图层并记位置；失败保留旧图层、
+  /// 不记位置（30 秒后可重试），且图层无状态文案、不干扰路网文案。
+  void _maybeFetchLayers({bool force = false}) {
+    if (!mounted) return;
+    if (_fetchingLayers) return;
+    final lat = widget.centerLat;
+    final lon = widget.centerLon;
+    if (!force && _layerFetchLat != null &&
+        _distM(_layerFetchLat!, _layerFetchLon!, lat, lon) <= 400) {
+      return;
+    }
+    if (!force && _layerLastAttempt != null &&
+        DateTime.now().difference(_layerLastAttempt!) <
+            const Duration(seconds: 30)) {
+      return;
+    }
+    _fetchingLayers = true;
+    _layerLastAttempt = DateTime.now();
+    // 先读缓存（本格无缓存时找邻格）：网络不行时也能先显示上次
+    // 成功的图层；缓存只在首载时应用，避免新格缓存盖掉已显示的
+    // 新数据（与路网 _roadLoaded 门一致）。
+    _loadBestCachedLayers(lat, lon).then((cached) {
+      if (!mounted) return;
+      if (cached != null && !_layersLoaded) {
+        setState(() => _layers = cached);
+      }
+    });
+    fetchMapLayersAround(lat, lon).then((result) {
+      if (!mounted) return;
+      setState(() {
+        _fetchingLayers = false;
+        if (result.ok) {
+          _layerFetchLat = lat;
+          _layerFetchLon = lon;
+          _layers = result.layers;
+          _layersLoaded = true;
+          if (result.layers.isNotEmpty) {
+            _saveCachedLayers(lat, lon, result.layers);
+          }
+        }
+      });
+    });
+  }
+
   void _manualRefresh() {
     _fetchLat = null;
     _lastAttempt = null;
@@ -1022,6 +1226,7 @@ class _Recording3dMapState extends State<Recording3dMap> {
             points: widget.points,
             photoPoints: widget.photoPoints,
             roadWays: _roads,
+            layers: _layers,
             roadsDimmed: _roadNeighborCache,
             is3d: widget.is3d,
             headingUp: widget.headingUp,
@@ -1121,6 +1326,7 @@ class _Recording3dPainter extends CustomPainter {
   final List<Recording3dPoint> points;
   final List<PhotoPoint> photoPoints;
   final List<RoadWay> roadWays;
+  final MapLayers layers;
 
   /// 邻格缓存路网是否正被显示：为 true 时道路画暗一档，与实时
   /// 拉取的路网肉眼可分，避免把 1~2 公里外邻格的路当成本地路。
@@ -1136,6 +1342,7 @@ class _Recording3dPainter extends CustomPainter {
     required this.points,
     required this.photoPoints,
     this.roadWays = const [],
+    this.layers = const MapLayers.empty(),
     this.roadsDimmed = false,
     required this.is3d,
     required this.headingUp,
@@ -1221,6 +1428,136 @@ class _Recording3dPainter extends CustomPainter {
     canvas.drawCircle(Offset(p.dx, p.dy - r * 2.2), r * 0.4, Paint()..color = Colors.white);
   }
 
+  // 静态图层 Picture 缓存：单条目（最新视口），键含尺寸、中心、
+  // 朝向、跟随模式、3D/2D、缩放与图层对象身份；视口或图层一变
+  // 即重录，静止时复用。Picture 是矢量命令表而非位图，内存有界；
+  // 旧图在替换时 dispose（widget 释放时残留一张单图，可接受）。
+  static ui.Picture? _staticLayerPicture;
+  static String? _staticLayerKey;
+
+  String _staticLayerKeyFor(Size size) =>
+      '${size.width}x${size.height}|$centerLat|$centerLon|$headingDeg|$headingUp|$is3d|$zoom|${identityHashCode(layers)}';
+
+  void _drawStaticLayers(Canvas canvas, Size size, double pxPerM) {
+    if (layers.isEmpty) return;
+    final key = _staticLayerKeyFor(size);
+    if (_staticLayerPicture != null && _staticLayerKey == key) {
+      canvas.drawPicture(_staticLayerPicture!);
+      return;
+    }
+    final recorder = ui.PictureRecorder();
+    _paintLayerGeometries(Canvas(recorder), size, pxPerM);
+    final pic = recorder.endRecording();
+    _staticLayerPicture?.dispose();
+    _staticLayerPicture = pic;
+    _staticLayerKey = key;
+    canvas.drawPicture(pic);
+  }
+
+  /// 绿地 → 水体 → 建筑（与 mapLayerDrawOrder 一致），只画地面
+  /// 填充与水体线；山峰标记不在此（量小，直接画在轨迹之后）。
+  void _paintLayerGeometries(Canvas canvas, Size size, double pxPerM) {
+    // 绿地。
+    final greenPaint = Paint()
+      ..color = greenFillColor.withValues(alpha: greenFillAlpha)
+      ..style = PaintingStyle.fill;
+    for (final g in layers.greens) {
+      _fillPolygon(canvas, size, g.points, pxPerM, greenPaint);
+    }
+    // 水体面（evenOdd：岛上不涂水）。
+    final waterPaint = Paint()
+      ..color = waterFillColor.withValues(alpha: waterFillAlpha)
+      ..style = PaintingStyle.fill;
+    for (final w in layers.waters) {
+      _fillWaterArea(canvas, size, w, pxPerM, waterPaint);
+    }
+    // 水体线。
+    for (final line in layers.waterLines) {
+      final proj = <(Offset, double)>[];
+      for (final (lat, lon) in line.points) {
+        final fr = _toForwardRight(lat, lon);
+        proj.add((_project(size, fr.$1, fr.$2, pxPerM), _factorFor(fr.$1)));
+      }
+      for (var i = 1; i < proj.length; i++) {
+        final a = proj[i - 1], b = proj[i];
+        if (_sameSideOutside(a.$1, b.$1, size)) continue;
+        final factor = (a.$2 + b.$2) / 2;
+        canvas.drawLine(
+            a.$1,
+            b.$1,
+            Paint()
+              ..color = waterLineColor.withValues(alpha: waterLineAlpha)
+              ..strokeWidth =
+                  roadWidthFor(waterLineWidth, waterLineMinWidth, factor)
+              ..strokeCap = StrokeCap.round
+              ..style = PaintingStyle.stroke);
+      }
+    }
+    // 建筑：缩放/面积门限过滤 + 同侧视野外跳过；只画扁平 footprint。
+    final buildingPaint = Paint()
+      ..color = buildingFillColor.withValues(alpha: buildingFillAlpha)
+      ..style = PaintingStyle.fill;
+    for (final b in layers.buildings) {
+      if (!buildingVisibleAtZoom(ringAreaM2(b.points, centerLat), zoom)) {
+        continue;
+      }
+      _fillPolygon(canvas, size, b.points, pxPerM, buildingPaint);
+    }
+  }
+
+  /// 环整体同侧出视野时跳过（有一个点在屏内或环抱屏幕时照常画）。
+  bool _polygonOutside(Size size, List<Offset> pts) {
+    const m = 60.0;
+    var allLeft = true, allRight = true, allTop = true, allBottom = true;
+    for (final p in pts) {
+      if (p.dx >= -m) allLeft = false;
+      if (p.dx <= size.width + m) allRight = false;
+      if (p.dy >= -m) allTop = false;
+      if (p.dy <= size.height + m) allBottom = false;
+    }
+    return allLeft || allRight || allTop || allBottom;
+  }
+
+  List<Offset> _projectRing(Size size, List<MapPoint> ring, double pxPerM) {
+    final out = <Offset>[];
+    for (final (lat, lon) in ring) {
+      final fr = _toForwardRight(lat, lon);
+      out.add(_project(size, fr.$1, fr.$2, pxPerM));
+    }
+    return out;
+  }
+
+  void _fillPolygon(Canvas canvas, Size size, List<MapPoint> ring,
+      double pxPerM, Paint paint) {
+    if (ring.length < 3) return;
+    final pts = _projectRing(size, ring, pxPerM);
+    if (_polygonOutside(size, pts)) return;
+    final path = Path()..moveTo(pts.first.dx, pts.first.dy);
+    for (var i = 1; i < pts.length; i++) {
+      path.lineTo(pts[i].dx, pts[i].dy);
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  void _fillWaterArea(Canvas canvas, Size size, WaterArea area, double pxPerM,
+      Paint paint) {
+    final path = Path()..fillType = PathFillType.evenOdd;
+    var drew = false;
+    for (final ring in [...area.outers, ...area.inners]) {
+      if (ring.length < 3) continue;
+      final pts = _projectRing(size, ring, pxPerM);
+      if (_polygonOutside(size, pts)) continue;
+      path.moveTo(pts.first.dx, pts.first.dy);
+      for (var i = 1; i < pts.length; i++) {
+        path.lineTo(pts[i].dx, pts[i].dy);
+      }
+      path.close();
+      drew = true;
+    }
+    if (drew) canvas.drawPath(path, paint);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     // v1.0.4：深炭灰底（纯黑底除外项，与主框架 #121212 同步）。
@@ -1273,6 +1610,11 @@ class _Recording3dPainter extends CustomPainter {
             Offset(size.width, size.height / 2 - m * pxPerM), gridPaint);
       }
     }
+
+    // 地理图层：绿地 → 水体 → 建筑（见 mapLayerDrawOrder），一律
+    // 压在道路之下；静态面进 Picture 缓存（视口变化才重绘，不逐
+    // 帧重画全部面），山峰标记量小、直接逐帧画在轨迹之后。
+    _drawStaticLayers(canvas, size, pxPerM);
 
     // v1.2.0 路网：按 highway 等级分级加粗着色（高速/主干更粗
     // 更亮，次干/支路居中，一般/步行类细暗），逐段按透视因子
@@ -1345,6 +1687,43 @@ class _Recording3dPainter extends CustomPainter {
       }
     }
 
+    // 山峰标记：HUD 风格小三角 + 名字/海拔（无名无海拔只画三角），
+    // 与照片点同级、画在轨迹之后；出视野的跳过。
+    for (final peak in layers.peaks) {
+      final fr = _toForwardRight(peak.lat, peak.lon);
+      final p = _project(size, fr.$1, fr.$2, pxPerM);
+      if (p.dx < -40 ||
+          p.dx > size.width + 40 ||
+          p.dy < -40 ||
+          p.dy > size.height + 40) {
+        continue;
+      }
+      final tri = Path()
+        ..moveTo(p.dx, p.dy - 8)
+        ..lineTo(p.dx - 6, p.dy + 4)
+        ..lineTo(p.dx + 6, p.dy + 4)
+        ..close();
+      canvas.drawPath(
+          tri,
+          Paint()
+            ..color =
+                peakTriangleColor.withValues(alpha: peakTriangleAlpha));
+      final label = peakLabelText(peak);
+      if (label.isEmpty) continue;
+      final labelPainter = TextPainter(
+        text: TextSpan(
+            text: label,
+            style: const TextStyle(
+                color: peakLabelColor, fontSize: peakLabelFontSize)),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+      )..layout();
+      labelPainter.paint(
+          canvas,
+          Offset(p.dx - labelPainter.width / 2,
+              p.dy - 8 - labelPainter.height - 2));
+    }
+
     // 起点 / 照片点立体标记（终点即当前车标，不另画）。
     if (projected.isNotEmpty) _drawMarker(canvas, projected.first.p, Colors.greenAccent, 7);
     for (final pp in photoPoints) {
@@ -1400,6 +1779,7 @@ class _Recording3dPainter extends CustomPainter {
       old.centerLon != centerLon ||
       old.headingDeg != headingDeg ||
       old.roadWays != roadWays ||
+      old.layers != layers ||
       old.roadsDimmed != roadsDimmed ||
       old.points != points ||
       old.photoPoints != photoPoints ||

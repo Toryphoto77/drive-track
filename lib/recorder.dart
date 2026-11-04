@@ -295,6 +295,9 @@ class Recorder extends ChangeNotifier {
   /// 该路无海拔（RMC 单独定位时），此时 alt 存占位 0 但 altValid=false，
   /// 绝不画进剖面图、绝不计入爬升；旧版恒写 alt: 0 且无标记是 bug。
   void onExternalFix(double lat, double lon, double speed, double bearing, int timeMs, {double? altM}) {
+    // 0,0 是无定位占位符（与 onLocation 的守卫镜像）：绝不进轨迹、
+    // 绝不移动显示。外置源断线/无效时调用方负责回落手机 GPS。
+    if (lat == 0 && lon == 0) return;
     curLat = lat;
     curLon = lon;
     curSpeed = speed;

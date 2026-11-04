@@ -21,12 +21,16 @@ class TripMeta {
   final String? trackId;
   final String trackName;
   final String? vehicleId;
+  // 高德逆地理编码的起终点中文短地名（空 = 未获取，列表回落日期显示）。
+  final String startPlace;
+  final String endPlace;
   const TripMeta(this.id, this.mode, this.startMs, this.endMs, this.distanceM, this.score, this.demo,
-      {this.isPublic = false, this.likes = 0, this.isTrackMode = false, this.trackId, this.trackName = '', this.vehicleId});
+      {this.isPublic = false, this.likes = 0, this.isTrackMode = false, this.trackId, this.trackName = '', this.vehicleId, this.startPlace = '', this.endPlace = ''});
   Map<String, dynamic> toJson() => {
         'id': id, 'mode': mode.name, 'start': startMs, 'end': endMs,
         'dist': distanceM, 'score': score, 'demo': demo, 'pub': isPublic, 'likes': likes,
         'trackMode': isTrackMode, 'trackId': trackId, 'trackName': trackName, 'vehicleId': vehicleId,
+        'startPlace': startPlace, 'endPlace': endPlace,
       };
   static TripMeta fromJson(Map<String, dynamic> j) => TripMeta(
         j['id'] as String,
@@ -42,6 +46,8 @@ class TripMeta {
         trackId: j['trackId'] as String?,
         trackName: (j['trackName'] as String?) ?? '',
         vehicleId: j['vehicleId'] as String?,
+        startPlace: (j['startPlace'] as String?) ?? '',
+        endPlace: (j['endPlace'] as String?) ?? '',
       );
 }
 
@@ -146,7 +152,8 @@ class Store {
                 meta.distanceM, meta.score, meta.demo,
                 isPublic: meta.isPublic, likes: meta.likes,
                 isTrackMode: t.isTrackMode, trackId: t.trackId,
-                trackName: t.trackName, vehicleId: t.vehicleId);
+                trackName: t.trackName, vehicleId: t.vehicleId,
+                startPlace: meta.startPlace, endPlace: meta.endPlace);
             changed = true;
           }
         }
@@ -179,6 +186,9 @@ class Store {
       lapsJson: old.lapsJson, startFinishLat: old.startFinishLat, startFinishLon: old.startFinishLon,
       photoPoints: old.photoPoints, vehicleId: old.vehicleId,
       isPublic: isPublic ?? old.isPublic, likes: likes, liked: liked,
+      correctedPoints: old.correctedPoints,
+      correctionStatus: old.correctionStatus,
+      startPlace: old.startPlace, endPlace: old.endPlace,
     );
     await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
     final metas = await loadIndex();
@@ -187,6 +197,49 @@ class Store {
       metas[idx] = TripMeta(id, trip.mode, trip.startMs, trip.endMs, trip.distanceM, trip.score, metas[idx].demo,
           isPublic: trip.isPublic, likes: trip.likes,
           isTrackMode: trip.isTrackMode, trackId: trip.trackId, trackName: trip.trackName, vehicleId: trip.vehicleId);
+      await _saveIndex(metas);
+    }
+    return trip;
+  }
+
+  /// 高德第一批：改写行程的高德派生层（纠偏轨迹、纠偏状态、起终点
+  /// 地名），其余字段原样保留。纠偏轨迹只写 'corrPts'，绝不碰
+  /// 'points' 原始轨迹；地名同时写回索引（列表显示用）。未传的
+  /// 字段保持旧值；行程不存在时返回 null。
+  Future<Trip?> updateTripEnrichment(String id,
+      {List<(double lat, double lon)>? correctedPoints,
+      String? correctionStatus,
+      String? startPlace,
+      String? endPlace}) async {
+    final old = await loadTrip(id);
+    if (old == null) return null;
+    final trip = Trip(
+      id: old.id, mode: old.mode, startMs: old.startMs, endMs: old.endMs,
+      points: old.points, events: old.events, score: old.score,
+      subScores: old.subScores, scoreReasons: old.scoreReasons,
+      trimPrivacy: old.trimPrivacy, riderBikeKg: old.riderBikeKg,
+      weatherSummary: old.weatherSummary, videoPaths: old.videoPaths,
+      trackId: old.trackId, trackName: old.trackName, isTrackMode: old.isTrackMode,
+      lapsJson: old.lapsJson, startFinishLat: old.startFinishLat, startFinishLon: old.startFinishLon,
+      photoPoints: old.photoPoints, vehicleId: old.vehicleId,
+      isPublic: old.isPublic, likes: old.likes, liked: old.liked,
+      correctedPoints: correctedPoints ?? old.correctedPoints,
+      correctionStatus: correctionStatus ?? old.correctionStatus,
+      startPlace: startPlace ?? old.startPlace,
+      endPlace: endPlace ?? old.endPlace,
+    );
+    await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
+    final metas = await loadIndex();
+    final idx = metas.indexWhere((m) => m.id == id);
+    if (idx >= 0) {
+      final m = metas[idx];
+      metas[idx] = TripMeta(m.id, m.mode, m.startMs, m.endMs, m.distanceM,
+          m.score, m.demo,
+          isPublic: m.isPublic, likes: m.likes,
+          isTrackMode: m.isTrackMode, trackId: m.trackId,
+          trackName: m.trackName, vehicleId: m.vehicleId,
+          startPlace: startPlace ?? m.startPlace,
+          endPlace: endPlace ?? m.endPlace);
       await _saveIndex(metas);
     }
     return trip;
@@ -214,6 +267,9 @@ class Store {
       lapsJson: old.lapsJson, startFinishLat: old.startFinishLat, startFinishLon: old.startFinishLon,
       photoPoints: capped, vehicleId: old.vehicleId,
       isPublic: old.isPublic, likes: old.likes, liked: old.liked,
+      correctedPoints: old.correctedPoints,
+      correctionStatus: old.correctionStatus,
+      startPlace: old.startPlace, endPlace: old.endPlace,
     );
     await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
     return PhotoPointsUpdate(trip: trip, inputCount: photoPoints.length, savedCount: capped.length);
@@ -296,12 +352,16 @@ class Store {
             lapsJson: t.lapsJson, startFinishLat: t.startFinishLat, startFinishLon: t.startFinishLon,
             photoPoints: t.photoPoints, vehicleId: null,
             isPublic: t.isPublic, likes: t.likes, liked: t.liked,
+            correctedPoints: t.correctedPoints,
+            correctionStatus: t.correctionStatus,
+            startPlace: t.startPlace, endPlace: t.endPlace,
           );
           await File('$_dir/trip_${m.id}.json').writeAsString(jsonEncode(nt.toJson()));
         }
         metas[i] = TripMeta(m.id, m.mode, m.startMs, m.endMs, m.distanceM, m.score, m.demo,
             isPublic: m.isPublic, likes: m.likes,
-            isTrackMode: m.isTrackMode, trackId: m.trackId, trackName: m.trackName, vehicleId: next);
+            isTrackMode: m.isTrackMode, trackId: m.trackId, trackName: m.trackName, vehicleId: next,
+            startPlace: m.startPlace, endPlace: m.endPlace);
         changed++;
       }
     }

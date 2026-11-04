@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart';
-
 import 'track_catalog.dart';
-import 'card_style.dart';
-import 'track_guide.dart';
-import 'track_widgets.dart';
 
-/// 赛道图鉴（v1.0.2：第 9 项，由赛道目录扩充而来）。
+/// 赛道信息数据（v1.0.2：第 9 项，由赛道目录扩充而来）。
+///
+/// 注意：本文件的列表页 Widget 已随赛道库上线退役（浏览收进选赛道
+/// 列表的 ⓘ 简介页，选赛道走赛道库包选择器，21 条 + 用户赛道均可选）；
+/// 本文件保留的只是条目数据（EncyclopediaTrack）与详情数据入口，
+/// 详情页见 track_guide.dart 的 TrackDetailPage。
 ///
 /// 口径（防编造）：
 /// - 现有目录 14 条：长度 / 弯道数 / 轮廓一律复用 track_catalog.dart
@@ -20,9 +20,8 @@ import 'track_widgets.dart';
 ///   有 12 与 16 两种说法，弯道数标待核，不二选一。
 /// - 长度一律按“约”理解：不同年份、不同布局的公布值会有出入，
 ///   界面必须显示“约 X km”，不得当成官方精确测绘值。
-/// - 本页不接入计时：图鉴只做资料浏览；选为本次赛道仍走原有
-///   赛道选择器（目录 14 条），新增 7 条在接入赛道模式前不设
-///   选赛道按钮，总协调接入时再按 catalogId 补。
+/// - 选赛道不再走旧目录选择器：赛道库包选择器覆盖 21 条 + 用户赛道，
+///   详情页的“在赛道模式中使用该赛道”返回条目，由调用方设为本次赛道。
 
 /// 一条图鉴条目。
 class EncyclopediaTrack {
@@ -400,276 +399,11 @@ EncyclopediaTrack? encyclopediaTrackById(String? id) {
   return null;
 }
 
-/// 赛道图鉴页 Widget（总协调接线见文末）。
-///
-/// [onSelectCatalogTrack]：仅目录 14 条可用，点“选为本次赛道”时
-/// 回传对应的 [TrackInfo]，由总协调复用原有赛道选择流程；
-/// 新增 7 条未接入赛道模式时不显示该按钮。不传时不显示按钮。
-class TrackEncyclopediaPage extends StatefulWidget {
-  final ValueChanged<TrackInfo>? onSelectCatalogTrack;
-
-  const TrackEncyclopediaPage({
-    super.key,
-    this.onSelectCatalogTrack,
-  });
-
-  @override
-  State<TrackEncyclopediaPage> createState() => _TrackEncyclopediaPageState();
-}
-
-class _TrackEncyclopediaPageState extends State<TrackEncyclopediaPage> {
-  final _searchCtrl = TextEditingController();
-  String _query = '';
-  String _region = '全部';
-  String _event = '全部';
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  List<String> get _regions {
-    final seen = <String>{};
-    final out = <String>['全部'];
-    for (final t in encyclopediaTracks) {
-      if (seen.add(t.region)) out.add(t.region);
-    }
-    return out;
-  }
-
-  List<EncyclopediaTrack> get _filtered {
-    final q = _query.trim().toLowerCase();
-    return encyclopediaTracks.where((t) {
-      if (_region != '全部' && t.region != _region) return false;
-      if (_event != '全部' && !t.eventTags.contains(_event)) return false;
-      if (q.isEmpty) return true;
-      return t.nameCn.toLowerCase().contains(q) ||
-          t.nameEn.toLowerCase().contains(q) ||
-          t.location.toLowerCase().contains(q);
-    }).toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
-    final list = _filtered;
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        title: const Text('赛道图鉴'),
-        backgroundColor: const Color(0xFF121212),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              controller: _searchCtrl,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: '搜索赛道名 / 位置',
-                hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.search, color: Colors.white54),
-                filled: true,
-                fillColor: const Color(0xFF1E1E1E),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.14),
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.14),
-                  ),
-                ),
-              ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                const Text('国家/地区',
-                    style: TextStyle(fontSize: 13, color: Colors.white70)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: _region,
-                    isExpanded: true,
-                    dropdownColor: const Color(0xFF1E1E1E),
-                    style: const TextStyle(color: Colors.white),
-                    items: [
-                      for (final r in _regions)
-                        DropdownMenuItem(value: r, child: Text(r)),
-                    ],
-                    onChanged: (v) => setState(() => _region = v ?? '全部'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                for (final e in encyclopediaEventFilters)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(e),
-                      selected: _event == e,
-                      selectedColor: accent.withValues(alpha: 0.25),
-                      labelStyle: TextStyle(
-                        color: _event == e ? accent : Colors.white70,
-                      ),
-                      onSelected: (_) => setState(() => _event = e),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '共 ${encyclopediaTracks.length} 条，当前显示 ${list.length} 条',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              itemCount: list.length,
-              itemBuilder: (_, i) => _card(list[i]),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _thumbnail(EncyclopediaTrack t) {
-    final osm = trackOsmOutlines[t.id];
-    final catalog = t.catalog;
-    if (osm != null) {
-      return SizedBox(
-        width: 88,
-        height: 60,
-        child: OutlineDiagram(outline: osm, height: 60),
-      );
-    }
-    if (catalog != null && t.hasOutline) {
-      return SizedBox(
-        width: 88,
-        height: 60,
-        child: TrackSchematicDiagram(
-          track: catalog,
-          height: 60,
-          showCaption: false,
-        ),
-      );
-    }
-    return Container(
-      width: 88,
-      height: 60,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
-      child: const Center(
-        child: Text('轮廓待补',
-            style: TextStyle(color: Colors.white54, fontSize: 12)),
-      ),
-    );
-  }
-
-  Widget _card(EncyclopediaTrack t) {
-    return DriveTrackCard(
-      margin: const EdgeInsets.only(bottom: 12),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => TrackDetailPage(
-              track: t,
-              onSelectCatalogTrack: widget.onSelectCatalogTrack,
-            ),
-          ),
-        );
-      },
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _thumbnail(t),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(t.nameCn,
-                    style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-                const SizedBox(height: 2),
-                Text(t.nameEn,
-                    style: const TextStyle(color: Colors.white54, fontSize: 13)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    _miniChip(t.location),
-                    _miniChip(t.lengthLabel),
-                    _miniChip(t.cornerLabel),
-                  ],
-                ),
-                if (t.eventTags.isNotEmpty && t.eventTags.first != '待核')
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      t.eventTags.join(' · '),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right, color: Colors.white38),
-        ],
-      ),
-    );
-  }
-
-  Widget _miniChip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
-      child: Text(label,
-          style: const TextStyle(color: Colors.white, fontSize: 12)),
-    );
-  }
-}
 
 // ---------- 总协调接线（不执行，仅供参考） ----------
-// 1) 抽屉菜单（main.dart，禁止本工人改）：旧文案 '赛道目录' +
-//    旧回调 _openTrackCatalogSheet 改为推 TrackEncyclopediaPage(
-//      onSelectCatalogTrack: (track) { 复用原有选赛道流程； })；
+// 1) 抽屉菜单（main.dart）：赛道库上线后，抽屉“赛道库”直推
+//    TrackLibraryPage；旧 TrackEncyclopediaPage 列表页已退役，
+//    浏览收进选赛道列表的 ⓘ 简介页（TrackDetailPage）。
 //    旧文案 '收藏' 改为连接的设备管理（设备中心入口，另见设备工人）。
 // 2) 主题设置接线（main.dart 的 _openThemeSettings）：
 //      ThemeSettingsPage(initial: 当前 ThemeChoice,

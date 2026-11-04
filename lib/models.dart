@@ -219,6 +219,16 @@ class Trip {
   final String? vehicleId;
   final double? startFinishLat;
   final double? startFinishLon;
+  // 高德第一批（纠偏 + 逆地理编码）：派生层单独存，绝不覆盖 points。
+  // correctedPoints 为纠偏后轨迹（WGS-84 经纬度对列）；correctionStatus：
+  // none=未尝试、pending=进行中、done=已完成、failed=失败、skipped=不适用
+  // （骑行/赛道/境外/无 Key 时不纠偏）；startPlace/endPlace 为逆地理
+  // 编码的中文短地名（空 = 未获取，界面回落坐标显示）。旧 JSON 缺键时
+  // 读默认值，不破坏旧数据。
+  final List<(double lat, double lon)> correctedPoints;
+  final String correctionStatus;
+  final String startPlace;
+  final String endPlace;
   const Trip({
     required this.id,
     required this.mode,
@@ -244,6 +254,10 @@ class Trip {
     this.vehicleId,
     this.startFinishLat,
     this.startFinishLon,
+    this.correctedPoints = const [],
+    this.correctionStatus = 'none',
+    this.startPlace = '',
+    this.endPlace = '',
   });
 
   double get distanceM {
@@ -282,6 +296,9 @@ class Trip {
         'laps': lapsJson, 'photos': photoPoints.map((p) => p.toJson()).toList(),
         'vehicleId': vehicleId,
         'sfLat': startFinishLat, 'sfLon': startFinishLon,
+        'corrPts': correctedPoints.map((p) => [p.$1, p.$2]).toList(),
+        'corrStatus': correctionStatus,
+        'startPlace': startPlace, 'endPlace': endPlace,
         'points': points.map((p) => p.toJson()).toList(),
         'events': events.map((e) => e.toJson()).toList(),
       };
@@ -305,6 +322,13 @@ class Trip {
         vehicleId: j['vehicleId'] as String?,
         startFinishLat: (j['sfLat'] as num?)?.toDouble(),
         startFinishLon: (j['sfLon'] as num?)?.toDouble(),
+        correctedPoints: ((j['corrPts'] as List?) ?? []).map((e) {
+          final pair = e as List;
+          return ((pair[0] as num).toDouble(), (pair[1] as num).toDouble());
+        }).toList(),
+        correctionStatus: (j['corrStatus'] as String?) ?? 'none',
+        startPlace: (j['startPlace'] as String?) ?? '',
+        endPlace: (j['endPlace'] as String?) ?? '',
         isPublic: (j['pub'] as bool?) ?? false,
         likes: (j['likes'] as num?)?.toInt() ?? 0,
         liked: (j['liked'] as bool?) ?? false,

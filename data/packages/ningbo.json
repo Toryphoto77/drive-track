@@ -1,0 +1,414 @@
+{
+ "id": "ningbo",
+ "nameCn": "宁波国际赛车场",
+ "nameEn": "Ningbo International Circuit",
+ "region": "中国",
+ "version": 1,
+ "source": "osm",
+ "sourceDetail": "OSM highway=raceway 单条闭合 way（© OpenStreetMap contributors，ODbL）",
+ "verification": "verified",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "centerline": [
+  {
+   "lat": 29.758913,
+   "lon": 121.863988
+  },
+  {
+   "lat": 29.757721,
+   "lon": 121.864359
+  },
+  {
+   "lat": 29.757639,
+   "lon": 121.864457
+  },
+  {
+   "lat": 29.757604,
+   "lon": 121.864751
+  },
+  {
+   "lat": 29.75785,
+   "lon": 121.865766
+  },
+  {
+   "lat": 29.758071,
+   "lon": 121.865888
+  },
+  {
+   "lat": 29.75874,
+   "lon": 121.865786
+  },
+  {
+   "lat": 29.759075,
+   "lon": 121.865786
+  },
+  {
+   "lat": 29.759604,
+   "lon": 121.866192
+  },
+  {
+   "lat": 29.761569,
+   "lon": 121.868395
+  },
+  {
+   "lat": 29.761727,
+   "lon": 121.868425
+  },
+  {
+   "lat": 29.761939,
+   "lon": 121.868243
+  },
+  {
+   "lat": 29.762194,
+   "lon": 121.868111
+  },
+  {
+   "lat": 29.762362,
+   "lon": 121.868121
+  },
+  {
+   "lat": 29.762556,
+   "lon": 121.868314
+  },
+  {
+   "lat": 29.762582,
+   "lon": 121.8687
+  },
+  {
+   "lat": 29.762521,
+   "lon": 121.868903
+  },
+  {
+   "lat": 29.761939,
+   "lon": 121.86944
+  },
+  {
+   "lat": 29.76149,
+   "lon": 121.86943
+  },
+  {
+   "lat": 29.761023,
+   "lon": 121.869237
+  },
+  {
+   "lat": 29.759031,
+   "lon": 121.867035
+  },
+  {
+   "lat": 29.758802,
+   "lon": 121.866903
+  },
+  {
+   "lat": 29.758617,
+   "lon": 121.866984
+  },
+  {
+   "lat": 29.758595,
+   "lon": 121.867187
+  },
+  {
+   "lat": 29.758987,
+   "lon": 121.867634
+  },
+  {
+   "lat": 29.759463,
+   "lon": 121.868273
+  },
+  {
+   "lat": 29.761498,
+   "lon": 121.870445
+  },
+  {
+   "lat": 29.761604,
+   "lon": 121.870445
+  },
+  {
+   "lat": 29.76312,
+   "lon": 121.869288
+  },
+  {
+   "lat": 29.763084,
+   "lon": 121.869045
+  },
+  {
+   "lat": 29.763093,
+   "lon": 121.868862
+  },
+  {
+   "lat": 29.763261,
+   "lon": 121.86874
+  },
+  {
+   "lat": 29.764168,
+   "lon": 121.868557
+  },
+  {
+   "lat": 29.76454,
+   "lon": 121.868291
+  },
+  {
+   "lat": 29.764628,
+   "lon": 121.868129
+  },
+  {
+   "lat": 29.76461,
+   "lon": 121.867794
+  },
+  {
+   "lat": 29.764813,
+   "lon": 121.867378
+  },
+  {
+   "lat": 29.765148,
+   "lon": 121.866901
+  },
+  {
+   "lat": 29.765668,
+   "lon": 121.866495
+  },
+  {
+   "lat": 29.765685,
+   "lon": 121.866231
+  },
+  {
+   "lat": 29.765624,
+   "lon": 121.866068
+  },
+  {
+   "lat": 29.765474,
+   "lon": 121.866038
+  },
+  {
+   "lat": 29.765271,
+   "lon": 121.866068
+  },
+  {
+   "lat": 29.764316,
+   "lon": 121.867349
+  },
+  {
+   "lat": 29.764168,
+   "lon": 121.86787
+  },
+  {
+   "lat": 29.763447,
+   "lon": 121.868149
+  },
+  {
+   "lat": 29.763236,
+   "lon": 121.867997
+  },
+  {
+   "lat": 29.763201,
+   "lon": 121.867855
+  },
+  {
+   "lat": 29.763298,
+   "lon": 121.867632
+  },
+  {
+   "lat": 29.763416,
+   "lon": 121.867423
+  },
+  {
+   "lat": 29.76402,
+   "lon": 121.866363
+  },
+  {
+   "lat": 29.764003,
+   "lon": 121.866211
+  },
+  {
+   "lat": 29.763491,
+   "lon": 121.865591
+  },
+  {
+   "lat": 29.763554,
+   "lon": 121.864653
+  },
+  {
+   "lat": 29.763395,
+   "lon": 121.864421
+  },
+  {
+   "lat": 29.762729,
+   "lon": 121.864252
+  },
+  {
+   "lat": 29.761054,
+   "lon": 121.864134
+  },
+  {
+   "lat": 29.75935,
+   "lon": 121.863818
+  },
+  {
+   "lat": 29.758913,
+   "lon": 121.863988
+  }
+ ],
+ "lengthM": 3968,
+ "publishedLengthM": 4010,
+ "corners": [
+  {
+   "number": 1,
+   "direction": "left",
+   "radiusM": 48,
+   "angleDeg": 83,
+   "lat": 29.757704,
+   "lon": 121.864379
+  },
+  {
+   "number": 2,
+   "direction": "left",
+   "radiusM": 39,
+   "angleDeg": 73,
+   "lat": 29.757848,
+   "lon": 121.865757
+  },
+  {
+   "number": 3,
+   "direction": "right",
+   "radiusM": 156,
+   "angleDeg": 48,
+   "lat": 29.759072,
+   "lon": 121.865786
+  },
+  {
+   "number": 4,
+   "direction": "left",
+   "radiusM": 38,
+   "angleDeg": 75,
+   "lat": 29.761531,
+   "lon": 121.868352
+  },
+  {
+   "number": 5,
+   "direction": "right",
+   "radiusM": 52,
+   "angleDeg": 165,
+   "lat": 29.76241,
+   "lon": 121.868169
+  },
+  {
+   "number": 6,
+   "direction": "right",
+   "radiusM": 97,
+   "angleDeg": 76,
+   "lat": 29.761602,
+   "lon": 121.869433
+  },
+  {
+   "number": 7,
+   "direction": "left",
+   "radiusM": 34,
+   "angleDeg": 171,
+   "lat": 29.758827,
+   "lon": 121.866917
+  },
+  {
+   "number": 8,
+   "direction": "left",
+   "radiusM": 34,
+   "angleDeg": 68,
+   "lat": 29.761459,
+   "lon": 121.870403
+  },
+  {
+   "number": 9,
+   "direction": "right",
+   "radiusM": 41,
+   "angleDeg": 84,
+   "lat": 29.763093,
+   "lon": 121.868876
+  },
+  {
+   "number": 10,
+   "direction": "left",
+   "radiusM": 76,
+   "angleDeg": 68,
+   "lat": 29.764276,
+   "lon": 121.86848
+  },
+  {
+   "number": 11,
+   "direction": "right",
+   "radiusM": 149,
+   "angleDeg": 50,
+   "lat": 29.764763,
+   "lon": 121.867481
+  },
+  {
+   "number": 12,
+   "direction": "left",
+   "radiusM": 33,
+   "angleDeg": 191,
+   "lat": 29.765671,
+   "lon": 121.866193
+  },
+  {
+   "number": 13,
+   "direction": "left",
+   "radiusM": 94,
+   "angleDeg": 18,
+   "lat": 29.764408,
+   "lon": 121.867225
+  },
+  {
+   "number": 14,
+   "direction": "right",
+   "radiusM": 46,
+   "angleDeg": 38,
+   "lat": 29.76422,
+   "lon": 121.867686
+  },
+  {
+   "number": 15,
+   "direction": "right",
+   "radiusM": 37,
+   "angleDeg": 140,
+   "lat": 29.763319,
+   "lon": 121.868057
+  },
+  {
+   "number": 16,
+   "direction": "left",
+   "radiusM": 38,
+   "angleDeg": 76,
+   "lat": 29.763992,
+   "lon": 121.866413
+  },
+  {
+   "number": 17,
+   "direction": "right",
+   "radiusM": 40,
+   "angleDeg": 43,
+   "lat": 29.763572,
+   "lon": 121.86569
+  },
+  {
+   "number": 18,
+   "direction": "left",
+   "radiusM": 84,
+   "angleDeg": 88,
+   "lat": 29.763329,
+   "lon": 121.864404
+  },
+  {
+   "number": 19,
+   "direction": "left",
+   "radiusM": 80,
+   "angleDeg": 22,
+   "lat": 29.759499,
+   "lon": 121.863846
+  }
+ ],
+ "cornerSource": "osm-derived",
+ "sectorPoints": [],
+ "sectorNote": "分段点待核：OSM 几何无法推导官方分段线",
+ "gantry": null,
+ "start": null,
+ "finish": null,
+ "startNote": "起终点待核：OSM 几何无法推导",
+ "userModified": false,
+ "isUserTrack": false
+}

@@ -29,6 +29,9 @@ class ExternalGpsFix {
     this.timestampUtc,
     this.hz,
     this.altitudeM,
+    this.fixQuality,
+    this.fixMode,
+    this.usedSatellites,
   });
 
   final double lat;
@@ -36,6 +39,17 @@ class ExternalGpsFix {
   final double? speedMps;
   final double? bearingDeg;
   final int? satellites;
+
+  /// GGA 定位质量：1=GPS、2=DGPS、4=RTK 固定、5=RTK 浮动、6=估算；
+  /// null = 本次定位无 GGA 质量（如仅 RMC 定位且此前无 GGA）。
+  final int? fixQuality;
+
+  /// GSA 定位模式：2=2D、3=3D；1=无定位时不由 GSA 单独造点，
+  /// 只记模式供下一次位置合并；null = 尚未收到 GSA。
+  final int? fixMode;
+
+  /// GSA 参与解算卫星数（12 个 PRN 槽位里非空个数）；null = 未收到 GSA。
+  final int? usedSatellites;
 
   /// GGA 第 9 字段海拔（平均海平面以上，米）。null = 本次定位
   /// 无海拔（如仅 RMC 定位），调用方必须按“无海拔”处理，绝不
@@ -68,6 +82,9 @@ class ExternalGpsFix {
         'hAcc': hAcc,
         'timestampUtc': timestampUtc?.toIso8601String(),
         'hz': hz,
+        'fixQuality': fixQuality,
+        'fixMode': fixMode,
+        'usedSatellites': usedSatellites,
         'source': source,
       };
 }
@@ -245,7 +262,56 @@ VtgData? parseVtg(String line) {
   return VtgData(speedMps: speed, bearingDeg: bearing);
 }
 
-/// NMEA 行流合并器：GGA/RMC 给位置，RMC/VTG 给速度与方向。
+/// GSA 解析结果：定位模式与参与解算卫星数；GSA 本身无位置，
+/// 只给下一次位置合并补充模式 / 星数 / HDOP（GGA 的 HDOP 优先）。
+class GsaData {
+  const GsaData({
+    required this.fixType,
+    required this.usedSatellites,
+    this.pdop,
+    this.hdop,
+    this.vdop,
+  });
+
+  /// 1=无定位、2=2D、3=3D（其它值一律视为非法）。
+  final int fixType;
+  final int usedSatellites;
+  final double? pdop;
+  final double? hdop;
+  final double? vdop;
+}
+
+/// 解析 GSA（$--GSA,a,m,prn×12,pdop,hdop,vdop*hh）。
+///
+/// 字段 ≥15 才解析（否则是残缺句，返回 null 供调用方丢弃计数）；
+/// 校验段语义与其它语句一致：无校验段不丢弃，有校验段不符丢弃；
+/// VDOP 缺失（17 字段）容忍为 null；fixType 不在 1/2/3 视为非法。
+GsaData? parseGsa(String line) {
+  final raw = line.trim();
+  if (!raw.startsWith(r'$') || !raw.contains('GSA')) return null;
+  if (!verifyNmeaChecksum(raw)) return null;
+  final body =
+      raw.substring(1, raw.contains('*') ? raw.indexOf('*') : raw.length);
+  final f = body.split(',');
+  if (f.length < 15) return null;
+  final fixType = int.tryParse(f[2]);
+  if (fixType == null || fixType < 1 || fixType > 3) return null;
+  var used = 0;
+  for (var i = 3; i <= 14; i++) {
+    if (f[i].trim().isNotEmpty) used++;
+  }
+  return GsaData(
+    fixType: fixType,
+    usedSatellites: used,
+    pdop: f.length > 15 ? double.tryParse(f[15]) : null,
+    hdop: f.length > 16 ? double.tryParse(f[16]) : null,
+    vdop: f.length > 17 ? double.tryParse(f[17]) : null,
+  );
+}
+
+/// NMEA 行流合并器：GGA/RMC 给位置，RMC/VTG 给速度与方向，
+/// GSA 只给定位模式 / 参与解算星数 / HDOP 兜底（不单独成点、
+/// 不刷新定位时间戳、不计入 accepted）。
 /// VTG 先于任何位置到达时只暂存速度/方向，等第一个有效位置到达后再合并，
 /// 绝不凭速度语句单独输出一个点。
 class BleDiyGpsFeed {
@@ -256,7 +322,14 @@ class BleDiyGpsFeed {
   double? _pendingSpeedMps;
   double? _pendingBearingDeg;
   DateTime? _lastFixAt;
+  int? _lastFixQuality;
+  int? _lastFixMode;
+  int? _lastUsedSats;
+  double? _lastGsaHdop;
   final List<DateTime> _acceptedAt = [];
+  // GGA 计次点：Hz 以定位周期计（GGA 每周期一句话）；从未收到 GGA
+  // 的设备（如只发 RMC）以 RMC 计次，避免读数恒为 0。
+  final List<DateTime> _ggaAt = [];
   final StringBuffer _buffer = StringBuffer();
 
   int droppedCount = 0;
@@ -265,10 +338,17 @@ class BleDiyGpsFeed {
   ExternalGpsFix? get latest => _latest;
   DateTime? get lastFixAt => _lastFixAt;
 
-  /// 最近 1 秒内被接受的定位点数（近似 Hz）。
+  void _pruneHz(DateTime at) {
+    _acceptedAt.removeWhere((t) => at.difference(t).inMilliseconds > 1000);
+    _ggaAt.removeWhere((t) => at.difference(t).inMilliseconds > 1000);
+  }
+
+  /// 最近 1 秒内定位周期数（近似 Hz）：GGA 每周期一句话，以 GGA 计；
+  /// 无 GGA 时以 RMC 计；VTG 不计次——同一周期 GGA+RMC+VTG 三句
+  /// 都 emit 时，不得把 25Hz 读成 50/75Hz。显示层只做取整，不封顶、
+  /// 不截断，25Hz 可直接显示。
   double get hz {
-    final now = DateTime.now();
-    _acceptedAt.removeWhere((t) => now.difference(t).inMilliseconds > 1000);
+    _pruneHz(DateTime.now());
     return _acceptedAt.length.toDouble();
   }
 
@@ -312,21 +392,25 @@ class BleDiyGpsFeed {
     final line = rawLine.trim();
     if (line.isEmpty) return _latest;
     final at = now ?? DateTime.now();
+    _pruneHz(at);
     if (line.contains('GGA')) {
       final gga = parseGga(line);
       if (gga == null) {
         droppedCount++;
         return null;
       }
+      _lastFixQuality = gga.fixQuality;
       return _emit(
         lat: gga.lat,
         lon: gga.lon,
         speedMps: _pendingSpeedMps,
         bearingDeg: _pendingBearingDeg,
         satellites: gga.satellites,
-        hdop: gga.hdop,
+        hdop: gga.hdop ?? _lastGsaHdop,
         altitudeM: gga.altitudeM,
         at: at,
+        isGga: true,
+        countForHz: true,
       );
     }
     if (line.contains('RMC')) {
@@ -346,6 +430,8 @@ class BleDiyGpsFeed {
         altitudeM: _latest?.altitudeM,
         timestampUtc: rmc.timestampUtc,
         at: at,
+        // 无 GGA 的设备以 RMC 计次；有 GGA 时 RMC 不重复计次。
+        countForHz: _ggaAt.isEmpty,
       );
     }
     if (line.contains('VTG')) {
@@ -369,7 +455,19 @@ class BleDiyGpsFeed {
         at: at,
       );
     }
-    // GGA/RMC/VTG 之外的语句（如 GSA/GSV/GLL）不在本期处理范围，
+    if (line.contains('GSA')) {
+      final gsa = parseGsa(line);
+      if (gsa == null) {
+        droppedCount++;
+        return null;
+      }
+      // GSA 无位置：只记模式 / 星数 / HDOP，不 emit、不刷新定位时间戳。
+      _lastFixMode = gsa.fixType;
+      _lastUsedSats = gsa.usedSatellites;
+      _lastGsaHdop = gsa.hdop ?? _lastGsaHdop;
+      return _latest;
+    }
+    // GGA/RMC/VTG/GSA 之外的语句（如 GSV/GLL）不在本期处理范围，
     // 直接忽略，不计入丢弃（它们不是错误语句）。
     return _latest;
   }
@@ -384,8 +482,15 @@ class BleDiyGpsFeed {
     double? altitudeM,
     DateTime? timestampUtc,
     required DateTime at,
+    bool isGga = false,
+    bool countForHz = false,
   }) {
-    _acceptedAt.add(at);
+    if (isGga) {
+      _acceptedAt.add(at);
+      _ggaAt.add(at);
+    } else if (countForHz) {
+      _acceptedAt.add(at);
+    }
     acceptedCount++;
     _lastFixAt = at;
     _pendingSpeedMps = null;
@@ -400,6 +505,9 @@ class BleDiyGpsFeed {
       altitudeM: altitudeM,
       timestampUtc: timestampUtc,
       hz: hz,
+      fixQuality: _lastFixQuality,
+      fixMode: _lastFixMode,
+      usedSatellites: _lastUsedSats,
     );
     return _latest!;
   }
@@ -409,7 +517,12 @@ class BleDiyGpsFeed {
     _pendingSpeedMps = null;
     _pendingBearingDeg = null;
     _lastFixAt = null;
+    _lastFixQuality = null;
+    _lastFixMode = null;
+    _lastUsedSats = null;
+    _lastGsaHdop = null;
     _acceptedAt.clear();
+    _ggaAt.clear();
     _buffer.clear();
   }
 }

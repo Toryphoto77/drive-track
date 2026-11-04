@@ -22,6 +22,12 @@ import 'big_action_buttons.dart';
 import 'device_center.dart';
 import 'blediy_gps.dart';
 import 'track_catalog.dart';
+import 'track_encyclopedia.dart';
+import 'track_guide.dart';
+import 'track_library.dart';
+import 'track_library_page.dart';
+import 'track_package_info_page.dart';
+import 'track_package_selector.dart';
 import 'track_timing.dart';
 import 'track_widgets.dart';
 import 'my_page.dart';
@@ -41,6 +47,7 @@ import 'photo_points.dart';
 import 'score_module.dart';
 import 'lean_chart.dart';
 import 'accel_module.dart';
+import 'amap_service.dart';
 import 'share_card_preview.dart';
 import 'track_viz.dart';
 import 'voice_service.dart';
@@ -472,6 +479,9 @@ class _HomePageState extends State<HomePage>
   // v0.1.3 赛道模式 / 地图 / 外接 GPS 状态
   bool trackMode = false;
   TrackInfo? selectedTrack;
+  // 赛道库：与 selectedTrack 同生命周期，选中包时一并设定，供计时
+  // 取包的经纬度起终点 / 分段点（无包数据时回落旧行为）。
+  TrackPackage? selectedPackage;
   LapTimer? liveLapTimer;
   int _lapFedCount = 0;
   // v0.1.8：记录页瓦片源已移除（改用 Recording3dMap 自绘，不再有瓦片）；
@@ -595,13 +605,16 @@ class _HomePageState extends State<HomePage>
       });
     }, onError: (_) {});
     _bleDataSub = Native.bleDataStream.listen((e) {
-      // v0.1.3 BleDIY 外接 GPS：通用通知按特征 UUID 分发，NUS TX(0003)
-      // 的字节喂给 NMEA 解析器；有效定位注入 Recorder（provider='external'），
-      // 超时/断线立即回落手机 GPS（Recorder.externalGpsActive=false）。
+      // v0.1.3 BleDIY 外接 GPS：通用通知按特征 UUID 分发，NMEA 特征
+      //（NUS TX …0003、RaceBox NMEA TX …1103）的字节喂给 NMEA 解析器；
+      // 有效定位注入 Recorder（provider='external'），超时/断线立即
+      // 回落手机 GPS（Recorder.externalGpsActive=false）。
+      // SPP 文本（sppNmea）走同一解析器与同一接管/回落规则。
       if (e['type'] == 'bleNotification') {
         final uuid = (e['characteristicUuid'] as String? ?? '').toLowerCase();
         final bytes = (e['bytes'] as List?)?.map((v) => (v as num).toInt()).toList() ?? <int>[];
-        if (uuid.contains('0003') && bytes.isNotEmpty) {
+        if ((uuid.contains('0003') || uuid.contains('1103')) &&
+            bytes.isNotEmpty) {
           _blediyFeed.feedBytes(bytes);
           final fix = _blediyFeed.latest;
           if (fix != null && !_blediyFeed.shouldFallbackToPhoneGps()) {
@@ -612,6 +625,25 @@ class _HomePageState extends State<HomePage>
                 altM: fix.altitudeM);
           }
         }
+      }
+      if (e['type'] == 'sppNmea') {
+        final line = (e['line'] ?? '').toString();
+        if (line.isNotEmpty) {
+          _blediyFeed.feedLine(line);
+          final fix = _blediyFeed.latest;
+          if (fix != null && !_blediyFeed.shouldFallbackToPhoneGps()) {
+            _blediyActive = true;
+            rec.externalGpsActive = true;
+            rec.onExternalFix(fix.lat, fix.lon, fix.speedMps ?? rec.curSpeed,
+                fix.bearingDeg ?? rec.curHeading, DateTime.now().millisecondsSinceEpoch,
+                altM: fix.altitudeM);
+          }
+        }
+      }
+      if (e['type'] == 'sppDisconnected') {
+        _blediyFeed.reset();
+        _blediyActive = false;
+        rec.externalGpsActive = false;
       }
       if (e['type'] == 'disconnected') {
         _blediyFeed.reset();
@@ -633,11 +665,30 @@ class _HomePageState extends State<HomePage>
   Future<LapTimer> _buildLapTimer() async {
     final ts = await TrackSettingsStore.load();
     final args = ts.lapTimerArgs;
+    // 赛道包起终点 / 分段点：仅当用户确实在该赛道附近（包起终点与
+    // 记录首点 < 500m）才采用；否则回落记录首点（旧行为），避免
+    // 在错误地点永远触发不了圈。无包起终点时同样回落旧行为。
+    var startFinish = GeoPoint(rec.points.first.lat, rec.points.first.lon);
+    var sectors = const <GeoPoint>[];
+    final pkg = selectedPackage;
+    if (pkg != null && pkg.start != null && rec.points.isNotEmpty) {
+      final d = haversineM(
+        pkg.start!.lat,
+        pkg.start!.lon,
+        rec.points.first.lat,
+        rec.points.first.lon,
+      );
+      if (d < 500) {
+        startFinish = pkg.start!;
+        sectors = pkg.sectorPoints;
+      }
+    }
     return LapTimer(
-      startFinish: GeoPoint(rec.points.first.lat, rec.points.first.lon),
+      startFinish: startFinish,
       crossingRadiusM: args.crossingRadiusM,
       dwellThresholdMs: args.dwellThresholdMs,
       dwellSpeedMs: args.dwellSpeedMs,
+      sectorPoints: sectors,
     );
   }
 
@@ -686,7 +737,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.2.8',
+          versionName: '1.2.9',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1220,6 +1271,9 @@ class _HomePageState extends State<HomePage>
     liveLapTimer = null;
     _lapFedCount = 0;
     trips = await store.loadIndex();
+    // 高德第一批：行程保存后后台做纠偏 + 逆地理编码（不阻塞保存与
+    // 跳转，失败不丢原始数据；结果落盘后刷新列表，详情页可刷新/重纠）。
+    unawaited(_enrichNewTrip(trip));
     _refreshTrackBestLaps();
     VoiceService.instance.announceSummary(
       distanceKm: trip.distanceM / 1000,
@@ -1237,6 +1291,62 @@ class _HomePageState extends State<HomePage>
       } else {
         Navigator.push(context, MaterialPageRoute(builder: (_) => TripDetailPage(store: store, tripId: trip.id)));
       }
+    }
+  }
+
+  /// 高德第一批：新行程后台 enrichment（轨迹纠偏 + 逆地理编码）。
+  /// - 无 Key 时直接跳过（不发无 Key 请求）；
+  /// - 境外行程（起终点任一在中国粗框外）跳过全部高德调用，状态记 skipped；
+  /// - 纠偏仅汽车/摩托街道行程；逆地理编码对所有新行程做（含骑行与赛道）；
+  /// - 纠偏先置 pending 再发请求，避免详情页重复触发；全程 try/catch，
+  ///   失败只写 failed/空地名，绝不影响已保存的原始行程；
+  /// - 只对本次新保存的行程生效，不改写历史行程。
+  Future<void> _enrichNewTrip(Trip trip) async {
+    try {
+      if (amapWebKey.isEmpty) return;
+      if (trip.points.isEmpty || !tripInChina(trip.points)) {
+        await store.updateTripEnrichment(trip.id,
+            correctionStatus: 'skipped');
+        trips = await store.loadIndex();
+        if (mounted) setState(() {});
+        return;
+      }
+      final correctable = !trip.isTrackMode &&
+          (trip.mode == TripMode.car || trip.mode == TripMode.moto);
+      if (correctable) {
+        await store.updateTripEnrichment(trip.id,
+            correctionStatus: 'pending');
+      }
+      List<(double lat, double lon)>? corrected;
+      if (correctable) {
+        try {
+          corrected = await correctTrackPoints(trip.points);
+        } catch (_) {
+          corrected = null;
+        }
+      }
+      String? startPlace, endPlace;
+      try {
+        startPlace = (await reverseGeocode(
+                trip.points.first.lat, trip.points.first.lon))
+            ?.shortName;
+      } catch (_) {}
+      try {
+        endPlace = (await reverseGeocode(
+                trip.points.last.lat, trip.points.last.lon))
+            ?.shortName;
+      } catch (_) {}
+      await store.updateTripEnrichment(trip.id,
+          correctedPoints: corrected,
+          correctionStatus: correctable
+              ? (corrected != null ? 'done' : 'failed')
+              : 'skipped',
+          startPlace: startPlace,
+          endPlace: endPlace);
+      trips = await store.loadIndex();
+      if (mounted) setState(() {});
+    } catch (_) {
+      // 后台任务任何异常都不打扰用户；详情页可手动重纠/刷新。
     }
   }
 
@@ -1452,14 +1562,14 @@ class _HomePageState extends State<HomePage>
           ),
           const Divider(color: Colors.white12),
           // v0.1.7 菜单简化去重 + v1.0.3 关于移入菜单 + v1.0.4 性能测试
-          // 移入菜单（红字加粗）：赛道图鉴 / 性能测试 / 连接的设备管理 /
+          // 移入菜单（红字加粗）：赛道库 / 性能测试 / 连接的设备管理 /
           // 数据导出/备份 / 免责声明 / 关于六项。首页与记录页入口已删，
           // 性能测试只剩这一处入口，仍进同一 performance_challenge.dart。
           // 关闭动画仍为 200ms easeOutCubic 主界面右移（build 里
           // 的 _menuAnim，不动）。
           Expanded(
             child: ListView(children: [
-              ListTile(leading: const Icon(Icons.flag), title: const Text('赛道图鉴'), subtitle: const Text('赛道行程、图鉴与分析都在赛道页'), onTap: () => _menuAction(_openTrackHome)),
+              ListTile(leading: const Icon(Icons.flag), title: const Text('赛道库'), subtitle: const Text('赛道数据包、版本与更新'), onTap: () => _menuAction(_openTrackLibrary)),
               ListTile(
                   leading: const Icon(Icons.timer_outlined, color: Colors.red),
                   title: const Text('性能测试', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
@@ -1541,7 +1651,10 @@ class _HomePageState extends State<HomePage>
       enabled: !rec.isRecording,
       onSurfaceChanged: (s) => setState(() {
         trackMode = s == DriveSurface.track;
-        if (!trackMode) selectedTrack = null;
+        if (!trackMode) {
+          selectedTrack = null;
+          selectedPackage = null;
+        }
       }),
       trackSelector: trackMode
           ? OutlinedButton.icon(
@@ -1776,7 +1889,9 @@ class _HomePageState extends State<HomePage>
     MyTripItem item(TripMeta m) => MyTripItem(
           id: m.id,
           title: '${m.mode.label} · ${(m.distanceM / 1000).toStringAsFixed(2)} km · 评分 ${m.score.toStringAsFixed(0)}',
-          subtitle: fmtDate(m.startMs),
+          // 高德逆地理编码：两端地名都有时追加“起点 → 终点”，缺一端时
+          // 不拼半句（只显示日期），避免“地名 → 终点”这种半成品。
+          subtitle: '${fmtDate(m.startMs)}${m.startPlace.isNotEmpty && m.endPlace.isNotEmpty ? ' · ${m.startPlace} → ${m.endPlace}' : ''}',
           isFavorite: favorites.contains(m.id),
           isPublic: m.isPublic,
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TripDetailPage(store: store, tripId: m.id))),
@@ -1972,11 +2087,8 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // v1.2.1：抽屉“赛道图鉴”入口保留，但指向同一赛道页
-  // （TrackHomePage：赛道行程分组 + 图鉴 + 分析 + 模式说明），
-  // 不再直接推图鉴页，避免两个赛道入口说法不一；图鉴里点
-  // “选为本次赛道”时仍复用原有选赛道流程
-  // （trackMode=true + selectedTrack）。
+  // v1.2.1：赛道专区页（TrackHomePage：赛道行程分组 + 赛道库 +
+  // 分析 + 模式说明），由记录页“赛道专区”卡片进入。
   void _openTrackHome() {
     Navigator.push(
       context,
@@ -1985,12 +2097,19 @@ class _HomePageState extends State<HomePage>
           metas: trips,
           bestLapMsByTripId: trackBestLapMs,
           loadTrip: store.loadTrip,
-          onSelectCatalogTrack: (t) {
-            setState(() {
-              trackMode = true;
-              selectedTrack = t;
-            });
-          },
+        ),
+      ),
+    );
+  }
+
+  /// 抽屉“赛道库”入口：直推赛道库页（数据包管理器）。
+  void _openTrackLibrary() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TrackLibraryPage(
+          metas: trips,
+          loadTrip: store.loadTrip,
         ),
       ),
     );
@@ -2080,11 +2199,17 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  /// 赛道目录（v0.1.5 菜单“赛道目录”与首页赛道选择器共用）：
-  /// 底部弹出赛道列表，选中即把该赛道定为本次赛道（trackMode=true）。
+  /// 赛道选择（赛道库版）：底部弹出包列表，选中即把该包定为本次赛道
+  /// （trackMode=true + selectedTrack 为包适配的 TrackInfo +
+  /// selectedPackage 为包本身，供计时取经纬度起终点 / 分段点）。
+  /// 行首 ⓘ 打开简介页（官方条目走 TrackDetailPage，用户赛道走
+  /// TrackPackageInfoPage），简介页点“在赛道模式中使用该赛道”时
+  /// 以条目 / 包作为结果返回，本处再设为本次赛道并关闭选择器。
   /// 骑行模式下选了赛道也不会进赛道计时（_endTrip 的 isTrack 判定
   /// 排除骑行），切回汽车/摩托后该选择仍有效。
-  void _openTrackCatalogSheet() {
+  void _openTrackCatalogSheet() async {
+    final snap = await TrackLibraryService.instance.loadAll();
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2095,15 +2220,56 @@ class _HomePageState extends State<HomePage>
           controller: ctrl,
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: TrackSelector(
-              tracks: allTracks,
+            child: TrackPackageSelector(
+              packages: snap.official,
+              userTracks: snap.userTracks,
               selectedId: selectedTrack?.id,
-              onSelected: (t) {
+              onSelected: (pkg) {
                 setState(() {
                   trackMode = true;
-                  selectedTrack = t;
+                  selectedTrack = trackInfoForPackage(pkg);
+                  selectedPackage = pkg;
                 });
                 Navigator.pop(ctx);
+              },
+              onInfo: (pkg) async {
+                final entry = encyclopediaTracks
+                    .where((e) => e.id == pkg.id)
+                    .firstOrNull;
+                if (entry != null) {
+                  final picked = await Navigator.push<EncyclopediaTrack>(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => TrackDetailPage(
+                        track: entry,
+                        package: pkg,
+                      ),
+                    ),
+                  );
+                  if (picked != null && ctx.mounted) {
+                    setState(() {
+                      trackMode = true;
+                      selectedTrack = trackInfoForPackage(pkg);
+                      selectedPackage = pkg;
+                    });
+                    Navigator.pop(ctx);
+                  }
+                } else {
+                  final picked = await Navigator.push<TrackPackage>(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => TrackPackageInfoPage(package: pkg),
+                    ),
+                  );
+                  if (picked != null && ctx.mounted) {
+                    setState(() {
+                      trackMode = true;
+                      selectedTrack = trackInfoForPackage(picked);
+                      selectedPackage = picked;
+                    });
+                    Navigator.pop(ctx);
+                  }
+                }
               },
             ),
           ),
@@ -2773,7 +2939,7 @@ class _HomePageState extends State<HomePage>
                     Text('赛道专区',
                         style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     SizedBox(height: 2),
-                    Text('我的赛道行程（按赛道分组）· 赛道图鉴 · 赛道分析 · 赛道模式说明',
+                    Text('我的赛道行程（按赛道分组）· 赛道库 · 赛道分析 · 赛道模式说明',
                         style: TextStyle(color: Colors.white70, fontSize: 12)),
                   ]),
                 ),
@@ -2962,6 +3128,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
   TripEvent? selectedEvent;
   bool sharing = false;
   bool sharingFile = false;
+  // 高德第一批：纠偏轨迹显示开关（默认看纠偏）、分享静态图加载态与缓存。
+  bool showCorrected = true;
+  bool loadingShareMap = false;
+  Uint8List? shareMapBytes;
   final GlobalKey _previewCardKey = GlobalKey();
   String selectedScoreKey = '';
   bool leanMountedConfirmed = false;
@@ -3027,6 +3197,130 @@ class _TripDetailPageState extends State<TripDetailPage> {
     metas = await widget.store.loadIndex();
     vehicleLibrary = await widget.store.loadVehicleLibrary();
     if (mounted) setState(() {});
+  }
+
+  /// 高德第一批：详情页刷新（后台 enrichment 完成后点“刷新”可见结果）。
+  Future<void> _refreshTrip() async {
+    final t = await widget.store.loadTrip(widget.tripId);
+    if (mounted && t != null) setState(() => trip = t);
+  }
+
+  /// 高德第一批：手动纠偏/重纠（仅汽车/摩托街道行程，UI 侧已门控；
+  /// pending 时不重复触发）。纠偏失败时仍可再点；地名缺失时顺带补调。
+  Future<void> _retryTripCorrection() async {
+    final t = trip;
+    if (t == null || t.correctionStatus == 'pending') return;
+    await widget.store.updateTripEnrichment(t.id,
+        correctionStatus: 'pending');
+    final reloaded = await widget.store.loadTrip(t.id);
+    if (mounted && reloaded != null) setState(() => trip = reloaded);
+    List<(double lat, double lon)>? corrected;
+    try {
+      corrected = await correctTrackPoints(t.points);
+    } catch (_) {
+      corrected = null;
+    }
+    String? startPlace, endPlace;
+    if (t.startPlace.isEmpty && t.points.isNotEmpty) {
+      try {
+        startPlace = (await reverseGeocode(
+                t.points.first.lat, t.points.first.lon))
+            ?.shortName;
+      } catch (_) {}
+    }
+    if (t.endPlace.isEmpty && t.points.isNotEmpty) {
+      try {
+        endPlace = (await reverseGeocode(
+                t.points.last.lat, t.points.last.lon))
+            ?.shortName;
+      } catch (_) {}
+    }
+    final nt = await widget.store.updateTripEnrichment(t.id,
+        correctedPoints: corrected,
+        correctionStatus: corrected != null ? 'done' : 'failed',
+        startPlace: startPlace,
+        endPlace: endPlace);
+    if (mounted && nt != null) setState(() => trip = nt);
+  }
+
+  /// 高德第一批：纠偏行 UI（仅汽车/摩托与骑行；赛道行程不进详情页，
+  /// 此处仍守卫）。状态机：pending 进行中、done 切原始/纠偏、
+  /// failed 可重纠、skipped/none 按原因给说明（骑行/境外/无 Key 不给按钮）。
+  Widget _correctionRow(Trip t) {
+    if (t.isTrackMode) return const SizedBox.shrink();
+    final actions = <Widget>[];
+    String label;
+    if (t.mode == TripMode.bike) {
+      label = '骑行行程不自动纠偏，避免贴到机动车道';
+    } else if (amapWebKey.isEmpty) {
+      label = '未配置高德 Key，轨迹纠偏不可用';
+    } else if (t.correctionStatus == 'pending') {
+      label = '高德轨迹纠偏进行中…';
+      actions.add(_pillButton('刷新', Icons.refresh, _refreshTrip));
+    } else if (t.correctionStatus == 'done' &&
+        t.correctedPoints.isNotEmpty) {
+      label = '地图轨迹为纠偏后显示（遥测数据仍为原始记录）';
+      actions.add(_pillButton('原始', Icons.route,
+          () => setState(() => showCorrected = false),
+          selected: !showCorrected));
+      actions.add(_pillButton('纠偏', Icons.route,
+          () => setState(() => showCorrected = true),
+          selected: showCorrected));
+      actions.add(_pillButton('刷新', Icons.refresh, _refreshTrip));
+    } else if (t.correctionStatus == 'done') {
+      label = '纠偏结果为空，当前显示原始轨迹';
+      actions.add(_pillButton('手动重纠', Icons.refresh, _retryTripCorrection));
+    } else if (t.correctionStatus == 'failed') {
+      label = '纠偏失败，当前显示原始轨迹';
+      actions.add(_pillButton('手动重纠', Icons.refresh, _retryTripCorrection));
+      actions.add(_pillButton('刷新', Icons.refresh, _refreshTrip));
+    } else if (t.correctionStatus == 'skipped') {
+      label = '境外行程不走高德纠偏';
+    } else {
+      label = '尚未纠偏';
+      actions.add(_pillButton('手动纠偏', Icons.refresh, _retryTripCorrection));
+    }
+    return Row(children: [
+      Expanded(
+          child: Text(label,
+              style:
+                  const TextStyle(color: Colors.white54, fontSize: 12))),
+      ...actions,
+    ]);
+  }
+
+  /// 高德第一批：分享卡用静态地图图片（内存 → 缓存文件 → 网络）。
+  /// 与卡面轨迹同一口径：按行程存储的隐私开关截取后的点列；
+  /// 境外行程、无 Key、点数不足、生成失败一律返回 null，
+  /// 调用方回落现有卡面轨迹，不堵住分享。
+  Future<Uint8List?> _ensureShareMapImage(Trip t) async {
+    if (shareMapBytes != null) return shareMapBytes;
+    try {
+      if (amapWebKey.isEmpty) return null;
+      if (t.points.isEmpty || !tripInChina(t.points)) return null;
+      final dir = await widget.store.cacheDir();
+      final path = '$dir/share_map_${t.id}.png';
+      final f = File(path);
+      if (await f.exists()) {
+        final cached = await f.readAsBytes();
+        if (cached.isNotEmpty) {
+          shareMapBytes = Uint8List.fromList(cached);
+          return shareMapBytes;
+        }
+      }
+      final pts = widget.store.trimmedPoints(t);
+      if (pts.length < 2) return null;
+      final bytes = await fetchStaticMapImage(
+          pts.map((p) => (p.lat, p.lon)).toList());
+      if (bytes == null) return null;
+      try {
+        await f.writeAsBytes(bytes);
+      } catch (_) {}
+      shareMapBytes = bytes;
+      return bytes;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// v0.1.7 行程相册：改动（附照片/改备注/删点）经相册页 onChanged
@@ -3125,6 +3419,19 @@ class _TripDetailPageState extends State<TripDetailPage> {
     final others = t.events.where((e) => e.kind != 'corner' && (_kinds == null || _kinds.contains(e.kind))).toList();
     final splits = paceSplitsKm(t.points);
     final shown = widget.store.trimmedPoints(t);
+    // 高德第一批：纠偏完成且开关开时，地图画纠偏轨迹（回放滑块、
+    // 各遥测图与车辆标记仍用原始点，遥测口径不动）。
+    final useCorrected = t.correctionStatus == 'done' &&
+        t.correctedPoints.isNotEmpty &&
+        showCorrected;
+    final mapPoints = useCorrected
+        ? t.correctedPoints
+            .map((p) => RefinedTrackPoint(lat: p.$1, lon: p.$2, speedKmh: 0))
+            .toList()
+        : t.points
+            .map((p) => RefinedTrackPoint(
+                lat: p.lat, lon: p.lon, speedKmh: p.speed * 3.6))
+            .toList();
     final centerPt = scrub >= 0 && scrub < t.points.length ? t.points[scrub] : t.points[t.points.length ~/ 2];
     final trend = metas.where((m) => m.mode == t.mode).take(6).toList().reversed.toList();
     final powers = t.points.where((p) => p.powerW != null).map((p) => p.powerW!).toList();
@@ -3142,7 +3449,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
             headingDeg: centerPt.heading,
             accuracyMeters: centerPt.hAcc >= 999 ? 0 : centerPt.hAcc,
             zoom: _fitZoom(t.points),
-            points: t.points.map((p) => RefinedTrackPoint(lat: p.lat, lon: p.lon, speedKmh: p.speed * 3.6)).toList(),
+            points: mapPoints,
             follow: false,
             headingUp: false,
             height: 320,
@@ -3150,6 +3457,20 @@ class _TripDetailPageState extends State<TripDetailPage> {
             vehicleMarkerKind: _vehicleKind(t.mode),
             vehicleMarkerColor: _vehicleColor(t.mode),
             vehicleMarkerPainter: markerPainterFor(appPrefs.vehicleSelection, t.mode, bodyColor: _vehicleColor(t.mode)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 高德逆地理编码：有地名显示地名，缺失端回落坐标。
+                  Text(
+                      '${t.startPlace.isNotEmpty ? t.startPlace : (t.points.isEmpty ? '—' : '${t.points.first.lat.toStringAsFixed(5)},${t.points.first.lon.toStringAsFixed(5)}')} → ${t.endPlace.isNotEmpty ? t.endPlace : (t.points.isEmpty ? '—' : '${t.points.last.lat.toStringAsFixed(5)},${t.points.last.lon.toStringAsFixed(5)}')}',
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  _correctionRow(t),
+                ]),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -3454,12 +3775,31 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 Text('${t.likes}'),
               ]),
               Wrap(spacing: 8, runSpacing: 8, children: [
-                _pillButton('分享卡预览', Icons.share, () => Navigator.push(context, MaterialPageRoute(builder: (_) => ShareCardPreviewPage(
+                _pillButton('分享卡预览', Icons.share, loadingShareMap
+                    ? null
+                    : () async {
+                        // 高德第一批：先取分享静态图（失败则 null 回落
+                        // 卡面原有轨迹），再进预览页，绝不堵住分享。
+                        setState(() => loadingShareMap = true);
+                        Uint8List? mapBytes;
+                        try {
+                          mapBytes = await _ensureShareMapImage(t);
+                        } finally {
+                          if (mounted) {
+                            setState(() => loadingShareMap = false);
+                          }
+                        }
+                        if (!mounted) return;
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => ShareCardPreviewPage(
                       trip: t,
                       videoPath: t.videoPaths.isEmpty ? null : t.videoPaths.first,
                       trimPrivacy: previewTrim,
                       onTrimPrivacyChanged: (v) => setState(() => previewTrim = v),
                       cardBoundaryKey: _previewCardKey,
+                      mapImageBytes: mapBytes,
                       trajectoryWidget: SizedBox(
                         height: 160,
                         child: CustomPaint(
@@ -3479,7 +3819,8 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       onShareGpx: () => _shareFile('gpx'),
                       onShareCsv: () => _shareFile('csv'),
                       onShareVideo: t.videoPaths.isEmpty ? null : () => Native.shareFiles([t.videoPaths.first], 'video/mp4', '驰迹行程视频'),
-                    )))),
+                                    )));
+                      }),
                 _pillButton('分享 GPX', Icons.file_download, sharingFile ? null : () => _shareFile('gpx')),
                 _pillButton('分享 CSV', Icons.file_download, sharingFile ? null : () => _shareFile('csv')),
                 _pillButton(

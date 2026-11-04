@@ -305,7 +305,7 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('关键参数（只读）', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                _paramRow('协议', 'NMEA 0183（GGA / RMC / VTG）'),
+                _paramRow('协议', 'NMEA 0183（GGA / RMC / VTG / GSA）'),
                 _paramRow('传输', 'BLE GATT 通知（Nordic UART 风格）'),
                 _paramRow('服务 UUID', nordicUartServiceUuid),
                 _paramRow('特征 TX', nordicUartTxUuid),

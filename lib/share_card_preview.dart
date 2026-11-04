@@ -14,6 +14,7 @@
 /// [trimPrivacy] 为真时卡面只标注“轨迹已截掉首尾”，不改写统计数字
 /// （统计口径与现有详情页分享卡一致：统计为整趟，轨迹显示截断）。
 
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -89,6 +90,7 @@ class ShareCardView extends StatelessWidget {
   final String? videoPath;
   final bool trimPrivacy;
   final Widget? trajectoryWidget;
+  final Uint8List? mapImageBytes;
   final ShareCardStyle style;
   final GlobalKey? cardBoundaryKey;
 
@@ -98,6 +100,7 @@ class ShareCardView extends StatelessWidget {
     this.videoPath,
     this.trimPrivacy = true,
     this.trajectoryWidget,
+    this.mapImageBytes,
     this.style = ShareCardStyle.racing,
     this.cardBoundaryKey,
   });
@@ -148,19 +151,28 @@ class ShareCardView extends StatelessWidget {
         const SizedBox(height: 10),
         SizedBox(
           height: 160,
-          child: trajectoryWidget ??
-              Container(
-                decoration: BoxDecoration(
-                  color: dark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : Colors.black.withValues(alpha: 0.06),
+          child: mapImageBytes != null
+              ? ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text('轨迹缩略图占位',
-                      style: TextStyle(color: subColor, fontSize: 13)),
-                ),
-              ),
+                  child: Image.memory(mapImageBytes!,
+                      width: double.infinity,
+                      height: 160,
+                      fit: BoxFit.cover),
+                )
+              : trajectoryWidget ??
+                  Container(
+                    decoration: BoxDecoration(
+                      color: dark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text('轨迹缩略图占位',
+                          style:
+                              TextStyle(color: subColor, fontSize: 13)),
+                    ),
+                  ),
         ),
         const SizedBox(height: 10),
         Wrap(spacing: 14, runSpacing: 4, children: [
@@ -225,6 +237,11 @@ class ShareCardPreviewPage extends StatefulWidget {
   /// 调用方传入的轨迹图 Widget；不传则显示占位框。
   final Widget? trajectoryWidget;
 
+  /// 高德第一批：分享静态地图图片（调用方在进预览页前取好）；
+  /// 非空时卡面轨迹区显示这张图（只用于分享卡片，不进记录页），
+  /// 为空时回落 trajectoryWidget / 占位框。
+  final Uint8List? mapImageBytes;
+
   /// 卡面风格初始值；页内可切换，切换状态只留本页。
   final ShareCardStyle initialStyle;
 
@@ -245,6 +262,7 @@ class ShareCardPreviewPage extends StatefulWidget {
     this.trimPrivacy = true,
     this.onTrimPrivacyChanged,
     this.trajectoryWidget,
+    this.mapImageBytes,
     this.initialStyle = ShareCardStyle.racing,
     this.cardBoundaryKey,
     this.onShareImage,
@@ -294,6 +312,7 @@ class _ShareCardPreviewPageState extends State<ShareCardPreviewPage> {
                   videoPath: widget.videoPath,
                   trimPrivacy: widget.trimPrivacy,
                   trajectoryWidget: widget.trajectoryWidget,
+                  mapImageBytes: widget.mapImageBytes,
                   style: _style,
                   cardBoundaryKey: widget.cardBoundaryKey,
                 ),

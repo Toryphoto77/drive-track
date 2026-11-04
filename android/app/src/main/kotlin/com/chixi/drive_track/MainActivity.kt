@@ -98,6 +98,20 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     private var senSink: EventChannel.EventSink? = null
     private var bleDevSink: EventChannel.EventSink? = null
     private var bleDataSink: EventChannel.EventSink? = null
+    private var btGpsDevSink: EventChannel.EventSink? = null
+    // 外置蓝牙 GPS 原生管理（SPP + 经典发现 + 无过滤 BLE 扫描），
+    // 惰性创建：stopBleScan 里只停已有实例，绝不因此新建。
+    private var btGpsManager: BtGpsManager? = null
+    private fun btGps(): BtGpsManager {
+        if (btGpsManager == null) {
+            btGpsManager = BtGpsManager(
+                this,
+                { map -> bleDataSink?.success(map) },
+                { map -> btGpsDevSink?.success(map) },
+            )
+        }
+        return btGpsManager!!
+    }
     // 分步授权：每个 step 一个 requestCode，结果按 code 存 map 分发，杜绝单一
     // pendingPermResult 被后一次请求覆盖丢结果。旧 1001 保留给 foreground 一步。
     private val pendingPermResults = mutableMapOf<Int, MethodChannel.Result>()
@@ -742,6 +756,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     }
                     "stopBleScan" -> {
                         try { bluetoothAdapter?.bluetoothLeScanner?.stopScan(bleScanCallback) } catch (_: Exception) {}
+                        try { btGpsManager?.stopUnfilteredScan() } catch (_: Exception) {}
                         result.success(null)
                     }
                     "connectBle" -> {
@@ -761,6 +776,29 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                         try { gatt?.close() } catch (_: Exception) {}
                         gatt = null
                         result.success(null)
+                    }
+                    // 外置蓝牙 GPS（BtGpsManager）：SPP + 经典发现 + 无过滤扫描。
+                    "listBondedSppDevices" -> {
+                        result.success(btGps().bondedDevices())
+                    }
+                    "connectSpp" -> {
+                        val addr = call.argument<String>("address")
+                        if (addr != null) btGps().connectSpp(addr)
+                        result.success(null)
+                    }
+                    "disconnectSpp" -> {
+                        btGps().disconnectSpp()
+                        result.success(null)
+                    }
+                    "startClassicDiscovery" -> {
+                        result.success(btGps().startClassicDiscovery())
+                    }
+                    "stopClassicDiscovery" -> {
+                        btGps().stopClassicDiscovery()
+                        result.success(null)
+                    }
+                    "scanBleUnfiltered" -> {
+                        result.success(btGps().startUnfilteredBleScan())
                     }
                     "setBleAutoReconnect" -> {
                         autoReconnect = call.argument<Boolean>("value") ?: true
@@ -893,6 +931,13 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(args: Any?, events: EventChannel.EventSink) { bleDataSink = events }
                 override fun onCancel(args: Any?) { bleDataSink = null }
+            })
+        // 外置蓝牙 GPS 专用发现流（无过滤 BLE 扫描 + 经典蓝牙发现），
+        // 与 bleDevices 分离，避免 GPS 扫描结果污染页级扫描列表。
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "drivetrack/btGpsDevices")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(args: Any?, events: EventChannel.EventSink) { btGpsDevSink = events }
+                override fun onCancel(args: Any?) { btGpsDevSink = null }
             })
         // v0.1.4：GNSS 卫星事件流与 TTS 完成事件流。
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "drivetrack/gnss")

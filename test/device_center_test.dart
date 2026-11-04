@@ -22,15 +22,43 @@ void main() {
     // 三组标题（不再有重复的 BleDIY 说明区）。
     expect(find.text('运动相机'), findsOneWidget);
     expect(find.text('外接 GPS 模块'), findsOneWidget);
-    expect(find.text('传感器：自定义 BLE 设备'), findsOneWidget);
     expect(find.text('RaceChrono BleDIY 外部 GPS'), findsNothing);
+    // 档案卡扩至 RaceChrono 清单后页面变长，传感器区需滚动才进入
+    // 懒加载 ListView 的视口；功能仍在，只是测试要按页顺序滚动断言。
+    await tester.scrollUntilVisible(
+      find.text('传感器：自定义 BLE 设备'),
+      300,
+    );
+    await tester.pump();
+    expect(find.text('传感器：自定义 BLE 设备'), findsOneWidget);
+    // 滚回顶部再断言 GoPro 区（滚走后懒加载会卸载顶部 widget）。
+    await tester.scrollUntilVisible(
+      find.text('扫描 GoPro 设备'),
+      -300,
+    );
+    await tester.pump();
     // GoPro 主操作是扫描，不再是“连接（需原生支持）”。
     expect(find.text('扫描 GoPro 设备'), findsOneWidget);
     expect(find.text('连接（需原生支持）'), findsNothing);
-    // Dragy / DEXIAN 如实标注未实测（仅选中档案才展开说明，故先点选）。
+    // 单入口主按钮在顶部；档案卡收进「高级 / 手动添加」，
+    // 默认收起时不在树里，先展开再断言。
+    expect(find.text('扫描适配设备'), findsOneWidget);
+    expect(find.text('BleDIY（RaceChrono DIY 兼容）'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('高级 / 手动添加'),
+      300,
+    );
+    await tester.pump();
+    await tester.tap(find.text('高级 / 手动添加'));
+    await tester.pumpAndSettle();
     expect(find.text('BleDIY（RaceChrono DIY 兼容）'), findsOneWidget);
     // 自定义表单收进展开区：未展开时字段不在树里。
     expect(find.text('名称，如：我的功率计'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('添加自定义传感器'),
+      300,
+    );
+    await tester.pump();
     await tester.tap(find.text('添加自定义传感器'));
     await tester.pumpAndSettle();
     expect(find.text('名称，如：我的功率计'), findsOneWidget);
