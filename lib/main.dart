@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 import 'models.dart';
@@ -45,6 +46,12 @@ import 'track_viz.dart';
 import 'voice_service.dart';
 import 'satellite_service.dart';
 import 'track_settings_page.dart';
+import 'track_session_display.dart';
+import 'track_sector_data.dart';
+import 'track_analysis_page.dart';
+import 'trip_analytics_page.dart';
+import 'vehicle_profile.dart';
+import 'vehicle_profile_page.dart';
 import 'settings_home_page.dart';
 import 'permission_settings_page.dart';
 import 'voice_settings_page.dart';
@@ -65,7 +72,7 @@ import 'data_export_page.dart';
 import 'fuel_page.dart';
 import 'update_service.dart';
 // v1.0.2 新模块（统合）
-import 'track_encyclopedia.dart';
+import 'track_home_page.dart';
 import 'performance_challenge.dart';
 
 void main() => runApp(const DriveTrackApp());
@@ -101,7 +108,7 @@ class AppPrefs extends ChangeNotifier {
   // 记录地图 3D 透视（默认开启，关闭为 2D 俯视示意，存 profile.json）。
   bool keepScreenOn = true;
   bool recordingMap3d = true;
-  // v1.0.3：可切换启动图标（profile.json 'appIcon'，'red' 默认 / 'blue'）。
+  // v1.0.3：可切换启动图标（profile.json 'appIcon'，'red' 默认，见 AppIconChoice）。
   String appIcon = 'red';
   // v1.0.7：安全守则“今日内不再弹出”（按日期 + 模式 + 街道/赛道记，
   // 只存本机 profile.json，不上传）。
@@ -464,6 +471,14 @@ class _HomePageState extends State<HomePage>
   List<PhotoPoint> livePhotoPoints = [];
   Set<String> favorites = {};
   int myTab = 0; // 0 行程 1 动态 2 收藏 3 成就
+  // v1.2.0：车辆档案（设置页入口加载，默认车辆用于新行程绑定）、
+  // 赛道行程最佳圈（列表卡片用，加载失败为 null 即“暂无圈速”）、
+  // 列表筛选 / 多选删除 / 油耗分组区间状态。
+  VehicleLibrary? vehicleLibrary;
+  Map<String, int?> trackBestLapMs = {};
+  bool _listSelecting = false;
+  final Set<String> _selectedTripIds = {};
+  int _listFilter = 0; // 0 全部 1 街道 2 赛道
 
   @override
   void initState() {
@@ -488,8 +503,12 @@ class _HomePageState extends State<HomePage>
     if (appPrefs.directSatellite) SatelliteService.instance.setDirectMode(true);
     await store.init();
     await appPrefs.load();
-    trips = await store.loadIndex();
+    // v1.2.0：旧索引无赛道/车辆键时回填（读不到回退全量加载 Trip，
+    // 见 Store.migrateIndexTrackFields），不丢旧数据。
+    trips = await store.migrateIndexTrackFields();
     favorites = await store.loadFavorites();
+    vehicleLibrary = await store.loadVehicleLibrary();
+    _refreshTrackBestLaps();
     await _loadCachedWeather();
     if (mounted) setState(() {});
     // v0.1.9：进首页即触发天气（见 _triggerWeatherOnLaunch 注释的根因）。
@@ -643,7 +662,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.0.7',
+          versionName: '1.2.4',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -764,6 +783,21 @@ class _HomePageState extends State<HomePage>
       setState(() => weatherLoading = false);
       return;
     }
+    // v1.2.0：10 分钟新鲜度 + 位置短路——已有天气且在 10 分钟内
+    // （且未移出缓存坐标 10 km）时不重拉，直接用缓存天气。
+    if (weather != null &&
+        !weatherNeedsRefresh(
+          hasWeather: true,
+          weatherMs: weatherMs,
+          nowMs: DateTime.now().millisecondsSinceEpoch,
+          cachedLat: weatherLat,
+          cachedLon: weatherLon,
+          lat: weatherLat,
+          lon: weatherLon,
+        )) {
+      setState(() => weatherLoading = false);
+      return;
+    }
     setState(() => weatherLoading = true);
     try {
       await Native.startLocation();
@@ -822,10 +856,18 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _maybeWeather(double lat, double lon, {bool force = false}) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    var need = force || weather == null || now - weatherMs > 10 * 60 * 1000;
-    if (weatherLat != null && weatherLon != null) {
-      if (haversineM(weatherLat!, weatherLon!, lat, lon) > 10000) need = true;
-    }
+    // v1.2.0：与 _triggerWeatherOnLaunch 共用同一新鲜度口径
+    // （10 分钟 + 移动 10 km），见 store.dart 的 weatherNeedsRefresh。
+    final need = force ||
+        weatherNeedsRefresh(
+          hasWeather: weather != null,
+          weatherMs: weatherMs,
+          nowMs: now,
+          cachedLat: weatherLat,
+          cachedLon: weatherLon,
+          lat: lat,
+          lon: lon,
+        );
     if (!need || fetchingWeather) return;
     await _fetchWeatherAt(lat, lon);
   }
@@ -855,8 +897,10 @@ class _HomePageState extends State<HomePage>
       permGranted = false;
     }
     if (mounted) setState(() {});
-    // v0.1.9：本次启动内刚给上定位权限也要立即拉天气。
-    if (permGranted) await _triggerWeatherOnLaunch();
+    // v1.2.0 开始记录延迟修复：权限通过后不再 await 天气——天气
+    // 改为后台不 await 拉取（_showSafety 随即推倒计时页，不再被
+    // 弱网天气拖住）；权限流程本身与 Recorder.start 均未动。
+    if (permGranted) unawaited(_triggerWeatherOnLaunch());
   }
 
   Future<void> _showSafety() async {
@@ -945,7 +989,7 @@ class _HomePageState extends State<HomePage>
     }
     await _requestPerm();
     if (!permGranted) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('需要定位权限才能记录轨迹')));
+      if (mounted) showAppNotice(context, '需要定位权限才能记录轨迹', AppNoticeKind.warning);
       return;
     }
     // v0.1.3：安全守则 + 权限通过后不立刻开录，先推全屏倒计时页；
@@ -997,17 +1041,18 @@ class _HomePageState extends State<HomePage>
     if (appPrefs.keepScreenOn) {
       final ok = await _setKeepScreenOn(true);
       if (!ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('常亮未开启：请检查系统设置，记录仍在继续')));
+        showAppNotice(context, '常亮未开启：请检查系统设置，记录仍在继续', AppNoticeKind.warning);
       }
     }
     if (mounted) setState(() {});
   }
 
-  /// v0.1.7 记录中一键打点：取最新轨迹点坐标，无轨迹点时用当前
+  /// v1.2.0 记录中标记事件：取最新轨迹点坐标，无轨迹点时用当前
   /// 定位快照；无定位时拒绝并提示，不存 (0,0) 假点。
-  /// 无照片也可先打点，之后在详情相册附照片；一趟上限 50 个。
-  void _addPhotoPoint() {
+  /// 标记时可写标题（≤50 字）、选类型（复用 photo_points.dart 的
+  /// 类型与颜色）、可选照片、可选备注；无照片也可先标记，之后在
+  /// 详情时间线附照片；一趟上限 50 条（store 层另有一道，保留前 50 条）。
+  Future<void> _addEventMarker() async {
     double? lat, lon;
     var timeMs = DateTime.now().millisecondsSinceEpoch;
     if (rec.points.isNotEmpty) {
@@ -1020,19 +1065,80 @@ class _HomePageState extends State<HomePage>
       lon = rec.curLon;
     }
     if (lat == null || lon == null || (lat == 0 && lon == 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('暂无定位，等定位出来后再打点')));
+      if (mounted) showAppNotice(context, '暂无定位，等定位出来后再标记', AppNoticeKind.warning);
       return;
     }
     if (livePhotoPoints.length >= kMaxPhotoPointsPerTrip) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('一趟最多 50 个照片点，已达上限')));
+      if (mounted) showAppNotice(context, '一趟最多 50 条事件标记，已达上限', AppNoticeKind.warning);
       return;
     }
-    setState(() => livePhotoPoints.add(
-        PhotoPoint(lat: lat!, lon: lon!, timeMs: timeMs)));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('已打点 ${livePhotoPoints.length} 个 · 结束后在详情相册附照片')));
+    final titleCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    var type = PhotoPointType.marker;
+    var attachPhoto = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
+        return AlertDialog(
+          title: const Text('标记事件'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: titleCtrl,
+                maxLength: 50,
+                decoration: const InputDecoration(labelText: '标题（可选，≤50 字）'),
+              ),
+              Row(children: [
+                const Text('类型：', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 8),
+                DropdownButton<PhotoPointType>(
+                  value: type,
+                  items: [
+                    for (final t in PhotoPointType.values)
+                      DropdownMenuItem(value: t, child: Text(t.label)),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setD(() => type = v);
+                  },
+                ),
+              ]),
+              TextField(
+                controller: noteCtrl,
+                maxLength: 200,
+                decoration: const InputDecoration(labelText: '备注（可选，≤200 字）'),
+              ),
+              SwitchListTile(
+                value: attachPhoto,
+                title: const Text('附照片（可选）'),
+                onChanged: (v) => setD(() => attachPhoto = v),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('标记')),
+          ],
+        );
+      }),
+    );
+    if (ok != true || !mounted) return;
+    String? photoPath;
+    if (attachPhoto) {
+      photoPath = await pickOrTakePhoto(context);
+      if (!mounted) return;
+    }
+    final title = titleCtrl.text.trim();
+    final note = noteCtrl.text.trim();
+    setState(() => livePhotoPoints.add(PhotoPoint(
+          lat: lat!,
+          lon: lon!,
+          timeMs: timeMs,
+          type: type,
+          title: title.isEmpty ? null : title,
+          note: note.isEmpty ? null : note,
+          photoPath: photoPath,
+        )));
+    if (mounted) showAppNotice(context, '已标记 ${livePhotoPoints.length} 条 · 结束后在详情时间线查看', AppNoticeKind.success);
   }
 
   Future<void> _endTrip() async {
@@ -1053,8 +1159,7 @@ class _HomePageState extends State<HomePage>
     if (pts.length < 10) {
       livePhotoPoints = [];
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(videoPaths.isEmpty ? '行程太短，未保存（少于 10 个轨迹点）' : '行程太短未保存，但视频文件仍在本机视频目录，未关联行程')));
+        showAppNotice(context, videoPaths.isEmpty ? '行程太短，未保存（少于 10 个轨迹点）' : '行程太短未保存，但视频文件仍在本机视频目录，未关联行程', AppNoticeKind.warning);
       }
       return;
     }
@@ -1062,17 +1167,20 @@ class _HomePageState extends State<HomePage>
     final lapsJson = (isTrack && liveLapTimer != null)
         ? liveLapTimer!.laps.map((l) => l.toJson()).toList()
         : <Map<String, dynamic>>[];
+    // v1.2.0：新行程绑定默认车辆（仅汽车/摩托且默认车辆模式
+    // 相符时；骑行不绑定，模式不符不绑定，缺默认车辆不绑定）。
     final trip = await store.saveTrip(mode, startMs, endMs, pts,
         trim: trimPrivacy, riderKg: riderKg, weatherSummary: weather?.summary ?? '', videoPaths: videoPaths,
         trackId: isTrack ? selectedTrack!.id : null, trackName: isTrack ? selectedTrack!.nameCn : '',
         isTrackMode: isTrack, lapsJson: lapsJson,
-        photoPoints: livePhotoPoints,
+        photoPoints: livePhotoPoints, vehicleId: _defaultVehicleIdForMode(mode),
         startFinishLat: isTrack && pts.isNotEmpty ? pts.first.lat : null,
         startFinishLon: isTrack && pts.isNotEmpty ? pts.first.lon : null);
     livePhotoPoints = [];
     liveLapTimer = null;
     _lapFedCount = 0;
     trips = await store.loadIndex();
+    _refreshTrackBestLaps();
     VoiceService.instance.announceSummary(
       distanceKm: trip.distanceM / 1000,
       durationMs: endMs - startMs,
@@ -1081,17 +1189,42 @@ class _HomePageState extends State<HomePage>
     );
     if (mounted) {
       setState(() {});
-      Navigator.push(context, MaterialPageRoute(builder: (_) => TripDetailPage(store: store, tripId: trip.id)));
+      // v1.2.0：赛道行程结束跳赛道分析页（不用街道版结束页），
+      // 街道行程仍走原详情页。
+      if (isTrack) {
+        final laps = trip.lapsJson.map((j) => Lap.fromJson(j)).toList();
+        Navigator.push(context, MaterialPageRoute(builder: (_) => TrackAnalysisPage(trip: trip, laps: laps)));
+      } else {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => TripDetailPage(store: store, tripId: trip.id)));
+      }
     }
   }
 
-  Future<void> _makeDemo() async {
-    final trip = await store.makeDemo(rec.mode);
-    trips = await store.loadIndex();
-    if (mounted) {
-      setState(() {});
-      Navigator.push(context, MaterialPageRoute(builder: (_) => TripDetailPage(store: store, tripId: trip.id)));
+  /// v1.2.0：默认车辆 id（模式相符才返回，否则 null = 回退全局值）。
+  String? _defaultVehicleIdForMode(TripMode mode) {
+    final lib = vehicleLibrary;
+    final def = lib?.defaultVehicle;
+    if (def == null) return null;
+    if (mode == TripMode.car && def.mode == VehicleMode.car) return def.id;
+    if (mode == TripMode.moto && def.mode == VehicleMode.moto) return def.id;
+    return null;
+  }
+
+  /// v1.2.0：刷新赛道行程最佳圈映射（列表卡片用；加载失败或无
+  /// 计入圈时为 null，卡片显示“暂无圈速”，不编圈速）。
+  Future<void> _refreshTrackBestLaps() async {
+    final map = <String, int?>{};
+    for (final m in trips) {
+      if (!m.isTrackMode) continue;
+      final t = await store.loadTrip(m.id);
+      if (t == null) {
+        map[m.id] = null;
+        continue;
+      }
+      final counted = t.lapsJson.map((j) => Lap.fromJson(j)).where((l) => l.counted).map((l) => l.durationMs).toList();
+      map[m.id] = counted.isEmpty ? null : counted.reduce(math.min);
     }
+    if (mounted) setState(() => trackBestLapMs = map);
   }
 
   @override
@@ -1282,7 +1415,7 @@ class _HomePageState extends State<HomePage>
           // 的 _menuAnim，不动）。
           Expanded(
             child: ListView(children: [
-              ListTile(leading: const Icon(Icons.flag), title: const Text('赛道图鉴'), subtitle: const Text('国内外赛道资料、赛道图与赛事'), onTap: () => _menuAction(_openTrackEncyclopedia)),
+              ListTile(leading: const Icon(Icons.flag), title: const Text('赛道图鉴'), subtitle: const Text('赛道行程、图鉴与分析都在赛道页'), onTap: () => _menuAction(_openTrackHome)),
               ListTile(
                   leading: const Icon(Icons.timer_outlined, color: Colors.red),
                   title: const Text('性能测试', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
@@ -1528,7 +1661,7 @@ class _HomePageState extends State<HomePage>
   //  公开仅指本机标记 + 对外分享，不宣称有服务器社区。
   List<TripMeta> get _realTrips => trips.where((t) => !t.demo).toList();
 
-  // v0.1.7 当月油耗汇总（记录页与我的页共用同一函数、同一口径）：
+  // v0.1.7 当月油耗汇总（v1.2.1 起记录页不再用，仅我的页用同一口径）：
   // 按开始时间过滤当月，演示行程不计入；总里程含全部模式，
   // 油耗/花费仅汽车/摩托；未填油耗/油价时油耗/花费为 null，
   // 显示“未填写”而不是 0。计算见 fuel_page.dart。
@@ -1540,30 +1673,6 @@ class _HomePageState extends State<HomePage>
         consumptionLPer100Km: appPrefs.fuelConsumptionLPer100Km,
         fuelPricePerLiter: appPrefs.fuelPricePerLiter,
       );
-
-  /// 记录页顶部的当月汇总卡（演示卡之后、行程列表之前）。
-  Widget _monthlyFuelCard() {
-    final s = _monthlyFuelSummary();
-    final fuelText = s.totalLiters == null ? '未填写' : '${s.totalLiters!.toStringAsFixed(2)} L';
-    final costText = s.totalCost == null ? '未填写' : '${s.totalCost!.toStringAsFixed(2)} 元';
-    return DriveTrackCard(
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('本月汇总 · ${s.year}年${s.month}月（${s.tripCount} 次行程）',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(children: [
-            Expanded(child: Text('总里程\n${s.totalDistanceKm.toStringAsFixed(1)} km')),
-            Expanded(child: Text('总油耗\n$fuelText')),
-            Expanded(child: Text('总花费\n$costText')),
-          ]),
-          const SizedBox(height: 6),
-          const Text('口径：总里程含汽车/摩托/骑行；油耗与花费仅汽车/摩托，按填写油耗估算，非加油实测；演示行程不计入。未填油耗/油价时油耗与花费显示“未填写”。',
-              style: TextStyle(color: Colors.white54, fontSize: 12)),
-        ]),
-    );
-  }
 
   List<(String, bool)> _achievements() {
     final real = _realTrips;
@@ -1622,7 +1731,7 @@ class _HomePageState extends State<HomePage>
     final totalLikes = real.where((m) => m.isPublic).fold(0, (a, m) => a + m.likes);
     MyTripItem item(TripMeta m) => MyTripItem(
           id: m.id,
-          title: '${m.mode.label} · ${(m.distanceM / 1000).toStringAsFixed(2)} km · 评分 ${m.score.toStringAsFixed(0)}${m.demo ? ' · 演示' : ''}',
+          title: '${m.mode.label} · ${(m.distanceM / 1000).toStringAsFixed(2)} km · 评分 ${m.score.toStringAsFixed(0)}',
           subtitle: fmtDate(m.startMs),
           isFavorite: favorites.contains(m.id),
           isPublic: m.isPublic,
@@ -1717,6 +1826,8 @@ class _HomePageState extends State<HomePage>
                 initialPrice: appPrefs.fuelPricePerLiter,
                 onSaved: (c, p) => appPrefs.setFuelSettings(c, p),
               ))),
+          // v1.2.0 车辆档案入口（油耗费用之后）。
+          onOpenVehicle: _openVehicleProfiles,
           countdownVibration: appPrefs.countdownVibration,
           onCountdownVibrationChanged: (v) => appPrefs.setCountdownVibration(v),
           keepScreenOn: appPrefs.keepScreenOn,
@@ -1734,6 +1845,37 @@ class _HomePageState extends State<HomePage>
 
   // v0.1.5：设置子页的直达入口（供 _openSettings 的入口列表与
   // 侧拉菜单“设置快捷”共用，同一子页不写两套跳转逻辑）。
+  /// v1.2.0 车辆档案入口：推 VehicleProfilePage；onChanged 里
+  /// 保存车辆库，检测到车辆被删时用 Store 批量回退绑定行程
+  /// （行程本身不删），随后刷新索引与列表。
+  Future<void> _openVehicleProfiles() async {
+    final lib = await store.loadVehicleLibrary();
+    if (!mounted) return;
+    var prevIds = lib.vehicles.map((v) => v.id).toSet();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VehicleProfilePage(
+          initialProfiles: lib.vehicles,
+          initialFuelLogs: lib.fuelLogs,
+          initialDefaultVehicleId: lib.defaultVehicleId,
+          onChanged: (next) async {
+            await store.saveVehicleLibrary(next);
+            final deleted = prevIds.where((id) => !next.vehicles.any((v) => v.id == id)).toList();
+            for (final id in deleted) {
+              await store.rebindTripsAfterVehicleDeleted(id);
+            }
+            prevIds = next.vehicles.map((v) => v.id).toSet();
+            vehicleLibrary = next;
+            trips = await store.loadIndex();
+            _refreshTrackBestLaps();
+            if (mounted) setState(() {});
+          },
+        ),
+      ),
+    );
+  }
+
   void _openPermissionSettings() {
     Navigator.push(
       context,
@@ -1786,13 +1928,19 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // v1.0.2：抽屉“赛道图鉴”——推图鉴页；目录条目选为本次赛道时
-  // 复用原有选赛道流程（trackMode=true + selectedTrack）。
-  void _openTrackEncyclopedia() {
+  // v1.2.1：抽屉“赛道图鉴”入口保留，但指向同一赛道页
+  // （TrackHomePage：赛道行程分组 + 图鉴 + 分析 + 模式说明），
+  // 不再直接推图鉴页，避免两个赛道入口说法不一；图鉴里点
+  // “选为本次赛道”时仍复用原有选赛道流程
+  // （trackMode=true + selectedTrack）。
+  void _openTrackHome() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => TrackEncyclopediaPage(
+        builder: (_) => TrackHomePage(
+          metas: trips,
+          bestLapMsByTripId: trackBestLapMs,
+          loadTrip: store.loadTrip,
           onSelectCatalogTrack: (t) {
             setState(() {
               trackMode = true;
@@ -1976,7 +2124,7 @@ class _HomePageState extends State<HomePage>
                   child: OutlinedButton(
                     onPressed: () async {
                       await Native.zeroCalibrate();
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已向功率计发送归零请求（设备支持时生效）')));
+                      if (context.mounted) showAppNotice(context, '已向功率计发送归零请求（设备支持时生效）', AppNoticeKind.success);
                     },
                     child: const Text('功率计归零'),
                   ),
@@ -2070,7 +2218,7 @@ class _HomePageState extends State<HomePage>
                   await appPrefs.setDirectSatellite(v);
                   if (mounted) setState(() {});
                 } else if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('直连卫星切换失败：${r['error'] ?? '请先授予定位权限'}')));
+                  showAppNotice(context, '直连卫星切换失败：${r['error'] ?? '请先授予定位权限'}', AppNoticeKind.error);
                 }
               },
             );
@@ -2165,28 +2313,75 @@ class _HomePageState extends State<HomePage>
             ),
           ]),
         ),
-      // v0.1.8：记录页地图改 3D 黑色风格自绘（Recording3dMap），
-      // 不再用 RefinedMap 瓦片、瓦片源选择器在记录页不再展示；
-      // 详情页的 RefinedMap 这一处不动。速度/G/时间/圈速/语音/
-      // 拍照打点/事件标记都在本页其余部分原样保留。
-      Expanded(
-        child: Recording3dMap(
-          centerLat: cLat,
-          centerLon: cLon,
-          headingDeg: rec.curHeading,
-          points: rec.points.map((p) => Recording3dPoint(lat: p.lat, lon: p.lon, speedKmh: p.speed * 3.6)).toList(),
-          photoPoints: livePhotoPoints,
-          is3d: appPrefs.recordingMap3d,
-          onModeChanged: (v) => appPrefs.setRecordingMap3d(v),
-          zoom: mapZoom,
-          onZoomChanged: (z) => setState(() => mapZoom = z),
-          headingUp: mapHeadingUp,
-          onCompassTap: () => setState(() => mapHeadingUp = false),
-          accentColor: Theme.of(context).colorScheme.primary,
-          vehicleColor: _vehicleColor(rec.mode),
-          vehicleMarkerPainter: markerPainterFor(appPrefs.vehicleSelection, rec.mode, bodyColor: _vehicleColor(rec.mode)),
+      // v1.2.0 赛道模式：地图区不再显示地图，只显示方案 A 的
+      // TrackSessionDisplay（大数字当前圈 + 分段色块 + 上一圈 /
+      // 最佳圈 / 预测圈小字，参照圈默认本节最佳圈）；街道模式仍用
+      // Recording3dMap。分段 delta 与预测圈由 LapTimer 新 API
+      // （currentSectorDeltasVsBest / predictedLapMsVsBest）算好
+      // 传入：已完成分段传带正负号的 delta，未完成分段传 null
+      // （显示灰色 '--'，是未完成状态不是缺口）；无参照圈分段
+      // 数据时预测圈保持 null（占位），不编数。上一圈 / 最佳圈 /
+      // 当前圈 / 暂停态均为 LapTimer 实测值。待核赛道传
+      // sectorSourceNote“扇区待核”，估算赛道传“估算分段”。
+      // 注意：本处不合成任何扇区点——LapTimer 的 sectorPoints
+      // 仍由赛道页实地传入（目前 _buildLapTimer 未传，故进行中
+      // completed 恒为空、分段格全为 '--'，见 track_timing.dart
+      // 的 currentCompletedSectorsMs 注释）；目录归一化轮廓点
+      // 不是经纬度，绝不能换算成 GeoPoint 冒充扇区点。
+      if (trackMode && selectedTrack != null && liveLapTimer != null)
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(12),
+            child: Builder(builder: (_) {
+              final sectorData = sectorDataFor(selectedTrack!.id);
+              final labels = sectorData?.sectorLabels ?? const [];
+              final timer = liveLapTimer!;
+              final completedDeltas = timer.currentSectorDeltasVsBest;
+              final count = labels.length > completedDeltas.length
+                  ? labels.length
+                  : completedDeltas.length;
+              final sectorDeltasMs = List<int?>.generate(
+                  count,
+                  (i) => i < completedDeltas.length
+                      ? completedDeltas[i]
+                      : null);
+              return TrackSessionDisplay(
+                currentLapNumber: timer.currentLapNumber,
+                currentLapMs: timer.currentLapMs,
+                sectorDeltasMs: sectorDeltasMs,
+                sectorLabels: labels,
+                lastLapMs: timer.lastLap?.durationMs,
+                bestLapMs: timer.bestLap?.durationMs,
+                predictedLapMs: timer.predictedLapMsVsBest,
+                sectorSourceNote: sectorData?.sourceLabel ?? '扇区待核',
+                isPaused: timer.isPaused,
+              );
+            }),
+          ),
+        )
+      else
+        // v0.1.8：记录页地图改 3D 黑色风格自绘（Recording3dMap），
+        // 不再用 RefinedMap 瓦片、瓦片源选择器在记录页不再展示；
+        // 详情页的 RefinedMap 这一处不动。速度/G/时间/圈速/语音/
+        // 事件标记都在本页其余部分原样保留。
+        Expanded(
+          child: Recording3dMap(
+            centerLat: cLat,
+            centerLon: cLon,
+            headingDeg: rec.curHeading,
+            points: rec.points.map((p) => Recording3dPoint(lat: p.lat, lon: p.lon, speedKmh: p.speed * 3.6)).toList(),
+            photoPoints: livePhotoPoints,
+            is3d: appPrefs.recordingMap3d,
+            onModeChanged: (v) => appPrefs.setRecordingMap3d(v),
+            zoom: mapZoom,
+            onZoomChanged: (z) => setState(() => mapZoom = z),
+            headingUp: mapHeadingUp,
+            onCompassTap: () => setState(() => mapHeadingUp = false),
+            accentColor: Theme.of(context).colorScheme.primary,
+            vehicleColor: _vehicleColor(rec.mode),
+            vehicleMarkerPainter: markerPainterFor(appPrefs.vehicleSelection, rec.mode, bodyColor: _vehicleColor(rec.mode)),
+          ),
         ),
-      ),
       // v1.0.2 记录页底部面板底色统一为卡片色 #1E1E1E（仅改色，不改结构/逻辑）。
       Container(
         padding: const EdgeInsets.all(12),
@@ -2223,23 +2418,23 @@ class _HomePageState extends State<HomePage>
             ),
           ]),
           const SizedBox(height: 10),
-          // v0.1.7 拍照打点：街道/赛道记录页共用，醒目全宽按钮，位于
-          // 暂停/长按结束上方；一键只存当前轨迹点坐标+时间，无照片
-          // 也可先打点，照片之后在详情相册附。
+          // v1.2.0 标记事件：街道/赛道记录页共用，醒目全宽按钮，位于
+          // 暂停/长按结束上方；标记时可写标题、选类型、可选照片与备注，
+          // 无照片也可先标记，之后在详情时间线附照片。
           SizedBox(
             width: double.infinity,
             height: 52,
             child: FilledButton.icon(
-              icon: const Icon(Icons.photo_camera),
+              icon: const Icon(Icons.place),
               label: Text(
-                  '拍照打点${livePhotoPoints.isEmpty ? '' : '（已打 ${livePhotoPoints.length} 个）'}',
+                  '标记事件${livePhotoPoints.isEmpty ? '' : '（已标记 ${livePhotoPoints.length} 条）'}',
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.bold)),
-              onPressed: _addPhotoPoint,
+              onPressed: _addEventMarker,
             ),
           ),
           const SizedBox(height: 4),
-          const Text('一键存当前坐标与时间，无照片也可先打点；结束后在详情页“行程相册”附照片、写备注',
+          const Text('存当前坐标与时间，可写标题、选类型、可选照片与备注；结束后在详情页事件时间线查看',
               style: TextStyle(color: Colors.white54, fontSize: 11)),
           const SizedBox(height: 10),
           Row(children: [
@@ -2280,58 +2475,244 @@ class _HomePageState extends State<HomePage>
     ]);
   }
 
-  Widget _buildList() {
-    final accent = Theme.of(context).colorScheme.primary;
-    final demoCard = DriveTrackCard(
-      borderColor: accent.withValues(alpha: 0.5),
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-      padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Icon(Icons.science_outlined, color: accent, size: 18),
-            const SizedBox(width: 6),
-            const Text('体验演示', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: accent.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
-              child: const Text('演示 · 不计入真实统计', style: TextStyle(fontSize: 11)),
-            ),
-          ]),
-          const SizedBox(height: 6),
-          const Text('合成路线，仅用于体验界面。', style: TextStyle(color: Colors.white54, fontSize: 12)),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(icon: const Icon(Icons.play_circle), label: const Text('生成演示行程'), onPressed: _makeDemo),
-        ]),
+  /// v1.2.0：单条删除确认（长按卡片触发）与批量删除确认共用
+  /// 文案：删除行程文件 + 索引 + 收藏孤儿 id，视频文件保留。
+  Future<void> _confirmDeleteTrips(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ids.length == 1 ? '删除这趟行程？' : '删除所选 ${ids.length} 趟行程？'),
+        content: const Text('删除后行程文件、索引与收藏记录一并删除，视频文件保留。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+        ],
+      ),
     );
-    if (trips.isEmpty) {
-      return SingleChildScrollView(
-        child: Column(children: [
-          demoCard,
-          _monthlyFuelCard(),
-          const SizedBox(height: 24),
-          const Center(child: Text('还没有行程\n去首页开始一次记录', textAlign: TextAlign.center)),
-        ]),
+    if (ok != true || !mounted) return;
+    await store.deleteTrips(ids);
+    trips = await store.loadIndex();
+    favorites = await store.loadFavorites();
+    trackBestLapMs.removeWhere((k, _) => !trips.any((m) => m.id == k));
+    _selectedTripIds.removeAll(ids);
+    if (_selectedTripIds.isEmpty) _listSelecting = false;
+    if (mounted) setState(() {});
+  }
+
+  /// v1.2.1 记录页重做（2b/2c/2d）：
+  /// - 演示模块整个删掉：无演示卡、无生成入口；列表与统计口径
+  ///   一律排除 demo（旧演示行程文件仍在索引里时也不再出现，
+  ///   分析页与油耗页的 demo 过滤保持不变，不靠本页兜底）。
+  /// - 油耗汇总卡从记录页拿掉：本页不再出现当月/按车辆分组油耗卡，
+  ///   油耗汇总只留在油耗页 / 车辆档案相关页与我的页（_monthlyFuelSummary
+  ///   仍供我的页共用，不动）。
+  /// - 排版：深色底 #121212 + 法拉利红 #E10600 点缀，统一卡片、
+  ///   字号层级与按钮样式；分区清晰：顶部筛选（全部/街道/赛道）
+  ///   + 分析入口、赛道专区入口、列表；不再并排一堆小按钮。
+  /// - 列表卡片统一为“模式或赛道名 + 日期 + 里程/时长 + 关键指标
+  ///   （街道给评分，赛道给最佳圈，无圈速写暂无圈速）”。
+  /// - 单条长按删除、多选批量删除保留（v1.2.0 已有，不丢）；
+  ///   空态写“暂无行程”。底部导航本身（216×56 方案 A 悬浮药丸）
+  ///   与主题色不动。记录页顶部的“赛道”只是筛选，赛道详情 /
+  ///   图鉴 / 分析统一走赛道页（_openTrackHome）。
+  Widget _buildList() {
+    const red = Color(0xFFE10600);
+    // 演示行程排除在外：不再出现在列表里。
+    final realTrips = trips.where((m) => !m.demo).toList();
+    final filtered = realTrips.where((m) {
+      if (_listFilter == 1) return !m.isTrackMode;
+      if (_listFilter == 2) return m.isTrackMode;
+      return true;
+    }).toList();
+
+    Widget filterChip(String label, int value) {
+      final selected = _listFilter == value;
+      return ChoiceChip(
+        label: Text(label,
+            style: TextStyle(
+                color: selected ? Colors.white : Colors.white70,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+        selected: selected,
+        selectedColor: red,
+        backgroundColor: const Color(0xFF1E1E1E),
+        side: BorderSide(color: selected ? red : Colors.white24),
+        onSelected: (_) => setState(() => _listFilter = value),
       );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 24),
-      itemCount: trips.length + 2,
-      itemBuilder: (ctx, i) {
-        if (i == 0) return demoCard;
-        if (i == 1) return _monthlyFuelCard();
-        final m = trips[i - 2];
-        return DriveTrackCard(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          padding: EdgeInsets.zero,
-          child: ListTile(
-            title: Text('${m.mode.label} · ${(m.distanceM / 1000).toStringAsFixed(2)} km · 评分 ${m.score.toStringAsFixed(0)}${m.demo ? ' · 演示' : ''}'),
-            subtitle: Text('${fmtDate(m.startMs)} · 时长 ${fmtDur(m.endMs - m.startMs)}'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TripDetailPage(store: store, tripId: m.id))),
+
+    String cardTitle(TripMeta m) =>
+        m.isTrackMode ? (m.trackName.isEmpty ? '赛道行程' : m.trackName) : m.mode.label;
+    String keyMetric(TripMeta m) {
+      if (m.isTrackMode) {
+        final best = trackBestLapMs[m.id];
+        // 无该 id（尚未加载完）与 null（无计入圈）都显示暂无圈速，绝不编圈速。
+        return best == null ? '最佳圈：暂无圈速' : '最佳圈：${LapTimer.formatLapTime(best)}';
+      }
+      return '评分：${m.score.toStringAsFixed(0)}';
+    }
+
+    return Container(
+      color: const Color(0xFF121212),
+      child: Column(children: [
+        // 分区一：顶部筛选 + 分析入口。
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('行程记录',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, children: [
+              filterChip('全部', 0),
+              filterChip('街道', 1),
+              filterChip('赛道', 2),
+            ]),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white, side: const BorderSide(color: red)),
+                icon: const Icon(Icons.analytics_outlined, size: 18),
+                label: const Text('行程分析', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => TripAnalyticsPage(metas: realTrips, loadTrip: store.loadTrip))),
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text('分析统计不含演示行程；赛道行程不评分，只统计圈速。',
+                style: TextStyle(color: Colors.white54, fontSize: 12)),
+          ]),
+        ),
+        // 分区二：赛道专区唯一入口（醒目红底卡片）。
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: _openTrackHome,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: red.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: red),
+              ),
+              child: const Row(children: [
+                Icon(Icons.flag, color: red, size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('赛道专区',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 2),
+                    Text('我的赛道行程（按赛道分组）· 赛道图鉴 · 赛道分析 · 赛道模式说明',
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ]),
+                ),
+                Icon(Icons.chevron_right, color: Colors.white70),
+              ]),
+            ),
           ),
-        );
-      },
+        ),
+        // 分区三：选择 / 批量删除条（仅选择模式下出现，不与分析入口并排）。
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                _listSelecting
+                    ? '已选 ${_selectedTripIds.length} 趟（点卡片勾选 / 取消）'
+                    : '长按单条卡片可删除单条；删除时视频文件保留。',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() {
+                _listSelecting = !_listSelecting;
+                if (!_listSelecting) _selectedTripIds.clear();
+              }),
+              child: Text(_listSelecting ? '取消选择' : '选择',
+                  style: const TextStyle(color: red, fontWeight: FontWeight.bold)),
+            ),
+            if (_listSelecting)
+              TextButton(
+                onPressed: _selectedTripIds.isEmpty ? null : () => _confirmDeleteTrips(_selectedTripIds.toList()),
+                child: const Text('删除所选', style: TextStyle(color: red, fontWeight: FontWeight.bold)),
+              ),
+          ]),
+        ),
+        // 分区四：行程列表。
+        Expanded(
+          child: filtered.isEmpty
+              ? const Center(
+                  child: Text('暂无行程\n去首页开始一次记录',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white54, fontSize: 14)),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  itemCount: filtered.length,
+                  itemBuilder: (ctx, i) {
+                    final m = filtered[i];
+                    final selected = _selectedTripIds.contains(m.id);
+                    return DriveTrackCard(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      padding: EdgeInsets.zero,
+                      child: ListTile(
+                        leading: _listSelecting
+                            ? Checkbox(
+                                value: selected,
+                                activeColor: red,
+                                onChanged: (v) => setState(() {
+                                  if (v == true) {
+                                    _selectedTripIds.add(m.id);
+                                  } else {
+                                    _selectedTripIds.remove(m.id);
+                                  }
+                                }),
+                              )
+                            : null,
+                        title: Text(cardTitle(m),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 2),
+                            Text(fmtDate(m.startMs),
+                                style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${(m.distanceM / 1000).toStringAsFixed(2)} km · ${fmtDur(m.endMs - m.startMs)} · ${keyMetric(m)}',
+                              style: const TextStyle(color: Colors.white54, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                        trailing: const Icon(Icons.chevron_right, color: Colors.white54),
+                        onTap: () {
+                          if (_listSelecting) {
+                            setState(() {
+                              if (selected) {
+                                _selectedTripIds.remove(m.id);
+                              } else {
+                                _selectedTripIds.add(m.id);
+                              }
+                            });
+                            return;
+                          }
+                          Navigator.push(context,
+                              MaterialPageRoute(builder: (_) => TripDetailPage(store: store, tripId: m.id)));
+                        },
+                        onLongPress: _listSelecting ? null : () => _confirmDeleteTrips([m.id]),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ]),
     );
   }
 }
@@ -2410,6 +2791,8 @@ class TripDetailPage extends StatefulWidget {
 class _TripDetailPageState extends State<TripDetailPage> {
   Trip? trip;
   List<TripMeta> metas = [];
+  VehicleLibrary? vehicleLibrary;
+  bool photoPointsTruncated = false;
   int scrub = -1;
   TripEvent? selectedEvent;
   bool sharing = false;
@@ -2463,7 +2846,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
       await File(path).writeAsBytes(data!.buffer.asUint8List());
       await Native.shareFiles([path], 'image/png', '驰迹 ${trip!.mode.label}行程 · 评分 ${trip!.score.toStringAsFixed(0)}');
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('分享失败：$e')));
+      if (mounted) showAppNotice(context, '分享失败：$e', AppNoticeKind.error);
     }
     if (mounted) setState(() => sharing = false);
   }
@@ -2477,19 +2860,27 @@ class _TripDetailPageState extends State<TripDetailPage> {
   Future<void> _load() async {
     trip = await widget.store.loadTrip(widget.tripId);
     metas = await widget.store.loadIndex();
+    vehicleLibrary = await widget.store.loadVehicleLibrary();
     if (mounted) setState(() {});
   }
 
   /// v0.1.7 行程相册：改动（附照片/改备注/删点）经相册页 onChanged
   /// 回传后落盘；失败时提示且不改界面上的 trip，避免假装已保存。
+  /// v1.2.0：走 updateTripPhotoPointsChecked，超 50 条截断时
+  /// 卡片明示“只保留了前 50 条”，不报成全部保存成功。
   Future<void> _savePhotoPoints(List<PhotoPoint> pts) async {
     final t = trip;
     if (t == null) return;
-    final nt = await widget.store.updateTripPhotoPoints(t.id, pts);
-    if (nt != null && mounted) setState(() => trip = nt);
+    final r = await widget.store.updateTripPhotoPointsChecked(t.id, pts);
+    if (r.trip != null && mounted) {
+      setState(() {
+        trip = r.trip;
+        photoPointsTruncated = r.truncated;
+      });
+    }
   }
 
-  void _openAlbum() {
+  void _openAlbum({String? focusPointId}) {
     final t = trip;
     if (t == null) return;
     Navigator.push(
@@ -2500,6 +2891,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   trackPoints:
                       t.points.map((p) => (lat: p.lat, lon: p.lon)).toList(),
                   onChanged: _savePhotoPoints,
+                  focusPointId: focusPointId,
                 )));
   }
 
@@ -2510,8 +2902,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
     if (t == null) return;
     final idx = t.photoPoints.lastIndexWhere((p) => !p.hasPhoto);
     if (idx < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('全部照片点都已有照片')));
+      if (mounted) showAppNotice(context, '全部照片点都已有照片', AppNoticeKind.info);
       return;
     }
     final path = await pickOrTakePhoto(context);
@@ -2660,17 +3051,33 @@ class _TripDetailPageState extends State<TripDetailPage> {
               TripPhotoAlbumCard(
                 trip: t,
                 onOpenAlbum: _openAlbum,
-                onPhotoTap: (_) => _openAlbum(),
+                // v1.2.0：点缩略图进相册时传入 focusPointId 定位到该点
+                // （修复旧 _openAlbum 不定位的缺口）。
+                onPhotoTap: (p) => _openAlbum(focusPointId: p.resolvedId),
                 onAttachToLatestUnphotographed:
                     _attachToLatestUnphotographed,
+                photoPointsTruncated: photoPointsTruncated,
               ),
               if (t.mode != TripMode.bike) ...[
                 const SizedBox(height: 12),
-                TripFuelCard(
-                  trip: t,
-                  consumptionLPer100Km: appPrefs.fuelConsumptionLPer100Km,
-                  fuelPricePerLiter: appPrefs.fuelPricePerLiter,
-                ),
+                Builder(builder: (_) {
+                  final lib = vehicleLibrary;
+                  VehicleProfile? vehicle;
+                  if (lib != null && t.vehicleId != null) {
+                    for (final v in lib.vehicles) {
+                      if (v.id == t.vehicleId) vehicle = v;
+                    }
+                  }
+                  return TripFuelCard(
+                    trip: t,
+                    consumptionLPer100Km: appPrefs.fuelConsumptionLPer100Km,
+                    fuelPricePerLiter: appPrefs.fuelPricePerLiter,
+                    vehicleConsumptionLPer100Km: vehicle?.consumptionLPer100Km,
+                    measuredConsumptionLPer100Km:
+                        (lib != null && t.vehicleId != null) ? lib.measuredFor(t.vehicleId!) : null,
+                    vehicleName: vehicle?.name,
+                  );
+                }),
               ],
               const SizedBox(height: 12),
               TripRoadTypeCard(points: t.points),
@@ -2912,7 +3319,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   t.videoPaths.isEmpty ? '同步视频 · 暂无' : '同步视频',
                   Icons.videocam,
                   t.videoPaths.isEmpty
-                      ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('暂无关联视频')))
+                      ? () { if (mounted) showAppNotice(context, '暂无关联视频', AppNoticeKind.info); }
                       : () => Native.shareFiles([t.videoPaths.first], 'video/mp4', '驰迹行程视频'),
                 ),
               ]),

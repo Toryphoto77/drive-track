@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 import 'package:flutter/services.dart';
 
 import 'import_style.dart';
@@ -278,22 +279,16 @@ class _SettingsPageState extends State<SettingsPage>
       if (spec.step == 'background' &&
           result['reason'] == 'foreground_not_granted') {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('请先补齐精确定位，再申请后台定位')),
-          );
+          showAppNotice(context, '请先补齐精确定位，再申请后台定位', AppNoticeKind.warning);
         }
       }
     } on PlatformException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('申请失败：${e.message ?? e.code}')),
-        );
+        showAppNotice(context, '申请失败：${e.message ?? e.code}', AppNoticeKind.error);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('申请失败：$e')),
-        );
+        showAppNotice(context, '申请失败：$e', AppNoticeKind.error);
       }
     } finally {
       if (mounted) setState(() => _busyStep = null);
@@ -305,9 +300,7 @@ class _SettingsPageState extends State<SettingsPage>
       await Native.openAppSettings();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法打开系统设置：$e')),
-        );
+        showAppNotice(context, '无法打开系统设置：$e', AppNoticeKind.error);
       }
     }
   }
@@ -535,9 +528,7 @@ class _SettingsPageState extends State<SettingsPage>
     final raw = _hexCtrl.text.trim().replaceFirst('#', '');
     final v = raw.length == 6 ? int.tryParse(raw, radix: 16) : null;
     if (v == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入 #RRGGBB 格式，如 #E10600')),
-      );
+      if (mounted) showAppNotice(context, '请输入 #RRGGBB 格式，如 #E10600', AppNoticeKind.warning);
       return;
     }
     widget.onThemeSelected(Color(0xFF000000 | v));

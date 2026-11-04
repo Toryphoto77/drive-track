@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 
 import 'app_icon_choice.dart';
 import 'card_style.dart';
@@ -37,7 +38,7 @@ class AboutPage extends StatefulWidget {
   final String displayFont;
   final UpdateConfig updateConfig;
 
-  /// v1.0.3：当前启动图标选择（'red' 默认 / 'blue'），顶部大卡的
+  /// v1.0.3：当前启动图标选择（'red' 默认，见 AppIconChoice），顶部大卡的
   /// 图标与“图标”行与桌面 alias 同步，不再固定显示旧转速表图。
   final String appIconKey;
 
@@ -100,7 +101,7 @@ class _AboutPageState extends State<AboutPage> {
     } catch (_) {}
     if (mounted) {
       setState(() => _cacheMsg = count > 0 ? '已清除 $count 个缓存文件，行程数据与设置未动。' : '暂无可清除的缓存文件，行程数据与设置未动。');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_cacheMsg!)));
+      showAppNotice(context, _cacheMsg!, appNoticeKindFromMessage(_cacheMsg!));
     }
   }
 

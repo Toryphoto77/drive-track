@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 
 import 'card_style.dart';
 
@@ -237,9 +238,7 @@ class _MyPageState extends State<MyPage> {
 
   Future<void> _pickAvatar() async {
     if (widget.onPickAvatar == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('换头像待总协调接线：需传入 Native.pickFile(\'image\') 回调')),
-      );
+      if (mounted) showAppNotice(context, '换头像待总协调接线：需传入 Native.pickFile(\'image\') 回调', AppNoticeKind.info);
       return;
     }
     if (_pickingAvatar) return;
@@ -252,9 +251,7 @@ class _MyPageState extends State<MyPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('换头像失败：$e')),
-        );
+        showAppNotice(context, '换头像失败：$e', AppNoticeKind.error);
       }
     } finally {
       if (mounted) setState(() => _pickingAvatar = false);

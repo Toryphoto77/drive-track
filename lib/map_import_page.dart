@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 
 import 'import_style.dart';
 
@@ -209,7 +210,7 @@ class _MapImportPageState extends State<MapImportPage> {
 
   void _show(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    showAppNotice(context, msg, appNoticeKindFromMessage(msg));
   }
 
   Future<void> _import(MapImportKind kind) async {

@@ -11,7 +11,23 @@
 // 画出（道路暗、轨迹亮）；无网络或无数据时退回现有网格 + 轨迹，
 // 并在地图角落小字注明“路网未加载”。不编造道路、不画真实导航图、
 // 不恢复瓦片旋转地图。
+// v1.2.0 路网：① 4 个 Overpass 镜像由串行改并行竞速（先到者胜、
+// 其余 HttpClient 强制关闭），单站连接 5 秒 + 响应 8 秒 + 整站
+// 15 秒兜底，最坏约 15 秒（原串行最坏约 100 秒）；失败原因分档
+// 不变（离线/超时/繁忙/空结果/其他），缓存机制与 400 米/30 秒门
+// 不变。② 道路按 highway 等级分级加粗着色（见 roadStyleForHighway），
+// 透视远处有线宽与亮度下限，不再统一细深灰。③ 车标盒由固定
+// 56px 改为 3D 52px（纵向 0.90 压扁贴合地面）/ 2D 48px，缩小后
+// 不遮挡轨迹。绝不做目的地、路线规划、转向箭头、剩余里程、ETA。
 // 轨迹点复用调用方传入的经纬度 + 速度，不改 Recorder 的数据模型。
+//
+// 路网修复（待发版，不改版本号）：① 查询收敛（600 米 + 仅可行驶
+// 等级 + 服务端 12 秒）；② OSM 主站 /map 作 hedged 兜底（Overpass
+// 3 秒未胜出才发出，沙箱实测 1 公里 bbox 约 2.6 秒返回）；③ 缓存
+// 升级为 v2（含保存时间）+ 邻格回退（本格无缓存时找最近邻格）；
+// ④ 失败文案不再被缓存盖住（缓存路网·服务器繁忙），手动重拉
+// 先清失败原因。Overpass 各镜像沙箱实测全部不可达（对照站正常），
+// 故本次不新增未经验证的镜像；真机结论以用户手机网络为准。
 //
 // 视角：跟随车头的 3D 俯视透视，俯仰角约 60-70 度（地平线在画面
 // 约 16% 高处、车标在约 72% 高处，近大远小）；车头朝上为默认跟随
@@ -44,9 +60,350 @@ class Recording3dPoint {
 }
 
 /// v1.0.4：OpenStreetMap 道路线（Overpass API 拉取结果的折线）。
+/// v1.2.0：新增 highway 等级（Overpass tags.highway，原样透传，
+/// 无 tag 时为空串，旧缓存无 highway 时同样为空串，不编造）。
 class RoadWay {
   final List<(double, double)> points; // (lat, lon)
-  const RoadWay(this.points);
+  final String highway;
+  const RoadWay(this.points, {this.highway = ''});
+}
+
+/// v1.2.0：按 highway 分级的道路绘制样式（纯函数，可单测）。
+/// 等级：0 高速/主干、1 次干/支路（secondary/tertiary）、
+/// 2 一般道路（residential/unclassified/service/road/未知）、
+/// 3 步行类（footway/path/cycleway/pedestrian/track 等）。
+/// 等级越低线越粗越亮；min* 为透视远处的可见性下限。
+class RoadStyle {
+  final int tier;
+  final double mainWidth, glowWidth, minMainWidth, minGlowWidth;
+  final Color mainColor;
+  final double mainAlpha, glowAlpha, minMainAlpha;
+  const RoadStyle({
+    required this.tier,
+    required this.mainWidth,
+    required this.glowWidth,
+    required this.minMainWidth,
+    required this.minGlowWidth,
+    required this.mainColor,
+    required this.mainAlpha,
+    required this.glowAlpha,
+    required this.minMainAlpha,
+  });
+}
+
+int roadTierForHighway(String highway) {
+  switch (highway) {
+    case 'motorway':
+    case 'motorway_link':
+    case 'trunk':
+    case 'trunk_link':
+    case 'primary':
+    case 'primary_link':
+      return 0;
+    case 'secondary':
+    case 'secondary_link':
+    case 'tertiary':
+    case 'tertiary_link':
+      return 1;
+    case 'footway':
+    case 'path':
+    case 'cycleway':
+    case 'pedestrian':
+    case 'track':
+    case 'steps':
+    case 'corridor':
+    case 'bridleway':
+    case 'construction':
+      return 3;
+    default:
+      // residential / unclassified / service / road / 未知（''，含旧缓存）
+      // / 其他未列名等级一律走一般道路，不断线、不降级到步行类。
+      return 2;
+  }
+}
+
+RoadStyle roadStyleForHighway(String highway) {
+  switch (roadTierForHighway(highway)) {
+    case 0:
+      return const RoadStyle(
+        tier: 0, mainWidth: 4.5, glowWidth: 10, minMainWidth: 2.2, minGlowWidth: 4.0,
+        mainColor: Color(0xFFEDEDED), mainAlpha: 0.95, glowAlpha: 0.30, minMainAlpha: 0.80,
+      );
+    case 1:
+      return const RoadStyle(
+        tier: 1, mainWidth: 3.5, glowWidth: 8, minMainWidth: 1.8, minGlowWidth: 3.0,
+        mainColor: Color(0xFFCFCFCF), mainAlpha: 0.90, glowAlpha: 0.24, minMainAlpha: 0.70,
+      );
+    case 3:
+      return const RoadStyle(
+        tier: 3, mainWidth: 1.8, glowWidth: 4.5, minMainWidth: 1.1, minGlowWidth: 2.0,
+        mainColor: Color(0xFF7A7A7A), mainAlpha: 0.75, glowAlpha: 0.14, minMainAlpha: 0.50,
+      );
+    default:
+      return const RoadStyle(
+        tier: 2, mainWidth: 2.5, glowWidth: 6, minMainWidth: 1.4, minGlowWidth: 2.4,
+        mainColor: Color(0xFF9A9A9A), mainAlpha: 0.85, glowAlpha: 0.18, minMainAlpha: 0.60,
+      );
+  }
+}
+
+/// v1.2.0：透视线宽 = base * factor，但不低于 min（远处仍可见），
+/// factor 为 1 时等于 base；factor 钳制到 [0, 1]。
+double roadWidthFor(double baseWidth, double minWidth, double factor) =>
+    (baseWidth * factor.clamp(0.0, 1.0)).clamp(minWidth, baseWidth).toDouble();
+
+/// v1.2.0：透视亮度 = base * (0.55 + 0.45 * factor)，但不低于 min；
+/// factor 为 1 时等于 base，远处（factor -> 0）仍有 55% 亮度保底
+/// 再叠加 min 下限，双重保底。
+double roadAlphaFor(double baseAlpha, double minAlpha, double factor) {
+  final f = factor.clamp(0.0, 1.0);
+  return math.max(baseAlpha * (0.55 + 0.45 * f), minAlpha);
+}
+
+/// v1.2.0：并行竞速全部失败时的原因聚合。单站失败原因互不相同
+/// 时优先报服务端侧信号（繁忙 > 超时 > 离线 > 其他），因为“设备
+/// 离线”若属实各站应一致报离线；混合时单站离线更可能是该镜像
+/// 不可达而非整机断网。
+String pickRoadErrorKind(List<String> kinds) {
+  if (kinds.contains('busy')) return 'busy';
+  if (kinds.contains('timeout')) return 'timeout';
+  if (kinds.contains('offline')) return 'offline';
+  if (kinds.isEmpty) return 'other';
+  return kinds.last;
+}
+
+/// v1.2.0：Overpass 响应解析（纯函数，可单测，不含网络）。
+/// 只取 type=way 且 geometry >= 2 点的折线，highway 取自 tags，
+/// 上限 200 条（与旧逻辑一致）。
+List<RoadWay> parseOverpassWays(Map<String, dynamic> data) {
+  final elements = (data['elements'] as List?) ?? const [];
+  final ways = <RoadWay>[];
+  for (final e in elements) {
+    if (e is! Map || e['type'] != 'way') continue;
+    final geom = (e['geometry'] as List?) ?? const [];
+    final pts = <(double, double)>[];
+    for (final g in geom) {
+      if (g is Map && g['lat'] is num && g['lon'] is num) {
+        pts.add(((g['lat'] as num).toDouble(), (g['lon'] as num).toDouble()));
+      }
+    }
+    if (pts.length < 2) continue;
+    final tags = e['tags'];
+    final highway = tags is Map && tags['highway'] is String
+        ? tags['highway'] as String
+        : '';
+    ways.add(RoadWay(pts, highway: highway));
+    if (ways.length >= 200) break;
+  }
+  return ways;
+}
+
+/// v1.2.0：缓存序列化（新格式含 highway）。旧格式（纯点列的
+/// List）由 roadWaysFromCacheJson 兼容读取，不丢旧缓存。
+List<Map<String, Object>> roadWaysToCacheJson(List<RoadWay> ways) => ways
+    .map((w) => <String, Object>{
+          'highway': w.highway,
+          'points': w.points.map((p) => [p.$1, p.$2]).toList(),
+        })
+    .toList();
+
+List<RoadWay> roadWaysFromCacheJson(dynamic decoded) {
+  if (decoded is! List) return const [];
+  final ways = <RoadWay>[];
+  for (final w in decoded) {
+    if (w is Map) {
+      // 新格式：{highway, points}。
+      final raw = w['points'];
+      if (raw is! List) continue;
+      final pts = <(double, double)>[];
+      for (final p in raw) {
+        if (p is List && p.length >= 2 && p[0] is num && p[1] is num) {
+          pts.add(((p[0] as num).toDouble(), (p[1] as num).toDouble()));
+        }
+      }
+      if (pts.length < 2) continue;
+      final highway = w['highway'] is String ? w['highway'] as String : '';
+      ways.add(RoadWay(pts, highway: highway));
+    } else if (w is List) {
+      // 旧格式：纯点列，无 highway。
+      final pts = <(double, double)>[];
+      for (final p in w) {
+        if (p is List && p.length >= 2 && p[0] is num && p[1] is num) {
+          pts.add(((p[0] as num).toDouble(), (p[1] as num).toDouble()));
+        }
+      }
+      if (pts.length >= 2) ways.add(RoadWay(pts));
+    }
+  }
+  return ways;
+}
+
+/// 路网修复：Overpass 查询只取可行驶道路等级（步行类、自行车道、
+/// 场地内道路全部排除），范围由 1000 米收为 600 米，服务端超时
+/// 由 20 秒收为 12 秒——查询越轻，繁忙镜像越可能在客户端 15 秒
+/// 兜底前返回。等值多子句写法，不用正则，避免个别镜像对方言
+/// 正则支持不一致导致整站 400。
+const drivableHighwayClasses = [
+  'motorway',
+  'motorway_link',
+  'trunk',
+  'trunk_link',
+  'primary',
+  'primary_link',
+  'secondary',
+  'secondary_link',
+  'tertiary',
+  'tertiary_link',
+  'unclassified',
+  'residential',
+  'living_street',
+  'road',
+];
+
+String buildOverpassQuery(double lat, double lon) {
+  final around = 'around:600,${lat.toString()},${lon.toString()}';
+  final clauses = drivableHighwayClasses
+      .map((c) => 'way["highway"="$c"]($around);')
+      .join();
+  return '[out:json][timeout:12];($clauses);out geom;';
+}
+
+/// 路网修复：失败原因人话映射（纯函数，可单测）。
+String roadErrorText(String kind) => switch (kind) {
+      'offline' => '无网络',
+      'timeout' => '请求超时',
+      'busy' => '服务器繁忙',
+      'empty' => '周边无道路数据',
+      _ => '拉取失败',
+    };
+
+/// 路网修复：左上角路网状态文案（纯函数，可单测）。缓存与新失败
+/// 同时存在时两者都写明（缓存路网·服务器繁忙），不再用缓存盖住
+/// 失败原因；'empty' 不追加（服务端已答复、只是周边无路，缓存
+/// 本身仍有效，追加反而误导）。
+String roadStatusLabel({
+  required bool loaded,
+  required bool fromCache,
+  required bool neighborCache,
+  required bool hasRoads,
+  String? errorKind,
+}) {
+  if (loaded) return '路网：OpenStreetMap';
+  if (fromCache && hasRoads) {
+    final base = neighborCache ? '附近缓存路网' : '缓存路网';
+    final suffix = (errorKind != null && errorKind != 'empty')
+        ? '·${roadErrorText(errorKind)}'
+        : '';
+    return '$base$suffix（点按重拉）';
+  }
+  if (errorKind != null) return '路网：${roadErrorText(errorKind)}（点按重拉）';
+  return '路网加载中…（点按重拉）';
+}
+
+/// 路网修复：OSM 主站 /map 兜底的 bbox（总宽 0.01 度，约 1 公里，
+/// 与缓存分格对齐），顺序为 minlon,minlat,maxlon,maxlat。
+String osmApiBbox(double lat, double lon) {
+  final minLat = (lat - 0.005).toStringAsFixed(6);
+  final maxLat = (lat + 0.005).toStringAsFixed(6);
+  final minLon = (lon - 0.005).toStringAsFixed(6);
+  final maxLon = (lon + 0.005).toStringAsFixed(6);
+  return '$minLon,$minLat,$maxLon,$maxLat';
+}
+
+/// 路网修复：OSM 主站 /map XML 解析（纯函数，可单测，零第三方包）。
+/// 只取带 highway 标签的 way，用 <nd> 串起节点坐标；节点解析不到
+/// 的 way、少于 2 点的 way 丢弃；按等级倒序（步行类先画、高速后
+/// 画压在上层），上限 250 条。
+List<RoadWay> parseOsmApiMap(String xml) {
+  final nodes = <String, (double, double)>{};
+  final nodeTag = RegExp(r'<node\s+([^>]*?)>');
+  final attr = RegExp(r'(\w+)="([^"]*)"');
+  for (final m in nodeTag.allMatches(xml)) {
+    final attrs = <String, String>{};
+    for (final a in attr.allMatches(m.group(1)!)) {
+      attrs[a.group(1)!] = a.group(2)!;
+    }
+    final id = attrs['id'];
+    final lat = double.tryParse(attrs['lat'] ?? '');
+    final lon = double.tryParse(attrs['lon'] ?? '');
+    if (id != null && lat != null && lon != null) nodes[id] = (lat, lon);
+  }
+  final ways = <RoadWay>[];
+  final wayBlock = RegExp(r'<way\s[^>]*>(.*?)</way>', dotAll: true);
+  final ndRef = RegExp(r'<nd\s+ref="(\d+)"');
+  final tagTag = RegExp(r'<tag\s+([^>]*?)/>');
+  for (final m in wayBlock.allMatches(xml)) {
+    final block = m.group(1)!;
+    String? highway;
+    for (final t in tagTag.allMatches(block)) {
+      final attrs = <String, String>{};
+      for (final a in attr.allMatches(t.group(1)!)) {
+        attrs[a.group(1)!] = a.group(2)!;
+      }
+      if (attrs['k'] == 'highway') highway = attrs['v'];
+    }
+    if (highway == null) continue;
+    final pts = <(double, double)>[];
+    for (final n in ndRef.allMatches(block)) {
+      final p = nodes[n.group(1)!];
+      if (p != null) pts.add(p);
+    }
+    if (pts.length >= 2) ways.add(RoadWay(pts, highway: highway));
+  }
+  ways.sort((a, b) =>
+      roadTierForHighway(b.highway).compareTo(roadTierForHighway(a.highway)));
+  return ways.length > 250 ? ways.sublist(0, 250) : ways;
+}
+
+/// 路网修复：缓存 v2（{v, savedAt, ways}，savedAt 为毫秒 epoch），
+/// 旧格式（纯点列 List）由 parseCachedRoads 兼容读取，不丢旧缓存。
+class CachedRoads {
+  final List<RoadWay> ways;
+  final int? savedAtMs;
+  const CachedRoads(this.ways, this.savedAtMs);
+}
+
+Map<String, Object> roadCacheFileJson(List<RoadWay> ways, int savedAtMs) => {
+      'v': 2,
+      'savedAt': savedAtMs,
+      'ways': roadWaysToCacheJson(ways),
+    };
+
+CachedRoads parseCachedRoads(dynamic decoded) {
+  if (decoded is Map && decoded['ways'] != null) {
+    final saved = decoded['savedAt'];
+    return CachedRoads(
+      roadWaysFromCacheJson(decoded['ways']),
+      saved is int ? saved : null,
+    );
+  }
+  return CachedRoads(roadWaysFromCacheJson(decoded), null);
+}
+
+/// 路网修复：缓存分格键（0.01 度一格，约 1 公里），与旧文件命名一致。
+String roadCacheCellKey(double lat, double lon) =>
+    'road_${lat.toStringAsFixed(2)}_${lon.toStringAsFixed(2)}.json';
+
+/// 路网修复：邻格偏移（环序：先 1 格环 8 格，再 2 格环 16 格，
+/// 环内按曼哈顿距离），供无本格缓存时找最近的邻格缓存。
+List<(int, int)> neighborCellOffsets() {
+  final offsets = <(int, int)>[];
+  for (var dLat = -2; dLat <= 2; dLat++) {
+    for (var dLon = -2; dLon <= 2; dLon++) {
+      if (dLat == 0 && dLon == 0) continue;
+      offsets.add((dLat, dLon));
+    }
+  }
+  int ring((int, int) o) => o.$1.abs() > o.$2.abs() ? o.$1.abs() : o.$2.abs();
+  offsets.sort((a, b) {
+    final ra = ring(a), rb = ring(b);
+    if (ra != rb) return ra.compareTo(rb);
+    final ma = a.$1.abs() + a.$2.abs(), mb = b.$1.abs() + b.$2.abs();
+    if (ma != mb) return ma.compareTo(mb);
+    if (a.$1 != b.$1) return a.$1.compareTo(b.$1);
+    return a.$2.compareTo(b.$2);
+  });
+  return offsets;
 }
 
 /// v1.0.7：Overpass 拉取结果（含失败分档，绝不编造道路）。
@@ -58,10 +415,16 @@ class RoadFetchResult {
   const RoadFetchResult(this.ways, this.errorKind);
 }
 
-/// v1.0.7：按中心点周边 1000 米向 Overpass 拉取 highway 道路线。
-/// 改动：POST + User-Agent，按顺序轮换多个公开镜像，一个失败立即试
-/// 下一个（实测 overpass-api.de 不带 UA 406、带 UA 502 已满，单站
-/// 不可靠；国内直连更难）。失败原因分档返回，调用方如实显示。
+/// v1.0.7：按中心点周边向 Overpass 拉取 highway 道路线。
+/// v1.2.0：4 个公开镜像并行竞速、先到者胜（成功有数据或成功空
+/// 结果都算胜出，与旧串行“空结果即停”语义一致），其余站的
+/// HttpClient 强制关闭；全部失败时按 pickRoadErrorKind 聚合原因。
+/// 单站：连接 5 秒、响应头 8 秒、响应体 8 秒，整站 15 秒兜底。
+/// 失败原因分档不变（offline/timeout/busy/empty/other），调用方如实显示。
+/// 路网修复：查询收敛见 buildOverpassQuery；Overpass 3 秒未胜出
+/// 时 hedged 起 OSM 主站 /map 兜底（同为 OpenStreetMap 数据，免
+/// key；沙箱实测 1 公里 bbox 约 2.6 秒），镜像全部快速失败时不
+/// 等 3 秒、直接起兜底；兜底失败也计入原因聚合。
 Future<RoadFetchResult> fetchRoadWaysAround(double lat, double lon) async {
   const mirrors = [
     'https://overpass-api.de/api/interpreter',
@@ -69,91 +432,196 @@ Future<RoadFetchResult> fetchRoadWaysAround(double lat, double lon) async {
     'https://overpass.nchc.org.tw/api/interpreter',
     'https://overpass.private.coffee/api/interpreter',
   ];
-  const queryTemplate = '[out:json][timeout:20];(way["highway"](around:1000,__LAT__,__LON__););out geom;';
-  final query = queryTemplate
-      .replaceAll('__LAT__', lat.toString())
-      .replaceAll('__LON__', lon.toString());
-  var lastKind = 'other';
-  for (final base in mirrors) {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-    try {
-      final req = await client.postUrl(Uri.parse(base));
-      req.headers.set('User-Agent', 'DriveTrack/1.0.7');
-      req.headers.contentType = ContentType('application', 'x-www-form-urlencoded');
-      req.write('data=${Uri.encodeQueryComponent(query)}');
-      final resp = await req.close().timeout(const Duration(seconds: 15));
-      final body = await resp.transform(utf8.decoder).join();
-      if (resp.statusCode == 429 ||
-          resp.statusCode == 502 ||
-          resp.statusCode == 503 ||
-          resp.statusCode == 504) {
-        lastKind = 'busy';
-        continue;
-      }
-      if (resp.statusCode != 200) {
-        lastKind = 'other';
-        continue;
-      }
-      final data = jsonDecode(body) as Map<String, dynamic>;
-      final elements = (data['elements'] as List?) ?? const [];
-      final ways = <RoadWay>[];
-      for (final e in elements) {
-        if (e is! Map || e['type'] != 'way') continue;
-        final geom = (e['geometry'] as List?) ?? const [];
-        final pts = <(double, double)>[];
-        for (final g in geom) {
-          if (g is Map && g['lat'] is num && g['lon'] is num) {
-            pts.add(((g['lat'] as num).toDouble(), (g['lon'] as num).toDouble()));
-          }
-        }
-        if (pts.length >= 2) ways.add(RoadWay(pts));
-        if (ways.length >= 200) break;
-      }
-      return RoadFetchResult(ways, ways.isEmpty ? 'empty' : 'none');
-    } on SocketException {
-      lastKind = 'offline';
-    } on TimeoutException {
-      lastKind = 'timeout';
-    } catch (_) {
-      lastKind = 'other';
-    } finally {
-      client.close();
+  final query = buildOverpassQuery(lat, lon);
+  final completer = Completer<RoadFetchResult>();
+  final clients = <HttpClient>[];
+  final failures = <String>[];
+  var total = mirrors.length;
+  var done = 0;
+  var fallbackStarted = false;
+  // 兜底定时器必须可取消：否则 widget 释放时仍有 pending Timer，
+  // widget 测试会因此失败（真实 App 里则是无用的空转回调）。
+  Timer? fallbackTimer;
+  void cancelFallbackTimer() {
+    fallbackTimer?.cancel();
+    fallbackTimer = null;
+  }
+
+  void closeOthers(HttpClient winner) {
+    for (final c in clients) {
+      if (!identical(c, winner)) c.close(force: true);
     }
   }
-  return RoadFetchResult(const [], lastKind);
+
+  // Dart 局部函数不能前向引用：先声明 late 变量，handleResult 里
+  // 调用它，之后再赋值实现（赋值在 handleResult 声明之后，故闭包
+  // 内引用 handleResult 合法）。
+  late void Function() startFallback;
+
+  void handleResult(HttpClient client, RoadFetchResult result) {
+    if (completer.isCompleted) return;
+    if (result.ways.isNotEmpty || result.errorKind == 'empty') {
+      completer.complete(result);
+      cancelFallbackTimer();
+      closeOthers(client);
+      return;
+    }
+    failures.add(result.errorKind);
+    done++;
+    if (done >= total) {
+      if (!fallbackStarted) {
+        // 镜像全部快速失败：不等 3 秒，直接起兜底。
+        startFallback();
+      } else {
+        completer.complete(
+            RoadFetchResult(const [], pickRoadErrorKind(failures)));
+        cancelFallbackTimer();
+        closeOthers(client);
+      }
+    }
+  }
+
+  startFallback = () {
+    cancelFallbackTimer();
+    if (fallbackStarted || completer.isCompleted) return;
+    fallbackStarted = true;
+    total++;
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    clients.add(client);
+    _fetchOsmApiRoads(client, lat, lon)
+        .timeout(const Duration(seconds: 20),
+            onTimeout: () => const RoadFetchResult([], 'timeout'))
+        .then((result) => handleResult(client, result));
+  };
+
+  for (final base in mirrors) {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    clients.add(client);
+    // 整站 15 秒兜底：任一阶段卡住都不拖过该上限。
+    _fetchOneMirror(client, base, query)
+        .timeout(const Duration(seconds: 15),
+            onTimeout: () => const RoadFetchResult([], 'timeout'))
+        .then((result) => handleResult(client, result));
+  }
+  // Hedged 兜底：Overpass 3 秒未胜出才发出，避免正常情况多一次请求。
+  fallbackTimer = Timer(const Duration(seconds: 3), startFallback);
+  return completer.future;
+}
+
+/// v1.2.0：单站拉取（供并行竞速调用；失败原因分档，不抛异常）。
+Future<RoadFetchResult> _fetchOneMirror(
+    HttpClient client, String base, String query) async {
+  try {
+    final req = await client.postUrl(Uri.parse(base));
+    req.headers.set('User-Agent', 'DriveTrack');
+    req.headers.contentType = ContentType('application', 'x-www-form-urlencoded');
+    req.write('data=${Uri.encodeQueryComponent(query)}');
+    final resp = await req.close().timeout(const Duration(seconds: 8));
+    final body =
+        await resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 8));
+    if (resp.statusCode == 429 ||
+        resp.statusCode == 502 ||
+        resp.statusCode == 503 ||
+        resp.statusCode == 504) {
+      return const RoadFetchResult([], 'busy');
+    }
+    if (resp.statusCode != 200) {
+      return const RoadFetchResult([], 'other');
+    }
+    final data = jsonDecode(body) as Map<String, dynamic>;
+    final ways = parseOverpassWays(data);
+    return RoadFetchResult(ways, ways.isEmpty ? 'empty' : 'none');
+  } on SocketException {
+    return const RoadFetchResult([], 'offline');
+  } on TimeoutException {
+    return const RoadFetchResult([], 'timeout');
+  } catch (_) {
+    return const RoadFetchResult([], 'other');
+  } finally {
+    client.close();
+  }
+}
+
+/// 路网修复：OSM 主站 /map 兜底（bbox 1 公里，只取 highway way，
+/// 失败分档与 Overpass 一致，不抛异常）。仅在 Overpass 慢/死时
+/// 由 hedged 逻辑触发，不做常规数据源。
+Future<RoadFetchResult> _fetchOsmApiRoads(
+    HttpClient client, double lat, double lon) async {
+  try {
+    final uri = Uri.parse(
+        'https://api.openstreetmap.org/api/0.6/map?bbox=${osmApiBbox(lat, lon)}');
+    final req = await client.getUrl(uri);
+    req.headers.set('User-Agent', 'DriveTrack');
+    final resp = await req.close().timeout(const Duration(seconds: 10));
+    final body =
+        await resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 10));
+    if (resp.statusCode == 429 ||
+        resp.statusCode == 509 ||
+        resp.statusCode == 502 ||
+        resp.statusCode == 503 ||
+        resp.statusCode == 504) {
+      return const RoadFetchResult([], 'busy');
+    }
+    if (resp.statusCode != 200) {
+      return const RoadFetchResult([], 'other');
+    }
+    final ways = parseOsmApiMap(body);
+    return RoadFetchResult(ways, ways.isEmpty ? 'empty' : 'none');
+  } on SocketException {
+    return const RoadFetchResult([], 'offline');
+  } on TimeoutException {
+    return const RoadFetchResult([], 'timeout');
+  } catch (_) {
+    return const RoadFetchResult([], 'other');
+  } finally {
+    client.close();
+  }
 }
 
 /// v1.0.7：路网缓存文件（按经纬度取 2 位小数分格，约 1km 一格）。
 Future<String?> _roadCachePath(double lat, double lon) async {
   try {
     final dir = await Native.getCacheDir();
-    return '$dir/road_${lat.toStringAsFixed(2)}_${lon.toStringAsFixed(2)}.json';
+    return '$dir/${roadCacheCellKey(lat, lon)}';
   } catch (_) {
     return null;
   }
 }
 
-Future<List<RoadWay>> _loadCachedRoads(double lat, double lon) async {
+Future<CachedRoads?> _readRoadCacheFile(String path) async {
   try {
-    final path = await _roadCachePath(lat, lon);
-    if (path == null) return const [];
     final f = File(path);
-    if (!await f.exists()) return const [];
-    final data = jsonDecode(await f.readAsString()) as List;
-    final ways = <RoadWay>[];
-    for (final w in data) {
-      if (w is! List) continue;
-      final pts = <(double, double)>[];
-      for (final p in w) {
-        if (p is List && p.length >= 2 && p[0] is num && p[1] is num) {
-          pts.add(((p[0] as num).toDouble(), (p[1] as num).toDouble()));
-        }
-      }
-      if (pts.length >= 2) ways.add(RoadWay(pts));
-    }
-    return ways;
+    if (!await f.exists()) return null;
+    final cached = parseCachedRoads(jsonDecode(await f.readAsString()));
+    return cached.ways.isEmpty ? null : cached;
   } catch (_) {
-    return const [];
+    return null;
+  }
+}
+
+/// 路网修复：先本格、再邻格（环序）找最近的非空缓存；都没有返回空。
+Future<({List<RoadWay> ways, int? savedAtMs, bool neighbor})>
+    _loadBestCachedRoads(double lat, double lon) async {
+  const empty = (ways: <RoadWay>[], savedAtMs: null, neighbor: false);
+  try {
+    final dir = await Native.getCacheDir();
+    final baseLat = double.parse(lat.toStringAsFixed(2));
+    final baseLon = double.parse(lon.toStringAsFixed(2));
+    String keyFor(int dLat, int dLon) => roadCacheCellKey(
+        baseLat + dLat * 0.01, baseLon + dLon * 0.01);
+    final self = await _readRoadCacheFile('$dir/${keyFor(0, 0)}');
+    if (self != null) {
+      return (ways: self.ways, savedAtMs: self.savedAtMs, neighbor: false);
+    }
+    for (final (dLat, dLon) in neighborCellOffsets()) {
+      final hit = await _readRoadCacheFile('$dir/${keyFor(dLat, dLon)}');
+      if (hit != null) {
+        return (ways: hit.ways, savedAtMs: hit.savedAtMs, neighbor: true);
+      }
+    }
+    return empty;
+  } catch (_) {
+    return empty;
   }
 }
 
@@ -161,8 +629,8 @@ Future<void> _saveCachedRoads(double lat, double lon, List<RoadWay> ways) async 
   try {
     final path = await _roadCachePath(lat, lon);
     if (path == null || ways.isEmpty) return;
-    final data = ways.map((w) => w.points.map((p) => [p.$1, p.$2]).toList()).toList();
-    await File(path).writeAsString(jsonEncode(data));
+    await File(path).writeAsString(jsonEncode(roadCacheFileJson(
+        ways, DateTime.now().millisecondsSinceEpoch)));
   } catch (_) {}
 }
 
@@ -210,6 +678,7 @@ class _Recording3dMapState extends State<Recording3dMap> {
   List<RoadWay> _roads = const [];
   bool _roadLoaded = false;
   bool _roadFromCache = false;
+  bool _roadNeighborCache = false;
   String? _roadError;
   bool _fetching = false;
   double? _fetchLat;
@@ -252,13 +721,15 @@ class _Recording3dMapState extends State<Recording3dMap> {
     _lastAttempt = DateTime.now();
     final lat = widget.centerLat;
     final lon = widget.centerLon;
-    // 先读缓存：网络不行时也能先显示上次成功的路网。
-    _loadCachedRoads(lat, lon).then((cached) {
+    // 先读缓存（本格无缓存时找邻格）：网络不行时也能先显示上次
+    // 成功的路网；缓存与新失败并存时文案两者都写明。
+    _loadBestCachedRoads(lat, lon).then((cached) {
       if (!mounted) return;
-      if (cached.isNotEmpty && !_roadLoaded) {
+      if (cached.ways.isNotEmpty && !_roadLoaded) {
         setState(() {
-          _roads = cached;
+          _roads = cached.ways;
           _roadFromCache = true;
+          _roadNeighborCache = cached.neighbor;
         });
       }
     });
@@ -272,19 +743,18 @@ class _Recording3dMapState extends State<Recording3dMap> {
           _roads = result.ways;
           _roadLoaded = true;
           _roadFromCache = false;
+          _roadNeighborCache = false;
           _roadError = null;
           _saveCachedRoads(lat, lon, result.ways);
         } else {
           // 失败不记 _fetchLat（下次 30 秒后可重试）；成功但无道路时
-          // 同样不记位置，避免把“无数据”误当成已拉取。
-          _roadError = switch (result.errorKind) {
-            'offline' => '无网络',
-            'timeout' => '请求超时',
-            'busy' => '服务器繁忙',
-            'empty' => '周边无道路数据',
-            _ => '拉取失败',
-          };
-          if (!_roadLoaded) _roadFromCache = _roads.isNotEmpty;
+          // 同样不记位置，避免把“无数据”误当成已拉取。失败原因存
+          // 原始分档，文案由 roadStatusLabel 统一映射，不被缓存盖住。
+          _roadError = result.errorKind;
+          if (!_roadLoaded) {
+            _roadFromCache = _roads.isNotEmpty;
+            if (_roads.isEmpty) _roadNeighborCache = false;
+          }
         }
       });
     });
@@ -293,15 +763,19 @@ class _Recording3dMapState extends State<Recording3dMap> {
   void _manualRefresh() {
     _fetchLat = null;
     _lastAttempt = null;
+    // 手动重拉先清失败原因，重拉过程中文案显示“加载中”，而不是
+    // 一直挂着旧失败；已显示的道路（缓存或旧数据）保留不清空。
+    setState(() => _roadError = null);
     _maybeFetch(force: true);
   }
 
-  String get _roadLabel {
-    if (_roadLoaded) return '路网：OpenStreetMap';
-    if (_roadFromCache && _roads.isNotEmpty) return '缓存路网（点按重拉）';
-    if (_roadError != null) return '路网：$_roadError（点按重拉）';
-    return '路网加载中…（点按重拉）';
-  }
+  String get _roadLabel => roadStatusLabel(
+        loaded: _roadLoaded,
+        fromCache: _roadFromCache,
+        neighborCache: _roadNeighborCache,
+        hasRoads: _roads.isNotEmpty,
+        errorKind: _roadError,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -325,7 +799,8 @@ class _Recording3dMapState extends State<Recording3dMap> {
         ),
       ),
       // 左上角：路网状态小字，点按可手动重拉；失败原因分档显示，
-      // 不再只写“路网未加载”。缓存路网时注明“缓存路网”。
+      // 不再只写“路网未加载”。缓存路网时注明“缓存路网”，邻格
+      // 缓存注明“附近缓存路网”，缓存与新失败并存时两者都写明。
       Positioned(
         top: 12,
         left: 12,
@@ -565,33 +1040,41 @@ class _Recording3dPainter extends CustomPainter {
       }
     }
 
-    // v1.0.4 路网：暗灰细线 + 微弱发光（两遍：宽淡光晕 + 细主线），
-    // 与亮红轨迹带区分（道路暗、轨迹亮）；无数据时本段自然不画。
+    // v1.2.0 路网：按 highway 等级分级加粗着色（高速/主干更粗
+    // 更亮，次干/支路居中，一般/步行类细暗），逐段按透视因子
+    // 缩放线宽与亮度但不低于下限，远处压缩处仍可见；道路仍暗
+    // 于亮红轨迹带（轨迹在后绘制，压在道路之上）；无数据时
+    // 本段自然不画。出视野同侧的段跳过。
     for (final way in roadWays) {
-      final proj = <Offset>[];
+      final style = roadStyleForHighway(way.highway);
+      final proj = <(Offset, double)>[];
       for (final (lat, lon) in way.points) {
         final fr = _toForwardRight(lat, lon);
-        proj.add(_project(size, fr.$1, fr.$2, pxPerM));
+        proj.add((_project(size, fr.$1, fr.$2, pxPerM), _factorFor(fr.$1)));
       }
-      for (var pass = 0; pass < 2; pass++) {
-        final paint = Paint()
-          ..color = pass == 0
-              ? const Color(0xFF888888).withValues(alpha: 0.20)
-              : const Color(0xFFB0B0B0).withValues(alpha: 0.85)
-          ..strokeWidth = pass == 0 ? 7 : 2.5
-          ..strokeCap = StrokeCap.round
-          ..style = PaintingStyle.stroke;
-        final path = Path();
-        var first = true;
-        for (final p in proj) {
-          if (first) {
-            path.moveTo(p.dx, p.dy);
-            first = false;
-          } else {
-            path.lineTo(p.dx, p.dy);
-          }
-        }
-        canvas.drawPath(path, paint);
+      for (var i = 1; i < proj.length; i++) {
+        final a = proj[i - 1], b = proj[i];
+        if (_sameSideOutside(a.$1, b.$1, size)) continue;
+        final factor = (a.$2 + b.$2) / 2;
+        final glowW = roadWidthFor(style.glowWidth, style.minGlowWidth, factor);
+        final mainW = roadWidthFor(style.mainWidth, style.minMainWidth, factor);
+        final mainAlpha = roadAlphaFor(style.mainAlpha, style.minMainAlpha, factor);
+        canvas.drawLine(
+            a.$1,
+            b.$1,
+            Paint()
+              ..color = style.mainColor.withValues(alpha: style.glowAlpha)
+              ..strokeWidth = glowW
+              ..strokeCap = StrokeCap.round
+              ..style = PaintingStyle.stroke);
+        canvas.drawLine(
+            a.$1,
+            b.$1,
+            Paint()
+              ..color = style.mainColor.withValues(alpha: mainAlpha)
+              ..strokeWidth = mainW
+              ..strokeCap = StrokeCap.round
+              ..style = PaintingStyle.stroke);
       }
     }
 
@@ -636,23 +1119,29 @@ class _Recording3dPainter extends CustomPainter {
 
     // 场景中心车标：阴影 + 朝向锥 + 车体（朝向跟随 headingDeg；
     // headingUp 时场景已旋转故车标恒朝上，否则按朝向旋转）。
+    // v1.2.0：车标盒不再固定 56px——3D 时 52px 且纵向 0.90 压扁
+    // （贴合透视地面、前大后小方向与场景一致），2D 时 48px 方形；
+    // 盒子缩小 + 朝向锥减淡（0.25 -> 0.18），轨迹先画、车标后画
+    // 但不遮挡轨迹。画笔调用约定不变（headingDeg=0，外层旋转）。
     final veh = is3d ? Offset(size.width / 2, size.height * 0.72) : Offset(size.width / 2, size.height / 2);
+    final markerSize = is3d ? 52.0 : 48.0;
     final shadow = Paint()..color = Colors.black.withValues(alpha: 0.5);
-    canvas.drawOval(Rect.fromCenter(center: Offset(veh.dx + 3, veh.dy + 12), width: 44, height: 16), shadow);
+    canvas.drawOval(Rect.fromCenter(center: Offset(veh.dx + 3, veh.dy + 12), width: 40, height: 14), shadow);
     canvas.save();
     canvas.translate(veh.dx, veh.dy);
     canvas.rotate(headingUp ? 0 : headingDeg * math.pi / 180);
+    if (is3d) canvas.scale(1.04, 0.90);
     final cone = Path()
-      ..moveTo(-13, 6)
-      ..lineTo(0, -52)
-      ..lineTo(13, 6)
+      ..moveTo(-12, 6)
+      ..lineTo(0, -50)
+      ..lineTo(12, 6)
       ..close();
-    canvas.drawPath(cone, Paint()..color = accentColor.withValues(alpha: 0.25));
+    canvas.drawPath(cone, Paint()..color = accentColor.withValues(alpha: 0.18));
     // v1.0.2：新 3D 车标（画笔版，外层已旋转故画笔朝向为 0）。
     if (vehicleMarkerPainter != null) {
       canvas.save();
-      canvas.translate(-28, -28);
-      vehicleMarkerPainter!.paint(canvas, const Size(56, 56));
+      canvas.translate(-markerSize / 2, -markerSize / 2);
+      vehicleMarkerPainter!.paint(canvas, Size(markerSize, markerSize));
       canvas.restore();
     } else {
       final body = Path()

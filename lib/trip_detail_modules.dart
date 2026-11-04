@@ -766,26 +766,51 @@ class TripFuelCard extends StatelessWidget {
   final Trip trip;
   final double? consumptionLPer100Km;
   final double? fuelPricePerLiter;
+  // v1.2.0：每车油耗与实测（均可空）。有效油耗 = 每车油耗（有值
+  // 时）否则全局值；实测有值时与估算并列显示并标注“实测（满油区间）”，
+  // 无实测时不显示实测行。油价一律用全局油价（车辆档案无油价字段）。
+  final double? vehicleConsumptionLPer100Km;
+  final double? measuredConsumptionLPer100Km;
+  final String? vehicleName;
   const TripFuelCard({
     super.key,
     required this.trip,
     this.consumptionLPer100Km,
     this.fuelPricePerLiter,
+    this.vehicleConsumptionLPer100Km,
+    this.measuredConsumptionLPer100Km,
+    this.vehicleName,
   });
 
   @override
   Widget build(BuildContext context) {
     if (trip.mode == TripMode.bike) return const SizedBox.shrink();
     final distanceKm = trip.distanceM / 1000;
+    final effectiveConsumption =
+        (vehicleConsumptionLPer100Km != null && vehicleConsumptionLPer100Km! > 0)
+            ? vehicleConsumptionLPer100Km
+            : consumptionLPer100Km;
     final est = estimateFuel(
       distanceKm: distanceKm,
-      consumptionLPer100Km: consumptionLPer100Km,
+      consumptionLPer100Km: effectiveConsumption,
       fuelPricePerLiter: fuelPricePerLiter,
     );
+    // 实测油量 = 里程 × 实测油耗 / 100；实测油钱按全局油价折算。
+    final measuredLiters = (measuredConsumptionLPer100Km != null && measuredConsumptionLPer100Km! > 0)
+        ? distanceKm * measuredConsumptionLPer100Km! / 100
+        : null;
+    final measuredCost = (measuredLiters != null && fuelPricePerLiter != null && fuelPricePerLiter! > 0)
+        ? measuredLiters * fuelPricePerLiter!
+        : null;
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _cardTitle('油耗费用'),
         const SizedBox(height: 8),
+        if (vehicleName != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('车辆：$vehicleName', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          ),
         if (est == null) ...[
           const Text('未填写油耗/油价',
               style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
@@ -797,11 +822,27 @@ class TripFuelCard extends StatelessWidget {
             _stat('油耗量', '${est.liters.toStringAsFixed(2)} L'),
             _stat('油钱', '${est.cost.toStringAsFixed(2)} 元'),
             _stat('里程', '${distanceKm.toStringAsFixed(2)} km'),
-            _stat('百公里油耗', '${consumptionLPer100Km!.toStringAsFixed(2)} L/100km'),
+            _stat('百公里油耗', '${effectiveConsumption!.toStringAsFixed(2)} L/100km'),
             _stat('油价', '${fuelPricePerLiter!.toStringAsFixed(2)} 元/L'),
           ]),
           const SizedBox(height: 6),
-          const Text('按填写油耗估算，非加油实测。公式：里程 × 百公里油耗 / 100 × 油价。',
+          Text(
+            vehicleConsumptionLPer100Km != null && vehicleConsumptionLPer100Km! > 0
+                ? '按每车油耗估算，非加油实测。公式：里程 × 百公里油耗 / 100 × 油价。'
+                : '按填写油耗估算，非加油实测。公式：里程 × 百公里油耗 / 100 × 油价。',
+              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        ],
+        if (measuredLiters != null) ...[
+          const SizedBox(height: 10),
+          const Text('实测（满油区间）',
+              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Wrap(spacing: 16, runSpacing: 8, children: [
+            _stat('实测油量', '${measuredLiters.toStringAsFixed(2)} L'),
+            if (measuredCost != null) _stat('实测油钱', '${measuredCost.toStringAsFixed(2)} 元'),
+            _stat('实测油耗', '${measuredConsumptionLPer100Km!.toStringAsFixed(2)} L/100km'),
+          ]),
+          const Text('实测油钱按全局油价折算；实测油耗仅由满油→满油区间算出，无有效区间时不显示本行。',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
         ],
       ]),
@@ -829,6 +870,9 @@ class TripPhotoAlbumCard extends StatelessWidget {
   final VoidCallback? onOpenAlbum;
   final ValueChanged<PhotoPoint>? onPhotoTap;
   final VoidCallback? onAttachToLatestUnphotographed;
+  // v1.2.0：上次落盘被 50 条上限截断时为 true，卡片须明示，
+  // 不得当作全部保存成功。
+  final bool photoPointsTruncated;
 
   const TripPhotoAlbumCard({
     super.key,
@@ -836,6 +880,7 @@ class TripPhotoAlbumCard extends StatelessWidget {
     this.onOpenAlbum,
     this.onPhotoTap,
     this.onAttachToLatestUnphotographed,
+    this.photoPointsTruncated = false,
   });
 
   bool get _hasUnphotographed =>
@@ -850,15 +895,21 @@ class TripPhotoAlbumCard extends StatelessWidget {
         Row(children: [
           Expanded(
               child: _cardTitle(
-                  '行程相册（${photos.length} 个照片点 · ${withPhoto.length} 张照片）')),
+                  '事件标记（${photos.length} 个标记 · ${withPhoto.length} 张照片）')),
           if (onOpenAlbum != null)
             TextButton(
-                onPressed: onOpenAlbum, child: const Text('打开相册')),
+                onPressed: onOpenAlbum, child: const Text('打开时间线')),
         ]),
+        if (photoPointsTruncated)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 4),
+            child: Text('提示：一趟最多保留前 50 条标记，超出部分未保存。',
+                style: TextStyle(color: Colors.orange, fontSize: 12)),
+          ),
         const SizedBox(height: 8),
         if (photos.isEmpty)
-          const Text('暂无照片点：记录中点“拍照打点”可先存坐标与时间，'
-              '结束后在这里给打点附照片。',
+          const Text('暂无标记：记录中点“标记事件”可先存坐标与时间，'
+              '结束后在这里给标记附照片、写标题与备注。',
               style: TextStyle(color: Colors.white70, fontSize: 13))
         else ...[
           SizedBox(
@@ -874,7 +925,7 @@ class TripPhotoAlbumCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Text('示意地图：白线为轨迹，红点为照片点（序号与相册列表一致）',
+          const Text('示意地图：白线为轨迹，彩点为事件（颜色与类型一致，序号与时间线一致）',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
           const SizedBox(height: 8),
           SizedBox(
@@ -914,7 +965,7 @@ class TripPhotoAlbumCard extends StatelessWidget {
           const SizedBox(height: 8),
           OutlinedButton.icon(
             icon: const Icon(Icons.photo_camera, size: 18),
-            label: const Text('给未附照片的打点附照片'),
+            label: const Text('给未附照片的标记附照片'),
             onPressed: onAttachToLatestUnphotographed,
           ),
         ],

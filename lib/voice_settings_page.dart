@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 import 'glass_button.dart';
 import 'import_style.dart';
 import 'native.dart';
@@ -10,24 +11,33 @@ import 'voice_service.dart';
 ///
 /// v1.0.2 “没有语音引擎”根因（查原生 MainActivity.kt 的 whenTtsReady
 /// 与 voice_service.dart 的 ensureAvailable 后确认，不是文案问题）：
-/// - 原生 TextToSpeech 初始化是异步的：先试 Locale.CHINESE，
-///   返回 LANG_AVAILABLE / LANG_COUNTRY_AVAILABLE 才算中文可用；
-///   中文不可用时回退系统默认语言，默认语言也不可用时才判
+/// - 原生 TextToSpeech 初始化是异步的：v1.2.1 起按 zh_CN → zh →
+///   zh_TW → 系统默认顺序试语言，返回 LANG_AVAILABLE /
+///   LANG_COUNTRY_AVAILABLE 才算该语言可用；全部不可用时才判
 ///   ttsLanguage='none'、ttsReady=false，Dart 侧收到
-///   available=false + error='tts_unavailable'。
+///   available=false + error='tts_unavailable'。最终语言代码原样
+///   回给 Dart（如 zh_CN），中文可用当且仅当代码以 zh 开头。
+/// - v1.2.1 另修三处：① 播报静音只看媒体音量，振动/静音模式照常
+///   播报，旧的“仅在非静音模式播报”文案已删；② 首选引擎持久化进
+///   voice_settings.json，重启恢复，卸载后回退系统默认并明示；
+///   ③ 试听等原生 done/error 回调（约 8 秒超时），不再入队即报成功。
+///   本页新增“诊断”区一屏给全上述状态，系统 TTS 设置与重新探测
+///   按钮保留在引擎卡里。
 /// - 所以“无引擎”在页面上其实是三种不同情况，旧页只写一句话分不清：
 ///   ① 系统根本没装 TTS 引擎（无 Google TTS 的国产机 / 精简系统常见，
 ///     TextToSpeech 构造失败或 init 回调非 SUCCESS）；
-///   ② 装了引擎、但中文语音数据没下载（setLanguage(CHINESE) 返回
-///     LANG_MISSING_DATA / LANG_NOT_SUPPORTED），此时若默认语言可用
-///     会回退默认语言播报、只是不是中文；
+///   ② 装了引擎、但中文语音数据没下载（按 zh_CN → zh → zh_TW
+///     顺序 setLanguage 均返回 LANG_MISSING_DATA /
+///     LANG_NOT_SUPPORTED），此时若默认语言可用会回退默认语言播报、
+///     只是不是中文；
 ///   ③ 引擎列表非空、但所选引擎的中文与默认语言都不可用。
 /// - 旧页的另一个缺口：打开时只调 loadEngines() 查引擎列表，
 ///   不调 ensureAvailable() 探测可用性与语言，ttsAvailable /
 ///   ttsLanguage 在点“试听”前一直是 null，页面只能写“状态待探测”。
 ///   本版打开时即 loadEngines + ensureAvailable，状态、当前引擎、
 ///   中文数据状态三行一次给全；“试听”仍走 speakTest，成功/失败
-///   都把原因留在按钮下方，设备静音时仍发出并提示“可能听不到”。
+///   都把原因留在按钮下方，v1.2.1 起试听等原生 done/error 回调才算
+///   结果，媒体音量为 0 时仍跑试听但成功结果里明说听不到。
 /// - 跳系统设置：新增原生通道 openTtsSettings，走
 ///   Settings.ACTION_TEXT_TO_SPEECH_SETTINGS（系统“文字转语音输出”页，
 ///   可选首选引擎、下载中文语音数据）；刻意不用
@@ -47,6 +57,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   VoiceSettings _s = VoiceSettings.defaults;
   bool _loaded = false;
   String? _testResult;
+  bool _testOk = false;
   String? _customTestResult;
   bool _testing = false;
   bool _customTesting = false;
@@ -59,9 +70,11 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   void initState() {
     super.initState();
     VoiceService.instance.load().then((_) async {
-      // 打开即探测：引擎列表 + 可用性/语言一次给全，不等用户点试听。
+      // 打开即探测：引擎列表 + 可用性/语言 + 音量/响铃模式一次给全，
+      // 不等用户点试听。load() 已先恢复已保存的首选引擎并传给原生。
       await VoiceService.instance.loadEngines();
       await VoiceService.instance.ensureAvailable();
+      await VoiceService.instance.refreshAudioStatus();
       if (!mounted) return;
       final c = VoiceService.instance.customVoice;
       _endpointCtrl.text = c.endpoint;
@@ -89,6 +102,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
     setState(() => _refreshing = true);
     await VoiceService.instance.loadEngines();
     await VoiceService.instance.ensureAvailable();
+    await VoiceService.instance.refreshAudioStatus();
     if (mounted) setState(() => _refreshing = false);
   }
 
@@ -98,14 +112,8 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
     if (mounted) {
       setState(() => _ttsSettingsBusy = false);
       if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '该设备没有系统 TTS 设置页，请手动打开：系统设置 > 系统 > '
-              '语言与输入法 > 文字转语音输出，在里面选首选引擎并下载中文语音数据。',
-            ),
-          ),
-        );
+        showAppNotice(context, '该设备没有系统 TTS 设置页，请手动打开：系统设置 > 系统 > '
+              '语言与输入法 > 文字转语音输出，在里面选首选引擎并下载中文语音数据。', AppNoticeKind.warning);
       }
     }
   }
@@ -118,6 +126,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
     final r = await VoiceService.instance.speakTest();
     if (mounted) setState(() {
       _testing = false;
+      _testOk = r.$1;
       _testResult = r.$2;
     });
   }
@@ -131,8 +140,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
     await VoiceService.instance.updateCustomVoice(next);
     if (mounted) {
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('自定义语音服务配置已保存到本机，未上传。')));
+      showAppNotice(context, '自定义语音服务配置已保存到本机，未上传。', AppNoticeKind.success);
     }
   }
 
@@ -150,21 +158,44 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   }
 
   /// 状态标题：中文数据状态与引擎可用性分开说，不混成一句。
+  /// v1.2.1：最终语言是原样代码（zh_CN/zh/zh_TW/系统默认代码），
+  /// 中文当且仅当代码以 zh 开头；'zh'/'default' 是旧值，不再产生。
   String _ttsStatusTitle() {
     final svc = VoiceService.instance;
     if (svc.ttsAvailable == null || svc.ttsLanguage == null) {
       return '语音引擎状态待探测';
     }
-    switch (svc.ttsLanguage) {
-      case 'zh':
-        return '语音可用 · 中文语音已安装';
-      case 'default':
-        return '语音可用，但中文语音未安装';
-      case 'none':
-        return svc.ttsEngineList.isEmpty ? '无可用语音引擎（系统未装 TTS 引擎）' : '有引擎，但无可用语言';
-      default:
-        return '语音引擎状态待探测';
+    if (svc.ttsLanguage == 'none') {
+      return svc.ttsEngineList.isEmpty ? '无可用语音引擎（系统未装 TTS 引擎）' : '有引擎，但无可用语言';
     }
+    if (svc.ttsChineseAvailable) return '语音可用 · 中文语音已安装';
+    return '语音可用，但中文语音未安装';
+  }
+
+  /// 响铃模式展示：只展示，不参与播报判断（振动/静音照常播报）。
+  String _ringerLabel(String? mode) {
+    switch (mode) {
+      case 'normal':
+        return '正常（normal）';
+      case 'vibrate':
+        return '振动（vibrate）';
+      case 'silent':
+        return '静音（silent）';
+      case 'unknown':
+        return '未知（unknown）';
+      default:
+        return '待探测';
+    }
+  }
+
+  Widget _diagRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: 108, child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12))),
+        Expanded(child: Text(value, style: const TextStyle(color: Colors.white70, fontSize: 12))),
+      ]),
+    );
   }
 
   /// 无引擎时的明确原因：引擎列表空 / 非空、原生错误码分开写。
@@ -204,7 +235,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                     ),
                     const Padding(
                       padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Text(voiceMutedNote, style: TextStyle(color: Colors.white54, fontSize: 12)),
+                      child: Text(voiceMuteRuleNote, style: TextStyle(color: Colors.white54, fontSize: 12)),
                     ),
                     Card(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -217,6 +248,33 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                     _slider('语速', _s.rate, 0.5, 2.0, (v) => _apply(_s.copyWith(rate: v))),
                     _slider('音调', _s.pitch, 0.5, 2.0, (v) => _apply(_s.copyWith(pitch: v))),
                     _slider('音量', _s.volume, 0.0, 1.0, (v) => _apply(_s.copyWith(volume: v))),
+                    // v1.2.1 诊断区：一屏给全总开关、首选引擎、已装引擎个数、
+                    // 最终语言、媒体音量、响铃模式、最近一次错误码、试听结果。
+                    // 数据随“重新探测”刷新；进系统 TTS 设置与重新探测按钮
+                    // 保留在下方引擎卡里，不重复造入口。
+                    ImportCard(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('诊断', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const SizedBox(height: 8),
+                        _diagRow('总开关', _s.enabled ? '开启' : '关闭'),
+                        _diagRow('首选引擎', svc.preferredTtsEngine ?? '系统默认（未保存首选）'),
+                        _diagRow('已装引擎', svc.ttsAvailable == null ? '待探测' : '${svc.ttsEngineList.length} 个'),
+                        _diagRow('最终语言', svc.ttsLanguage ?? '待探测'),
+                        _diagRow('媒体音量', svc.audioMusicVolume == null ? '待探测' : '${svc.audioMusicVolume}（为 0 时不播报）'),
+                        _diagRow('响铃模式', _ringerLabel(svc.audioRingerMode)),
+                        _diagRow('最近一次错误码', svc.lastError == null ? '无' : (svc.lastTtsErrorCode == null ? svc.lastError! : '${svc.lastError}（原生错误码：${svc.lastTtsErrorCode}）')),
+                        _diagRow('试听结果', _testResult ?? '尚未试听'),
+                        if (svc.preferredEngineMissing) ...[
+                          const SizedBox(height: 8),
+                          const Text('该引擎已卸载，已回退系统默认',
+                              style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ],
+                        const SizedBox(height: 8),
+                        const Text('振动 / 静音模式下照常播报，只有媒体音量为 0 时才不播报；'
+                            '诊断数据随下方“重新探测”刷新。',
+                            style: TextStyle(color: Colors.white54, fontSize: 12)),
+                      ]),
+                    ),
                     // 原生 TTS 引擎状态：当前引擎 + 中文数据状态 + 原因 + 下一步。
                     ImportCard(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -225,24 +283,24 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                         const SizedBox(height: 8),
                         Text(_ttsStatusTitle(),
                             style: TextStyle(
-                              color: svc.ttsLanguage == 'zh'
+                              color: svc.ttsChineseAvailable
                                   ? Colors.greenAccent
-                                  : svc.ttsLanguage == 'default'
-                                      ? Colors.orange
-                                      : svc.ttsLanguage == 'none'
-                                          ? Colors.redAccent
+                                  : svc.ttsLanguage == 'none'
+                                      ? Colors.redAccent
+                                      : svc.ttsLanguage != null
+                                          ? Colors.orange
                                           : Colors.white70,
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
                             )),
                         const SizedBox(height: 4),
                         Text(
-                          svc.ttsLanguage == 'zh'
-                              ? '当前引擎支持中文，播报走中文语音。'
-                              : svc.ttsLanguage == 'default'
-                                  ? '中文语音数据未安装，已回退系统默认语言播报：播报能出声，但不一定是中文。按下面步骤装中文数据后可恢复中文播报。'
-                                  : svc.ttsLanguage == 'none'
-                                      ? _ttsCauseDetail()
+                          svc.ttsChineseAvailable
+                              ? '当前引擎支持中文（最终语言：${svc.ttsLanguage}），播报走中文语音。'
+                              : svc.ttsLanguage == 'none'
+                                  ? _ttsCauseDetail()
+                                  : svc.ttsLanguage != null
+                                      ? '中文语音数据未安装，已回退系统默认语言播报（最终语言：${svc.ttsLanguage}）：播报能出声，但不一定是中文。按下面步骤装中文数据后可恢复中文播报。'
                                       : '正在探测系统 TTS 引擎与中文语音数据，点“重新探测”可再查一次。',
                           style: const TextStyle(color: Colors.white70, fontSize: 12),
                         ),
@@ -255,14 +313,24 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
+                              '已保存的首选引擎：${svc.preferredTtsEngine ?? '系统默认（未保存首选）'}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
                               '已装引擎：${svc.ttsEngineList.isEmpty ? '暂无（点“重新探测”后仍为空，即系统未装引擎）' : '${svc.ttsEngineList.length} 个'}',
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '中文语音数据：${svc.ttsLanguage == 'zh' ? '已安装' : svc.ttsLanguage == 'default' ? '未安装（已回退默认语言）' : svc.ttsLanguage == 'none' ? '不可用（无引擎或语言数据缺失）' : '待探测'}',
+                              '中文语音数据：${svc.ttsChineseAvailable ? '已安装' : svc.ttsLanguage == 'none' ? '不可用（无引擎或语言数据缺失）' : svc.ttsLanguage != null ? '未安装（已回退默认语言，最终语言：${svc.ttsLanguage}）' : '待探测'}',
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
+                            if (svc.preferredEngineMissing) ...[
+                              const SizedBox(height: 4),
+                              const Text('该引擎已卸载，已回退系统默认',
+                                  style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold)),
+                            ],
                           ]),
                         ),
                         const SizedBox(height: 12),
@@ -284,11 +352,21 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                               if (v == null) return;
                               final ok = await svc.setTtsEngine(v);
                               if (mounted && !ok) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('引擎切换失败，已保持原引擎。')));
+                                showAppNotice(context, '引擎切换失败，已尝试恢复原引擎。', AppNoticeKind.error);
                               }
                             },
                           ),
+                        const SizedBox(height: 8),
+                        ImportSecondaryButton(
+                          label: '恢复系统默认引擎（清除已保存首选）',
+                          onPressed: () async {
+                            await svc.clearPreferredEngine();
+                            if (mounted) {
+                              showAppNotice(context, '已清除已保存的首选引擎，改走系统默认。', AppNoticeKind.success);
+                              setState(() {});
+                            }
+                          },
+                        ),
                         const SizedBox(height: 12),
                         ImportPrimaryButton(
                           label: _ttsSettingsBusy ? '正在打开…' : '打开系统 TTS 设置',
@@ -324,8 +402,10 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                         child: ImportNotice(
+                          // v1.2.1：按试听实际结果着色，不再按“已播报/
+                          // 已发出”字样猜——新文案是“试听完成”才算成功。
                           message: _testResult!,
-                          kind: _testResult!.contains('已播报') || _testResult!.contains('已发出')
+                          kind: _testOk
                               ? ImportNoticeKind.success
                               : ImportNoticeKind.error,
                         ),

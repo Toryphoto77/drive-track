@@ -343,8 +343,14 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     "getFilesDir" -> result.success(filesDir.absolutePath)
                     // v1.0.3：切换桌面启动图标 alias。Manifest 里主 Activity
                     // 不带 LAUNCHER 过滤器，alias 各带 LAUNCHER 过滤器
-                    // 与对应图标；此处启用选中 alias、禁用其余三个。
-                    // v1.1.3：alias 扩展到四个（红/蓝/RB17/女武神）。
+                    // 与对应图标；此处启用选中 alias、禁用其余 alias，
+                    // 一次只启用一个。
+                    // v1.2.2：alias 扩展到五个（红/RB17/女武神/方向盘/方格旗）；
+                    // 已删除的旧蓝仪表键收到时当红赛车处理，绝不抛错、
+                    // 不指向不存在的组件。
+                    // v1.2.3：LauncherBlue 已作为启动兼容垫片恢复进 Manifest，
+                    // 但它不是可选项；此处禁用清单必须含它（见下面的
+                    // allComponents），否则旧蓝用户迁移后垫片关不掉。
                     // DONT_KILL_APP：切换瞬间不杀 App、不丢数据，桌面
                     // 图标由启动器在刷新后变化（部分厂商 ROM 有延迟，
                     // 见主题页回落说明）。
@@ -354,12 +360,20 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             val pm = packageManager
                             val aliases = mapOf(
                                 "red" to ComponentName(this, "com.chixi.drive_track.LauncherRed"),
-                                "blue" to ComponentName(this, "com.chixi.drive_track.LauncherBlue"),
+                                "blue" to ComponentName(this, "com.chixi.drive_track.LauncherRed"),
                                 "rb17" to ComponentName(this, "com.chixi.drive_track.LauncherRb17"),
-                                "valkyrie" to ComponentName(this, "com.chixi.drive_track.LauncherValkyrie")
+                                "valkyrie" to ComponentName(this, "com.chixi.drive_track.LauncherValkyrie"),
+                                "steering" to ComponentName(this, "com.chixi.drive_track.LauncherSteering"),
+                                "checkered" to ComponentName(this, "com.chixi.drive_track.LauncherCheckered")
                             )
                             val enable = aliases[icon] ?: aliases["red"]!!
-                            for ((_, alias) in aliases) {
+                            // v1.2.3：禁用循环必须走独立的全部件列表（含恢复的
+                            // LauncherBlue 垫片）。选择映射里 "blue" 指向
+                            // LauncherRed，去重后清单里根本没有 LauncherBlue，
+                            // 旧蓝用户启动迁移时垫片就关不掉、出现双图标。
+                            val allComponents = (aliases.values +
+                                ComponentName(this, "com.chixi.drive_track.LauncherBlue")).toSet()
+                            for (alias in allComponents) {
                                 val state = if (alias == enable) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
                                 pm.setComponentEnabledSetting(alias, state, PackageManager.DONT_KILL_APP)
                             }
@@ -501,6 +515,28 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             result.success(mapOf("ok" to ttsReady))
                         }
                     }
+                    // v1.2.1 持久化首选引擎：在首次 TTS 初始化前把
+                    // Dart 侧 voice_settings.json 里存的首选引擎传给原生。
+                    // TTS 尚未创建时只记下 override，等 whenTtsReady 建
+                    // 实例时用它（不提前触发一次默认引擎初始化再重建）；
+                    // TTS 已创建时走与 ttsSetEngine 相同的重建路径。
+                    "ttsApplyPreferredEngine" -> {
+                        val engine = call.argument<String>("engine") ?: ""
+                        if (tts == null) {
+                            ttsEngineOverride = engine.ifEmpty { null }
+                            result.success(mapOf("ok" to true))
+                        } else {
+                            try { tts?.shutdown() } catch (_: Exception) {}
+                            tts = null
+                            ttsInitDone = false
+                            ttsReady = false
+                            ttsLanguage = "none"
+                            ttsEngineOverride = engine.ifEmpty { null }
+                            whenTtsReady {
+                                result.success(mapOf("ok" to ttsReady))
+                            }
+                        }
+                    }
                     // v0.1.9 自定义语音服务回放：播放 Dart 侧保存的音频文件。
                     "playAudioFile" -> {
                         val path = call.argument<String>("path") ?: ""
@@ -518,7 +554,11 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             result.success(mapOf("ok" to false, "error" to "play_failed"))
                         }
                     }
-                    // v0.1.4 设备静音判断：响铃模式非正常，或音乐流音量为 0。
+                    // v1.2.1 设备静音判断：只看媒体音量是否为 0。TTS 走
+                    // STREAM_MUSIC 媒体流，振动/静音响铃模式本不该禁掉
+                    // 媒体播报；旧逻辑（非正常响铃模式即 muted）会让用户
+                    // 一开振动就悄悄丢掉行程播报。响铃模式仍随结果回传，
+                    // 供诊断页展示，不再参与 muted 判断。
                     "audioMuted" -> {
                         try {
                             val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -530,7 +570,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             }
                             val vol = am.getStreamVolume(AudioManager.STREAM_MUSIC)
                             result.success(mapOf(
-                                "muted" to (am.ringerMode != AudioManager.RINGER_MODE_NORMAL || vol == 0),
+                                "muted" to (vol == 0),
                                 "ringerMode" to ringerStr,
                                 "musicVolume" to vol
                             ))
@@ -1074,19 +1114,32 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             val initListener = TextToSpeech.OnInitListener { status ->
                 ttsInitDone = true
                 if (status == TextToSpeech.SUCCESS) {
-                    val zh = tts?.setLanguage(java.util.Locale.CHINESE)
-                    if (zh == TextToSpeech.LANG_AVAILABLE || zh == TextToSpeech.LANG_COUNTRY_AVAILABLE) {
-                        ttsLanguage = "zh"
-                        ttsReady = true
-                    } else {
-                        val dflt = tts?.setLanguage(java.util.Locale.getDefault())
-                        if (dflt == TextToSpeech.LANG_AVAILABLE || dflt == TextToSpeech.LANG_COUNTRY_AVAILABLE) {
-                            ttsLanguage = "default"
+                    // v1.2.1 语言候选：不少国产引擎对裸 zh 返回
+                    // LANG_MISSING_DATA / LANG_NOT_SUPPORTED，却支持
+                    // zh_CN，因此按 zh_CN → zh → zh_TW → 系统默认顺序
+                    // 试，第一个返回 LANG_AVAILABLE /
+                    // LANG_COUNTRY_AVAILABLE 的胜出；ttsLanguage 存
+                    // 最终选中的语言代码原样（如 zh_CN），不再只写
+                    // zh/default，系统默认回退时存其 toString() 代码。
+                    val candidates = listOf(
+                        java.util.Locale.SIMPLIFIED_CHINESE to "zh_CN",
+                        java.util.Locale.CHINESE to "zh",
+                        java.util.Locale.TRADITIONAL_CHINESE to "zh_TW",
+                        java.util.Locale.getDefault() to java.util.Locale.getDefault().toString()
+                    )
+                    var found = false
+                    for ((locale, code) in candidates) {
+                        val res = tts?.setLanguage(locale)
+                        if (res == TextToSpeech.LANG_AVAILABLE || res == TextToSpeech.LANG_COUNTRY_AVAILABLE) {
+                            ttsLanguage = code
                             ttsReady = true
-                        } else {
-                            ttsLanguage = "none"
-                            ttsReady = false
+                            found = true
+                            break
                         }
+                    }
+                    if (!found) {
+                        ttsLanguage = "none"
+                        ttsReady = false
                     }
                     if (ttsReady) {
                         try { tts?.setSpeechRate(ttsRate) } catch (_: Exception) {}
@@ -1127,14 +1180,16 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         @Deprecated("Deprecated in Java")
         override fun onError(utteranceId: String?) {
             runOnUiThread {
-                ttsSink?.success(mapOf("type" to "error", "utteranceId" to (utteranceId ?: "")))
+                ttsSink?.success(mapOf("type" to "error", "utteranceId" to (utteranceId ?: ""), "errorCode" to -1))
             }
         }
 
         override fun onError(utteranceId: String?, errorCode: Int) {
             // 不调 super：默认实现会转调单参数版，避免一次失败报两次。
+            // v1.2.1：把原生错误码随事件回给 Dart，试听失败时不再
+            // 只有一句笼统的 tts_speak_error。
             runOnUiThread {
-                ttsSink?.success(mapOf("type" to "error", "utteranceId" to (utteranceId ?: "")))
+                ttsSink?.success(mapOf("type" to "error", "utteranceId" to (utteranceId ?: ""), "errorCode" to errorCode))
             }
         }
     }

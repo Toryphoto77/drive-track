@@ -42,16 +42,32 @@ void main() {
     expect(selected, 1);
   });
 
-  test('v1.0.3 app icon choice: red default, blue asset/label differ, invalid normalizes to red', () {
+  test('v1.2.2 app icon choice: red default, legacy blue/gray fall back to red', () {
     expect(AppIconChoice.normalize(null), AppIconChoice.red);
     expect(AppIconChoice.normalize('bogus'), AppIconChoice.red);
-    expect(AppIconChoice.normalize('gray'), AppIconChoice.blue);
+    expect(AppIconChoice.normalize('gray'), AppIconChoice.red);
+    expect(AppIconChoice.normalize('blue'), AppIconChoice.red);
+    expect(AppIconChoice.isValid('blue'), isFalse);
+    expect(AppIconChoice.isValid('gray'), isFalse);
     expect(AppIconChoice.assetFor(AppIconChoice.red), 'assets/app_icon_red.png');
-    expect(AppIconChoice.assetFor(AppIconChoice.blue), 'assets/app_icon_blue.png');
+    expect(AppIconChoice.assetFor('blue'), 'assets/app_icon_red.png');
     expect(AppIconChoice.labelFor(AppIconChoice.red), '红赛车');
-    expect(AppIconChoice.labelFor(AppIconChoice.blue), '蓝仪表');
-    expect(AppIconChoice.assetFor(AppIconChoice.red),
-        isNot(AppIconChoice.assetFor(AppIconChoice.blue)));
+    expect(AppIconChoice.labelFor('blue'), '红赛车');
+  });
+
+  test('v1.2.2 app icon choice: steering and checkered keys valid, distinct assets/labels', () {
+    expect(AppIconChoice.isValid('steering'), isTrue);
+    expect(AppIconChoice.isValid('checkered'), isTrue);
+    expect(AppIconChoice.normalize('steering'), 'steering');
+    expect(AppIconChoice.normalize('checkered'), 'checkered');
+    expect(AppIconChoice.assetFor('steering'), 'assets/app_icon_steering.png');
+    expect(AppIconChoice.assetFor('checkered'), 'assets/app_icon_checkered.png');
+    expect(AppIconChoice.labelFor('steering'), '方向盘');
+    expect(AppIconChoice.labelFor('checkered'), '方格旗');
+    expect(AppIconChoice.assetFor('steering'),
+        isNot(AppIconChoice.assetFor('checkered')));
+    expect(AppIconChoice.assetFor('steering'),
+        isNot(AppIconChoice.assetFor(AppIconChoice.red)));
   });
 
   test('v1.1.3 app icon choice: rb17 and valkyrie keys valid, distinct assets/labels', () {

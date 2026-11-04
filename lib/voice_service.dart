@@ -15,16 +15,30 @@ import 'native.dart';
 /// - 原生播报完成回调：EventChannel `drivetrack/tts`，事件
 ///   `{type: 'done'|'error', utteranceId: String}`。若 30 秒内无回执，
 ///   Dart 侧看门狗超时推进（不断在一条坏语音上卡住），并把该条记为失败。
-/// - 静音：播报前先查 [isMuted]（原生 AudioManager：非正常响铃模式，
-///   或音乐流音量为 0，即视为静音）。“仅在非静音模式播报”这句话由
-///   调用方（设置页/语音设置行）在界面上展示，本文件只提供判断接口
-///   与下面的 [voiceMutedNote] 文案常量，UI 不得自己另编一套说法。
+/// - 静音（v1.2.1 已修正）：播报前先查 [isMuted]，只看媒体音量
+///   是否为 0。TTS 走媒体流 STREAM_MUSIC，振动/静音响铃模式下
+///   照常播报，不再悄悄丢弃。旧文案“仅在非静音模式播报”已删除，
+///   改由 [voiceMuteRuleNote] 如实说明该规则，UI 不得自己另编一套说法。
+/// - 语言（v1.2.1）：原生按 zh_CN → zh → zh_TW → 系统默认顺序试，
+///   [ttsLanguage] 存最终选中的语言代码原样（如 zh_CN），不再只写
+///   zh/default；中文可用当且仅当该代码以 zh 开头（见
+///   [ttsChineseAvailable]）。
+/// - 首选引擎（v1.2.1）：[preferredTtsEngine] 持久化进
+///   voice_settings.json，[load] 时恢复并在首次 TTS 初始化前经
+///   原生 ttsApplyPreferredEngine 传给原生；所选引擎不在已装列表
+///   时 [loadEngines] 置 [preferredEngineMissing] 并回退系统默认。
+/// - 试听（v1.2.1）：[speakTest] 不再入队即报成功，改为等待单条
+///   utterance 的原生 done/error 回调（超时约 8 秒），返回播完 /
+///   引擎报错（带原生错误码）/ 超时无回调三种明确结果。
 /// - 本服务不读系统通知权限、不申请麦克风：TTS 是输出，不是录音。
 /// - 无 TTS 引擎时原生返回 ok=false + error，Dart 侧不静默假装播了：
 ///   [lastError] 会被置为该错误，调用方可展示“设备无语音引擎”。
 
-/// 调用方展示的静音说明文案（原样展示，不要改写成“已开启勿扰”等说法）。
-const String voiceMutedNote = '仅在非静音模式播报：手机处于静音或振动模式、或媒体音量为 0 时不播报。';
+/// 调用方展示的播报规则文案（原样展示）：振动 / 静音模式下照常
+/// 播报，只有媒体音量为 0 时才不播报。旧的 voiceMutedNote
+/// （“仅在非静音模式播报”）已在 v1.2.1 删除，那是误导文案。
+const String voiceMuteRuleNote =
+    '振动 / 静音模式下照常播报：TTS 走媒体音量，只有媒体音量为 0 时才不播报。';
 
 /// 语音设置：默认总开关开启（见 [VoiceSettings.defaults]）。
 class VoiceSettings {
@@ -184,6 +198,19 @@ class VoiceService extends ChangeNotifier {
   List<String> ttsEngineList = [];
   String? ttsEngineCurrent;
 
+  /// v1.2.1：已保存的首选引擎包名（持久化进 voice_settings.json），
+  /// null = 未保存首选，走系统默认。重启后 [load] 恢复它。
+  String? preferredTtsEngine;
+
+  /// v1.2.1：已保存的首选引擎不在已装列表时为 true（该引擎已卸载，
+  /// [loadEngines] 已回退系统默认并清掉已保存首选）。
+  bool preferredEngineMissing = false;
+
+  /// 诊断用：最近一次 audioMuted 回执的响铃模式与媒体音量。
+  /// 响铃模式不参与播报静音判断，只展示。
+  String? audioRingerMode;
+  int? audioMusicVolume;
+
   /// 手动静音（用户在行程中点“静音”）：为 true 时队列直接丢弃新播报，
   /// 不进原生。区别于设备静音（[isMuted] 查的是系统状态）。
   bool manualMuted = false;
@@ -192,23 +219,41 @@ class VoiceService extends ChangeNotifier {
   /// 供调用方展示“设备无语音引擎，播报不可用”，不要静默吞掉。
   String? lastError;
 
+  /// 最近一次原生 TTS 报错事件的错误码（UtteranceProgressListener
+  /// onError 的 errorCode），无报错事件时为 null；供诊断页展示。
+  int? lastTtsErrorCode;
+
   /// 原生 TTS 引擎是否可用（最后一次探测结果；未探测过为 null）。
-  /// 语言：'zh'（中文）/ 'default'（中文不可用，回退系统默认语言）/
-  /// 'none'（不可用）。中文优先 Locale.CHINESE，不可用时回退默认。
+  /// 语言：最终选中的语言代码原样（如 'zh_CN'/'zh'/'zh_TW'/
+  /// 系统默认代码）/ 'none'（不可用）。v1.2.1 前的 'zh'/'default'
+  /// 旧值不再产生；中文可用见 [ttsChineseAvailable]。
   bool? ttsAvailable;
   String? ttsLanguage;
+
+  /// 最终语言是否为中文：代码以 zh 开头（zh_CN / zh / zh_TW）。
+  /// 系统默认语言代码（如 en_US）即使可用也不算中文。
+  bool get ttsChineseAvailable =>
+      ttsLanguage != null && ttsLanguage!.startsWith('zh');
 
   final List<_QueuedSpeech> _queue = [];
   bool _speaking = false;
   int _seq = 0;
   Timer? _watchdog;
   StreamSubscription<Map<String, dynamic>>? _ttsSub;
+
+  /// v1.2.1 试听等待者：utteranceId → (结果类型 'done'/'error',
+  /// 原生错误码, 原生错误串)。试听入队前先登记，事件回调里按
+  /// utteranceId 精确完成，不靠“入队即成功”。
+  final Map<String, Completer<(String, int?, String?)>> _utteranceWaiters = {};
   final Map<VoiceEventKind, int> _lastSpokenKindMs = {};
 
   int get queueLength => _queue.length;
   bool get isSpeaking => _speaking;
 
   /// 加载本机语音设置；文件不存在或损坏时用默认值，不抛错。
+  /// v1.2.1：恢复已保存的首选引擎，并在首次 TTS 初始化前传给
+  /// 原生（原生尚未建实例时只记下 override，不提前触发默认引擎
+  /// 初始化；本方法在 main.dart _init 里先于任何播报调用）。
   Future<void> load() async {
     try {
       final dir = await Native.getFilesDir();
@@ -216,15 +261,30 @@ class VoiceService extends ChangeNotifier {
       if (!await f.exists()) {
         settings = VoiceSettings.defaults;
         customVoice = const CustomVoiceConfig();
-        return;
+        preferredTtsEngine = null;
+        preferredEngineMissing = false;
+      } else {
+        final j = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+        settings = VoiceSettings.fromJson(j);
+        customVoice = CustomVoiceConfig.fromJson(
+            (j['customVoice'] as Map?)?.cast<String, dynamic>());
+        final saved = (j['preferredTtsEngine'] as String?)?.trim();
+        preferredTtsEngine = (saved != null && saved.isNotEmpty) ? saved : null;
+        preferredEngineMissing = false;
       }
-      final j = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
-      settings = VoiceSettings.fromJson(j);
-      customVoice = CustomVoiceConfig.fromJson(
-          (j['customVoice'] as Map?)?.cast<String, dynamic>());
     } catch (_) {
       settings = VoiceSettings.defaults;
       customVoice = const CustomVoiceConfig();
+      preferredTtsEngine = null;
+      preferredEngineMissing = false;
+    }
+    if (preferredTtsEngine != null) {
+      try {
+        await Native.ttsApplyPreferredEngine(preferredTtsEngine!);
+      } catch (_) {
+        // 原生未就绪不阻塞：下次 ensureAvailable / loadEngines 时
+        // 仍以已保存首选为准，页面会展示实际探测结果。
+      }
     }
     notifyListeners();
   }
@@ -235,6 +295,7 @@ class VoiceService extends ChangeNotifier {
       await File('$dir/$fileName').writeAsString(jsonEncode({
             ...settings.toJson(),
             'customVoice': customVoice.toJson(),
+            'preferredTtsEngine': preferredTtsEngine,
           }));
     } catch (_) {
       // 本机写盘失败不阻塞播报；设置本次会话内仍生效。
@@ -248,6 +309,11 @@ class VoiceService extends ChangeNotifier {
   }
 
   /// 刷新系统已装 TTS 引擎列表与当前引擎（供引擎选择器展示）。
+  /// v1.2.1：已保存的首选引擎不在已装列表（且列表非空，即不是
+  /// 探测失败）时，置 [preferredEngineMissing]，清掉已保存首选并
+  /// 持久化，同时把原生切回系统默认引擎；页面据此展示
+  /// “该引擎已卸载，已回退系统默认”。列表为空时不判定缺失，
+  /// 避免一次探测失败误删用户首选。
   Future<void> loadEngines() async {
     try {
       final r = await Native.ttsEngines();
@@ -261,18 +327,78 @@ class VoiceService extends ChangeNotifier {
       ttsEngineList = [];
       ttsEngineCurrent = null;
     }
+    if (preferredTtsEngine != null &&
+        ttsEngineList.isNotEmpty &&
+        !ttsEngineList.contains(preferredTtsEngine)) {
+      preferredEngineMissing = true;
+      preferredTtsEngine = null;
+      ttsAvailable = null;
+      await save();
+      try {
+        await Native.ttsSetEngine('');
+      } catch (_) {}
+      try {
+        final r = await Native.ttsEngines();
+        final raw = r['engines'];
+        ttsEngineList = raw is List
+            ? raw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+            : <String>[];
+        final cur = r['current'] as String?;
+        ttsEngineCurrent = (cur != null && cur.isNotEmpty) ? cur : null;
+      } catch (_) {}
+    } else {
+      preferredEngineMissing = false;
+    }
     notifyListeners();
   }
 
+  /// 用户在选择器里选引擎：原生切换成功才把包名持久化为首选；
+  /// 切换失败不写盘，并尝试把原生恢复到切换前的首选（或系统默认），
+  /// 避免本次会话残留一个建不起来的引擎、页面却谎称“已保持原引擎”。
   Future<bool> setTtsEngine(String packageName) async {
+    final previousPreferred = preferredTtsEngine;
     final ok = await Native.ttsSetEngine(packageName);
     if (ok) {
       ttsEngineCurrent = packageName;
+      preferredTtsEngine = packageName;
+      preferredEngineMissing = false;
       ttsAvailable = null;
+      await save();
       await ensureAvailable();
+    } else {
+      lastError = 'tts_unavailable';
+      if (previousPreferred != packageName) {
+        try {
+          await Native.ttsSetEngine(previousPreferred ?? '');
+        } catch (_) {}
+        ttsEngineCurrent = previousPreferred;
+        await ensureAvailable();
+      }
     }
     notifyListeners();
     return ok;
+  }
+
+  /// 清除已保存的首选引擎并切回系统默认（供设置页“恢复系统默认”）。
+  Future<bool> clearPreferredEngine() async {
+    preferredTtsEngine = null;
+    preferredEngineMissing = false;
+    await save();
+    final ok = await Native.ttsSetEngine('');
+    await loadEngines();
+    await ensureAvailable();
+    notifyListeners();
+    return ok;
+  }
+
+  /// 刷新诊断用的响铃模式与媒体音量（不改变播报判断）。
+  Future<void> refreshAudioStatus() async {
+    try {
+      final r = await Native.audioMuted();
+      audioRingerMode = r['ringerMode'] as String?;
+      audioMusicVolume = (r['musicVolume'] as num?)?.toInt();
+    } catch (_) {}
+    notifyListeners();
   }
 
   Future<void> updateSettings(VoiceSettings next) async {
@@ -313,11 +439,15 @@ class VoiceService extends ChangeNotifier {
     }
   }
 
-  /// 设备是否处于静音状态：响铃模式非正常，或媒体音量为 0。
+  /// 播报是否会被听不到：v1.2.1 起只看媒体音量是否为 0。
+  /// 振动/静音响铃模式不再算静音（TTS 走媒体流，响铃模式不影响
+  /// 媒体播报）；响铃模式与媒体音量同时记进诊断字段。
   /// 调用方在行程中播报前可用它决定是否跳过；[speakText] 内部同样会查。
   Future<bool> isMuted() async {
     try {
       final r = await Native.audioMuted();
+      audioRingerMode = r['ringerMode'] as String?;
+      audioMusicVolume = (r['musicVolume'] as num?)?.toInt();
       return (r['muted'] as bool?) ?? false;
     } catch (_) {
       return manualMuted;
@@ -343,9 +473,12 @@ class VoiceService extends ChangeNotifier {
     return true;
   }
 
-  /// v0.1.9 试听：不静默失败。返回 (是否发出, 原因说明)：
-  /// 总开关关闭 / 手动静音 / 无引擎时直接给原因；设备静音时仍
-  /// 发出试听但明确提示“可能听不到”，而不是悄悄返回 false。
+  /// v1.2.1 试听：不再入队即报成功。返回 (是否播完, 结果说明)，
+  /// 三种明确结果：播完（收到原生 done 回调）/ 引擎报错（带原生
+  /// 错误码或原生错误串）/ 超时无回调（约 8 秒）。总开关关闭 /
+  /// 手动静音 / 无引擎时直接给原因不入队；媒体音量为 0 时仍跑
+  /// 试听（回调本身不受音量影响），但成功结果里明确说听不到。
+  /// 自定义语音服务开启时试听仍走原生系统 TTS（测的是引擎本身）。
   Future<(bool, String)> speakTest() async {
     if (!settings.enabled) {
       return (false, '总开关已关闭：请先开启语音播报总开关再试听。');
@@ -362,11 +495,42 @@ class VoiceService extends ChangeNotifier {
             'TTS 语音数据，或在下方引擎选择器里换一个已装引擎。'
       );
     }
-    _enqueue('语音播报已开启，当前语速正常。');
-    if (muted) {
-      return (true, '试听已发出，但设备处于静音或媒体音量为 0，当前可能听不到声音。');
+    final utteranceId = 'dt_test_${++_seq}';
+    final waiter = Completer<(String, int?, String?)>();
+    _utteranceWaiters[utteranceId] = waiter;
+    _listenTtsEvents();
+    _queue.add(_QueuedSpeech('语音播报已开启，当前语速正常。', utteranceId));
+    _pump();
+    late final (String, int?, String?) result;
+    try {
+      result = await waiter.future.timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      // 超时即摘掉等待者：之后姗姗来迟的回调不再翻案；该条仍可能
+      // 在队列里或正在播，但绝不能把“已入队”说成“已播完”。
+      _utteranceWaiters.remove(utteranceId);
+      return (
+        false,
+        '试听超时：8 秒内未收到原生播报完成回调，引擎可能无响应或前方播报未播完，'
+            '请点“重新探测”后再试。'
+      );
     }
-    return (true, '试听已播报。');
+    if (result.$1 == 'done') {
+      if (muted) {
+        return (
+          true,
+          '试听完成：已收到原生播报完成回调，但媒体音量为 0，当前听不到声音，'
+              '请调大媒体音量后再试。'
+        );
+      }
+      return (true, '试听完成：已收到原生播报完成回调。');
+    }
+    final detail = result.$2 != null
+        ? '（原生错误码：${result.$2}）'
+        : (result.$3 != null ? '（${result.$3}）' : '');
+    return (
+      false,
+      '试听失败：引擎报错$detail，请换一个已装引擎或点“重新探测”后再试。'
+    );
   }
 
   /// v0.1.9 自定义服务测试：只测用户自己填的端点，不用示例 Key。
@@ -520,10 +684,31 @@ class VoiceService extends ChangeNotifier {
         _watchdog?.cancel();
         _watchdog = null;
         _speaking = false;
-        if (type == 'error') lastError = 'tts_speak_error';
+        final utteranceId = e['utteranceId'] as String?;
+        final errorCode = (e['errorCode'] as num?)?.toInt();
+        if (type == 'error') {
+          lastError = 'tts_speak_error';
+          lastTtsErrorCode = errorCode;
+        }
+        // v1.2.1：按 utteranceId 精确完成试听等待者；非试听条目
+        // 不在等待表里，直接跳过，不影响队列推进。
+        if (utteranceId != null) {
+          final waiter = _utteranceWaiters.remove(utteranceId);
+          if (waiter != null && !waiter.isCompleted) {
+            waiter.complete((type, errorCode, null));
+          }
+        }
         _pump();
       }
     }, onError: (_) {});
+  }
+
+  void _completeWaiter(
+      String utteranceId, String type, int? errorCode, String? error) {
+    final waiter = _utteranceWaiters.remove(utteranceId);
+    if (waiter != null && !waiter.isCompleted) {
+      waiter.complete((type, errorCode, error));
+    }
   }
 
   Future<void> _pump() async {
@@ -539,8 +724,10 @@ class VoiceService extends ChangeNotifier {
           .timeout(const Duration(seconds: 10),
               onTimeout: () => {'ok': false, 'error': 'tts_timeout'});
       if ((r['ok'] as bool?) != true) {
-        // 原生明确失败（如无引擎）：不静默假装，记错误并推进下一条。
+        // 原生明确失败（如无引擎）：不静默假装，记错误并推进下一条；
+        // 若该条是试听，立刻以报错完成等待者，不让试听等满 8 秒超时。
         lastError = (r['error'] as String?) ?? 'tts_speak_failed';
+        _completeWaiter(next.utteranceId, 'error', null, lastError);
         _speaking = false;
         notifyListeners();
         _pump();
@@ -556,6 +743,7 @@ class VoiceService extends ChangeNotifier {
       });
     } catch (e) {
       lastError = 'tts_speak_failed';
+      _completeWaiter(next.utteranceId, 'error', null, lastError);
       _speaking = false;
       notifyListeners();
       _pump();

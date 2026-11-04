@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 import 'package:flutter/services.dart';
 import 'models.dart';
 import 'native.dart';
@@ -333,8 +334,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
       await Native.shareFiles([file.path], 'text/plain', '驰迹事件时间戳清单（未烧录进视频，仅文本清单）');
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('导出失败，可改用“复制清单”')));
+        showAppNotice(context, '导出失败，可改用“复制清单”', AppNoticeKind.error);
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -552,8 +552,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                 label: const Text('复制事件清单'),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: _exportText()));
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(const SnackBar(content: Text('事件时间戳清单已复制')));
+                  if (mounted) showAppNotice(context, '事件时间戳清单已复制', AppNoticeKind.success);
                 },
               ),
               OutlinedButton.icon(

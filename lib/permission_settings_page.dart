@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 import 'package:flutter/services.dart';
 import 'glass_button.dart';
 import 'native.dart';
@@ -104,12 +105,12 @@ class _PermissionSettingsPageState extends State<PermissionSettingsPage> with Wi
       final result = await Native.requestStep(r.step);
       if (mounted) setState(() { _status = result; _requested.add(r.step); });
       if (r.step == 'background' && result['reason'] == 'foreground_not_granted' && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先补齐精确定位，再申请后台定位')));
+        showAppNotice(context, '请先补齐精确定位，再申请后台定位', AppNoticeKind.warning);
       }
     } on PlatformException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('申请失败：${e.message ?? e.code}')));
+      if (mounted) showAppNotice(context, '申请失败：${e.message ?? e.code}', AppNoticeKind.error);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('申请失败：$e')));
+      if (mounted) showAppNotice(context, '申请失败：$e', AppNoticeKind.error);
     } finally {
       if (mounted) setState(() { _busyStep = null; });
     }
@@ -191,7 +192,7 @@ class _PermissionSettingsPageState extends State<PermissionSettingsPage> with Wi
                             final ok = await Native.openBatteryOptimizationSettings();
                             if (mounted) {
                               setState(() => _batteryBusy = false);
-                              if (!ok) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('打不开系统电池优化设置页，请在系统设置里手动找电池优化')));
+                              if (!ok) showAppNotice(context, '打不开系统电池优化设置页，请在系统设置里手动找电池优化', AppNoticeKind.error);
                             }
                           },
                           child: const Text('去系统电池优化设置'),

@@ -167,7 +167,9 @@ class Native {
   }
 
   /// v0.1.4 语音播报（Android TextToSpeech，语言优先中文）。
-  /// ttsIsAvailable 返回 {available, language: 'zh'/'default'/'none', error?}；
+  /// v1.2.1：语言按 zh_CN → zh → zh_TW → 系统默认顺序试，
+  /// ttsIsAvailable 返回 {available, language: 最终语言代码原样
+  /// （如 'zh_CN'/'zh'/'zh_TW'/系统默认代码）/'none', error?}；
   /// 无引擎时 available=false + error='tts_unavailable'，绝不假装播了。
   /// ttsSpeak 返回 {ok, utteranceId?, error?}；完成/失败经 ttsStream 回报，
   /// Dart 侧（voice_service.dart）据此推进队列，原生不做排队。
@@ -183,8 +185,9 @@ class Native {
 
   static Future<void> ttsStop() => _m.invokeMethod('ttsStop');
 
-  /// v1.0.3：切换桌面启动图标 alias（'red' / 'blue'，见 AndroidManifest
-  /// 的 LauncherRed / LauncherBlue）。原生侧用 DONT_KILL_APP，不在
+  /// v1.0.3：切换桌面启动图标 alias（见 AndroidManifest 的
+  /// LauncherRed / LauncherRb17 / LauncherValkyrie / LauncherSteering /
+  /// LauncherCheckered）。原生侧用 DONT_KILL_APP，不在
   /// 切换瞬间杀 App、不丢数据；部分厂商启动器刷新有延迟，见主题页
   /// 回落说明。返回 false = 原生切换未成功（选择本身仍已持久化，
   /// 下次冷启动会按持久化选择重新同步一次）。
@@ -227,6 +230,19 @@ class Native {
     }
   }
 
+  /// v1.2.1 持久化首选引擎：在首次 TTS 初始化前把已保存的首选
+  /// 引擎包名传给原生。TTS 尚未创建时原生只记下 override，
+  /// 建实例时用它；已创建时原生重建。空串 = 系统默认。
+  static Future<bool> ttsApplyPreferredEngine(String packageName) async {
+    try {
+      final r = await _m.invokeMethod(
+          'ttsApplyPreferredEngine', {'engine': packageName});
+      return (Map<String, dynamic>.from(r as Map))['ok'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// v0.1.9 自定义语音服务回放：播放自定义服务返回的音频文件。
   /// 仅供 VoiceService 的通用自定义端点使用；原生 TTS 播报不走这里。
   static Future<bool> playAudioFile(String path) async {
@@ -238,8 +254,10 @@ class Native {
     }
   }
 
-  /// 设备静音判断：响铃模式非正常，或音乐流音量为 0，即 muted=true。
-  /// 返回 {muted, ringerMode: 'normal'/'vibrate'/'silent'/'unknown', musicVolume}。
+  /// 设备静音判断（v1.2.1）：只看媒体音量是否为 0，即 muted=true。
+  /// TTS 走媒体流，振动/静音响铃模式不再禁播报；响铃模式仍回传，
+  /// 供诊断页展示。返回 {muted, ringerMode:
+  /// 'normal'/'vibrate'/'silent'/'unknown', musicVolume}。
   static Future<Map<String, dynamic>> audioMuted() async {
     final r = await _m.invokeMethod('audioMuted');
     return Map<String, dynamic>.from(r as Map);

@@ -18,6 +18,7 @@
 ///   改后历史行程的估算值会随新值重算。
 
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 
 import 'models.dart';
 
@@ -45,16 +46,19 @@ FuelEstimate? estimateFuel({
 
 /// 当月汇总的输入：一律用 TripMeta 的现成字段映射进来，
 /// 不在这里读 store、不读轨迹文件。
+/// v1.2.0：新增 [vehicleId]（null = 未绑定车辆，回退全局值）。
 class FuelTripInput {
   final TripMode mode;
   final double distanceM;
   final int startMs;
   final bool demo;
+  final String? vehicleId;
   const FuelTripInput({
     required this.mode,
     required this.distanceM,
     required this.startMs,
     this.demo = false,
+    this.vehicleId,
   });
 }
 
@@ -113,6 +117,100 @@ MonthlyFuelSummary summarizeMonthlyFuel({
     totalLiters: est?.liters,
     totalCost: est?.cost,
   );
+}
+
+/// v1.2.0：按车辆分组的区间汇总结果。只含汽车 / 摩托行程
+/// （骑行不耗油，不进组）；演示行程不计入。
+/// - [estimatedLiters]/[estimatedCost]：按每车油耗（有则用，无则
+///   回退全局值）× 全局油价估算；任一缺失时为 null（不是 0）。
+/// - [measuredLiters]：按该车实测油耗（满油区间加权，见
+///   vehicle_profile.dart 的 measuredFor）× 本组里程；无实测区间
+///   时为 null，无实测行不显示；[measuredCost] 为实测油量 × 全局
+///   油价折算（全局油价未填时为 null），界面须注明是按全局油价折算。
+/// - 未绑定车辆的行程统一进 label 为“未指定车辆（全局值）”的组，
+///   该组无实测（加油记录只属于某车）。
+class FuelGroupSummary {
+  final String? vehicleId;
+  final String label;
+  final int tripCount;
+  final double fuelDistanceKm;
+  final double? estimatedLiters;
+  final double? estimatedCost;
+  final double? measuredLiters;
+  final double? measuredCost;
+  const FuelGroupSummary({
+    required this.vehicleId,
+    required this.label,
+    required this.tripCount,
+    required this.fuelDistanceKm,
+    required this.estimatedLiters,
+    required this.estimatedCost,
+    required this.measuredLiters,
+    required this.measuredCost,
+  });
+  bool get hasMeasured => measuredLiters != null;
+}
+
+/// v1.2.0：任意区间 + 按车辆分组汇总（单月汇总的推广版，
+/// summarizeMonthlyFuel 保持原样不动作兼容）。
+/// 区间为左闭右开：startMs <= 行程开始 < endMs；全部区间调用方
+/// 传 startMs=0、endMs 为很大的未来值。排量 / 车重不参与计算。
+List<FuelGroupSummary> summarizeFuelByVehicle({
+  required List<FuelTripInput> trips,
+  required int startMs,
+  required int endMs,
+  double? globalConsumptionLPer100Km,
+  double? globalPricePerLiter,
+  Map<String, double?> perVehicleConsumption = const {},
+  Map<String, double?> measuredConsumptionByVehicle = const {},
+  Map<String, String> vehicleNames = const {},
+}) {
+  final groups = <String?, List<FuelTripInput>>{};
+  for (final t in trips) {
+    if (t.demo) continue;
+    if (t.mode != TripMode.car && t.mode != TripMode.moto) continue;
+    if (t.startMs < startMs || t.startMs >= endMs) continue;
+    final key = (t.vehicleId == null || t.vehicleId!.isEmpty) ? null : t.vehicleId;
+    (groups[key] ??= []).add(t);
+  }
+  final out = <FuelGroupSummary>[];
+  for (final entry in groups.entries) {
+    final id = entry.key;
+    final km = entry.value.fold(0.0, (a, t) => a + t.distanceM / 1000);
+    double? perVehicle;
+    if (id != null) {
+      final c = perVehicleConsumption[id];
+      if (c != null && c > 0) perVehicle = c;
+    }
+    final est = estimateFuel(
+      distanceKm: km,
+      consumptionLPer100Km: perVehicle ?? globalConsumptionLPer100Km,
+      fuelPricePerLiter: globalPricePerLiter,
+    );
+    double? measuredLiters;
+    double? measuredCost;
+    if (id != null) {
+      final mc = measuredConsumptionByVehicle[id];
+      if (mc != null && mc > 0) {
+        measuredLiters = km * mc / 100;
+        if (globalPricePerLiter != null && globalPricePerLiter > 0) {
+          measuredCost = measuredLiters * globalPricePerLiter;
+        }
+      }
+    }
+    out.add(FuelGroupSummary(
+      vehicleId: id,
+      label: id == null ? '未指定车辆（全局值）' : (vehicleNames[id] ?? '车辆 $id'),
+      tripCount: entry.value.length,
+      fuelDistanceKm: km,
+      estimatedLiters: est?.liters,
+      estimatedCost: est?.cost,
+      measuredLiters: measuredLiters,
+      measuredCost: measuredCost,
+    ));
+  }
+  out.sort((a, b) => b.fuelDistanceKm.compareTo(a.fuelDistanceKm));
+  return out;
 }
 
 /// 解析设置页输入：空串 = 未填写（null）；非空必须是 > 0 的数字，
@@ -181,9 +279,7 @@ class _FuelSettingsPageState extends State<FuelSettingsPage> {
     final p = parseFuelInput(pText);
     widget.onSaved?.call(c, p);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(clear ? '已清空油耗设置' : '油耗设置已保存')),
-      );
+      showAppNotice(context, clear ? '已清空油耗设置' : '油耗设置已保存', AppNoticeKind.success);
       Navigator.pop(context);
     }
   }

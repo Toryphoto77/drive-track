@@ -15,6 +15,8 @@ class SettingsHomePage extends StatelessWidget {
   final VoidCallback onOpenMapImport;
   // v0.1.7 油耗费用入口：可选回调，未传时不显示该入口（不破坏旧调用方）。
   final VoidCallback? onOpenFuel;
+  // v1.2.0 车辆档案入口：可选回调，未传时不显示该入口。
+  final VoidCallback? onOpenVehicle;
   final bool countdownVibration;
   final ValueChanged<bool> onCountdownVibrationChanged;
   // v0.1.8：记录时保持屏幕常亮 / 记录地图 3D 透视（可选参数，
@@ -39,6 +41,7 @@ class SettingsHomePage extends StatelessWidget {
     required this.onOpenDevices,
     required this.onOpenMapImport,
     this.onOpenFuel,
+    this.onOpenVehicle,
     required this.countdownVibration,
     required this.onCountdownVibrationChanged,
     this.keepScreenOn = true,
@@ -82,6 +85,8 @@ class SettingsHomePage extends StatelessWidget {
           // v0.1.7 油耗费用：百公里油耗与油价，汽车/摩托行程自动估算。
           if (onOpenFuel != null)
             entry(Icons.local_gas_station, '油耗费用', '百公里油耗与油价，行程自动估算油耗与油钱', onOpenFuel!),
+          if (onOpenVehicle != null)
+            entry(Icons.directions_car, '车辆档案', '车辆档案与加油记录，行程油耗按车计算、实测按满油区间算', onOpenVehicle!),
           const SizedBox(height: 12),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),

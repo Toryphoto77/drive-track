@@ -223,6 +223,80 @@ class LapTimer {
     return cur - best.durationMs;
   }
 
+  /// 进行中圈已完成分段的各段用时（ms，已扣除暂停时长）：
+  /// 由本圈已触发的分段点时刻差算出（第 i 段 = 第 i 个分段点时刻
+  /// 减上一分段点时刻，首段减圈起点）；未开始计时、或尚未触发
+  /// 任何分段点时为空列表。只读快照，不改动任何计时状态。
+  /// 注意：无分段点（sectorPoints 为空）时进行中圈没有已完成
+  /// 分段，本 getter 恒为空——前后半圈切分只在完圈时
+  /// （[_buildSectors]）才能确定，不得在进行中把半圈当成
+  /// 已完成分段去算 delta。
+  List<int> get currentCompletedSectorsMs {
+    if (_lapStartMs == null) return const [];
+    final sectors = <int>[];
+    var prevSplit = 0;
+    for (final split in _sectorSplitElapsed) {
+      sectors.add(split - prevSplit);
+      prevSplit = split;
+    }
+    return sectors;
+  }
+
+  /// 进行中圈当前分段已用耗时（ms，已扣除暂停时长）：
+  /// = 当前圈已用时长 - 已完成分段用时之和；未开始计时时为 null。
+  /// 只读，不改动计时状态。
+  int? get currentSectorElapsedMs {
+    final cur = currentLapMs;
+    if (cur == null) return null;
+    var done = 0;
+    for (final s in currentCompletedSectorsMs) {
+      done += s;
+    }
+    return cur - done;
+  }
+
+  /// 进行中圈已完成分段相对本节最佳圈的 delta（ms）：
+  /// 第 i 项 = 本圈第 i 段实测 - 最佳圈第 i 段；负 = 更快，正 = 更慢。
+  /// 长度 = 已完成分段数；对应位置无参照数据时（无最佳圈，或
+  /// 最佳圈没有该段——分段口径不一致时）该项为 null，不得拿
+  /// 错位的段相减。只读，参照圈固定为 [bestLap]，调用方不得
+  /// 在此改参照口径。
+  List<int?> get currentSectorDeltasVsBest {
+    final completed = currentCompletedSectorsMs;
+    final best = bestLap;
+    return List<int?>.generate(completed.length, (i) {
+      if (best == null || i >= best.sectorsMs.length) return null;
+      return completed[i] - best.sectorsMs[i];
+    });
+  }
+
+  /// 预测圈（ms，参照圈默认本节最佳圈）：
+  /// = 已完成分段实测之和 + 参照圈从当前分段起的各段用时。
+  /// 等价于参照圈总圈速 + 已完成分段 delta 之和：当前分段按
+  /// 参照圈 pace 投影，当前分段已用耗时不另加——若在
+  /// [currentLapMs] 之外再加参照圈剩余段，会把当前分段算两次；
+  /// 若只加当前分段之后的参照段，则等于默认当前分段立即结束，
+  /// 会系统性低估。两种错误算法本 getter 一律不用。
+  /// 返回 null 的情形（不编数）：未开始计时；无最佳圈；参照圈
+  /// 无分段数据；参照圈分段数 <= 已完成分段数（无剩余分段可
+  /// 投影，或分段口径不一致）。
+  int? get predictedLapMsVsBest {
+    if (currentLapMs == null) return null;
+    final best = bestLap;
+    if (best == null || best.sectorsMs.isEmpty) return null;
+    final completed = currentCompletedSectorsMs;
+    final k = completed.length;
+    if (best.sectorsMs.length <= k) return null;
+    var sum = 0;
+    for (final s in completed) {
+      sum += s;
+    }
+    for (var i = k; i < best.sectorsMs.length; i++) {
+      sum += best.sectorsMs[i];
+    }
+    return sum;
+  }
+
   /// 圈速稳定性（只统计计入圈）；计入圈不足 2 圈时为 null。
   LapStability? get stability {
     final ds =

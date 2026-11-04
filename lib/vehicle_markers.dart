@@ -11,6 +11,11 @@ import 'models.dart';
 /// 最后画车身高光条与前后灯；透视感来自车头收窄 + 阴影偏移，
 /// 不是贴图。全部仍为自绘矢量路径，不用任何图片资源、
 /// 不用 AI 生成图、不画品牌 Logo；摩托品牌名仍仅作风格区分。
+/// v1.2.0 立体化：双层地面阴影（宽淡投影 + 紧贴的深色接触影，
+/// 地面贴合感，类似导航开始后的车标）+ 车体下移暗色挤出层
+/// （侧壁厚度）+ 顶部亮面与轮毂高光；朝向仍由 headingDeg
+/// 旋转（调用方外层旋转时传 0，避免双重旋转）；markerFor /
+/// markerPainterFor 签名与调用约定不变。
 ///
 /// 品牌名仅作风格区分，非官方授权模型：摩托四种风格的命名
 /// （杜卡迪 / 雅马哈 / 本田 / 川崎）只表示“这种外观风格”，
@@ -174,17 +179,36 @@ class VehicleMarkerPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// 俯视投影阴影：向右下偏移的圆角椭圆，营造离地透视感。
+  /// v1.2.0 双层地面阴影：外层宽淡投影（离地高度感）+ 内层
+  /// 紧贴车体的深色接触影（地面贴合感），两者都向右下偏移，
+  /// 光源方向一致，车标不飘。
   void _shadow(Canvas canvas, Size size, double wFrac, double hFrac) {
     final w = size.width, h = size.height;
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(w * 0.5 + w * 0.04, h * 0.5 + h * 0.06),
+        center: Offset(w * 0.5 + w * 0.05, h * 0.5 + h * 0.07),
+        width: w * (wFrac + 0.10),
+        height: h * (hFrac + 0.04),
+      ),
+      Paint()..color = Colors.black.withValues(alpha: 0.22),
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(w * 0.5 + w * 0.02, h * 0.5 + h * 0.03),
         width: w * wFrac,
         height: h * hFrac,
       ),
-      Paint()..color = Colors.black.withValues(alpha: 0.45),
+      Paint()..color = Colors.black.withValues(alpha: 0.50),
     );
+  }
+
+  /// v1.2.0 侧壁挤出层：把 [path] 下移 [dy] 以暗色先画一遍，
+  /// 再画本体，车体即有厚度而非一片平色；dy 很小，不改轮廓。
+  void _extrude(Canvas canvas, Path path, double dy) {
+    canvas.save();
+    canvas.translate(0, dy);
+    canvas.drawPath(path, Paint()..color = Colors.black.withValues(alpha: 0.35));
+    canvas.restore();
   }
 
   /// 车身高光：沿车体左侧的一条半透明亮带 + 车顶中央弱光。
@@ -234,7 +258,12 @@ class VehicleMarkerPainter extends CustomPainter {
       ..lineTo(w * 0.24, h * 0.18)
       ..quadraticBezierTo(w * 0.26, noseY + h * 0.02, cx, noseY)
       ..close();
+    _extrude(canvas, bodyPath, h * 0.035);
     canvas.drawPath(bodyPath, Paint()..color = base);
+    // 顶部亮面：车体上半部一层弱白，模拟顶面受光，与两侧
+    // 暗边形成明暗对比，立体感不靠贴图。
+    canvas.drawPath(
+        bodyPath, Paint()..color = Colors.white.withValues(alpha: 0.07));
     // 车体侧面暗边：左右各一条窄暗带，强化立体厚度。
     canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -297,6 +326,12 @@ class VehicleMarkerPainter extends CustomPainter {
             Rect.fromLTWH(w * 0.64, h * 0.89, w * 0.10, h * 0.04),
             const Radius.circular(2)),
         tail);
+    // 轮毂高光：四轮中心各一小亮点，轮胎不再是纯黑块。
+    final hub = Paint()..color = Colors.white.withValues(alpha: 0.30);
+    for (final y in [0.30, 0.74]) {
+      canvas.drawCircle(Offset(w * 0.215, h * y), math.max(1.5, w * 0.02), hub);
+      canvas.drawCircle(Offset(w * 0.785, h * y), math.max(1.5, w * 0.02), hub);
+    }
     _highlight(canvas, size, 0.34, 0.08, 0.14, 0.88);
   }
 
@@ -367,6 +402,7 @@ class VehicleMarkerPainter extends CustomPainter {
         ..quadraticBezierTo(w * 0.34, h * 0.36, cx, h * 0.30)
         ..close(),
     };
+    _extrude(canvas, fairing, h * 0.03);
     canvas.drawPath(fairing, body);
     // 油箱高光 + 品牌色点缀条（仅一小块色条，不是 Logo）。
     canvas.drawRRect(
@@ -412,6 +448,13 @@ class VehicleMarkerPainter extends CustomPainter {
     // 俯视车架：中轴纵线 + 前叉 / 后叉斜线 + 座垫；
     // 车把在前轮后方横置：公路为弯把（两端小折线）、
     // 山地为宽平把、城市为上翘宽把。
+    // v1.2.0：车架先画一遍下移暗色（厚度），再画本体。
+    final frameShadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(2, w * 0.045)
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(cx + 1.5, h * 0.30 + 2), Offset(cx + 1.5, h * 0.70 + 2), frameShadow);
     canvas.drawLine(Offset(cx, h * 0.30), Offset(cx, h * 0.70), frame);
     canvas.drawLine(Offset(cx, h * 0.30), Offset(cx, h * 0.24), frame);
     canvas.drawLine(Offset(cx, h * 0.70), Offset(cx, h * 0.76), frame);

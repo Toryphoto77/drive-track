@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_notice.dart';
 
 import 'app_icon_choice.dart';
 import 'models.dart';
@@ -342,12 +343,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     if (_appIcon == key) return;
     setState(() => _appIcon = key);
     widget.onAppIconChanged?.call(key);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('桌面图标已切换，若桌面未立即刷新请稍等或重启启动器'),
-        duration: Duration(seconds: 3),
-      ),
-    );
+    showAppNotice(context, '桌面图标已切换，若桌面未立即刷新请稍等或重启启动器', AppNoticeKind.success);
   }
 
   /// v1.0.3 APP 图标分区卡：图标并排（小图 + 名称），点选即切换。
@@ -518,7 +514,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 ),
               ),
             ),
-            // v1.0.3：APP 图标分区。v1.1.3 扩展到四张，分两行并排，点选即切换。
+            // v1.0.3：APP 图标分区。v1.2.2 扩展到五张，3+2 两行并排，点选即切换。
             _sectionTitle('APP 图标'),
             Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -531,15 +527,17 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                       children: [
                         _appIconOption(AppIconChoice.red),
                         const SizedBox(width: 12),
-                        _appIconOption(AppIconChoice.blue),
+                        _appIconOption(AppIconChoice.rb17),
+                        const SizedBox(width: 12),
+                        _appIconOption(AppIconChoice.valkyrie),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        _appIconOption(AppIconChoice.rb17),
+                        _appIconOption(AppIconChoice.steering),
                         const SizedBox(width: 12),
-                        _appIconOption(AppIconChoice.valkyrie),
+                        _appIconOption(AppIconChoice.checkered),
                       ],
                     ),
                     const SizedBox(height: 12),

@@ -214,6 +214,9 @@ class Trip {
   // v0.1.7 沿途照片打点：默认空列表；旧行程 JSON 缺 'photos' 键时
   // fromJson 读空，不破坏旧数据；照片只存本机路径，见 photo_points.dart。
   final List<PhotoPoint> photoPoints;
+  // v1.2.0：绑定车辆 id（JSON 键 'vehicleId'）；缺键 = null =
+  // 回退全局油耗/油价。排量/车重绝不参与油耗计算（见 vehicle_profile）。
+  final String? vehicleId;
   final double? startFinishLat;
   final double? startFinishLon;
   const Trip({
@@ -238,6 +241,7 @@ class Trip {
     this.isTrackMode = false,
     this.lapsJson = const [],
     this.photoPoints = const [],
+    this.vehicleId,
     this.startFinishLat,
     this.startFinishLon,
   });
@@ -276,6 +280,7 @@ class Trip {
         'videos': videoPaths, 'pub': isPublic, 'likes': likes, 'liked': liked,
         'trackId': trackId, 'trackName': trackName, 'trackMode': isTrackMode,
         'laps': lapsJson, 'photos': photoPoints.map((p) => p.toJson()).toList(),
+        'vehicleId': vehicleId,
         'sfLat': startFinishLat, 'sfLon': startFinishLon,
         'points': points.map((p) => p.toJson()).toList(),
         'events': events.map((e) => e.toJson()).toList(),
@@ -297,6 +302,7 @@ class Trip {
         isTrackMode: (j['trackMode'] as bool?) ?? false,
         lapsJson: ((j['laps'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
         photoPoints: ((j['photos'] as List?) ?? []).map((e) => PhotoPoint.fromJson(e as Map<String, dynamic>)).toList(),
+        vehicleId: j['vehicleId'] as String?,
         startFinishLat: (j['sfLat'] as num?)?.toDouble(),
         startFinishLon: (j['sfLon'] as num?)?.toDouble(),
         isPublic: (j['pub'] as bool?) ?? false,
