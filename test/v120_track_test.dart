@@ -190,7 +190,7 @@ void main() {
       expect(find.text('实时 Delta'), findsOneWidget);
       expect(find.text('-0:00.500'), findsOneWidget);
       expect(find.text('0:30.000'), findsOneWidget); // 已完成分段的绝对用时
-      expect(find.text('最优圈'), findsOneWidget);
+      expect(find.text('理论最优'), findsOneWidget);
       expect(find.text('1:27.000'), findsOneWidget);
       expect(find.text('参照圈：本节最佳圈'), findsOneWidget);
       expect(find.text('估算分段'), findsOneWidget);

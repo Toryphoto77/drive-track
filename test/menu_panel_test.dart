@@ -30,7 +30,7 @@ void main() {
     final panelSize = tester.getSize(panel);
     expect(panelSize.width, 280.0);
     // 底部菜单项的副标题在面板内完整排版：其右边缘不超过面板右边缘。
-    final subtitle = find.text('驰迹 DriveTrack · 正式版');
+    final subtitle = find.text('版本号、在线更新、反馈与备份');
     expect(subtitle, findsOneWidget);
     final subBox = tester.getTopLeft(subtitle);
     final subSize = tester.getSize(subtitle);

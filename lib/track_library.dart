@@ -6,8 +6,9 @@
 /// - 版本号两层：库页顶部显示数据总版本（manifest dataVersion），
 ///   每条包自带自己的版本，更新按条进行。
 /// - 更新走公开拉取：manifest（JSON，含 dataVersion 与各包文件地址）
-///   与包 JSON 放工程 data/ 目录，随推仓库进仓库，App 经
-///   raw.githubusercontent.com 拉取。manifest 不可用时优雅失败，
+///   与包 JSON 放工程 data/ 目录，随推仓库进仓库，App 先走
+///   jsDelivr（cdn.jsdelivr.net/gh，GitHub 仓库的 CDN 镜像）拉取，
+///   失败再自动回落 raw.githubusercontent.com。manifest 不可用时优雅失败，
 ///   绝不崩溃、绝不清空本地数据。
 /// - 合并规则（远端只覆盖远端覆盖的包）：
 ///   1. 用户改过 / 自建的包永不被远端覆盖；
@@ -34,8 +35,28 @@ import 'track_sector_data.dart';
 import 'track_timing.dart';
 
 /// 赛道库 manifest 地址（公开拉取，随仓库 main 分支走）。
+///
+/// 更新源双链路（v1.2.11）：主用 jsDelivr，备用 GitHub raw。
+/// 清单里各包 url 字段写的是 raw 地址，走 jsDelivr 源时须把包地址
+/// 按同一源重写为 cdn 前缀（见 rewriteManifestPackageUrls），不能
+/// 清单走 CDN、包还走 raw；走 raw 源时用清单原地址。
+/// 注意：jsDelivr 对 GitHub 新提交有几分钟缓存，刚推的包可能要等
+/// 几分钟才在 CDN 上可见，属正常现象（不等就走 raw 回落兜底）。
+/// 单源超时 10 秒，两源串行总等待约 20 秒。
+const String kTrackLibraryManifestUrlCdn =
+    'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/tracks-manifest.json';
+
+/// GitHub raw 备用源（jsDelivr 失败时回落）。
 const String kTrackLibraryManifestUrl =
     'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/tracks-manifest.json';
+
+/// 清单包地址的 raw 前缀（与 cdn 前缀一一对应，仅用于源重写）。
+const String kTrackPackageRawPrefix =
+    'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/';
+const String kTrackPackageCdnPrefix =
+    'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/';
+
+/// 单个更新源的超时（连接与响应各 10 秒）。
 
 /// 随 App 打包的种子 manifest（工程 data/ 目录，进 assets）。
 const String kBundledManifestAsset = 'data/tracks-manifest.json';
@@ -69,25 +90,25 @@ enum TrackPackageSource {
 
 extension TrackPackageSourceLabel on TrackPackageSource {
   String get label => switch (this) {
-        TrackPackageSource.official => '官方',
-        TrackPackageSource.measured => '实测',
-        TrackPackageSource.osm => 'OSM',
-        TrackPackageSource.estimated => '估算',
-        TrackPackageSource.pending => '待核',
-        TrackPackageSource.community => '社区',
-        TrackPackageSource.user => '用户',
-      };
+    TrackPackageSource.official => '官方',
+    TrackPackageSource.measured => '实测',
+    TrackPackageSource.osm => 'OSM',
+    TrackPackageSource.estimated => '估算',
+    TrackPackageSource.pending => '待核',
+    TrackPackageSource.community => '社区',
+    TrackPackageSource.user => '用户',
+  };
 
   static TrackPackageSource fromJson(String? v) => switch (v) {
-        'official' => TrackPackageSource.official,
-        'measured' => TrackPackageSource.measured,
-        'osm' => TrackPackageSource.osm,
-        'estimated' => TrackPackageSource.estimated,
-        'pending' => TrackPackageSource.pending,
-        'community' => TrackPackageSource.community,
-        'user' => TrackPackageSource.user,
-        _ => TrackPackageSource.pending,
-      };
+    'official' => TrackPackageSource.official,
+    'measured' => TrackPackageSource.measured,
+    'osm' => TrackPackageSource.osm,
+    'estimated' => TrackPackageSource.estimated,
+    'pending' => TrackPackageSource.pending,
+    'community' => TrackPackageSource.community,
+    'user' => TrackPackageSource.user,
+    _ => TrackPackageSource.pending,
+  };
 
   String get jsonValue => name;
 }
@@ -96,13 +117,11 @@ extension TrackPackageSourceLabel on TrackPackageSource {
 enum TrackPackageVerification { verified, pending }
 
 extension TrackPackageVerificationLabel on TrackPackageVerification {
-  String get label =>
-      this == TrackPackageVerification.verified ? '已核对' : '待核';
+  String get label => this == TrackPackageVerification.verified ? '已核对' : '待核';
 
-  static TrackPackageVerification fromJson(String? v) =>
-      v == 'verified'
-          ? TrackPackageVerification.verified
-          : TrackPackageVerification.pending;
+  static TrackPackageVerification fromJson(String? v) => v == 'verified'
+      ? TrackPackageVerification.verified
+      : TrackPackageVerification.pending;
 }
 
 /// 一个弯角（经纬度位置；几何推导的弯角须在 cornerSource 注明，
@@ -127,37 +146,34 @@ class TrackCorner {
   String get directionLabel => direction == 'left' ? '左弯' : '右弯';
 
   factory TrackCorner.fromJson(Map<String, dynamic> j) => TrackCorner(
-        number: (j['number'] as num?)?.toInt() ?? 0,
-        direction: (j['direction'] as String?) ?? 'right',
-        radiusM: (j['radiusM'] as num?)?.toInt() ?? 0,
-        angleDeg: (j['angleDeg'] as num?)?.toInt() ?? 0,
-        point: _geoFromJson(j),
-      );
+    number: (j['number'] as num?)?.toInt() ?? 0,
+    direction: (j['direction'] as String?) ?? 'right',
+    radiusM: (j['radiusM'] as num?)?.toInt() ?? 0,
+    angleDeg: (j['angleDeg'] as num?)?.toInt() ?? 0,
+    point: _geoFromJson(j),
+  );
 
   Map<String, dynamic> toJson() => {
-        'number': number,
-        'direction': direction,
-        'radiusM': radiusM,
-        'angleDeg': angleDeg,
-        'lat': point.lat,
-        'lon': point.lon,
-      };
+    'number': number,
+    'direction': direction,
+    'radiusM': radiusM,
+    'angleDeg': angleDeg,
+    'lat': point.lat,
+    'lon': point.lon,
+  };
 }
 
 GeoPoint _geoFromJson(Map<String, dynamic> j) => GeoPoint(
-      (j['lat'] as num?)?.toDouble() ?? 0,
-      (j['lon'] as num?)?.toDouble() ?? 0,
-    );
+  (j['lat'] as num?)?.toDouble() ?? 0,
+  (j['lon'] as num?)?.toDouble() ?? 0,
+);
 
 Map<String, dynamic>? _geoToJson(GeoPoint? p) =>
     p == null ? null : {'lat': p.lat, 'lon': p.lon};
 
 List<GeoPoint> _geoListFromJson(dynamic v) {
   if (v is! List) return const [];
-  return v
-      .whereType<Map<String, dynamic>>()
-      .map(_geoFromJson)
-      .toList();
+  return v.whereType<Map<String, dynamic>>().map(_geoFromJson).toList();
 }
 
 /// 一个赛道数据包：真实可用的赛道数据（不只是轮廓）。
@@ -201,6 +217,10 @@ class TrackPackage {
   final GeoPoint? finish;
   final String startNote;
 
+  /// 维修区入口 / 出口（经纬度；null = 待核）。
+  final GeoPoint? pitIn;
+  final GeoPoint? pitOut;
+
   /// 本地改动标记：用户在编辑器 / 导入里改过，远端更新永不覆盖。
   final bool userModified;
 
@@ -228,6 +248,8 @@ class TrackPackage {
     this.start,
     this.finish,
     this.startNote = '',
+    this.pitIn,
+    this.pitOut,
     this.userModified = false,
     this.isUserTrack = false,
   });
@@ -235,6 +257,7 @@ class TrackPackage {
   bool get hasCenterline => centerline.length >= 3;
   bool get hasStartFinish => start != null;
   bool get hasSectors => sectorPoints.isNotEmpty;
+  bool get hasPitLane => pitIn != null && pitOut != null;
   bool get isVerified => verification == TrackPackageVerification.verified;
 
   double? get lengthKm => lengthM == null ? null : lengthM! / 1000.0;
@@ -274,6 +297,8 @@ class TrackPackage {
     GeoPoint? start,
     GeoPoint? finish,
     String? startNote,
+    GeoPoint? pitIn,
+    GeoPoint? pitOut,
     bool? userModified,
     bool? isUserTrack,
   }) {
@@ -298,77 +323,85 @@ class TrackPackage {
       start: start ?? this.start,
       finish: finish ?? this.finish,
       startNote: startNote ?? this.startNote,
+      pitIn: pitIn ?? this.pitIn,
+      pitOut: pitOut ?? this.pitOut,
       userModified: userModified ?? this.userModified,
       isUserTrack: isUserTrack ?? this.isUserTrack,
     );
   }
 
   factory TrackPackage.fromJson(Map<String, dynamic> j) => TrackPackage(
-        id: (j['id'] as String?) ?? '',
-        nameCn: (j['nameCn'] as String?) ?? '',
-        nameEn: (j['nameEn'] as String?) ?? '',
-        region: (j['region'] as String?) ?? '',
-        version: (j['version'] as num?)?.toInt() ?? 0,
-        source: TrackPackageSourceLabel.fromJson(j['source'] as String?),
-        sourceDetail: (j['sourceDetail'] as String?) ?? '',
-        verification: TrackPackageVerificationLabel.fromJson(
-          j['verification'] as String?,
-        ),
-        verificationNote: (j['verificationNote'] as String?) ?? '',
-        centerline: _geoListFromJson(j['centerline']),
-        lengthM: (j['lengthM'] as num?)?.toInt(),
-        publishedLengthM: (j['publishedLengthM'] as num?)?.toInt(),
-        corners: (j['corners'] is List)
-            ? (j['corners'] as List)
-                .whereType<Map<String, dynamic>>()
-                .map(TrackCorner.fromJson)
-                .toList()
-            : const [],
-        cornerSource: j['cornerSource'] as String?,
-        sectorPoints: _geoListFromJson(j['sectorPoints']),
-        sectorNote: (j['sectorNote'] as String?) ?? '',
-        gantry: j['gantry'] is Map<String, dynamic>
-            ? _geoFromJson(j['gantry'] as Map<String, dynamic>)
-            : null,
-        start: j['start'] is Map<String, dynamic>
-            ? _geoFromJson(j['start'] as Map<String, dynamic>)
-            : null,
-        finish: j['finish'] is Map<String, dynamic>
-            ? _geoFromJson(j['finish'] as Map<String, dynamic>)
-            : null,
-        startNote: (j['startNote'] as String?) ?? '',
-        userModified: (j['userModified'] as bool?) ?? false,
-        isUserTrack: (j['isUserTrack'] as bool?) ?? false,
-      );
+    id: (j['id'] as String?) ?? '',
+    nameCn: (j['nameCn'] as String?) ?? '',
+    nameEn: (j['nameEn'] as String?) ?? '',
+    region: (j['region'] as String?) ?? '',
+    version: (j['version'] as num?)?.toInt() ?? 0,
+    source: TrackPackageSourceLabel.fromJson(j['source'] as String?),
+    sourceDetail: (j['sourceDetail'] as String?) ?? '',
+    verification: TrackPackageVerificationLabel.fromJson(
+      j['verification'] as String?,
+    ),
+    verificationNote: (j['verificationNote'] as String?) ?? '',
+    centerline: _geoListFromJson(j['centerline']),
+    lengthM: (j['lengthM'] as num?)?.toInt(),
+    publishedLengthM: (j['publishedLengthM'] as num?)?.toInt(),
+    corners: (j['corners'] is List)
+        ? (j['corners'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map(TrackCorner.fromJson)
+              .toList()
+        : const [],
+    cornerSource: j['cornerSource'] as String?,
+    sectorPoints: _geoListFromJson(j['sectorPoints']),
+    sectorNote: (j['sectorNote'] as String?) ?? '',
+    gantry: j['gantry'] is Map<String, dynamic>
+        ? _geoFromJson(j['gantry'] as Map<String, dynamic>)
+        : null,
+    start: j['start'] is Map<String, dynamic>
+        ? _geoFromJson(j['start'] as Map<String, dynamic>)
+        : null,
+    finish: j['finish'] is Map<String, dynamic>
+        ? _geoFromJson(j['finish'] as Map<String, dynamic>)
+        : null,
+    startNote: (j['startNote'] as String?) ?? '',
+    pitIn: j['pitIn'] is Map<String, dynamic>
+        ? _geoFromJson(j['pitIn'] as Map<String, dynamic>)
+        : null,
+    pitOut: j['pitOut'] is Map<String, dynamic>
+        ? _geoFromJson(j['pitOut'] as Map<String, dynamic>)
+        : null,
+    userModified: (j['userModified'] as bool?) ?? false,
+    isUserTrack: (j['isUserTrack'] as bool?) ?? false,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'nameCn': nameCn,
-        'nameEn': nameEn,
-        'region': region,
-        'version': version,
-        'source': source.jsonValue,
-        'sourceDetail': sourceDetail,
-        'verification': verification.name,
-        'verificationNote': verificationNote,
-        'centerline': centerline
-            .map((p) => {'lat': p.lat, 'lon': p.lon})
-            .toList(),
-        'lengthM': lengthM,
-        'publishedLengthM': publishedLengthM,
-        'corners': corners.map((c) => c.toJson()).toList(),
-        'cornerSource': cornerSource,
-        'sectorPoints': sectorPoints
-            .map((p) => {'lat': p.lat, 'lon': p.lon})
-            .toList(),
-        'sectorNote': sectorNote,
-        'gantry': _geoToJson(gantry),
-        'start': _geoToJson(start),
-        'finish': _geoToJson(finish),
-        'startNote': startNote,
-        'userModified': userModified,
-        'isUserTrack': isUserTrack,
-      };
+    'id': id,
+    'nameCn': nameCn,
+    'nameEn': nameEn,
+    'region': region,
+    'version': version,
+    'source': source.jsonValue,
+    'sourceDetail': sourceDetail,
+    'verification': verification.name,
+    'verificationNote': verificationNote,
+    'centerline': centerline.map((p) => {'lat': p.lat, 'lon': p.lon}).toList(),
+    'lengthM': lengthM,
+    'publishedLengthM': publishedLengthM,
+    'corners': corners.map((c) => c.toJson()).toList(),
+    'cornerSource': cornerSource,
+    'sectorPoints': sectorPoints
+        .map((p) => {'lat': p.lat, 'lon': p.lon})
+        .toList(),
+    'sectorNote': sectorNote,
+    'gantry': _geoToJson(gantry),
+    'start': _geoToJson(start),
+    'finish': _geoToJson(finish),
+    'startNote': startNote,
+    'pitIn': _geoToJson(pitIn),
+    'pitOut': _geoToJson(pitOut),
+    'userModified': userModified,
+    'isUserTrack': isUserTrack,
+  };
 }
 
 /// manifest 里的一个包条目。
@@ -390,18 +423,56 @@ class ManifestPackage {
   });
 
   factory ManifestPackage.fromJson(Map<String, dynamic> j) => ManifestPackage(
-        id: (j['id'] as String?) ?? '',
-        nameCn: (j['nameCn'] as String?) ?? '',
-        version: (j['version'] as num?)?.toInt() ?? 0,
-        url: (j['url'] as String?) ?? '',
-        source: TrackPackageSourceLabel.fromJson(j['source'] as String?),
-        verification: TrackPackageVerificationLabel.fromJson(
-          j['verification'] as String?,
-        ),
-      );
+    id: (j['id'] as String?) ?? '',
+    nameCn: (j['nameCn'] as String?) ?? '',
+    version: (j['version'] as num?)?.toInt() ?? 0,
+    url: (j['url'] as String?) ?? '',
+    source: TrackPackageSourceLabel.fromJson(j['source'] as String?),
+    verification: TrackPackageVerificationLabel.fromJson(
+      j['verification'] as String?,
+    ),
+  );
+
+  ManifestPackage copyWith({String? url}) => ManifestPackage(
+    id: id,
+    nameCn: nameCn,
+    version: version,
+    url: url ?? this.url,
+    source: source,
+    verification: verification,
+  );
 }
 
-/// 赛道库 manifest（dataVersion + 各包文件地址）。
+/// 单个包地址按更新源重写（纯函数，可单测）：走 jsDelivr 源时把
+/// raw 前缀换成 cdn 前缀；非 raw 地址（如以后清单直接写 cdn 或
+/// 别的源）原样不动；走 raw 源时不调用本函数，用清单原地址。
+String rewriteTrackPackageUrl(String url, {required bool useCdn}) {
+  if (!useCdn) return url;
+  if (url.startsWith(kTrackPackageRawPrefix)) {
+    return kTrackPackageCdnPrefix +
+        url.substring(kTrackPackageRawPrefix.length);
+  }
+  return url;
+}
+
+/// 整份 manifest 的包地址按更新源重写（纯函数，可单测）。
+TrackLibraryManifest rewriteManifestPackageUrls(
+  TrackLibraryManifest manifest, {
+  required bool useCdn,
+}) {
+  if (!useCdn) return manifest;
+  return TrackLibraryManifest(
+    dataVersion: manifest.dataVersion,
+    updatedAt: manifest.updatedAt,
+    attribution: manifest.attribution,
+    packages: manifest.packages
+        .map(
+          (p) => p.copyWith(url: rewriteTrackPackageUrl(p.url, useCdn: true)),
+        )
+        .toList(),
+  );
+}
+
 class TrackLibraryManifest {
   final String dataVersion;
   final String updatedAt;
@@ -422,9 +493,9 @@ class TrackLibraryManifest {
         attribution: (j['attribution'] as String?) ?? '',
         packages: (j['packages'] is List)
             ? (j['packages'] as List)
-                .whereType<Map<String, dynamic>>()
-                .map(ManifestPackage.fromJson)
-                .toList()
+                  .whereType<Map<String, dynamic>>()
+                  .map(ManifestPackage.fromJson)
+                  .toList()
             : const [],
       );
 }
@@ -478,17 +549,20 @@ class ApplyResult {
   final List<String> appliedIds;
   final Map<String, String> skippedReasons;
 
-  const ApplyResult({this.appliedIds = const [], this.skippedReasons = const {}});
+  const ApplyResult({
+    this.appliedIds = const [],
+    this.skippedReasons = const {},
+  });
 }
 
 /// 可注入的拉取函数（生产走 HttpClient，测试走 fake，不依赖真实网络）。
 typedef TrackLibraryFetcher = Future<String> Function(Uri uri);
 
 Future<String> _defaultFetcher(Uri uri) async {
-  final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
     final req = await client.getUrl(uri);
-    final resp = await req.close().timeout(const Duration(seconds: 15));
+    final resp = await req.close().timeout(const Duration(seconds: 10));
     final body = await resp.transform(utf8.decoder).join();
     if (resp.statusCode != 200) {
       throw Exception('HTTP ${resp.statusCode}');
@@ -512,10 +586,13 @@ String sectorNoteAfterEdit({
   required List<GeoPoint> edited,
   required String originalNote,
 }) {
-  final changed = edited.length != original.length ||
-      edited.asMap().entries.any((e) =>
-          e.value.lat != original[e.key].lat ||
-          e.value.lon != original[e.key].lon);
+  final changed =
+      edited.length != original.length ||
+      edited.asMap().entries.any(
+        (e) =>
+            e.value.lat != original[e.key].lat ||
+            e.value.lon != original[e.key].lon,
+      );
   if (!changed) return originalNote;
   if (edited.isEmpty) return '分段点待核：用户已清除原分段，待重新落点';
   return '用户实测分段点（编辑器手动落点），以实测为准';
@@ -563,41 +640,47 @@ UpdateCheckResult diffUpdates({
     if (m.id.isEmpty || m.url.isEmpty) continue;
     final local = byId[m.id];
     if (local == null) {
-      updates.add(PackageUpdate(
-        id: m.id,
-        nameCn: m.nameCn,
-        localVersion: -1,
-        remoteVersion: m.version,
-        url: m.url,
-        isNew: true,
-      ));
+      updates.add(
+        PackageUpdate(
+          id: m.id,
+          nameCn: m.nameCn,
+          localVersion: -1,
+          remoteVersion: m.version,
+          url: m.url,
+          isNew: true,
+        ),
+      );
       continue;
     }
     if (local.isUserTrack) continue;
     if (local.userModified) {
-      skipped.add(PackageUpdate(
-        id: m.id,
-        nameCn: m.nameCn,
-        localVersion: local.version,
-        remoteVersion: m.version,
-        url: m.url,
-      ));
+      skipped.add(
+        PackageUpdate(
+          id: m.id,
+          nameCn: m.nameCn,
+          localVersion: local.version,
+          remoteVersion: m.version,
+          url: m.url,
+        ),
+      );
       continue;
     }
     if (m.version > local.version) {
-      updates.add(PackageUpdate(
-        id: m.id,
-        nameCn: m.nameCn,
-        localVersion: local.version,
-        remoteVersion: m.version,
-        url: m.url,
-      ));
+      updates.add(
+        PackageUpdate(
+          id: m.id,
+          nameCn: m.nameCn,
+          localVersion: local.version,
+          remoteVersion: m.version,
+          url: m.url,
+        ),
+      );
     }
   }
   if (updates.isEmpty) {
     return UpdateCheckResult(
       status: UpdateCheckStatus.upToDate,
-      message: '已是最新',
+      message: '赛道库已是最新版本',
       remoteDataVersion: manifest.dataVersion,
       skippedUserModified: skipped,
     );
@@ -697,18 +780,19 @@ class TrackLibraryService {
 
   Future<void> _saveLocal(_LocalLibrary local) async {
     final f = await _localFile();
-    await f.writeAsString(jsonEncode({
-      'dataVersion': local.dataVersion,
-      'overrides': local.overrides.map((p) => p.toJson()).toList(),
-      'userTracks': local.userTracks.map((p) => p.toJson()).toList(),
-    }));
+    await f.writeAsString(
+      jsonEncode({
+        'dataVersion': local.dataVersion,
+        'overrides': local.overrides.map((p) => p.toJson()).toList(),
+        'userTracks': local.userTracks.map((p) => p.toJson()).toList(),
+      }),
+    );
   }
 
   /// 打包的种子包（assets data/；缺失时回落为空，不抛错）。
   Future<List<TrackPackage>> bundledPackages() async {
     try {
-      final manifestJson =
-          await rootBundle.loadString(kBundledManifestAsset);
+      final manifestJson = await rootBundle.loadString(kBundledManifestAsset);
       final manifest = TrackLibraryManifest.fromJson(
         jsonDecode(manifestJson) as Map<String, dynamic>,
       );
@@ -718,9 +802,9 @@ class TrackLibraryService {
           final pkgJson = await rootBundle.loadString(
             'data/packages/${m.id}.json',
           );
-          out.add(TrackPackage.fromJson(
-            jsonDecode(pkgJson) as Map<String, dynamic>,
-          ));
+          out.add(
+            TrackPackage.fromJson(jsonDecode(pkgJson) as Map<String, dynamic>),
+          );
         } catch (_) {
           // 单个包缺失时跳过，不影响其他包。
           continue;
@@ -735,8 +819,7 @@ class TrackLibraryService {
   /// 打包 manifest 的数据总版本（缺失时为空）。
   Future<String> bundledDataVersion() async {
     try {
-      final manifestJson =
-          await rootBundle.loadString(kBundledManifestAsset);
+      final manifestJson = await rootBundle.loadString(kBundledManifestAsset);
       final manifest = TrackLibraryManifest.fromJson(
         jsonDecode(manifestJson) as Map<String, dynamic>,
       );
@@ -777,85 +860,109 @@ class TrackLibraryService {
   Future<void> savePackage(TrackPackage pkg) async {
     final local = await _loadLocal();
     if (pkg.isUserTrack) {
-      final list = local.userTracks
-          .where((p) => p.id != pkg.id)
-          .toList()
+      final list = local.userTracks.where((p) => p.id != pkg.id).toList()
         ..add(pkg);
-      await _saveLocal(_LocalLibrary(
-        dataVersion: local.dataVersion,
-        overrides: local.overrides,
-        userTracks: list,
-      ));
+      await _saveLocal(
+        _LocalLibrary(
+          dataVersion: local.dataVersion,
+          overrides: local.overrides,
+          userTracks: list,
+        ),
+      );
       return;
     }
     final marked = pkg.copyWith(userModified: true);
-    final list =
-        local.overrides.where((p) => p.id != pkg.id).toList()..add(marked);
-    await _saveLocal(_LocalLibrary(
-      dataVersion: local.dataVersion,
-      overrides: list,
-      userTracks: local.userTracks,
-    ));
+    final list = local.overrides.where((p) => p.id != pkg.id).toList()
+      ..add(marked);
+    await _saveLocal(
+      _LocalLibrary(
+        dataVersion: local.dataVersion,
+        overrides: list,
+        userTracks: local.userTracks,
+      ),
+    );
   }
 
   /// 删除一条用户赛道（官方包不可删，只能恢复默认）。
   Future<void> deleteUserTrack(String id) async {
     final local = await _loadLocal();
-    await _saveLocal(_LocalLibrary(
-      dataVersion: local.dataVersion,
-      overrides: local.overrides,
-      userTracks: local.userTracks.where((p) => p.id != id).toList(),
-    ));
+    await _saveLocal(
+      _LocalLibrary(
+        dataVersion: local.dataVersion,
+        overrides: local.overrides,
+        userTracks: local.userTracks.where((p) => p.id != id).toList(),
+      ),
+    );
   }
 
   /// 恢复官方包默认（删掉本地覆盖层，回到打包种子 / 内置迁移）。
   Future<void> resetOverride(String id) async {
     final local = await _loadLocal();
-    await _saveLocal(_LocalLibrary(
-      dataVersion: local.dataVersion,
-      overrides: local.overrides.where((p) => p.id != id).toList(),
-      userTracks: local.userTracks,
-    ));
+    await _saveLocal(
+      _LocalLibrary(
+        dataVersion: local.dataVersion,
+        overrides: local.overrides.where((p) => p.id != id).toList(),
+        userTracks: local.userTracks,
+      ),
+    );
   }
 
   /// 导出包 JSON 到本机文件，返回文件路径（调用方走系统分享）。
   Future<String> exportPackage(TrackPackage pkg) async {
     final dir = await Native.getFilesDir();
     final path = '$dir/track_package_export_${pkg.id}.json';
-    await File(path).writeAsString(
-      const JsonEncoder.withIndent('  ').convert(pkg.toJson()),
-    );
+    await File(
+      path,
+    ).writeAsString(const JsonEncoder.withIndent('  ').convert(pkg.toJson()));
     return path;
   }
 
   /// 检查更新：拉 manifest → 按条比对版本。失败时返回 error 状态，
   /// 绝不改动本地数据。
+  ///
+  /// 双源串行（v1.2.11）：先 jsDelivr，失败再回落 GitHub raw；单源
+  /// 超时 10 秒，两源总等待约 20 秒。任一源拉到的 manifest 为空
+  /// （dataVersion 与 packages 双空）视为该源失败，继续试下一源；
+  /// 两源都失败才报网络问题。清单走哪个源，包地址就按同一源重写
+  /// （jsDelivr 源时包走 cdn 前缀，raw 源时用清单原地址）。
   Future<UpdateCheckResult> checkForUpdates({
     TrackLibraryFetcher? fetcher,
   }) async {
     final snap = await loadAll();
     final fetch = fetcher ?? _defaultFetcher;
-    try {
-      final body =
-          await fetch(Uri.parse(kTrackLibraryManifestUrl)).timeout(
-        const Duration(seconds: 15),
-      );
-      final manifest = TrackLibraryManifest.fromJson(
-        jsonDecode(body) as Map<String, dynamic>,
-      );
-      if (manifest.dataVersion.isEmpty && manifest.packages.isEmpty) {
-        return const UpdateCheckResult(
-          status: UpdateCheckStatus.error,
-          message: '更新清单为空，请稍后重试',
+    var sawEmptyManifest = false;
+    for (final entry in [
+      (kTrackLibraryManifestUrlCdn, true),
+      (kTrackLibraryManifestUrl, false),
+    ]) {
+      final (manifestUrl, useCdn) = entry;
+      try {
+        final body = await fetch(Uri.parse(manifestUrl))
+            .timeout(const Duration(seconds: 10));
+        final manifest = TrackLibraryManifest.fromJson(
+          jsonDecode(body) as Map<String, dynamic>,
         );
+        if (manifest.dataVersion.isEmpty && manifest.packages.isEmpty) {
+          sawEmptyManifest = true;
+          continue;
+        }
+        final sourced = rewriteManifestPackageUrls(manifest, useCdn: useCdn);
+        return diffUpdates(localOfficial: snap.official, manifest: sourced);
+      } catch (_) {
+        // 该源失败，继续试下一源；两源都失败才在循环后统一报错。
+        continue;
       }
-      return diffUpdates(localOfficial: snap.official, manifest: manifest);
-    } catch (e) {
-      return UpdateCheckResult(
+    }
+    if (sawEmptyManifest) {
+      return const UpdateCheckResult(
         status: UpdateCheckStatus.error,
-        message: '暂无更新或网络问题：$e',
+        message: '更新清单为空，请稍后重试',
       );
     }
+    return const UpdateCheckResult(
+      status: UpdateCheckStatus.error,
+      message: '网络不通：两个更新源都连不上，请检查网络或代理后重试',
+    );
   }
 
   /// 应用更新：逐条下载包 JSON → 校验 → 写入覆盖层（非用户改动）。
@@ -875,9 +982,8 @@ class TrackLibraryService {
     for (final u in updates) {
       if (!seenIds.add(u.id)) continue;
       try {
-        final body = await fetch(Uri.parse(u.url)).timeout(
-          const Duration(seconds: 15),
-        );
+        final body = await fetch(Uri.parse(u.url))
+            .timeout(const Duration(seconds: 10));
         final pkg = TrackPackage.fromJson(
           jsonDecode(body) as Map<String, dynamic>,
         );
@@ -889,9 +995,7 @@ class TrackLibraryService {
           skipped[u.id] = '用户赛道，官方更新不覆盖';
           continue;
         }
-        final curOverride = overrides
-            .where((p) => p.id == pkg.id)
-            .firstOrNull;
+        final curOverride = overrides.where((p) => p.id == pkg.id).firstOrNull;
         if (curOverride != null && curOverride.userModified) {
           skipped[u.id] = '本地已改动，官方更新不覆盖';
           continue;
@@ -909,13 +1013,15 @@ class TrackLibraryService {
         skipped[u.id] = '下载失败：$e';
       }
     }
-    await _saveLocal(_LocalLibrary(
-      dataVersion: manifestDataVersion.isEmpty
-          ? local.dataVersion
-          : manifestDataVersion,
-      overrides: overrides,
-      userTracks: userTracks,
-    ));
+    await _saveLocal(
+      _LocalLibrary(
+        dataVersion: manifestDataVersion.isEmpty
+            ? local.dataVersion
+            : manifestDataVersion,
+        overrides: overrides,
+        userTracks: userTracks,
+      ),
+    );
     return ApplyResult(appliedIds: applied, skippedReasons: skipped);
   }
 }
@@ -936,27 +1042,29 @@ List<TrackPackage> builtinPackages() {
     final km = e.resolvedLengthKm;
     final sector = sectorDataFor(e.id);
     final isOsm = _osmOutlineIds.contains(e.id);
-    out.add(TrackPackage(
-      id: e.id,
-      nameCn: e.nameCn,
-      nameEn: e.nameEn,
-      region: e.region,
-      version: 0,
-      source: isOsm ? TrackPackageSource.osm : TrackPackageSource.estimated,
-      sourceDetail: isOsm
-          ? 'OSM 真实走线（归一化示意，非经纬度，待经纬度化）'
-          : '原赛道目录示意数据（归一化轮廓，非经纬度）',
-      verification: TrackPackageVerification.pending,
-      verificationNote: isOsm
-          ? '示意数据：OSM 走线仅归一化示意，经纬度几何、分段、起终点待核对后覆盖'
-          : '示意数据：轮廓 / 弯角为归一化示意，非经纬度；分段为估算 / 待核；经纬度几何待种子数据核对后覆盖',
-      lengthM: km == null ? null : (km * 1000).round(),
-      publishedLengthM: km == null ? null : (km * 1000).round(),
-      sectorNote: sector == null
-          ? '分段待核'
-          : '${sector.sourceLabel}：${sector.note}（经纬度点待补）',
-      startNote: '起终点待核：公开资料起终点坐标未经核实，未写入',
-    ));
+    out.add(
+      TrackPackage(
+        id: e.id,
+        nameCn: e.nameCn,
+        nameEn: e.nameEn,
+        region: e.region,
+        version: 0,
+        source: isOsm ? TrackPackageSource.osm : TrackPackageSource.estimated,
+        sourceDetail: isOsm
+            ? 'OSM 真实走线（归一化示意，非经纬度，待经纬度化）'
+            : '原赛道目录示意数据（归一化轮廓，非经纬度）',
+        verification: TrackPackageVerification.pending,
+        verificationNote: isOsm
+            ? '示意数据：OSM 走线仅归一化示意，经纬度几何、分段、起终点待核对后覆盖'
+            : '示意数据：轮廓 / 弯角为归一化示意，非经纬度；分段为估算 / 待核；经纬度几何待种子数据核对后覆盖',
+        lengthM: km == null ? null : (km * 1000).round(),
+        publishedLengthM: km == null ? null : (km * 1000).round(),
+        sectorNote: sector == null
+            ? '分段待核'
+            : '${sector.sourceLabel}：${sector.note}（经纬度点待补）',
+        startNote: '起终点待核：公开资料起终点坐标未经核实，未写入',
+      ),
+    );
   }
   return out;
 }
@@ -971,7 +1079,8 @@ double _haversineM(GeoPoint a, GeoPoint b) {
   final p2 = b.lat * math.pi / 180;
   final dphi = (b.lat - a.lat) * math.pi / 180;
   final dl = (b.lon - a.lon) * math.pi / 180;
-  final x = math.sin(dphi / 2) * math.sin(dphi / 2) +
+  final x =
+      math.sin(dphi / 2) * math.sin(dphi / 2) +
       math.cos(p1) * math.cos(p2) * math.sin(dl / 2) * math.sin(dl / 2);
   return 2 * r * math.asin(math.sqrt(x));
 }
@@ -995,18 +1104,18 @@ class _LatLonBounds {
   final double span;
 
   _LatLonBounds(List<GeoPoint> pts)
-      : minLat = pts.map((p) => p.lat).reduce(math.min),
-        maxLat = pts.map((p) => p.lat).reduce(math.max),
-        minLon = pts.map((p) => p.lon).reduce(math.min),
-        maxLon = pts.map((p) => p.lon).reduce(math.max),
-        cosLat = math.cos(
-          (pts.map((p) => p.lat).reduce(math.min) +
-                  pts.map((p) => p.lat).reduce(math.max)) /
-              2 *
-              math.pi /
-              180,
-        ),
-        span = _spanOf(pts);
+    : minLat = pts.map((p) => p.lat).reduce(math.min),
+      maxLat = pts.map((p) => p.lat).reduce(math.max),
+      minLon = pts.map((p) => p.lon).reduce(math.min),
+      maxLon = pts.map((p) => p.lon).reduce(math.max),
+      cosLat = math.cos(
+        (pts.map((p) => p.lat).reduce(math.min) +
+                pts.map((p) => p.lat).reduce(math.max)) /
+            2 *
+            math.pi /
+            180,
+      ),
+      span = _spanOf(pts);
 
   static double _spanOf(List<GeoPoint> pts) {
     final minLat = pts.map((p) => p.lat).reduce(math.min);
@@ -1130,9 +1239,7 @@ List<GeoPoint> simplifyPolyline(List<GeoPoint> pts, double toleranceM) {
 /// 从一次实测行程导成用户赛道包（轨迹点列即轮廓与起终点）。
 /// 点数不足时返回 null（调用方提示用户，不编数据）。
 TrackPackage? packageFromTrip(Trip trip, {String? name}) {
-  final raw = trip.points
-      .map((p) => GeoPoint(p.lat, p.lon))
-      .toList();
+  final raw = trip.points.map((p) => GeoPoint(p.lat, p.lon)).toList();
   if (raw.length < 10) return null;
   final centerline = simplifyPolyline(raw, 3.0);
   final first = centerline.first;
@@ -1144,7 +1251,8 @@ TrackPackage? packageFromTrip(Trip trip, {String? name}) {
       '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   return TrackPackage(
     id: 'user_${trip.startMs}',
-    nameCn: name ??
+    nameCn:
+        name ??
         (trip.trackName.isNotEmpty ? trip.trackName : '我的赛道 $dateLabel'),
     nameEn: '',
     region: '',

@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'gps_source.dart';
 import 'models.dart';
 import 'logic.dart';
 import 'native.dart';
 import 'photo_points.dart';
+import 'track_timing.dart';
 import 'vehicle_profile.dart';
 
 class TripMeta {
@@ -24,13 +26,17 @@ class TripMeta {
   // 高德逆地理编码的起终点中文短地名（空 = 未获取，列表回落日期显示）。
   final String startPlace;
   final String endPlace;
+  // v1.2.16：GPS 来源（JSON 键 'gps'，存 enum name）。只在保存新
+  // 行程时由轨迹点 provider 统计后写入；旧索引缺键时 fromJson 回退
+  // unknown，不回填、不编造来源。
+  final GpsSource gpsSource;
   const TripMeta(this.id, this.mode, this.startMs, this.endMs, this.distanceM, this.score, this.demo,
-      {this.isPublic = false, this.likes = 0, this.isTrackMode = false, this.trackId, this.trackName = '', this.vehicleId, this.startPlace = '', this.endPlace = ''});
+      {this.isPublic = false, this.likes = 0, this.isTrackMode = false, this.trackId, this.trackName = '', this.vehicleId, this.startPlace = '', this.endPlace = '', this.gpsSource = GpsSource.unknown});
   Map<String, dynamic> toJson() => {
         'id': id, 'mode': mode.name, 'start': startMs, 'end': endMs,
         'dist': distanceM, 'score': score, 'demo': demo, 'pub': isPublic, 'likes': likes,
         'trackMode': isTrackMode, 'trackId': trackId, 'trackName': trackName, 'vehicleId': vehicleId,
-        'startPlace': startPlace, 'endPlace': endPlace,
+        'startPlace': startPlace, 'endPlace': endPlace, 'gps': gpsSource.name,
       };
   static TripMeta fromJson(Map<String, dynamic> j) => TripMeta(
         j['id'] as String,
@@ -48,6 +54,7 @@ class TripMeta {
         vehicleId: j['vehicleId'] as String?,
         startPlace: (j['startPlace'] as String?) ?? '',
         endPlace: (j['endPlace'] as String?) ?? '',
+        gpsSource: GpsSourceLabel.fromKey(j['gps'] as String?),
       );
 }
 
@@ -123,9 +130,12 @@ class Store {
       startFinishLat: startFinishLat, startFinishLon: startFinishLon,
     );
     await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
+    // v1.2.16：GPS 来源由本次轨迹点的 provider 统计后存入索引；
+    // 老行程不回填（索引缺 'gps' 键时读作 unknown）。
+    final gpsSource = classifyGpsSource(points.map((p) => p.provider));
     final metas = await loadIndex();
     metas.insert(0, TripMeta(id, mode, startMs, endMs, trip.distanceM, sc.total, demo,
-        isTrackMode: isTrackMode, trackId: trackId, trackName: trackName, vehicleId: vehicleId));
+        isTrackMode: isTrackMode, trackId: trackId, trackName: trackName, vehicleId: vehicleId, gpsSource: gpsSource));
     await _saveIndex(metas);
     return trip;
   }
@@ -153,7 +163,8 @@ class Store {
                 isPublic: meta.isPublic, likes: meta.likes,
                 isTrackMode: t.isTrackMode, trackId: t.trackId,
                 trackName: t.trackName, vehicleId: t.vehicleId,
-                startPlace: meta.startPlace, endPlace: meta.endPlace);
+                startPlace: meta.startPlace, endPlace: meta.endPlace,
+                gpsSource: meta.gpsSource);
             changed = true;
           }
         }
@@ -196,7 +207,8 @@ class Store {
     if (idx >= 0) {
       metas[idx] = TripMeta(id, trip.mode, trip.startMs, trip.endMs, trip.distanceM, trip.score, metas[idx].demo,
           isPublic: trip.isPublic, likes: trip.likes,
-          isTrackMode: trip.isTrackMode, trackId: trip.trackId, trackName: trip.trackName, vehicleId: trip.vehicleId);
+          isTrackMode: trip.isTrackMode, trackId: trip.trackId, trackName: trip.trackName, vehicleId: trip.vehicleId,
+          gpsSource: metas[idx].gpsSource);
       await _saveIndex(metas);
     }
     return trip;
@@ -239,7 +251,8 @@ class Store {
           isTrackMode: m.isTrackMode, trackId: m.trackId,
           trackName: m.trackName, vehicleId: m.vehicleId,
           startPlace: startPlace ?? m.startPlace,
-          endPlace: endPlace ?? m.endPlace);
+          endPlace: endPlace ?? m.endPlace,
+          gpsSource: m.gpsSource);
       await _saveIndex(metas);
     }
     return trip;
@@ -361,7 +374,8 @@ class Store {
         metas[i] = TripMeta(m.id, m.mode, m.startMs, m.endMs, m.distanceM, m.score, m.demo,
             isPublic: m.isPublic, likes: m.likes,
             isTrackMode: m.isTrackMode, trackId: m.trackId, trackName: m.trackName, vehicleId: next,
-            startPlace: m.startPlace, endPlace: m.endPlace);
+            startPlace: m.startPlace, endPlace: m.endPlace,
+            gpsSource: m.gpsSource);
         changed++;
       }
     }
@@ -415,12 +429,27 @@ class Store {
     return trip.points.sublist(s, e + 1);
   }
 
-  String toGpx(Trip trip, {bool trimmed = true}) {
+  /// v1.2.18：赛道分段航点。调用方仅在查到赛道包且包有起终点 /
+  /// 分段点时传 [startFinish]/[sectorPoints]；默认不传 = 老行为
+  /// （不加任何航点）。航点按 GPX 1.1 XSD 顺序写在 <trk> 之前；
+  /// 命名只用“起终点/S1/S2”，不写来源字样；分段点按传入顺序编号
+  /// S1、S2…。无航点时输出与改前逐字节一致。
+  String toGpx(Trip trip,
+      {bool trimmed = true,
+      GeoPoint? startFinish,
+      List<GeoPoint> sectorPoints = const []}) {
     final pts = trimmed ? trimmedPoints(trip) : trip.points;
     final b = StringBuffer()
       ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
-      ..writeln('<gpx version="1.1" creator="DriveTrack" xmlns="http://www.topografix.com/GPX/1/1">')
-      ..writeln('<trk><name>${trip.mode.label} ${DateTime.fromMillisecondsSinceEpoch(trip.startMs)}</name><trkseg>');
+      ..writeln('<gpx version="1.1" creator="DriveTrack" xmlns="http://www.topografix.com/GPX/1/1">');
+    if (startFinish != null) {
+      b.writeln('<wpt lat="${startFinish.lat}" lon="${startFinish.lon}"><name>起终点</name></wpt>');
+    }
+    for (var i = 0; i < sectorPoints.length; i++) {
+      final p = sectorPoints[i];
+      b.writeln('<wpt lat="${p.lat}" lon="${p.lon}"><name>S${i + 1}</name></wpt>');
+    }
+    b.writeln('<trk><name>${trip.mode.label} ${DateTime.fromMillisecondsSinceEpoch(trip.startMs)}</name><trkseg>');
     for (final p in pts) {
       // v0.1.7：无海拔点不写 <ele>，不把占位 0 导出成海平面数据。
       final ele = p.altValid ? '<ele>${p.alt.toStringAsFixed(1)}</ele>' : '';
@@ -431,7 +460,16 @@ class Store {
     return b.toString();
   }
 
-  String toCsv(Trip trip, {bool trimmed = false}) {
+  /// v1.2.18：赛道行程（isTrackMode 且 lapsJson 非空）时，在逐点行
+  /// 末尾追加分段小节（空行 + 表头 + 每圈一行；圈号从 1 起按
+  /// lapsJson 顺序；缺失的段留空，绝不填 0、绝不估算）。街道行程
+  /// 与无 laps 的行程输出字节级不变。
+  /// [hasSectorPoints] 为调用方告知的“该行程赛道包有无真实分段点”：
+  /// false 时三列一律留空（无分段点的圈在 Lap 层仍带 2 段退化半圈，
+  /// 见 track_timing.dart，不得把半圈当分段成绩导出）；null（未告
+  /// 知）时只在 sectorsMs 长度 ≥3 时写值（3 段只能来自 2 个真实
+  /// 分段点），2 段一律留空，宁可少写也不冒充；true 时按实际长度写。
+  String toCsv(Trip trip, {bool trimmed = false, bool? hasSectorPoints}) {
     final pts = trimmed ? trimmedPoints(trip) : trip.points;
     final b = StringBuffer()
       ..writeln('time,lat,lon,alt_m,speed_kmh,bearing,hAcc_m,longG,latG,pitch_deg,roll_deg,powerW,powerEstimated,cadenceRpm,heartRate,sensorStatus');
@@ -441,6 +479,20 @@ class Store {
           '${p.hAcc.toStringAsFixed(1)},${p.longG.toStringAsFixed(3)},${p.latG.toStringAsFixed(3)},'
           '${p.pitch.toStringAsFixed(1)},${p.roll.toStringAsFixed(1)},${p.powerW ?? ''},${p.powerEstimated},'
           '${p.cadenceRpm ?? ''},${p.heartRate ?? ''},${p.sensorStatus}');
+    }
+    if (trip.isTrackMode && trip.lapsJson.isNotEmpty) {
+      b.writeln();
+      b.writeln('lap,total_ms,s1_ms,s2_ms,s3_ms');
+      for (var i = 0; i < trip.lapsJson.length; i++) {
+        final lap = Lap.fromJson(trip.lapsJson[i]);
+        final showSectors = hasSectorPoints == true ||
+            (hasSectorPoints == null && lap.sectorsMs.length >= 3);
+        String sec(int idx) => showSectors &&
+                idx < lap.sectorsMs.length
+            ? '${lap.sectorsMs[idx]}'
+            : '';
+        b.writeln('${i + 1},${lap.durationMs},${sec(0)},${sec(1)},${sec(2)}');
+      }
     }
     return b.toString();
   }

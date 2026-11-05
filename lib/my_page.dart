@@ -414,7 +414,7 @@ class _MyPageState extends State<MyPage> {
               Text('ID · ${widget.userId}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
               const SizedBox(height: 4),
               Text(
-                _localBio.isEmpty ? '暂无简介' : _localBio,
+                _localBio.isEmpty ? '暂无简介，点“编辑”添加' : _localBio,
                 style: TextStyle(color: _localBio.isEmpty ? Colors.white38 : Colors.white70, fontSize: 13),
               ),
               if (_localEmail.isNotEmpty)
@@ -699,7 +699,7 @@ class _MyPageState extends State<MyPage> {
         const SizedBox(height: 12),
         if (_section == MyPageSection.trips) ...[
           if (widget.trips.isEmpty)
-            _empty('暂无行程')
+            _empty('暂无行程\n去首页开始一次记录')
           else
             for (final t in widget.trips) ...[
               _tripRow(t, showPublicToggle: true),
@@ -708,7 +708,7 @@ class _MyPageState extends State<MyPage> {
         ],
         if (_section == MyPageSection.posts) ...[
           if (widget.posts.isEmpty)
-            _empty('暂无动态')
+            _empty('暂无动态\n把行程设为公开后会显示在这里')
           else
             for (final p in widget.posts) ...[
               _tripRow(p),
@@ -717,7 +717,7 @@ class _MyPageState extends State<MyPage> {
         ],
         if (_section == MyPageSection.favorites) ...[
           if (widget.favorites.isEmpty)
-            _empty('暂无收藏')
+            _empty('暂无收藏\n点行程卡片上的星标即可收藏')
           else
             for (final f in widget.favorites) ...[
               _tripRow(f),

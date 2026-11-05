@@ -20,6 +20,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'models.dart';
+import 'track_sector_data.dart';
+import 'track_timing.dart';
 
 /// 卡面风格。
 enum ShareCardStyle {
@@ -82,6 +84,41 @@ String shareCardHighlight(Trip trip) {
   }
 }
 
+/// 最佳圈分段行文案（v1.2.18 B 路）：仅赛道行程且最佳圈有分段时
+/// 返回 `最佳圈分段 S1 … · S2 … · S3 …`，否则返回 null（调用方整行
+/// 不显示，不占位、不写“--”冒充）。
+/// - 最佳圈口径复用 [sessionBestLap]（分析页同款，只看计入圈里
+///   最快的一圈），不取第一圈、不另算最短 durationMs；
+/// - 分段用时一律用 [LapTimer.formatLapTime]，不自己拼毫秒格式；
+/// - 段数按最佳圈 sectorsMs 实际长度显示（1 段只 S1，2 段 S1/S2，
+///   3 段全显），缺失的段不补 0；
+/// - 诚实门控 [hasSectorPoints]（调用方告知的“该行程赛道包有无
+///   真实分段点”）：false 时返回 null；null（未告知）时只在
+///   sectorsMs 长度 ≥3 时显示（3 段只能来自 2 个真实分段点），
+///   2 段一律不显示——无分段点的行程在 Lap 层仍带 2 段退化半圈
+///   （见 track_timing.dart），与“1 个真实分段点”的 2 段无法
+///   区分，宁可少显示也不把半圈当分段成绩。
+String? shareCardBestLapSectors(Trip trip, {bool? hasSectorPoints}) {
+  if (!trip.isTrackMode) return null;
+  if (hasSectorPoints == false) return null;
+  final laps = <Lap>[];
+  for (final j in trip.lapsJson) {
+    try {
+      laps.add(Lap.fromJson(j));
+    } catch (_) {
+      // 单条坏圈跳过，不让卡面崩掉；不编数。
+    }
+  }
+  final best = sessionBestLap(laps);
+  if (best == null || best.sectorsMs.isEmpty) return null;
+  if (hasSectorPoints == null && best.sectorsMs.length < 3) return null;
+  final parts = <String>[];
+  for (var i = 0; i < best.sectorsMs.length; i++) {
+    parts.add('S${i + 1} ${LapTimer.formatLapTime(best.sectorsMs[i])}');
+  }
+  return '最佳圈分段 ${parts.join(' · ')}';
+}
+
 /// 纯卡面（不带 Scaffold / 按钮组）：详情页如需把卡面嵌进已有页面
 /// 用这个；需要完整预览流程（含风格切换与按钮组）用
 /// [ShareCardPreviewPage]，它内部复用同一张卡面。
@@ -94,6 +131,10 @@ class ShareCardView extends StatelessWidget {
   final ShareCardStyle style;
   final GlobalKey? cardBoundaryKey;
 
+  /// v1.2.18：该行程赛道包有无真实分段点（调用方告知）；null = 未
+  /// 告知，见 [shareCardBestLapSectors] 的保守门控。
+  final bool? hasSectorPoints;
+
   const ShareCardView({
     super.key,
     required this.trip,
@@ -103,6 +144,7 @@ class ShareCardView extends StatelessWidget {
     this.mapImageBytes,
     this.style = ShareCardStyle.racing,
     this.cardBoundaryKey,
+    this.hasSectorPoints,
   });
 
   @override
@@ -188,6 +230,16 @@ class ShareCardView extends StatelessWidget {
             _kv('评分', trip.score.toStringAsFixed(0), titleColor, subColor),
         ]),
         const SizedBox(height: 8),
+        // v1.2.18 B 路：最佳圈分段行。只在赛道行程且最佳圈有分段
+        // 时出现（见 shareCardBestLapSectors），放在统计行与模式
+        // 亮点行之间；无分段时整行不出现，不占位。
+        if (shareCardBestLapSectors(trip, hasSectorPoints: hasSectorPoints)
+            case final sectorsText?) ...[
+          Text(sectorsText,
+              style:
+                  TextStyle(color: titleColor, fontSize: 13)),
+          const SizedBox(height: 4),
+        ],
         Text(shareCardHighlight(trip),
             style: TextStyle(color: highlightColor, fontSize: 13)),
         const SizedBox(height: 4),
@@ -255,6 +307,10 @@ class ShareCardPreviewPage extends StatefulWidget {
   final VoidCallback? onShareCsv;
   final VoidCallback? onShareVideo;
 
+  /// v1.2.18：该行程赛道包有无真实分段点（调用方告知），转发给
+  /// [ShareCardView]；null = 未告知，见 [shareCardBestLapSectors]。
+  final bool? hasSectorPoints;
+
   const ShareCardPreviewPage({
     super.key,
     required this.trip,
@@ -269,6 +325,7 @@ class ShareCardPreviewPage extends StatefulWidget {
     this.onShareGpx,
     this.onShareCsv,
     this.onShareVideo,
+    this.hasSectorPoints,
   });
 
   @override
@@ -315,6 +372,7 @@ class _ShareCardPreviewPageState extends State<ShareCardPreviewPage> {
                   mapImageBytes: widget.mapImageBytes,
                   style: _style,
                   cardBoundaryKey: widget.cardBoundaryKey,
+                  hasSectorPoints: widget.hasSectorPoints,
                 ),
               ),
             ),

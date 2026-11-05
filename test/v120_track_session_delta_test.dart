@@ -130,7 +130,8 @@ void main() {
       expect(timer.predictedLapMsVsBest, isNull);
 
       // 完第 1 圈（前后半圈 [30000, 30000]），第 2 圈进行中：
-      // 仍无已完成分段，预测圈即参照圈圈速。
+      // 仍无已完成分段；v1.2.15：无真实分段点时预测圈为 null（占位），
+      // 不再退化成“预测圈 = 最佳圈总时长”复读。
       timer.addPoint(_pt(31000, 0.001));
       timer.addPoint(_pt(61000, 0));
       expect(timer.bestLap!.sectorsMs, [30000, 30000]);
@@ -138,7 +139,7 @@ void main() {
       expect(timer.currentCompletedSectorsMs, isEmpty);
       expect(timer.currentSectorElapsedMs, 10000);
       expect(timer.currentSectorDeltasVsBest, isEmpty);
-      expect(timer.predictedLapMsVsBest, 60000);
+      expect(timer.predictedLapMsVsBest, isNull);
     });
   });
 }

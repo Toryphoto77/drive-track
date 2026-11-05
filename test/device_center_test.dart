@@ -31,12 +31,17 @@ void main() {
     );
     await tester.pump();
     expect(find.text('传感器：自定义 BLE 设备'), findsOneWidget);
-    // 滚回顶部再断言 GoPro 区（滚走后懒加载会卸载顶部 widget）。
+    // v1.2.12：GoPro 旧卡片收进设备中心「高级 / 按品牌」，默认收起时
+    // 不在树里；主入口是「打开连接运动相机」。先断言主入口，再展开旧区。
+    expect(find.text('打开连接运动相机'), findsOneWidget);
+    expect(find.text('扫描 GoPro 设备'), findsNothing);
     await tester.scrollUntilVisible(
-      find.text('扫描 GoPro 设备'),
-      -300,
+      find.text('高级 / 按品牌'),
+      300,
     );
     await tester.pump();
+    await tester.tap(find.text('高级 / 按品牌'));
+    await tester.pumpAndSettle();
     // GoPro 主操作是扫描，不再是“连接（需原生支持）”。
     expect(find.text('扫描 GoPro 设备'), findsOneWidget);
     expect(find.text('连接（需原生支持）'), findsNothing);

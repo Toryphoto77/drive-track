@@ -8,6 +8,8 @@ import 'import_style.dart';
 import 'models.dart';
 import 'native.dart';
 import 'store.dart';
+import 'track_library.dart';
+import 'track_timing.dart';
 
 /// 数据导出 / 备份页（v0.1.5：侧拉菜单“数据导出/备份”的落点）。
 ///
@@ -89,13 +91,37 @@ class _DataExportPageState extends State<DataExportPage> {
       final trip = await widget.store.loadTrip(meta.id);
       if (trip == null) return;
       final dir = await widget.store.cacheDir();
+      // v1.2.18：赛道包只查一次，GPX 航点与 CSV 分段门控共用。
+      // 注：TrackPackage 无 startFinish 字段，起终线取 pkg.start
+      //（与计时接线 _buildLapTimer 同口径），缺失时回落 pkg.finish。
+      GeoPoint? startFinish;
+      var sectorPoints = const <GeoPoint>[];
+      bool? hasSectorPoints;
+      final trackId = trip.trackId;
+      if (trip.isTrackMode && trackId != null && trackId.isNotEmpty) {
+        final pkg = (await TrackLibraryService.instance.loadAll())
+            .packageById(trackId);
+        if (pkg != null) {
+          hasSectorPoints = pkg.hasSectors;
+          if (pkg.hasSectors || pkg.start != null || pkg.finish != null) {
+            startFinish = pkg.start ?? pkg.finish;
+            sectorPoints = pkg.sectorPoints;
+          }
+        }
+      }
       if (kind == 'gpx') {
         final path = '$dir/trip_${trip.id}.gpx';
-        await File(path).writeAsString(widget.store.toGpx(trip, trimmed: trip.trimPrivacy));
+        // 赛道行程且赛道包有起终点/分段点时，GPX 加分段航点（写在
+        // <trk> 之前）；查不到包或包无分段点时不传参数（老行为不变）。
+        await File(path).writeAsString(widget.store.toGpx(trip,
+            trimmed: trip.trimPrivacy,
+            startFinish: startFinish,
+            sectorPoints: sectorPoints));
         await Native.shareFiles([path], 'application/gpx+xml', '驰迹 GPX（${trip.trimPrivacy ? '已截掉首尾' : '完整轨迹'}）');
       } else {
         final path = '$dir/trip_${trip.id}.csv';
-        await File(path).writeAsString(widget.store.toCsv(trip, trimmed: false));
+        await File(path).writeAsString(widget.store.toCsv(trip,
+            trimmed: false, hasSectorPoints: hasSectorPoints));
         await Native.shareFiles([path], 'text/csv', '驰迹 CSV（完整数据）');
       }
     } finally {
@@ -252,7 +278,7 @@ class _DataExportPageState extends State<DataExportPage> {
                 if (_metas.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('暂无行程可导出'),
+                    child: Text('暂无行程可导出\n先去首页开始一次记录'),
                   )
                 else
                   for (final m in _metas)

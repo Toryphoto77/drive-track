@@ -191,8 +191,12 @@ void main() {
       expect(find.text('连接中'), findsNothing);
 
       // 展开高级区：全部结果里耳机也在，数据没丢。
+      // 注意：此时合并扫描仍在进行，共用扫描卡片的波纹动画（1800ms 循环）
+      // 在持续调度帧，pumpAndSettle 永远等不到静止；展开动画只需 pump
+      // 几帧即可断言，不用 pumpAndSettle。
       await tester.tap(find.text('高级 / 手动添加'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('My Headphones'), findsOneWidget);
       expect(find.text('BleDIY（RaceChrono DIY 兼容）'), findsOneWidget);
       // 合并扫描进行中时，旧分别扫描按钮的文案本来就是“停止扫描”

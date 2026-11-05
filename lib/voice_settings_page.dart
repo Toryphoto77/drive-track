@@ -235,7 +235,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
               builder: (_, __) => ListView(children: [
                     SwitchListTile(
                       title: const Text('语音播报总开关'),
-                      subtitle: const Text('默认开启，可一键关闭'),
+                      subtitle: const Text('关掉后所有语音播报都不出声'),
                       value: _s.enabled,
                       onChanged: (v) => _apply(_s.copyWith(enabled: v)),
                     ),

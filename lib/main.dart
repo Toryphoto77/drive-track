@@ -15,6 +15,7 @@ import 'permission_gate.dart';
 import 'recording_3d_map.dart';
 import 'recorder.dart';
 import 'store.dart';
+import 'gps_source.dart';
 import 'widgets.dart';
 // v0.1.3 新模块（统合）
 import 'countdown_page.dart';
@@ -37,6 +38,7 @@ import 'weather_service.dart';
 import 'weather_page.dart';
 // v0.1.4 新模块（统合）
 import 'glass_button.dart';
+import 'gps_source_badge.dart';
 import 'mode_switch.dart';
 import 'theme_settings_page.dart';
 import 'vehicle_markers.dart';
@@ -384,6 +386,31 @@ String fmtDur(int ms) {
   return '${(s ~/ 3600).toString().padLeft(2, '0')}:${((s % 3600) ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
 }
 
+/// v1.2.17：维修区停站后缀（旗标头行用）。只在计时器 inPit 为真时
+/// 显示“ · 维修区 · 停站 mm:ss”，停站时长取计时器 pitStopMs；
+/// 不在维修区时返回空串，不显示、不编数。
+String pitStopSuffix({required bool inPit, required int pitStopMs}) =>
+    inPit ? ' · 维修区 · 停站 ${fmtDur(pitStopMs)}' : '';
+
+/// v1.2.17：圈标记文案。flying（飞行圈）无标记，返回空串；
+/// inLap / outLap 分别标“进站圈”/“出站圈”，与“不计圈”“最快”并存。
+String lapKindTag(LapKind kind) => switch (kind) {
+      LapKind.inLap => '进站圈',
+      LapKind.outLap => '出站圈',
+      LapKind.flying => '',
+    };
+
+/// v1.2.17：圈速列表展开行文案。“S1 1:05.000 / S2 1:06.000 / S3
+/// 1:04.000”；下标即段号（2 个分段点 = S1/S2/S3，1 个 = S1/S2），
+/// 实际长度按 Lap.sectorsMs，不补缺失段。
+String formatLapSectorTimes(Lap lap) {
+  final parts = <String>[];
+  for (var i = 0; i < lap.sectorsMs.length; i++) {
+    parts.add('S${i + 1} ${LapTimer.formatLapTime(lap.sectorsMs[i])}');
+  }
+  return parts.join(' / ');
+}
+
 String fmtDate(int ms) {
   final d = DateTime.fromMillisecondsSinceEpoch(ms);
   return '${d.month}月${d.day}日 ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
@@ -436,6 +463,43 @@ Future<void> unawaitedSaveBle(String address) async {
   } catch (_) {}
 }
 
+/// v1.2.14 越线检测接线：决定传给 [LapTimer] 的中心线。
+///
+/// 仅当包起终点已被采用（包 start 与记录首点 < 500m，见 _buildLapTimer
+/// 的采用门控）且包中心线可用（≥ 2 点）时返回包中心线；其余情形
+/// （无包、无起终点、离首点 ≥ 500m、中心线不足 2 点）返回 null，
+/// [LapTimer] 对应边界回落半径法。起终点 / 分段点的采用逻辑仍在
+/// _buildLapTimer 里，不动；本函数只决定中心线是否传。
+/// 中心线不足 2 点时 tangentAtPoint 本就返回 null，显式返回 null
+/// 只是让回落意图在接线处可见。
+List<GeoPoint>? lapTimerCenterlineForPackage(
+    TrackPackage? pkg, GeoPoint firstPoint) {
+  final start = pkg?.start;
+  if (start == null) return null;
+  if (haversineM(start.lat, start.lon, firstPoint.lat, firstPoint.lon) >=
+      500) {
+    return null;
+  }
+  if (pkg!.centerline.length < 2) return null;
+  return pkg.centerline;
+}
+
+/// v1.2.14 排空时序：LapTimer 喂点排空（纯函数部分）。
+/// 把 [points] 里自 [fedCount] 起未喂的点逐点喂给 [timer]，
+/// 返回新的已喂点数。手机定位回调与外接 GPS 回调共用同一循环，
+/// 逻辑与 v1.2.13 的排空循环逐行一致，只改触发时机，不改排空
+/// 逻辑、不改轨迹落点频率、不改存储频率。
+int drainLapTimerPoints(
+    LapTimer timer, List<TrackPoint> points, int fedCount) {
+  var fed = fedCount;
+  while (fed < points.length) {
+    final p = points[fed++];
+    timer.addPoint(TimedPoint(
+        lat: p.lat, lon: p.lon, speed: p.speed, timeMs: p.timeMs));
+  }
+  return fed;
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
@@ -484,6 +548,9 @@ class _HomePageState extends State<HomePage>
   TrackPackage? selectedPackage;
   LapTimer? liveLapTimer;
   int _lapFedCount = 0;
+  // v1.2.14 排空时序：_drainLapTimer 在途标志，防两次排空同时建计时器
+  //（见 _drainLapTimer 注释）。只在 _drainLapTimer 内读写。
+  bool _lapDrainRunning = false;
   // v0.1.8：记录页瓦片源已移除（改用 Recording3dMap 自绘，不再有瓦片）；
   // mapZoom / mapHeadingUp 继续作 3D 地图的缩放与跟随状态。
   double mapZoom = 16;
@@ -567,23 +634,9 @@ class _HomePageState extends State<HomePage>
           VoiceService.instance.announceEvent(kind: VoiceEventKind.leanOver, leanDeg: rec.rollDeg, speedKmh: rec.curSpeed * 3.6);
         }
       }
-      // v0.1.3 赛道实时计时：赛道模式下，首点定为起终点，逐点喂 LapTimer。
-      if (trackMode && selectedTrack != null && rec.isRecording && rec.points.isNotEmpty) {
-        liveLapTimer ??= await _buildLapTimer();
-        final prevBest = liveLapTimer!.bestLap?.durationMs;
-        final prevLapCount = liveLapTimer!.laps.length;
-        while (_lapFedCount < rec.points.length) {
-          final p = rec.points[_lapFedCount++];
-          liveLapTimer!.addPoint(TimedPoint(lat: p.lat, lon: p.lon, speed: p.speed, timeMs: p.timeMs));
-        }
-        final nb = liveLapTimer!.bestLap;
-        if (liveLapTimer!.laps.length > prevLapCount) {
-          final done = liveLapTimer!.laps.last;
-          if (done.counted) VoiceService.instance.announceLap(lapNumber: done.number, lapMs: done.durationMs, isBest: nb != null && done.durationMs == nb.durationMs);
-        } else if (nb != null && nb.counted && prevBest != null && nb.durationMs < prevBest) {
-          VoiceService.instance.announceLap(lapNumber: nb.number, lapMs: nb.durationMs, isBest: true);
-        }
-      }
+      // v0.1.3 赛道实时计时：赛道模式下，首点定为起终点，逐点喂 LapTimer
+      //（排空见 _drainLapTimer；外接 GPS 回调里同样触发，见 _bleDataSub）。
+      await _drainLapTimer();
       final lat = (e['lat'] as num?)?.toDouble() ?? 0;
       final lon = (e['lon'] as num?)?.toDouble() ?? 0;
       if (lat != 0) _maybeWeather(lat, lon);
@@ -610,6 +663,7 @@ class _HomePageState extends State<HomePage>
       // 有效定位注入 Recorder（provider='external'），超时/断线立即
       // 回落手机 GPS（Recorder.externalGpsActive=false）。
       // SPP 文本（sppNmea）走同一解析器与同一接管/回落规则。
+      var fedExternalFix = false;
       if (e['type'] == 'bleNotification') {
         final uuid = (e['characteristicUuid'] as String? ?? '').toLowerCase();
         final bytes = (e['bytes'] as List?)?.map((v) => (v as num).toInt()).toList() ?? <int>[];
@@ -623,6 +677,7 @@ class _HomePageState extends State<HomePage>
             rec.onExternalFix(fix.lat, fix.lon, fix.speedMps ?? rec.curSpeed,
                 fix.bearingDeg ?? rec.curHeading, DateTime.now().millisecondsSinceEpoch,
                 altM: fix.altitudeM);
+            fedExternalFix = true;
           }
         }
       }
@@ -637,9 +692,15 @@ class _HomePageState extends State<HomePage>
             rec.onExternalFix(fix.lat, fix.lon, fix.speedMps ?? rec.curSpeed,
                 fix.bearingDeg ?? rec.curHeading, DateTime.now().millisecondsSinceEpoch,
                 altM: fix.altitudeM);
+            fedExternalFix = true;
           }
         }
       }
+      // v1.2.14 排空时序：外接 GPS（BLE/SPP，25Hz）的定位点由此回调
+      // 直接落点，不经过手机定位回调；此前排空只在手机定位事件里
+      // 跑，实时显示最多滞后约 1 秒。在此同样触发一次排空，只改
+      // 触发时机，不改排空逻辑、不改落点/存储频率（见 _drainLapTimer）。
+      if (fedExternalFix) unawaited(_drainLapTimer());
       if (e['type'] == 'sppDisconnected') {
         _blediyFeed.reset();
         _blediyActive = false;
@@ -662,6 +723,38 @@ class _HomePageState extends State<HomePage>
     }, onError: (_) {});
   }
 
+  /// v1.2.14 排空时序：手机定位回调与外接 GPS 回调共用的 LapTimer
+  /// 喂点排空。只触发排空：把 rec.points 里尚未喂入的点逐点喂给
+  /// LapTimer（循环见顶层 drainLapTimerPoints，与 v1.2.13 的排空
+  /// 循环逐行一致），不改排空逻辑、不改轨迹落点频率、不改存储频率。
+  /// 圈速本身不受影响（addPoint 用点 timeMs 计时）。
+  /// 外接 GPS（BLE/SPP，25Hz）下定位点不经过手机定位回调，
+  /// 此前实时显示最多滞后约 1 秒，故外接数据回调里同样调一次
+  /// 本方法。[_lapDrainRunning] 防并发：两次排空若同时在途，
+  /// 第二次直接返回（在途那次恢复时已能看到全部已落点，不会丢点）；
+  /// 否则两次排空可能各建一个 LapTimer，后建的会顶掉已喂点的那个，
+  /// 造成计时丢失。
+  Future<void> _drainLapTimer() async {
+    if (!trackMode || selectedTrack == null || !rec.isRecording || rec.points.isEmpty) return;
+    if (_lapDrainRunning) return;
+    _lapDrainRunning = true;
+    try {
+      liveLapTimer ??= await _buildLapTimer();
+      final prevBest = liveLapTimer!.bestLap?.durationMs;
+      final prevLapCount = liveLapTimer!.laps.length;
+      _lapFedCount = drainLapTimerPoints(liveLapTimer!, rec.points, _lapFedCount);
+      final nb = liveLapTimer!.bestLap;
+      if (liveLapTimer!.laps.length > prevLapCount) {
+        final done = liveLapTimer!.laps.last;
+        if (done.counted) VoiceService.instance.announceLap(lapNumber: done.number, lapMs: done.durationMs, isBest: nb != null && done.durationMs == nb.durationMs);
+      } else if (nb != null && nb.counted && prevBest != null && nb.durationMs < prevBest) {
+        VoiceService.instance.announceLap(lapNumber: nb.number, lapMs: nb.durationMs, isBest: true);
+      }
+    } finally {
+      _lapDrainRunning = false;
+    }
+  }
+
   Future<LapTimer> _buildLapTimer() async {
     final ts = await TrackSettingsStore.load();
     final args = ts.lapTimerArgs;
@@ -671,6 +764,11 @@ class _HomePageState extends State<HomePage>
     var startFinish = GeoPoint(rec.points.first.lat, rec.points.first.lon);
     var sectors = const <GeoPoint>[];
     final pkg = selectedPackage;
+    // v1.2.17：维修区入口/出口（包 pitIn/pitOut，null = 待核）。
+    // 只在包起终点/分段点同一 500m 门控内采用，门控外传 null；
+    // 中心线传入逻辑不动（仍走 lapTimerCenterlineForPackage）。
+    GeoPoint? pitIn;
+    GeoPoint? pitOut;
     if (pkg != null && pkg.start != null && rec.points.isNotEmpty) {
       final d = haversineM(
         pkg.start!.lat,
@@ -681,6 +779,8 @@ class _HomePageState extends State<HomePage>
       if (d < 500) {
         startFinish = pkg.start!;
         sectors = pkg.sectorPoints;
+        pitIn = pkg.pitIn;
+        pitOut = pkg.pitOut;
       }
     }
     return LapTimer(
@@ -689,6 +789,13 @@ class _HomePageState extends State<HomePage>
       dwellThresholdMs: args.dwellThresholdMs,
       dwellSpeedMs: args.dwellSpeedMs,
       sectorPoints: sectors,
+      pitIn: pitIn,
+      pitOut: pitOut,
+      // v1.2.14 越线检测接线：包中心线由此传入（起终点/分段点
+      // 采用门控内的包才传，见 lapTimerCenterlineForPackage）；
+      // 无包/无中心线时传 null，LapTimer 回落半径法。
+      centerline: lapTimerCenterlineForPackage(
+          pkg, GeoPoint(rec.points.first.lat, rec.points.first.lon)),
     );
   }
 
@@ -737,7 +844,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.2.10',
+          versionName: '1.3.0',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1562,7 +1669,7 @@ class _HomePageState extends State<HomePage>
           ),
           const Divider(color: Colors.white12),
           // v0.1.7 菜单简化去重 + v1.0.3 关于移入菜单 + v1.0.4 性能测试
-          // 移入菜单（红字加粗）：赛道库 / 性能测试 / 连接的设备管理 /
+          // 移入菜单（红字加粗）：赛道库 / 性能测试 / 设备中心 /
           // 数据导出/备份 / 免责声明 / 关于六项。首页与记录页入口已删，
           // 性能测试只剩这一处入口，仍进同一 performance_challenge.dart。
           // 关闭动画仍为 200ms easeOutCubic 主界面右移（build 里
@@ -1575,10 +1682,10 @@ class _HomePageState extends State<HomePage>
                   title: const Text('性能测试', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                   subtitle: const Text('0-100 加速 / 100-0 刹停 · 仅封闭场地测试'),
                   onTap: () => _menuAction(_openPerformanceChallenge)),
-              ListTile(leading: const Icon(Icons.devices), title: const Text('连接的设备管理'), subtitle: const Text('设备中心：相机、传感器、外接 GPS'), onTap: () => _menuAction(_openDeviceCenter)),
+              ListTile(leading: const Icon(Icons.devices), title: const Text('设备中心'), subtitle: const Text('运动相机 · 传感器 · 外接 GPS'), onTap: () => _menuAction(_openDeviceCenter)),
               ListTile(leading: const Icon(Icons.file_download), title: const Text('数据导出/备份'), subtitle: const Text('按行程分享 GPX / CSV'), onTap: () => _menuAction(_openDataExport)),
-              ListTile(leading: const Icon(Icons.warning_amber_rounded), title: const Text('免责声明'), subtitle: const Text('独立页面'), onTap: () => _menuAction(_openSafetySection)),
-              ListTile(leading: const Icon(Icons.info_outline), title: const Text('关于'), subtitle: const Text('驰迹 DriveTrack · 正式版'), onTap: () => _menuAction(_showAbout)),
+              ListTile(leading: const Icon(Icons.warning_amber_rounded), title: const Text('免责声明'), subtitle: const Text('使用前必读：安全须知与责任说明'), onTap: () => _menuAction(_openSafetySection)),
+              ListTile(leading: const Icon(Icons.info_outline), title: const Text('关于'), subtitle: const Text('版本号、在线更新、反馈与备份'), onTap: () => _menuAction(_showAbout)),
             ]),
           ),
         ]),
@@ -2476,8 +2583,25 @@ class _HomePageState extends State<HomePage>
     // 到达后才异步建成，旧条件（timer != null）会让赛道模式开局回落
     // 到街道 3D 地图，这就是“很大概率还是街道界面”的根因。
     final isTrackPage = trackMode && selectedTrack != null;
+    // v1.2.17：暂停/恢复切换（500ms 内连点防抖）；赛道紧凑按钮与
+    // 街道半宽按钮共用同一份逻辑，只改布局，不改行为。
+    Future<void> togglePause() async {
+      final now = DateTime.now();
+      if (_lastPauseTap != null &&
+          now.difference(_lastPauseTap!).inMilliseconds < 500) return;
+      _lastPauseTap = now;
+      if (rec.isRecording) {
+        await rec.pause();
+      } else {
+        await rec.resume();
+      }
+      setState(() {});
+    }
     return Column(children: [
-      RippleTap(
+      // v1.2.17：赛道模式隐藏顶部天气条容器（整块不渲染）；街道模式
+      // 保留原样。GpsSourceBadge 在其下原样原位保留。
+      if (!isTrackPage)
+        RippleTap(
         onTap: _openWeatherPage,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -2486,8 +2610,6 @@ class _HomePageState extends State<HomePage>
             const Icon(Icons.cloud, size: 16, color: Colors.white),
             const SizedBox(width: 6),
             Expanded(child: Text(weather?.summary ?? '天气', style: const TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
-            if (_blediyActive)
-              Text('外接 GPS · ${_blediyFeed.hz.toStringAsFixed(0)} Hz', style: const TextStyle(color: Colors.greenAccent, fontSize: 12)),
             const SizedBox(width: 8),
             Text(rec.state == RecState.paused ? '已暂停' : '记录中', style: const TextStyle(color: Colors.orange, fontSize: 12)),
             // v0.1.8 常亮状态一眼可辨：开启=常亮中，开关关了=常亮已关闭，
@@ -2503,6 +2625,27 @@ class _HomePageState extends State<HomePage>
                   color: _keepScreenOnActual ? Colors.yellowAccent : Colors.white54, fontSize: 12),
             ),
           ]),
+        ),
+      ),
+      // v1.2.16 A 路：GPS 来源徽标（只在记录中显示）。生效态实时判定：
+      // _blediyActive 为真且未超时才算外接，回落瞬间即变灰，不在已回落
+      // 时仍显示外接。设备名状态里无现成映射，传 null 由徽标省略，不编名。
+      // 卫星数：外接态取 GGA 星数，手机态取手机 GNSS 可见星数，无数据为 null。
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+        child: GpsSourceBadge(
+          externalActive:
+              _blediyActive && !_blediyFeed.shouldFallbackToPhoneGps(),
+          fallingBack:
+              _blediyActive && _blediyFeed.shouldFallbackToPhoneGps(),
+          hz: _blediyFeed.hz,
+          satelliteCount: (_blediyActive &&
+                  !_blediyFeed.shouldFallbackToPhoneGps())
+              ? _blediyFeed.satelliteCount
+              : (SatelliteService.instance.visibleCount > 0
+                  ? SatelliteService.instance.visibleCount
+                  : null),
+          accuracyM: rec.curHAcc >= 999 ? null : rec.curHAcc,
         ),
       ),
       // v1.0.4：记录页性能测试小入口已删，入口只在左拉菜单（红字加粗）。
@@ -2524,7 +2667,10 @@ class _HomePageState extends State<HomePage>
                     ? '${selectedTrack!.nameCn} · 等待定位，计时即将开始'
                     : '${selectedTrack!.nameCn} · ${liveLapTimer!.currentLapNumber <= 0 ? '发车圈' : '第 ${liveLapTimer!.currentLapNumber} 圈'}'
                         ' · 本节用时 ${fmtDur(rec.elapsedMs)}'
-                        '${liveLapTimer!.isPaused ? ' · 已自动暂停' : ''}',
+                        '${liveLapTimer!.isPaused ? ' · 已自动暂停' : ''}'
+                        // v1.2.17：维修区内追加“ · 维修区 · 停站 mm:ss”
+                        // （计时器 inPit / pitStopMs），不在维修区不显示。
+                        '${pitStopSuffix(inPit: liveLapTimer!.inPit, pitStopMs: liveLapTimer!.pitStopMs)}',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -2542,10 +2688,11 @@ class _HomePageState extends State<HomePage>
       // 当前圈 / 暂停态均为 LapTimer 实测值。待核赛道传
       // sectorSourceNote“扇区待核”，估算赛道传“估算分段”。
       // 注意：本处不合成任何扇区点——LapTimer 的 sectorPoints
-      // 仍由赛道页实地传入（目前 _buildLapTimer 未传，故进行中
-      // completed 恒为空、分段格全为 '--'，见 track_timing.dart
-      // 的 currentCompletedSectorsMs 注释）；目录归一化轮廓点
-      // 不是经纬度，绝不能换算成 GeoPoint 冒充扇区点。
+      // 由 _buildLapTimer 从赛道包取（包起终点与记录首点 < 500m
+      // 时采用包 sectorPoints，否则为空；见 _buildLapTimer）；
+      // 目录归一化轮廓点不是经纬度，绝不能换算成 GeoPoint 冒充
+      // 扇区点。无包分段点的赛道计时器无扇区点，预测圈 / Delta /
+      // 最优圈三者均为占位，分段格全为 '--'。
       if (isTrackPage)
         Expanded(
           child: SingleChildScrollView(
@@ -2553,7 +2700,19 @@ class _HomePageState extends State<HomePage>
             child: Builder(builder: (_) {
               final timer = liveLapTimer;
               final sectorData = sectorDataFor(selectedTrack!.id);
-              final labels = sectorData?.sectorLabels ?? const [];
+              // v1.2.15：分段标签以计时器实际配置的扇区点为准——
+              // 包分段点是经纬度实点，2 点 = S1/S2/S3、1 点 = S1/S2；
+              // 分数制 sectorData 只作无实点时的回落。勒芒等“包有
+              // 实点、分数数据却为 pending”的赛道，旧写法会把整行
+              // 分段格盖成“扇区待核”，delta 在算但格子不显示。
+              // 无实点时仍按 sectorData 标签 + 来源标注显示 '--'。
+              final hasSectorPoints =
+                  timer != null && timer.sectorPoints.isNotEmpty;
+              final labels = hasSectorPoints
+                  ? (timer.sectorPoints.length >= 2
+                      ? const ['S1', 'S2', 'S3']
+                      : const ['S1', 'S2'])
+                  : (sectorData?.sectorLabels ?? const []);
               final completedDeltas =
                   timer?.currentSectorDeltasVsBest ?? const <int?>[];
               final count = labels.length > completedDeltas.length
@@ -2567,16 +2726,16 @@ class _HomePageState extends State<HomePage>
               final laps = timer?.laps ?? const <Lap>[];
               final bestMs = timer?.bestLap?.durationMs;
               // 职业面板接线（诚实口径，见 track_session_display.dart）：
-              // - 实时 Delta 只认真实扇区点：_buildLapTimer 目前不传
-              //   sectorPoints（目录轮廓点不是经纬度，绝不能冒充），
-              //   故直播中分段完成数据恒为空，Delta 传 null 显示 '--'；
-              //   扇区点接入后，Delta = 预测圈 - 最佳圈（分段级）。
-              // - 最优圈复用 sessionOptimalLapMs（内部先按最佳圈的
-              //   分段长度过滤，避免退化半圈与真实分段按下标混算）。
+              // - 预测圈：LapTimer.predictedLapMsVsBest（已完成分段实测 +
+              //   参照圈剩余分段，参照圈 = 本节最佳圈）；无分段点 / 无
+              //   参照圈时 getter 本身返回 null，显示占位，不编数。
+              // - 实时 Delta 只认真实扇区点：liveDeltaMsFor 内部按
+              //   hasSectorPoints 门控，Delta = 预测圈 - 最佳圈（分段级）。
+              // - 最优圈：有真实扇区点时才传 sessionOptimalLapMs（内部
+              //   先按最佳圈段数过滤，避免退化半圈与真实分段混算）；
+              //   无扇区点时传 null，不拿前后半圈拼假最优圈。
               final completedTimes =
                   timer?.currentCompletedSectorsMs ?? const <int>[];
-              final hasSectorPoints =
-                  timer != null && timer.sectorPoints.isNotEmpty;
               final predictedMs = timer?.predictedLapMsVsBest;
               final liveDelta = liveDeltaMsFor(
                 predictedLapMs: predictedMs,
@@ -2587,7 +2746,8 @@ class _HomePageState extends State<HomePage>
                   hasSectorPoints && completedTimes.length < labels.length
                       ? completedTimes.length
                       : null;
-              final optimalLapMs = sessionOptimalLapMs(laps);
+              final optimalLapMs =
+                  hasSectorPoints ? sessionOptimalLapMs(laps) : null;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -2608,7 +2768,12 @@ class _HomePageState extends State<HomePage>
                     bestLapMs: bestMs,
                     predictedLapMs: predictedMs,
                     optimalLapMs: optimalLapMs,
-                    sectorSourceNote: sectorData?.sourceLabel ?? '扇区待核',
+                    // 有真实扇区点时不标“扇区待核”：分段点来自赛道包
+                    // 经纬度实点（模拟器推导的待核状态见包 sectorNote
+                    // 与赛道 ⓘ 页，本行只标分段点是否真实存在）。
+                    sectorSourceNote: hasSectorPoints
+                        ? '真实分段点'
+                        : (sectorData?.sourceLabel ?? '扇区待核'),
                     isPaused: timer?.isPaused ?? false,
                     liveGSource: LiveGSource(
                       listenable: rec,
@@ -2620,7 +2785,22 @@ class _HomePageState extends State<HomePage>
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _trackLapListCard(laps, bestMs),
+                  // v1.2.17：段速 + 到下一计时线距离行（赛道页内，
+                  // TrackSessionDisplay 下方）。段速取计时器
+                  // sectorSpeeds（与分段标签等长，未开始的段为 null，
+                  // 只取 GPS 实测点）；无真实分段点时显示占位
+                  // “段速 --”，不编数。下一计时线距离取计时器
+                  // nextLineDistanceM，为 null 时该段不显示。
+                  TrackSectorSpeedRow(
+                    sectorSpeeds:
+                        timer?.sectorSpeeds ?? const <SectorSpeed?>[],
+                    sectorLabels: labels,
+                    hasSectorPoints: hasSectorPoints,
+                    nextLineDistanceM: timer?.nextLineDistanceM,
+                  ),
+                  const SizedBox(height: 12),
+                  _trackLapListCard(laps, bestMs,
+                      hasSectorPoints: hasSectorPoints),
                   const SizedBox(height: 12),
                   _trackSpeedCard(),
                 ],
@@ -2690,42 +2870,50 @@ class _HomePageState extends State<HomePage>
             ]),
             const SizedBox(height: 10),
           ],
-          // v1.2.0 标记事件：街道/赛道记录页共用，醒目全宽按钮，位于
-          // 暂停/长按结束上方；标记时可写标题、选类型、可选照片与备注，
-          // 无照片也可先标记，之后在详情时间线附照片。
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: FilledButton.icon(
-              icon: const Icon(Icons.place),
-              label: Text(
-                  '标记事件${livePhotoPoints.isEmpty ? '' : '（已标记 ${livePhotoPoints.length} 条）'}',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
-              onPressed: _addEventMarker,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text('存当前坐标与时间，可写标题、选类型、可选照片与备注；结束后在详情页事件时间线查看',
-              style: TextStyle(color: Colors.white54, fontSize: 11)),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: FilledButton(
-                onPressed: () async {
-                  final now = DateTime.now();
-                  if (_lastPauseTap != null && now.difference(_lastPauseTap!).inMilliseconds < 500) return;
-                  _lastPauseTap = now;
-                  if (rec.isRecording) {
-                    await rec.pause();
-                  } else {
-                    await rec.resume();
-                  }
-                  setState(() {});
-                },
-                child: Text(rec.isRecording ? '暂停' : '恢复'),
+          // v1.2.0 标记事件：醒目全宽按钮，位于暂停/长按结束上方；
+          // 标记时可写标题、选类型、可选照片与备注，无照片也可先标记，
+          // 之后在详情时间线附照片。
+          // v1.2.17：赛道模式下标记事件按钮与下面那行说明文字都不显示
+          // （赛道页不做标记）；街道模式保留原样，仍调用 _addEventMarker。
+          if (!isTrackPage) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.place),
+                label: Text(
+                    '标记事件${livePhotoPoints.isEmpty ? '' : '（已标记 ${livePhotoPoints.length} 条）'}',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+                onPressed: _addEventMarker,
               ),
             ),
+            const SizedBox(height: 4),
+            const Text('存当前坐标与时间，可写标题、选类型、可选照片与备注；结束后在详情页事件时间线查看',
+                style: TextStyle(color: Colors.white54, fontSize: 11)),
+          ],
+          const SizedBox(height: 10),
+          // v1.2.17：赛道模式底部按钮改为紧凑暂停按钮（96×48）+
+          // Expanded 长按结束（红色、48 高，仍只响应 onLongPress
+          // 防误触）；结束计时保持手动，不加任何自动结束或自动
+          // 结束弹窗。街道模式保持现有两个半宽按钮不动。
+          Row(children: [
+            if (isTrackPage)
+              SizedBox(
+                width: 96,
+                height: 48,
+                child: FilledButton(
+                  onPressed: togglePause,
+                  child: Text(rec.isRecording ? '暂停' : '恢复'),
+                ),
+              )
+            else
+              Expanded(
+                child: FilledButton(
+                  onPressed: togglePause,
+                  child: Text(rec.isRecording ? '暂停' : '恢复'),
+                ),
+              ),
             const SizedBox(width: 8),
             Expanded(
               child: RippleTap(
@@ -2749,7 +2937,13 @@ class _HomePageState extends State<HomePage>
 
   /// 赛道面板：圈速列表卡（最新圈在上；最快圈红字标“最快”；
   /// 停留不计圈的圈标“不计圈”，不参与最快圈比较）。
-  Widget _trackLapListCard(List<Lap> laps, int? bestMs) {
+  /// v1.2.17：每圈在总时间下方展开 S1/S2/S3 用时（取 Lap.sectorsMs；
+  /// 只有计时器有真实分段点时才展开，无分段点只显示总时间，不把
+  /// 退化两段当前真实分段）；圈标记新增 Lap.kind：inLap“进站圈”、
+  /// outLap“出站圈”，与“不计圈”“最快”并存；“发车圈”仍由旗标
+  /// 头行 currentLapNumber<=0 显示，不动。
+  Widget _trackLapListCard(List<Lap> laps, int? bestMs,
+      {required bool hasSectorPoints}) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -2767,35 +2961,50 @@ class _HomePageState extends State<HomePage>
           for (final lap in laps.reversed)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(children: [
-                Text('第 ${lap.number} 圈',
-                    style: const TextStyle(color: Colors.white, fontSize: 14)),
-                const Spacer(),
-                if (!lap.counted)
-                  const Text('不计圈 ',
-                      style: TextStyle(color: Colors.white54, fontSize: 12))
-                else if (bestMs != null && lap.durationMs == bestMs)
-                  const Text('最快 ',
-                      style: TextStyle(
-                          color: Color(0xFFE10600),
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
-                Text(LapTimer.formatLapTime(lap.durationMs),
-                    style: TextStyle(
-                        color: (lap.counted && bestMs != null && lap.durationMs == bestMs)
-                            ? const Color(0xFFE10600)
-                            : Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold)),
-              ]),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Text('第 ${lap.number} 圈',
+                        style: const TextStyle(color: Colors.white, fontSize: 14)),
+                    const Spacer(),
+                    if (lapKindTag(lap.kind).isNotEmpty)
+                      Text('${lapKindTag(lap.kind)} ',
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    if (!lap.counted)
+                      const Text('不计圈 ',
+                          style: TextStyle(color: Colors.white54, fontSize: 12))
+                    else if (bestMs != null && lap.durationMs == bestMs)
+                      const Text('最快 ',
+                          style: TextStyle(
+                              color: Color(0xFFE10600),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold)),
+                    Text(LapTimer.formatLapTime(lap.durationMs),
+                        style: TextStyle(
+                            color: (lap.counted && bestMs != null && lap.durationMs == bestMs)
+                                ? const Color(0xFFE10600)
+                                : Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold)),
+                  ]),
+                  if (hasSectorPoints && lap.sectorsMs.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(formatLapSectorTimes(lap),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    ),
+                ],
+              ),
             ),
       ]),
     );
   }
 
-  /// 赛道面板：速度 / 里程 / 用时卡。不用街道面板的 G 值圆与
-  /// 速度区间图例，只给赛道关心的三项 + 定位精度。职业面板里
-  /// 它降级放在圈速列表下面：内边距与字号都缩小，不抢计时区风头。
+  /// 赛道面板：速度卡。不用街道面板的 G 值圆与速度区间图例。
+  /// v1.2.17：删掉“里程”和“用时”两行，只留速度与定位精度。
+  /// 职业面板里它降级放在圈速列表下面：内边距与字号都缩小，
+  /// 不抢计时区风头。
   Widget _trackSpeedCard() {
     return Container(
       padding: const EdgeInsets.all(10),
@@ -2817,12 +3026,6 @@ class _HomePageState extends State<HomePage>
         ),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km',
-                style: const TextStyle(color: Colors.white70)),
-            const SizedBox(height: 4),
-            Text('用时 ${fmtDur(rec.elapsedMs)}',
-                style: const TextStyle(color: Colors.white70)),
-            const SizedBox(height: 4),
             Text(
                 '定位精度 ${rec.curHAcc >= 999 ? '—' : '${rec.curHAcc.toStringAsFixed(0)} m'}',
                 style: const TextStyle(color: Colors.white54, fontSize: 12)),
@@ -3020,6 +3223,13 @@ class _HomePageState extends State<HomePage>
                               '${(m.distanceM / 1000).toStringAsFixed(2)} km · ${fmtDur(m.endMs - m.startMs)} · ${keyMetric(m)}',
                               style: const TextStyle(color: Colors.white54, fontSize: 12),
                             ),
+                            // v1.2.16：GPS 来源标签，与最佳圈/评分关键指标
+                            // 并列在副标题区（下方一行，不挤占指标文案）；
+                            // 老行程 unknown 时不显示。
+                            if (m.gpsSource != GpsSource.unknown) ...[
+                              const SizedBox(height: 5),
+                              GpsSourceChip(source: m.gpsSource),
+                            ],
                           ],
                         ),
                         trailing: const Icon(Icons.chevron_right, color: Colors.white54),
@@ -3395,13 +3605,35 @@ class _TripDetailPageState extends State<TripDetailPage> {
     try {
     final dir = await widget.store.cacheDir();
     final trimmed = trip!.trimPrivacy;
+    // v1.2.18：赛道包只查一次，GPX 航点与 CSV 分段门控共用。
+    // 注：TrackPackage 无 startFinish 字段，起终线取 pkg.start
+    //（与计时接线 _buildLapTimer 同口径），缺失时回落 pkg.finish。
+    GeoPoint? startFinish;
+    var sectorPoints = const <GeoPoint>[];
+    bool? hasSectorPoints;
+    final trackId = trip!.trackId;
+    if (trip!.isTrackMode && trackId != null && trackId.isNotEmpty) {
+      final pkg = (await TrackLibraryService.instance.loadAll())
+          .packageById(trackId);
+      if (pkg != null) {
+        hasSectorPoints = pkg.hasSectors;
+        if (pkg.hasSectors || pkg.start != null || pkg.finish != null) {
+          startFinish = pkg.start ?? pkg.finish;
+          sectorPoints = pkg.sectorPoints;
+        }
+      }
+    }
     if (kind == 'gpx') {
       final path = '$dir/trip_${trip!.id}.gpx';
-      await File(path).writeAsString(widget.store.toGpx(trip!, trimmed: trimmed));
+      await File(path).writeAsString(widget.store.toGpx(trip!,
+          trimmed: trimmed,
+          startFinish: startFinish,
+          sectorPoints: sectorPoints));
       await Native.shareFiles([path], 'application/gpx+xml', '驰迹 GPX（${trimmed ? '已截掉首尾' : '完整轨迹'}）');
     } else {
       final path = '$dir/trip_${trip!.id}.csv';
-      await File(path).writeAsString(widget.store.toCsv(trip!, trimmed: false));
+      await File(path).writeAsString(widget.store.toCsv(trip!,
+          trimmed: false, hasSectorPoints: hasSectorPoints));
       await Native.shareFiles([path], 'text/csv', '驰迹 CSV（完整数据）');
     }
     } finally {
@@ -3434,6 +3666,15 @@ class _TripDetailPageState extends State<TripDetailPage> {
             .toList();
     final centerPt = scrub >= 0 && scrub < t.points.length ? t.points[scrub] : t.points[t.points.length ~/ 2];
     final trend = metas.where((m) => m.mode == t.mode).take(6).toList().reversed.toList();
+    // v1.2.16：详情页 GPS 来源标签取索引 TripMeta（与列表同一口径；
+    // 老行程 unknown 时不显示，不拿轨迹点重算、不回填）。
+    TripMeta? detailMeta;
+    for (final m in metas) {
+      if (m.id == t.id) {
+        detailMeta = m;
+        break;
+      }
+    }
     final powers = t.points.where((p) => p.powerW != null).map((p) => p.powerW!).toList();
     final avgPower = powers.isEmpty ? 0.0 : powers.reduce((a, b) => a + b) / powers.length;
     final cads = t.points.where((p) => p.cadenceRpm != null).map((p) => p.cadenceRpm!).toList();
@@ -3470,6 +3711,12 @@ class _TripDetailPageState extends State<TripDetailPage> {
                           color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 6),
                   _correctionRow(t),
+                  // v1.2.16：GPS 来源标签（详情页头部，与起终点地名、
+                  // 纠偏行并列展示；unknown 不显示）。
+                  if (detailMeta != null && detailMeta.gpsSource != GpsSource.unknown) ...[
+                    const SizedBox(height: 6),
+                    GpsSourceChip(source: detailMeta.gpsSource),
+                  ],
                 ]),
           ),
           Padding(
@@ -3790,6 +4037,23 @@ class _TripDetailPageState extends State<TripDetailPage> {
                           }
                         }
                         if (!mounted) return;
+                        // v1.2.18：分享卡分段行门控——赛道包有无真实
+                        // 分段点；查不到包/查包失败时为 null（卡面走
+                        // 保守门控，只显示 3 段分段行）。
+                        bool? hasSectors;
+                        final tid = t.trackId;
+                        if (t.isTrackMode &&
+                            tid != null &&
+                            tid.isNotEmpty) {
+                          try {
+                            hasSectors = (await TrackLibraryService.instance
+                                    .loadAll())
+                                .packageById(tid)
+                                ?.hasSectors;
+                          } catch (_) {
+                            hasSectors = null;
+                          }
+                        }
                         Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -3797,6 +4061,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       trip: t,
                       videoPath: t.videoPaths.isEmpty ? null : t.videoPaths.first,
                       trimPrivacy: previewTrim,
+                      hasSectorPoints: hasSectors,
                       onTrimPrivacyChanged: (v) => setState(() => previewTrim = v),
                       cardBoundaryKey: _previewCardKey,
                       mapImageBytes: mapBytes,

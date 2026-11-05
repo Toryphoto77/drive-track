@@ -20,8 +20,9 @@
 /// Catalyst 等专业软件的信息架构，不照搬皮肤）：
 /// - 主角是当前圈大计时，其下是大的实时 Delta 数字 + 一条细的红绿
 ///   Delta 条；分段行每段给分段用时 + Delta，当前段高亮；目标行
-///   并排预测圈 / 最佳圈 / 最优圈（最优圈 = 各段历史最快相加，
-///   调用方用 track_sector_data.dart 的 theoreticalBestLapMs 算）。
+///   并排预测圈 / 最佳圈 / 理论最优（理论最优 = 各段历史最快相加，
+///   调用方用 track_sector_data.dart 的 theoreticalBestLapMs 算；
+///   标签写“理论最优”不写“最优圈”，与实测最佳圈区分，不得混淆）。
 /// - 诚实口径（绝不冒充）：
 ///   实时 Delta 是分段级的：[liveDeltaMs] = 预测圈 - 最佳圈，即已
 ///   完成分段 delta 之和，只在分段点触发时变化，不是基于距离的
@@ -37,6 +38,8 @@
 /// 传入的权威 currentLapMs，暂停/完成一圈/新 GPS 点到达时的行为
 /// 见 live_lap_timer_text.dart。分段格与 Delta 是分段级数据，
 /// 本来就只在分段点触发时变化，不走 ticker。
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'live_lap_timer_text.dart';
@@ -72,20 +75,39 @@ int? liveDeltaMsFor({
   return predictedLapMs - bestLapMs;
 }
 
+/// Delta 指示条填充比例（0~1，纯函数，可单测）：
+/// 对数缩放口径（v1.2.15，由线性 10 秒满格改为对数，理由如下）：
+/// - 分段级 Delta 的典型量级是几百毫秒：线性 10 秒满格下 500ms
+///   只占半条的 5%，余光根本看不见，条形同虚设；
+/// - 对数缩放让小 Delta 可见，同时不让小 Delta 看起来像大 Delta：
+///   刻度是 ln(1 + |d| / τ) / ln(1 + 满格 / τ)，τ = 500ms、满格
+///   = 10000ms：100ms → 0.06、500ms → 0.23、1s → 0.36、2s → 0.53、
+///   5s → 0.79、10s → 1.0（≥ 10s 钳制到满格）。小 Delta 始终只占
+///   条的一小截，大失误才顶满，两者量级一眼可分；
+/// - 条只作方向与量级提示：精确值以条上方的 Delta 数字为准，
+///   不得只看条读数。null 或 0 时返回 0，只画底条与中心刻度。
+double deltaBarFraction(int? deltaMs) {
+  if (deltaMs == null || deltaMs == 0) return 0;
+  const tauMs = 500.0;
+  const fullScaleMs = 10000.0;
+  final frac = math.log(1 + deltaMs.abs() / tauMs) /
+      math.log(1 + fullScaleMs / tauMs);
+  return frac.clamp(0.0, 1.0);
+}
+
 /// 细的红绿 Delta 条：中心为 0，左红（比参照慢）、右绿（比参照快）。
-/// 满格 = 10 秒（分段级 Delta 通常在几秒内，10 秒满格既能看清小幅
-/// 变化、又不至于让一次大失误直接顶满）；null 或 0 时只画底条与中心刻度。
+/// 填充幅度见 [deltaBarFraction]（对数缩放，τ = 500ms、满格 10s）；
+/// null 或 0 时只画底条与中心刻度。
 class _DeltaBar extends StatelessWidget {
   final int? deltaMs;
   const _DeltaBar(this.deltaMs);
 
   @override
   Widget build(BuildContext context) {
-    const fullScaleMs = 10000;
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;
       final d = deltaMs;
-      final frac = d == null ? 0.0 : (d.abs() / fullScaleMs).clamp(0.0, 1.0);
+      final frac = deltaBarFraction(d);
       final half = w / 2;
       final fillW = half * frac;
       return SizedBox(
@@ -175,6 +197,7 @@ class TrackSessionDisplay extends StatelessWidget {
 
   /// 最优圈圈速（ms）= 各段历史最快相加；调用方用
   /// theoreticalBestLapMs 算好传入，无数据时为 null，显示占位。
+  /// 界面标签为“理论最优”，与实测最佳圈区分，不得只写“最优圈”。
   final int? optimalLapMs;
 
   /// 参照圈说明；默认“参照圈：本节最佳圈”。
@@ -376,7 +399,7 @@ class TrackSessionDisplay extends StatelessWidget {
               ],
             ),
           const SizedBox(height: 10),
-          // 目标行：预测圈、最佳圈、最优圈（上一圈已在下方圈速列表
+          // 目标行：预测圈、最佳圈、理论最优（上一圈已在下方圈速列表
           // 最新一行，不在这里重复占位）。
           Row(
             children: [
@@ -390,7 +413,7 @@ class TrackSessionDisplay extends StatelessWidget {
               ),
               Expanded(
                 child: _smallStat(
-                    '最优圈', LapTimer.formatLapTime(optimalLapMs)),
+                    '理论最优', LapTimer.formatLapTime(optimalLapMs)),
               ),
             ],
           ),
@@ -428,6 +451,83 @@ class TrackSessionDisplay extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// v1.2.17 赛道页：段速 + 到下一计时线距离行（放在 TrackSessionDisplay
+/// 下方，赛道页内）。
+///
+/// - 段速：调用方传计时器 [LapTimer.sectorSpeeds]（与分段标签等长，
+///   只取 GPS 实测点；未开始的段为 null）。有真实分段点时每段显示
+///   “Si 最低–最高”（km/h，取整）；某段为 null 时该段显示“Si --”。
+///   无真实分段点时整段只显示占位“段速 --”，不编数。
+/// - 到下一计时线距离：取计时器 [LapTimer.nextLineDistanceM]（沿中心线
+///   到下一边界点的米数）；有值时显示“距下一计时线 XXX m”，为 null
+///   时该段不显示、不编数。
+/// - 本 widget 不做计时、不算速度、不碰 GPS：全部输入由调用方从
+///   LapTimer 算好传入。
+class TrackSectorSpeedRow extends StatelessWidget {
+  /// 每段段内速度（最低/最高 km/h），与 [sectorLabels] 等长；
+  /// 未开始的段为 null。
+  final List<SectorSpeed?> sectorSpeeds;
+
+  /// 分段标签；默认 S1/S2/S3。
+  final List<String> sectorLabels;
+
+  /// 计时器是否有真实分段点；为 false 时只显示占位“段速 --”。
+  final bool hasSectorPoints;
+
+  /// 沿中心线到下一计时线边界点的距离（米）；无中心线或无边界点
+  /// 时为 null，该段不显示。
+  final double? nextLineDistanceM;
+
+  const TrackSectorSpeedRow({
+    super.key,
+    required this.sectorSpeeds,
+    this.sectorLabels = const ['S1', 'S2', 'S3'],
+    required this.hasSectorPoints,
+    this.nextLineDistanceM,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final speedText = hasSectorPoints
+        ? [
+            for (var i = 0; i < sectorLabels.length; i++)
+              i < sectorSpeeds.length && sectorSpeeds[i] != null
+                  ? '${sectorLabels[i]} ${sectorSpeeds[i]!.minKmh.toStringAsFixed(0)}–${sectorSpeeds[i]!.maxKmh.toStringAsFixed(0)}'
+                  : '${sectorLabels[i]} --',
+          ].join(' · ')
+        : '段速 --';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              speedText,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (nextLineDistanceM != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              '距下一计时线 ${nextLineDistanceM!.toStringAsFixed(0)} m',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -108,7 +108,7 @@ void main() {
   });
 
   group('职业面板新显示字段', () {
-    testWidgets('实时 Delta 着色、分段用时、最优圈均渲染', (tester) async {
+    testWidgets('实时 Delta 着色、分段用时、理论最优均渲染', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -132,13 +132,13 @@ void main() {
       expect(deltaText.style?.color, const Color(0xFF22C55E));
       expect(find.text('0:28.000'), findsOneWidget);
       expect(find.text('0:41.000'), findsOneWidget);
-      expect(find.text('最优圈'), findsOneWidget);
+      expect(find.text('理论最优'), findsOneWidget);
       expect(find.text('1:27.000'), findsOneWidget);
       // 第三段未完成：用时与 delta 均为 '--'。
       expect(find.text('--'), findsNWidgets(2));
     });
 
-    testWidgets('无 Delta 与最优圈时显示占位，不编数', (tester) async {
+    testWidgets('无 Delta 与理论最优时显示占位，不编数', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -153,7 +153,7 @@ void main() {
         ),
       );
       expect(find.text('实时 Delta'), findsOneWidget);
-      expect(find.text('最优圈'), findsOneWidget);
+      expect(find.text('理论最优'), findsOneWidget);
       expect(find.text('--:--.---'), findsWidgets);
     });
   });

@@ -21,6 +21,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'app_notice.dart';
 import 'models.dart';
 import 'store.dart';
 import 'track_analysis_page.dart';
@@ -53,9 +54,7 @@ class TrackHomePage extends StatelessWidget {
   });
 
   List<TripMeta> get _trackTrips {
-    final list = metas
-        .where((m) => m.isTrackMode && !m.demo)
-        .toList()
+    final list = metas.where((m) => m.isTrackMode && !m.demo).toList()
       ..sort((a, b) => b.startMs.compareTo(a.startMs));
     return list;
   }
@@ -64,9 +63,7 @@ class TrackHomePage extends StatelessWidget {
     final trip = await loadTrip(m.id);
     if (!context.mounted) return;
     if (trip == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('行程文件读取失败，请重试')),
-      );
+      showAppNotice(context, '行程文件读取失败，请重试', AppNoticeKind.error);
       return;
     }
     final laps = trip.lapsJson.map((j) => Lap.fromJson(j)).toList();
@@ -82,10 +79,7 @@ class TrackHomePage extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => TrackLibraryPage(
-          metas: metas,
-          loadTrip: loadTrip,
-        ),
+        builder: (_) => TrackLibraryPage(metas: metas, loadTrip: loadTrip),
       ),
     );
   }
@@ -96,22 +90,19 @@ class TrackHomePage extends StatelessWidget {
     // 按赛道分组：key 为 trackId（无 id 时按赛道名兜底）。
     final groups = <String, List<TripMeta>>{};
     for (final m in trackTrips) {
-      final key =
-          (m.trackId != null && m.trackId!.isNotEmpty) ? m.trackId! : m.trackName;
+      final key = (m.trackId != null && m.trackId!.isNotEmpty)
+          ? m.trackId!
+          : m.trackName;
       (groups[key] ??= []).add(m);
     }
     final groupKeys = groups.keys.toList()
-      ..sort((a, b) => groups[b]!
-          .first
-          .startMs
-          .compareTo(groups[a]!.first.startMs));
+      ..sort(
+        (a, b) => groups[b]!.first.startMs.compareTo(groups[a]!.first.startMs),
+      );
 
     return Scaffold(
       backgroundColor: _kBg,
-      appBar: AppBar(
-        title: const Text('赛道'),
-        backgroundColor: _kBg,
-      ),
+      appBar: AppBar(title: const Text('赛道'), backgroundColor: _kBg),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
@@ -122,23 +113,31 @@ class TrackHomePage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('赛道入口',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
+                  const Text(
+                    '赛道入口',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     height: 48,
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
-                          backgroundColor: _kRed,
-                          foregroundColor: Colors.white),
+                        backgroundColor: _kRed,
+                        foregroundColor: Colors.white,
+                      ),
                       icon: const Icon(Icons.flag),
-                      label: const Text('赛道库',
-                          style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        '赛道库',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       onPressed: () => _openLibrary(context),
                     ),
                   ),
@@ -153,19 +152,22 @@ class TrackHomePage extends StatelessWidget {
                       ),
                       icon: const Icon(Icons.analytics_outlined),
                       label: Text(
-                          trackTrips.isEmpty
-                              ? '赛道分析 · 暂无赛道行程'
-                              : '赛道分析 · 最新一趟',
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold)),
+                        trackTrips.isEmpty ? '赛道分析 · 暂无赛道行程' : '赛道分析 · 最新一趟',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       onPressed: trackTrips.isEmpty
                           ? null
                           : () => _openTripAnalysis(context, trackTrips.first),
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text('赛道详情、图鉴、分析统一走本页；记录页顶部的“赛道”只是筛选，不进详情。',
-                      style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  const Text(
+                    '赛道详情、图鉴、分析统一走本页；记录页顶部的“赛道”只是筛选，不进详情。',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
                 ],
               ),
             ),
@@ -175,34 +177,50 @@ class TrackHomePage extends StatelessWidget {
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('赛道模式说明',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
+                  Text(
+                    '赛道模式说明',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   SizedBox(height: 8),
-                  Text('· 赛道模式只在汽车 / 摩托下计时，骑行不进赛道计时。',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  Text('· 赛道行程不评分；结束页永远展示本节传感器实测总览，无圈速时也不为空。',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  Text('· 未连接 OBD，暂无此通道：油门 / 刹车 / 转速均无数据，不反推曲线。',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  Text('· 扇区口径：官方扇区 0 条可核实；估算的标“估算分段”、待核的标“扇区待核”，绝不冒充官方。',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(
+                    '· 赛道模式只在汽车 / 摩托下计时，骑行不进赛道计时。',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  Text(
+                    '· 赛道行程不评分；结束页永远展示本节传感器实测总览，无圈速时也不为空。',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  Text(
+                    '· 未连接 OBD，暂无此通道：油门 / 刹车 / 转速均无数据，不反推曲线。',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  Text(
+                    '· 扇区口径：官方扇区 0 条可核实；估算的标“估算分段”、待核的标“扇区待核”，绝不冒充官方。',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            const Text('我的赛道行程 · 按赛道分组',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold)),
+            const Text(
+              '我的赛道行程 · 按赛道分组',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 8),
             if (trackTrips.isEmpty)
-              const Text('暂无赛道行程\n去首页选赛道开始一次记录',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54, fontSize: 13))
+              const Text(
+                '暂无赛道行程\n去首页选赛道开始一次记录',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 13),
+              )
             else
               for (final key in groupKeys) ...[
                 _groupCard(context, groups[key]!),
@@ -221,30 +239,42 @@ class TrackHomePage extends StatelessWidget {
         .map((m) => bestLapMsByTripId[m.id])
         .whereType<int>()
         .toList();
-    final groupBest = bests.isEmpty ? null : bests.reduce((a, b) => a < b ? a : b);
+    final groupBest = bests.isEmpty
+        ? null
+        : bests.reduce((a, b) => a < b ? a : b);
     final sector = sectorDataFor(first.trackId);
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Expanded(
-              child: Text(name,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold)),
-            ),
-            Text('${trips.length} 趟',
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          ]),
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                '${trips.length} 趟',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             groupBest == null
                 ? '最佳圈：暂无圈速'
                 : '最佳圈：${LapTimer.formatLapTime(groupBest)}',
             style: const TextStyle(
-                color: _kRed, fontSize: 14, fontWeight: FontWeight.bold),
+              color: _kRed,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
@@ -259,41 +289,55 @@ class TrackHomePage extends StatelessWidget {
               onTap: () => _openTripAnalysis(context, m),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_fmtDate(m.startMs),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _fmtDate(m.startMs),
                             style: const TextStyle(
-                                color: Colors.white, fontSize: 14)),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${(m.distanceM / 1000).toStringAsFixed(2)} km · ${_fmtDur(m.endMs - m.startMs)}',
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 12),
-                        ),
-                      ],
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${(m.distanceM / 1000).toStringAsFixed(2)} km · ${_fmtDur(m.endMs - m.startMs)}',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Text(
-                    bestLapMsByTripId[m.id] == null
-                        ? '暂无圈速'
-                        : LapTimer.formatLapTime(bestLapMsByTripId[m.id]!),
-                    style: const TextStyle(
+                    Text(
+                      bestLapMsByTripId[m.id] == null
+                          ? '暂无圈速'
+                          : LapTimer.formatLapTime(bestLapMsByTripId[m.id]!),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 13,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.chevron_right,
-                      size: 18, color: Colors.white54),
-                ]),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: Colors.white54,
+                    ),
+                  ],
+                ),
               ),
             ),
           const SizedBox(height: 2),
-          const Text('点某条行程进该行程的赛道分析页。',
-              style: TextStyle(color: Colors.white54, fontSize: 11)),
+          const Text(
+            '点某条行程进该行程的赛道分析页。',
+            style: TextStyle(color: Colors.white54, fontSize: 11),
+          ),
         ],
       ),
     );

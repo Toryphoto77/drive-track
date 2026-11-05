@@ -269,7 +269,7 @@ class _AboutPageState extends State<AboutPage> {
           // v1.0.7：库链接 / 源码 / 作者 ID（点按用系统浏览器打开）。
           _linkCard(
             icon: Icons.code,
-            title: '库链接',
+            title: 'GitHub 仓库',
             subtitle: kDriveTrackRepoUrl,
             onTap: () => Native.openUrl(kDriveTrackRepoUrl),
           ),

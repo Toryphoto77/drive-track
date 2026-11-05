@@ -14,6 +14,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_notice.dart';
 import 'models.dart';
 import 'native.dart';
 import 'store.dart';
@@ -83,9 +84,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   void _onVersionTap() {
     if (_versionTapGate.tap() && !_curation) {
       setState(() => _curation = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('策展模式已解锁')),
-      );
+      showAppNotice(context, '策展模式已解锁', AppNoticeKind.success);
     }
   }
 
@@ -100,10 +99,16 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       _checking = false;
       _check = result;
     });
-    if (result.status == UpdateCheckStatus.error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
-      );
+    // 三种状态都走卡片状态行 + 顶部自动消失提示：
+    // 失败 → error，已是最新 → success，有更新 → info；文案取
+    // 服务返回的 message（与卡片状态行同一口径）。
+    switch (result.status) {
+      case UpdateCheckStatus.error:
+        showAppNotice(context, result.message, AppNoticeKind.error);
+      case UpdateCheckStatus.upToDate:
+        showAppNotice(context, result.message, AppNoticeKind.success);
+      case UpdateCheckStatus.available:
+        showAppNotice(context, result.message, AppNoticeKind.info);
     }
   }
 
@@ -117,7 +122,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
           u.isNew
               ? '远端新增包 v${u.remoteVersion}，下载后加入本地库。'
               : '本地 v${u.localVersion} → 远端 v${u.remoteVersion}。'
-              '用户改过的包不会被覆盖；更新失败不影响本地数据。',
+                    '用户改过的包不会被覆盖；更新失败不影响本地数据。',
         ),
         actions: [
           TextButton(
@@ -178,7 +183,13 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     if (result.skippedReasons.isNotEmpty) {
       msg.write('；跳过 ${result.skippedReasons.length} 个');
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg.toString())));
+    showAppNotice(
+      context,
+      msg.toString(),
+      result.skippedReasons.isEmpty
+          ? AppNoticeKind.success
+          : AppNoticeKind.warning,
+    );
   }
 
   Future<void> _export(TrackPackage pkg) async {
@@ -191,9 +202,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败：$e')),
-      );
+      showAppNotice(context, '导出失败：$e', AppNoticeKind.error);
     }
   }
 
@@ -210,15 +219,12 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
           ...snap.userTracks.map((p) => p.toJson()),
         ],
       };
-      await File(path).writeAsString(
-        const JsonEncoder.withIndent('  ').convert(doc),
-      );
+      await File(path)
+          .writeAsString(const JsonEncoder.withIndent('  ').convert(doc));
       await Native.shareFiles([path], 'application/json', '赛道库全部数据包');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败：$e')),
-      );
+      showAppNotice(context, '导出失败：$e', AppNoticeKind.error);
     }
   }
 
@@ -265,9 +271,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('恢复「${pkg.nameCn}」默认？'),
-        content: const Text(
-          '本地版本（用户改动或远端更新）将被删除，回到打包种子 / 内置迁移版本。',
-        ),
+        content: const Text('本地版本（用户改动或远端更新）将被删除，回到打包种子 / 内置迁移版本。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -289,9 +293,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     final trips = widget.metas.where((m) => !m.demo).toList()
       ..sort((a, b) => b.startMs.compareTo(a.startMs));
     if (trips.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('暂无可导入的行程')),
-      );
+      showAppNotice(context, '暂无可导入的行程：先去首页记录一次行程', AppNoticeKind.warning);
       return;
     }
     final picked = await showModalBottomSheet<TripMeta>(
@@ -316,9 +318,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
             const SizedBox(height: 12),
             for (final m in trips)
               ListTile(
-                title: Text(
-                  m.trackName.isNotEmpty ? m.trackName : '行程',
-                ),
+                title: Text(m.trackName.isNotEmpty ? m.trackName : '行程'),
                 subtitle: Text(
                   '${DateTime.fromMillisecondsSinceEpoch(m.startMs)}'
                   ' · ${(m.distanceM / 1000).toStringAsFixed(1)} km'
@@ -334,16 +334,12 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     final trip = await widget.loadTrip(picked.id);
     if (!mounted) return;
     if (trip == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('行程文件读取失败，请重试')),
-      );
+      showAppNotice(context, '行程文件读取失败，请重试', AppNoticeKind.error);
       return;
     }
     final pkg = packageFromTrip(trip);
     if (pkg == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('轨迹点不足（需至少 10 点），无法导入')),
-      );
+      showAppNotice(context, '轨迹点不足（需至少 10 点），无法导入', AppNoticeKind.warning);
       return;
     }
     // 目标：新建我的赛道，或更新到现有官方包（成为本地改动）。
@@ -370,9 +366,8 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     if (target == null) {
       await _service.savePackage(pkg);
       await _refresh();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已导入我的赛道「${pkg.nameCn}」')),
-      );
+      if (!mounted) return;
+      showAppNotice(context, '已导入我的赛道「${pkg.nameCn}」', AppNoticeKind.success);
       return;
     }
     final updated = target.copyWith(
@@ -385,8 +380,11 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     );
     await _service.savePackage(updated);
     await _refresh();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已用行程更新「${target.nameCn}」（本地改动，远端不覆盖）')),
+    if (!mounted) return;
+    showAppNotice(
+      context,
+      '已用行程更新「${target.nameCn}」（本地改动，远端不覆盖）',
+      AppNoticeKind.success,
     );
   }
 
@@ -432,8 +430,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  for (final u in check.updates)
-                    _updateRow(u),
+                  for (final u in check.updates) _updateRow(u),
                 ],
                 const SizedBox(height: 20),
                 const Text(
@@ -468,8 +465,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                     style: TextStyle(color: Colors.white54, fontSize: 13),
                   )
                 else
-                  for (final p in snap.userTracks)
-                    _packageRow(p, isUser: true),
+                  for (final p in snap.userTracks) _packageRow(p, isUser: true),
                 if (_curation) ...[
                   const SizedBox(height: 24),
                   Container(
@@ -595,10 +591,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                     onPressed: _applying ? null : () => _applyOne(update),
                     child: const Text('更新'),
                   ),
-                TextButton(
-                  onPressed: () => _edit(p),
-                  child: const Text('编辑'),
-                ),
+                TextButton(onPressed: () => _edit(p), child: const Text('编辑')),
                 TextButton(
                   onPressed: () => _export(p),
                   child: const Text('导出'),
@@ -716,20 +709,14 @@ class LibraryVersionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(
-                Icons.map_outlined,
-                color: Colors.white70,
-                size: 22,
-              ),
+              Icon(Icons.map_outlined, color: Colors.white70, size: 22),
               SizedBox(width: 8),
               Text(
                 '赛道库',
@@ -746,10 +733,7 @@ class LibraryVersionCard extends StatelessWidget {
             onTap: onVersionTap,
             child: Text(
               '当前版本：$dataVersion',
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.white,
-              ),
+              style: const TextStyle(fontSize: 16, color: Colors.white),
             ),
           ),
           const SizedBox(height: 6),
@@ -767,10 +751,7 @@ class LibraryVersionCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   statusText,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ),
             ],
@@ -779,10 +760,7 @@ class LibraryVersionCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '${c.skippedUserModified.length} 个包因本地改动未列入更新（远端不覆盖本地改动）',
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 12,
-              ),
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ],
           const SizedBox(height: 14),
@@ -802,17 +780,11 @@ class LibraryVersionCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          OutlinedButton(
-            onPressed: onImport,
-            child: const Text('从行程导入'),
-          ),
+          OutlinedButton(onPressed: onImport, child: const Text('从行程导入')),
           const SizedBox(height: 8),
           Text(
             '$kOsmAttribution；OSM 数据遵循 ODbL，署名见本页。',
-            style: const TextStyle(
-              color: Colors.white54,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ],
       ),

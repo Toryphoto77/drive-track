@@ -352,6 +352,10 @@ class BleDiyGpsFeed {
     return _acceptedAt.length.toDouble();
   }
 
+  /// 最新定位的卫星数：GGA 卫星数优先，GSA 参与解算数兜底；
+  /// 两者皆无时 null（调用方显示“—”，不得补 0）。
+  int? get satelliteCount => _latest?.satellites ?? _latest?.usedSatellites;
+
   /// 是否应回落手机 GPS：从未拿到有效位置，或超过超时无新定位。
   /// 回落逻辑（调用方责任，见下方说明）：
   /// 1. 一旦本方法为 true，调用方应立即切回手机 GPS 轨迹源，并把

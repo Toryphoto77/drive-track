@@ -311,6 +311,19 @@ int? sessionOptimalLapMs(List<Lap> laps) {
       .toList());
 }
 
+/// 赛后理论最优圈（分析页用）：与直播页 [sessionOptimalLapMs]
+/// 同口径（先按最佳圈段数过滤，再各段最快相加），另加一道真实
+/// 分段门控——最佳圈须至少 3 段（即 2 个真实分段点均已触发）。
+/// 2 段无法区分“1 个真实分段点”与“无分段点时的前后半圈切分”，
+/// 保守起见返回 null（1 分段点赛道的理论最优暂不显示，等分段口
+/// 径随行程持久化后再放开）；无分段点的半圈拼合一律不显示。
+/// 无计入圈、最佳圈段数不足时为 null，界面显示占位。
+int? analysisTheoreticalBestLapMs(List<Lap> laps) {
+  final best = sessionBestLap(laps);
+  if (best == null || best.sectorsMs.length < 3) return null;
+  return sessionOptimalLapMs(laps);
+}
+
 /// 本节最佳圈：计入成绩的圈里最快的一圈；无计入圈时为 null。
 /// 与 LapTimer.bestLap 口径一致（只看 counted），供不持有 LapTimer
 /// 的分析页复用。

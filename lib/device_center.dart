@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 
 import 'blediy_gps.dart';
 import 'bt_gps_receiver.dart';
+import 'camera_connect_page.dart';
 import 'camera_guide.dart';
+import 'device_scan_card.dart';
 import 'gopro_protocol.dart';
 import 'native.dart';
 import 'satellite_settings_page.dart';
@@ -1005,37 +1007,53 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     final fix = _feed.latest;
     final stale = _feed.shouldFallbackToPhoneGps();
     final uuids = _effectiveUuids;
+    // 扫描卡片状态行（三种状态共用一处文案来源）：
+    // 空态 / 扫描中 / 有结果（无可适配时也在这里说清，不另起文案）。
+    final adaptable = _scanned.where(gpsDeviceIsAdaptable).toList();
+    final scanStatusLine = _adaptScanning
+        ? '正在扫描周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对）…'
+        : _scanned.isEmpty
+            ? '尚未扫描：点上方「扫描适配设备」开始。'
+            : adaptable.isEmpty
+                ? '已扫描 ${_scanned.length} 台设备，其中没有可适配的 GPS 设备'
+                    '（全部结果见下方「高级 / 手动添加」）。'
+                : '已扫描 ${_scanned.length} 台设备，找到 ${adaptable.length} 台'
+                    '可适配设备，点行即连。';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '点下方按钮一次扫完周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对），'
-          '点列表里的设备即自动连接。',
-          style: TextStyle(color: Colors.white60, fontSize: 12),
+        // 动态匹配卡片：与相机页同一套共用组件（device_scan_card.dart），
+        // 只换外衣——扫描 / 去重 / 连接逻辑一律不动（见 _toggleAdaptScan /
+        // _connectAdaptable）。
+        DeviceScanCard(
+          title: '外接 GPS',
+          description: '点下方按钮一次扫完周围可适配的 GPS 设备（BLE + 经典蓝牙 + '
+              '已配对），点列表里的设备即自动连接。BLE 优先、只有 SPP 通道时走 SPP；'
+              '12 张档案名录匹配或广播 NMEA UART / SPP 服务的设备才进主列表。',
+          icon: Icons.satellite_alt,
+          scanning: _adaptScanning,
+          scanLabel: '扫描适配设备',
+          stopLabel: '停止扫描',
+          onScanToggle: _toggleAdaptScan,
+          statusLine: scanStatusLine,
+          scanButtonIcon: Icons.bluetooth_searching,
+          footnote: '第一测试目标：DEXIAN D1 25Hz（用户确认）；BLE 服务 UUID 仍未知、'
+              '连接与定位仍待真机验证。',
+          permNotice: _permNotice,
+          onOpenSettings: () => Native.openAppSettings(),
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: _toggleAdaptScan,
-            icon: Icon(_adaptScanning ? Icons.stop : Icons.bluetooth_searching,
-                size: 18),
-            label: Text(_adaptScanning ? '停止扫描' : '扫描适配设备'),
-          ),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         const Text('可适配设备',
             style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
         if (_scanned.isEmpty)
-          const Text('尚未扫描：点上方「扫描适配设备」开始。',
+          const Text('尚未找到设备：点上方「扫描适配设备」开始；设备须开机、蓝牙打开，'
+              'SPP 设备须先在系统蓝牙里配对。',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
-        if (_scanned.isNotEmpty && !_scanned.any(gpsDeviceIsAdaptable))
-          Text('已扫描 ${_scanned.length} 台设备，其中没有可适配的 GPS 设备'
-              '（全部结果见下方「高级 / 手动添加」）。',
-              style: const TextStyle(color: Colors.white54, fontSize: 12)),
-        for (final dev in _scanned.where(gpsDeviceIsAdaptable))
+        for (final dev in adaptable)
           Builder(builder: (context) {
             final channels = (dev['channels'] as List? ?? <dynamic>[])
                 .map((e) => e.toString())
@@ -1051,37 +1069,23 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
             final signal = rssi != null
                 ? '信号 $rssi'
                 : (dev['bonded'] == true ? '已配对' : '');
-            return ListTile(
-              title: Text((dev['name'] ?? '').toString(),
-                  style: const TextStyle(color: Colors.white)),
-              subtitle: Text(
-                isConnected && fix != null
-                    ? '$channelLabel${signal.isEmpty ? '' : ' · $signal'} · '
-                        '${btGpsFixStatusLabel(fix)} · '
-                        '卫星 ${fix.satellites ?? '—'} · '
-                        '更新率 ${fix.hz?.toStringAsFixed(0) ?? '—'} Hz'
-                    : '$channelLabel${signal.isEmpty ? '' : ' · $signal'} · $addr',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              trailing: isConnecting
-                  ? const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2)),
-                        SizedBox(width: 6),
-                        Text('连接中',
-                            style: TextStyle(color: Colors.white70)),
-                      ],
-                    )
-                  : isConnected
-                      ? const Text('已连接',
-                          style: TextStyle(color: Colors.greenAccent))
-                      : const Text('点按连接',
-                          style: TextStyle(color: Colors.white70)),
+            return DeviceScanRow(
+              title: (dev['name'] ?? '').toString().isEmpty
+                  ? '未命名设备'
+                  : (dev['name'] ?? '').toString(),
+              badgeLabel: channelLabel,
+              detail: _guessHint(dev),
+              meta: isConnected && fix != null
+                  ? '${btGpsFixStatusLabel(fix)} · '
+                      '卫星 ${fix.satellites ?? '—'} · '
+                      '更新率 ${fix.hz?.toStringAsFixed(0) ?? '—'} Hz'
+                      '${signal.isEmpty ? '' : ' · $signal'} · $addr'
+                  : (signal.isEmpty ? addr : '$signal · $addr'),
+              actionLabel: '点按连接',
+              // GPS 页沿用旧文案“连接中”（无省略号），与单入口测试一致。
+              connectingLabel: '连接中',
+              isConnecting: isConnecting,
+              isConnected: isConnected,
               onTap: () => _connectAdaptable(dev),
             );
           }),
@@ -1280,19 +1284,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           ],
         ),
         const SizedBox(height: 8),
-        if (_permNotice != null)
-          Row(children: [
-            Expanded(
-              child: Text(_permNotice!,
-                  style: const TextStyle(
-                      color: Colors.orangeAccent, fontSize: 12)),
-            ),
-            TextButton(
-              onPressed: () => Native.openAppSettings(),
-              child: const Text('去系统设置'),
-            ),
-          ]),
-        if (_notice != null)
+        // _notice 与卡片状态行同文时只在卡片里出现一次（扫描中提示），
+        // 避免同一文案在页面上出现两处；其余提示（连接 / 断开 / 停止等）
+        // 仍在这里显示。权限提示已收进卡片，不再另起一块。
+        if (_notice != null && _notice != scanStatusLine)
           Text(_notice!,
               style: const TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 8),
@@ -1673,50 +1668,112 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                   style: const TextStyle(color: Colors.white, fontSize: 13)),
             ),
           _sectionTitle('运动相机'),
-          _cameraCard(
-            accent: accent,
-            name: 'GoPro',
-            subtitle: 'Open GoPro BLE：先点下方按钮扫描 FEA6 设备，再在扫描列表的 '
-                'GoPro 行点“GoPro 连接”，依次完成连接 → 订阅响应特征 GP-0073 → '
-                '下发 Get Version 只读查询；收到响应后状态才变已连接。',
-            status: _goproStatus,
-            batteryText: _goproBattery == null
-                ? '电量：—（未收到电量事件，不显示假数值）'
-                : '电量：$_goproBattery%',
-            actionLabel: _goproScanning ? '停止扫描 GoPro' : '扫描 GoPro 设备',
-            onAction: _scanGoPro,
-          ),
-          _cameraCard(
-            accent: accent,
-            name: 'Insta360',
-            subtitle: 'Beta / 向导式连接：Wi-Fi 热点 + Insta360 App 连接，'
-                '本 App 不直连相机。',
-            status: DeviceLinkStatus.disconnected,
-            batteryText: '电量：—（请在品牌 App 内查看）',
-            actionLabel: '打开连接向导',
-            onAction: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                  builder: (_) => CameraGuidePage(
-                        brand: CameraGuideBrand.insta360,
-                        onBack: () => Navigator.of(context).pop(),
-                      )),
+          // v1.2.12：统一入口是「连接运动相机」新页（一个入口扫全部品牌，
+          // 品牌自动识别、点行即连）。下方三张旧的按品牌卡片只保留在
+          // 「高级 / 按品牌」区作直达入口，说法与新页一致：GoPro 直连，
+          // Insta360 / DJI 只走向导，不两套入口各说各话。
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B0E13),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withValues(alpha: 0.6)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.videocam, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text('连接运动相机',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                    '一个入口扫全部品牌：GoPro 走 BLE 直连，Insta360 / DJI 走'
+                    ' Wi-Fi 热点 + 品牌 App 向导（本 App 不直连）；品牌自动识别，'
+                    '不用先选品牌，点行即连。',
+                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const CameraConnectPage()),
+                  ),
+                  child: const Text('打开连接运动相机'),
+                ),
+              ],
             ),
           ),
-          _cameraCard(
-            accent: accent,
-            name: 'DJI',
-            subtitle: 'Beta / 向导式连接：Wi-Fi 热点 + DJI Mimo App 连接，'
-                '本 App 不直连相机。',
-            status: DeviceLinkStatus.disconnected,
-            batteryText: '电量：—（请在品牌 App 内查看）',
-            actionLabel: '打开连接向导',
-            onAction: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                  builder: (_) => CameraGuidePage(
-                        brand: CameraGuideBrand.dji,
-                        onBack: () => Navigator.of(context).pop(),
-                      )),
-            ),
+          ExpansionTile(
+            title: const Text('高级 / 按品牌',
+                style: TextStyle(color: Colors.white, fontSize: 14)),
+            subtitle: const Text('旧的按品牌直达入口：GoPro 扫描直连、Insta360 / DJI 向导',
+                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            iconColor: Colors.white70,
+            collapsedIconColor: Colors.white70,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text(
+                    '主入口是上方的「连接运动相机」；这里只保留旧的按品牌直达入口，'
+                    '两处说法一致：GoPro 直连，Insta360 / DJI 只走向导。',
+                    style: TextStyle(color: Colors.white60, fontSize: 12)),
+              ),
+              _cameraCard(
+                accent: accent,
+                name: 'GoPro',
+                subtitle: 'Open GoPro BLE：先点下方按钮扫描 FEA6 设备，再在扫描列表的 '
+                    'GoPro 行点“GoPro 连接”，依次完成连接 → 订阅响应特征 GP-0073 → '
+                    '下发 Get Version 只读查询；收到响应后状态才变已连接。',
+                status: _goproStatus,
+                batteryText: _goproBattery == null
+                    ? '电量：—（未收到电量事件，不显示假数值）'
+                    : '电量：$_goproBattery%',
+                actionLabel: _goproScanning ? '停止扫描 GoPro' : '扫描 GoPro 设备',
+                onAction: _scanGoPro,
+              ),
+              _cameraCard(
+                accent: accent,
+                name: 'Insta360',
+                subtitle: 'Beta / 向导式连接：Wi-Fi 热点 + Insta360 App 连接，'
+                    '本 App 不直连相机。',
+                status: DeviceLinkStatus.disconnected,
+                batteryText: '电量：—（请在品牌 App 内查看）',
+                actionLabel: '打开连接向导',
+                onAction: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => CameraGuidePage(
+                            brand: CameraGuideBrand.insta360,
+                            onBack: () => Navigator.of(context).pop(),
+                          )),
+                ),
+              ),
+              _cameraCard(
+                accent: accent,
+                name: 'DJI',
+                subtitle: 'Beta / 向导式连接：Wi-Fi 热点 + DJI Mimo App 连接，'
+                    '本 App 不直连相机。',
+                status: DeviceLinkStatus.disconnected,
+                batteryText: '电量：—（请在品牌 App 内查看）',
+                actionLabel: '打开连接向导',
+                onAction: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => CameraGuidePage(
+                            brand: CameraGuideBrand.dji,
+                            onBack: () => Navigator.of(context).pop(),
+                          )),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           _sectionTitle('外接 GPS 模块'),

@@ -55,39 +55,38 @@ void main() {
   }
 
   UpdateCheckResult upToDateCheck() => UpdateCheckResult(
-        status: UpdateCheckStatus.upToDate,
-        message: '已是最新',
-        updates: const [],
-        remoteDataVersion: 'V1.0.1',
-        skippedUserModified: const [],
-      );
+    status: UpdateCheckStatus.upToDate,
+    message: '赛道库已是最新版本',
+    updates: const [],
+    remoteDataVersion: 'V1.0.1',
+    skippedUserModified: const [],
+  );
 
   UpdateCheckResult availableCheck() => UpdateCheckResult(
-        status: UpdateCheckStatus.available,
-        message: '有更新',
-        updates: const [
-          PackageUpdate(
-            id: 'shanghai',
-            nameCn: '上海国际赛车场',
-            localVersion: 1,
-            remoteVersion: 99,
-            url: 'https://example.invalid/shanghai.json',
-          ),
-        ],
-        remoteDataVersion: 'V1.0.2',
-        skippedUserModified: const [],
-      );
+    status: UpdateCheckStatus.available,
+    message: '1 个包可更新',
+    updates: const [
+      PackageUpdate(
+        id: 'shanghai',
+        nameCn: '上海国际赛车场',
+        localVersion: 1,
+        remoteVersion: 99,
+        url: 'https://example.invalid/shanghai.json',
+      ),
+    ],
+    remoteDataVersion: 'V1.0.2',
+    skippedUserModified: const [],
+  );
 
   UpdateCheckResult errorCheck() => UpdateCheckResult(
-        status: UpdateCheckStatus.error,
-        message: '暂无更新或网络问题：Exception: boom',
-        updates: const [],
-        remoteDataVersion: '',
-        skippedUserModified: const [],
-      );
+    status: UpdateCheckStatus.error,
+    message: '网络不通：两个更新源都连不上，请检查网络或代理后重试',
+    updates: const [],
+    remoteDataVersion: '',
+    skippedUserModified: const [],
+  );
 
-  testWidgets('初始版式：标题 + 真实版本 + 未检查状态 + 更新按钮置灰',
-      (tester) async {
+  testWidgets('初始版式：标题 + 真实版本 + 未检查状态 + 更新按钮置灰', (tester) async {
     await pumpCard(tester, dataVersion: 'V1.0.1');
     // 标题仍为“赛道库”，不改成截图的“支持赛道”。
     expect(find.text('赛道库'), findsOneWidget);
@@ -135,7 +134,7 @@ void main() {
 
   testWidgets('检查失败：显示错误原文 + 更新按钮置灰', (tester) async {
     await pumpCard(tester, dataVersion: 'V1.0.1', check: errorCheck());
-    expect(find.text('暂无更新或网络问题：Exception: boom'), findsOneWidget);
+    expect(find.text('网络不通：两个更新源都连不上，请检查网络或代理后重试'), findsOneWidget);
     final updateButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, '更新赛道库'),
     );
@@ -169,25 +168,16 @@ void main() {
     expect(updateButton2.onPressed, isNull);
   });
 
-  testWidgets('版本文本点按转发给 onVersionTap（策展 gate 的入口）',
-      (tester) async {
+  testWidgets('版本文本点按转发给 onVersionTap（策展 gate 的入口）', (tester) async {
     var taps = 0;
-    await pumpCard(
-      tester,
-      dataVersion: 'V1.0.1',
-      onVersionTap: () => taps++,
-    );
+    await pumpCard(tester, dataVersion: 'V1.0.1', onVersionTap: () => taps++);
     await tester.tap(find.text('当前版本：V1.0.1'));
     expect(taps, 1);
   });
 
   testWidgets('检测按钮点按转发给 onCheck', (tester) async {
     var tapped = false;
-    await pumpCard(
-      tester,
-      dataVersion: 'V1.0.1',
-      onCheck: () => tapped = true,
-    );
+    await pumpCard(tester, dataVersion: 'V1.0.1', onCheck: () => tapped = true);
     await tester.tap(find.text('赛道库版本检测'));
     expect(tapped, isTrue);
   });

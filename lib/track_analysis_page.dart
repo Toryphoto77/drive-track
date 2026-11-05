@@ -13,7 +13,8 @@
 ///
 /// 内容（用户定版）：
 /// - 圈速总览：最佳圈、理论最佳圈（= 各分段最佳相加，见
-///   track_sector_data.dart 的 theoreticalBestLapMs）、圈速列表 +
+///   track_sector_data.dart 的 analysisTheoreticalBestLapMs，与
+///   直播页同口径并加真实分段门控）、圈速列表 +
 ///   无效圈标注（停留不计圈 / 分段缺失的圈不进最佳圈与理论圈统计）。
 /// - 分段对比表：与赛中同色规则（delta < 0 绿、> 0 红、== 0 灰，
 ///   格里写带正负号的 delta 数字，不写中文“快/慢”）；注意与
@@ -346,7 +347,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
   Widget build(BuildContext context) {
     final laps = widget.laps;
     final best = sessionBestLap(laps);
-    final theoretical = theoreticalBestLapMs(laps);
+    // v1.2.15：理论最佳圈与直播页同口径（见
+    // analysisTheoreticalBestLapMs）：先按最佳圈段数过滤，再加
+    // 真实分段门控（最佳圈须 3 段）；无真实分段点时为 null，显示
+    // 占位，不拿前后半圈拼一个假理论圈。
+    final theoretical = analysisTheoreticalBestLapMs(laps);
     final counted = laps.where((l) => lapInvalidReason(l) == null).length;
     final sectorData = _sectorData;
     final selected = _selected;
@@ -490,7 +495,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      '理论最佳圈 = 各分段最佳相加；无效圈不进统计',
+                      '理论最佳圈 = 各分段最佳相加；无效圈不进统计；仅真实分段赛道显示，无真实分段点时为占位',
                       style: TextStyle(
                           color: Colors.white54, fontSize: 11),
                     ),

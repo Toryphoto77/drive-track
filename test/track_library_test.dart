@@ -143,7 +143,9 @@ void main() {
   group('合并规则', () {
     test('打包种子 v1 覆盖内置迁移 v0', () {
       final merged = mergePackages(
-        builtin: [_pkg(id: 'a', version: 0, source: TrackPackageSource.estimated)],
+        builtin: [
+          _pkg(id: 'a', version: 0, source: TrackPackageSource.estimated),
+        ],
         bundled: [_pkg(id: 'a', version: 1, source: TrackPackageSource.osm)],
         overrides: const [],
       );
@@ -192,7 +194,10 @@ void main() {
   });
 
   group('版本比对（manifest diff）', () {
-    TrackLibraryManifest manifest(String dataVersion, List<Map<String, dynamic>> pkgs) {
+    TrackLibraryManifest manifest(
+      String dataVersion,
+      List<Map<String, dynamic>> pkgs,
+    ) {
       return TrackLibraryManifest.fromJson({
         'dataVersion': dataVersion,
         'packages': pkgs,
@@ -297,10 +302,7 @@ void main() {
 
   group('几何工具', () {
     test('归一化保长宽比、居中（东西向线 y=0.5，x 拉满 0~1）', () {
-      final norm = normalizeLatLon(const [
-        GeoPoint(0, 0),
-        GeoPoint(0, 1),
-      ]);
+      final norm = normalizeLatLon(const [GeoPoint(0, 0), GeoPoint(0, 1)]);
       expect(norm.length, 2);
       expect(norm[0].x, closeTo(0, 1e-9));
       expect(norm[1].x, closeTo(1, 1e-9));
@@ -335,10 +337,7 @@ void main() {
     });
 
     test('折线长度：赤道 0.01° 经度约 1113m', () {
-      final len = polylineLengthM(const [
-        GeoPoint(0, 0),
-        GeoPoint(0, 0.01),
-      ]);
+      final len = polylineLengthM(const [GeoPoint(0, 0), GeoPoint(0, 0.01)]);
       expect(len, closeTo(1113, 5));
     });
   });
@@ -373,25 +372,25 @@ void main() {
 
   group('行程录入', () {
     TrackPoint pt(int t, double lat, double lon) => TrackPoint(
-          timeMs: t,
-          lat: lat,
-          lon: lon,
-          alt: 0,
-          speed: 0,
-          bearing: 0,
-          hAcc: 0,
-          vAcc: 0,
-          speedAcc: 0,
-          provider: 'gps',
-          longG: 0,
-          latG: 0,
-          vertG: 0,
-          pitch: 0,
-          roll: 0,
-          heading: 0,
-          pressureHpa: 0,
-          calibrated: false,
-        );
+      timeMs: t,
+      lat: lat,
+      lon: lon,
+      alt: 0,
+      speed: 0,
+      bearing: 0,
+      hAcc: 0,
+      vAcc: 0,
+      speedAcc: 0,
+      provider: 'gps',
+      longG: 0,
+      latG: 0,
+      vertG: 0,
+      pitch: 0,
+      roll: 0,
+      heading: 0,
+      pressureHpa: 0,
+      calibrated: false,
+    );
 
     test('闭合回路行程 → 用户赛道包（起终点同点、长度 > 0）', () {
       final loop = <TrackPoint>[];
@@ -399,7 +398,13 @@ void main() {
       for (var i = 0; i <= n; i++) {
         final a = i / n * 2 * math.pi;
         // 约 1km 见方的小环
-        loop.add(pt(i * 1000, 31.34 + 0.004 * math.sin(a), 121.22 + 0.004 * math.cos(a)));
+        loop.add(
+          pt(
+            i * 1000,
+            31.34 + 0.004 * math.sin(a),
+            121.22 + 0.004 * math.cos(a),
+          ),
+        );
       }
       final trip = Trip(
         id: 't1',
@@ -460,21 +465,20 @@ void main() {
       TestWidgetsFlutterBinding.ensureInitialized();
       tmp = await Directory.systemTemp.createTemp('track_lib_test_');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('drivetrack/native'),
-        (call) async {
-          if (call.method == 'getFilesDir') return tmp.path;
-          return null;
-        },
-      );
+          .setMockMethodCallHandler(const MethodChannel('drivetrack/native'), (
+            call,
+          ) async {
+            if (call.method == 'getFilesDir') return tmp.path;
+            return null;
+          });
     });
 
     tearDown(() async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel('drivetrack/native'),
-        null,
-      );
+            const MethodChannel('drivetrack/native'),
+            null,
+          );
       if (await tmp.exists()) await tmp.delete(recursive: true);
     });
 
@@ -505,6 +509,190 @@ void main() {
         snap.official.firstWhere((p) => p.id == 'shanghai').userModified,
         isFalse,
       );
+    });
+  });
+
+  group('检查更新：jsDelivr 主用 + GitHub raw 备用（v1.2.11）', () {
+    late Directory tmp;
+
+    setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      tmp = await Directory.systemTemp.createTemp('track_lib_dual_src_');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(const MethodChannel('drivetrack/native'), (
+            call,
+          ) async {
+            if (call.method == 'getFilesDir') return tmp.path;
+            return null;
+          });
+    });
+
+    tearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('drivetrack/native'),
+            null,
+          );
+      if (await tmp.exists()) await tmp.delete(recursive: true);
+    });
+
+    String manifestJson(
+      List<Map<String, dynamic>> pkgs, {
+      String dataVersion = 'V1.0.1',
+    }) {
+      return jsonEncode({'dataVersion': dataVersion, 'packages': pkgs});
+    }
+
+    Map<String, dynamic> shanghaiEntry({int version = 1}) => {
+      'id': 'shanghai',
+      'nameCn': '上海国际赛车场',
+      'version': version,
+      'url': 'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json',
+      'source': 'osm',
+    };
+
+    /// 本地不存在的全新包 id（避免与打包种子 / 内置迁移的版本耦合：
+    /// 打包种子上海已是 v2，清单写 v1 会被判为已是最新）。
+    Map<String, dynamic> newTrackEntry({int version = 1}) => {
+      'id': 'test_new_track',
+      'nameCn': '测试新赛道',
+      'version': version,
+      'url': 'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/test_new_track.json',
+      'source': 'osm',
+    };
+
+    test('包地址重写：raw 前缀 → cdn 前缀，非 raw 地址不动', () {
+      expect(
+        rewriteTrackPackageUrl(
+          'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json',
+          useCdn: true,
+        ),
+        'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/shanghai.json',
+      );
+      expect(
+        rewriteTrackPackageUrl(
+          'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/shanghai.json',
+          useCdn: true,
+        ),
+        'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/shanghai.json',
+      );
+      expect(
+        rewriteTrackPackageUrl(
+          'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json',
+          useCdn: false,
+        ),
+        'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json',
+      );
+    });
+
+    test('主用 jsDelivr：清单与包地址都走 cdn，raw 源不被请求', () async {
+      final requested = <String>[];
+      Future<String> fake(Uri uri) async {
+        requested.add(uri.toString());
+        return manifestJson([newTrackEntry(version: 1)]);
+      }
+
+      final r = await TrackLibraryService.instance.checkForUpdates(
+        fetcher: fake,
+      );
+      expect(requested, [kTrackLibraryManifestUrlCdn]);
+      expect(r.status, UpdateCheckStatus.available);
+      expect(r.updates.length, 1);
+      expect(r.updates.first.isNew, isTrue);
+      expect(
+        r.updates.first.url,
+        'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/test_new_track.json',
+      );
+      expect(r.remoteDataVersion, 'V1.0.1');
+    });
+
+    test('jsDelivr 失败 → 回落 raw：包地址用清单原地址', () async {
+      final requested = <String>[];
+      Future<String> fake(Uri uri) async {
+        requested.add(uri.toString());
+        if (uri.toString() == kTrackLibraryManifestUrlCdn) {
+          throw Exception('CDN unreachable');
+        }
+        return manifestJson([newTrackEntry(version: 1)]);
+      }
+
+      final r = await TrackLibraryService.instance.checkForUpdates(
+        fetcher: fake,
+      );
+      expect(requested, [
+        kTrackLibraryManifestUrlCdn,
+        kTrackLibraryManifestUrl,
+      ]);
+      expect(r.status, UpdateCheckStatus.available);
+      expect(
+        r.updates.first.url,
+        'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/test_new_track.json',
+      );
+    });
+
+    test('jsDelivr 返回空清单 → 回落 raw，不直接报空', () async {
+      Future<String> fake(Uri uri) async {
+        if (uri.toString() == kTrackLibraryManifestUrlCdn) return '{}';
+        return manifestJson([newTrackEntry(version: 1)]);
+      }
+
+      final r = await TrackLibraryService.instance.checkForUpdates(
+        fetcher: fake,
+      );
+      expect(r.status, UpdateCheckStatus.available);
+      expect(r.updates.first.url, contains('raw.githubusercontent.com'));
+    });
+
+    test('两源都失败 → 网络不通文案（不带异常原文）', () async {
+      Future<String> fake(Uri uri) async {
+        throw Exception('boom: ${uri.host}');
+      }
+
+      final r = await TrackLibraryService.instance.checkForUpdates(
+        fetcher: fake,
+      );
+      expect(r.status, UpdateCheckStatus.error);
+      expect(r.message, '网络不通：两个更新源都连不上，请检查网络或代理后重试');
+      expect(r.message, isNot(contains('boom')));
+    });
+
+    test('两源都返回空清单 → 更新清单为空', () async {
+      Future<String> fake(Uri uri) async => '{}';
+
+      final r = await TrackLibraryService.instance.checkForUpdates(
+        fetcher: fake,
+      );
+      expect(r.status, UpdateCheckStatus.error);
+      expect(r.message, '更新清单为空，请稍后重试');
+    });
+
+    test('已是最新 → 文案为“赛道库已是最新版本”', () async {
+      // 取本地真实版本作清单版本（不硬编打包种子版本号）。
+      final snap = await TrackLibraryService.instance.loadAll();
+      final local = snap.official.firstWhere((p) => p.id == 'shanghai');
+      Future<String> fake(Uri uri) async {
+        return manifestJson([shanghaiEntry(version: local.version)]);
+      }
+
+      final r = await TrackLibraryService.instance.checkForUpdates(
+        fetcher: fake,
+      );
+      expect(r.status, UpdateCheckStatus.upToDate);
+      expect(r.message, '赛道库已是最新版本');
+      expect(r.updates, isEmpty);
+    });
+
+    test('版本判定不动：只看各包整数版本，dataVersion 原样透传', () async {
+      Future<String> fake(Uri uri) async {
+        return manifestJson([newTrackEntry(version: 1)], dataVersion: 'V9.9.9');
+      }
+
+      final r = await TrackLibraryService.instance.checkForUpdates(
+        fetcher: fake,
+      );
+      expect(r.status, UpdateCheckStatus.available);
+      expect(r.remoteDataVersion, 'V9.9.9');
+      expect(r.updates.first.remoteVersion, 1);
     });
   });
 }

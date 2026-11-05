@@ -297,7 +297,7 @@ class _MapImportPageState extends State<MapImportPage> {
           ),
           if (_resources.isEmpty)
             const ImportCard(
-              child: Text('暂无已导入资源', style: TextStyle(color: Colors.white54, fontSize: 13)),
+              child: Text('暂无已导入资源\n用上方卡片导入离线瓦片包、GeoJSON/KML 或底图样式', style: TextStyle(color: Colors.white54, fontSize: 13)),
             )
           else
             for (final r in _resources)

@@ -78,7 +78,7 @@ class SettingsHomePage extends StatelessWidget {
           // 复用现有标定逻辑，不另造一套 G 值计算。
           if (onOpenSensorCalibration != null)
             entry(Icons.sensors, '传感器校准', '静置校零、车头标定、罗盘提示', onOpenSensorCalibration!),
-          entry(Icons.devices, '设备中心', '运动相机、传感器、BleDIY GPS', onOpenDevices),
+          entry(Icons.devices, '设备中心', '运动相机 · 传感器 · 外接 GPS', onOpenDevices),
           entry(Icons.map, '地图资源导入', '离线瓦片包、GeoJSON/KML 叠加、底图样式', onOpenMapImport),
           // v1.0.2：第 8 项——“地图车标”入口已从设置首页删除，
           // 功能移入主题设置页的“地图车标”分区。
