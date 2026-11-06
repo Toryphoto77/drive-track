@@ -1,6 +1,6 @@
 {
-  "dataVersion": "V1.0.1",
-  "updatedAt": "2026-11-05",
+  "dataVersion": "V1.1.0",
+  "updatedAt": "2026-11-06",
   "attribution": "© OpenStreetMap contributors，ODbL（http://osm.org/copyright）",
   "packages": [
     {
@@ -152,6 +152,478 @@
       "nameCn": "巴瑟斯特全景山赛道",
       "version": 1,
       "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/bathurst.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "albert_park",
+      "nameCn": "阿尔伯特公园赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/albert_park.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "catalunya",
+      "nameCn": "巴塞罗那-加泰罗尼亚赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/catalunya.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "gilles_villeneuve",
+      "nameCn": "吉尔·维伦纽夫赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/gilles_villeneuve.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "hungaroring",
+      "nameCn": "亨格罗宁赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/hungaroring.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "miami",
+      "nameCn": "迈阿密国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/miami.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "red_bull_ring",
+      "nameCn": "红牛环",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/red_bull_ring.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "silverstone",
+      "nameCn": "银石赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/silverstone.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "zandvoort",
+      "nameCn": "赞德福特赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zandvoort.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "baku",
+      "nameCn": "巴库城市赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/baku.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "interlagos",
+      "nameCn": "英特拉格斯赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/interlagos.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "las_vegas",
+      "nameCn": "拉斯维加斯街道赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/las_vegas.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "lusail",
+      "nameCn": "卢赛尔国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/lusail.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "madring",
+      "nameCn": "马德里赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/madring.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "marina_bay",
+      "nameCn": "滨海湾街道赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/marina_bay.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "mexico_city",
+      "nameCn": "埃尔马诺斯·罗德里格斯赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/mexico_city.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "yas_marina",
+      "nameCn": "亚斯码头赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/yas_marina.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "adelaide",
+      "nameCn": "阿德莱德街道赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/adelaide.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "algarve",
+      "nameCn": "阿尔加维国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/algarve.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "bahrain",
+      "nameCn": "巴林国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/bahrain.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "brands_hatch",
+      "nameCn": "布兰兹哈奇赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/brands_hatch.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "buddh",
+      "nameCn": "佛陀国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/buddh.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "bugatti",
+      "nameCn": "布加迪赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/bugatti.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "estoril",
+      "nameCn": "埃斯托里尔赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/estoril.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "imola",
+      "nameCn": "伊莫拉赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/imola.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "mugello",
+      "nameCn": "穆杰洛赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/mugello.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "dijon",
+      "nameCn": "第戎-普雷努瓦赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/dijon.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "jarama",
+      "nameCn": "哈拉马赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/jarama.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "jerez",
+      "nameCn": "赫雷斯赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/jerez.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "magny_cours",
+      "nameCn": "马尼库尔赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/magny_cours.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "mont_tremblant",
+      "nameCn": "蒙特朗布朗赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/mont_tremblant.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "paul_ricard",
+      "nameCn": "保罗·里卡德赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/paul_ricard.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "zolder",
+      "nameCn": "佐尔德赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zolder.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "donington",
+      "nameCn": "多宁顿公园",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/donington.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "hockenheim",
+      "nameCn": "霍肯海姆赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/hockenheim.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "indianapolis",
+      "nameCn": "印第安纳波利斯赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/indianapolis.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "istanbul",
+      "nameCn": "伊斯坦布尔公园",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/istanbul.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "jeddah",
+      "nameCn": "吉达滨海赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/jeddah.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "korea",
+      "nameCn": "韩国国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/korea.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "kyalami",
+      "nameCn": "凯亚拉米赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/kyalami.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "long_beach",
+      "nameCn": "长滩街道赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/long_beach.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "montjuic",
+      "nameCn": "蒙特惠奇赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/montjuic.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "mosport",
+      "nameCn": "莫斯波特公园",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/mosport.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "nurburgring",
+      "nameCn": "纽博格林 GP 赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/nurburgring.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "aida",
+      "nameCn": "TI 赛道 Aida",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/aida.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "anderstorp",
+      "nameCn": "安德斯托普赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/anderstorp.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "prince_george",
+      "nameCn": "乔治王子赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/prince_george.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "valencia",
+      "nameCn": "瓦伦西亚街道赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/valencia.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "watkins_glen",
+      "nameCn": "沃特金斯格伦",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/watkins_glen.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "daqing",
+      "nameCn": "大庆赛车小镇",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/daqing.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "guia",
+      "nameCn": "东望洋赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/guia.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "guizhou",
+      "nameCn": "贵州骏驰国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/guizhou.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "hunan",
+      "nameCn": "湖南国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/hunan.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "pingtan_2022",
+      "nameCn": "平潭如意湖国际城市赛道（2022 年布局）",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/pingtan_2022.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "pingtan_2023",
+      "nameCn": "平潭如意湖国际城市赛道（2023 年布局）",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/pingtan_2023.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "qinhuangdao",
+      "nameCn": "秦皇岛首钢赛车谷",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/qinhuangdao.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "wanchi",
+      "nameCn": "江苏万驰国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/wanchi.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "xiamen",
+      "nameCn": "厦门国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/xiamen.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "yancheng",
+      "nameCn": "盐城街道赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/yancheng.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "zhengzhou",
+      "nameCn": "郑州国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zhengzhou.json",
       "source": "osm",
       "verification": "verified"
     }

@@ -1,0 +1,57 @@
+{
+ "id": "xiamen",
+ "nameCn": "厦门国际赛车场",
+ "nameEn": "Xiamen International Circuit",
+ "region": "中国",
+ "version": 1,
+ "source": "osm",
+ "sourceDetail": "OSM way 1162854466（highway=raceway，area=yes，未命名）（© OpenStreetMap contributors，ODbL）",
+ "verification": "pending",
+ "verificationNote": "官方长度 1.82km、13 弯（厦门国际赛车场官网 xiamencircuit.com 场地规格，顺时针）；用户包所写 1.696km/16 弯与官方不符，未采信。OSM 中仅有未命名 area=yes 8 点粗略轮廓（way 1162854466），非精细中心线；实测周长 1544m，与官方 1820m 偏差 -15.2%（10–20% 区间，pending）。几何轮廓与官网赛道线行图大致相符（东西向长、顶部直道），但 8 个顶点无法推导 13 个弯道与起终点，corners 与起终点均留空待核。",
+ "centerline": [
+  {
+   "lat": 24.65367,
+   "lon": 118.312656
+  },
+  {
+   "lat": 24.655772,
+   "lon": 118.31584
+  },
+  {
+   "lat": 24.655897,
+   "lon": 118.316891
+  },
+  {
+   "lat": 24.655558,
+   "lon": 118.31808
+  },
+  {
+   "lat": 24.653226,
+   "lon": 118.316879
+  },
+  {
+   "lat": 24.6522,
+   "lon": 118.315882
+  },
+  {
+   "lat": 24.651643,
+   "lon": 118.313759
+  },
+  {
+   "lat": 24.65367,
+   "lon": 118.312656
+  }
+ ],
+ "lengthM": 1544,
+ "publishedLengthM": 1820,
+ "corners": [],
+ "cornerSource": null,
+ "sectorPoints": [],
+ "sectorNote": "分段点待核：OSM 几何无法推导官方分段线",
+ "gantry": null,
+ "start": null,
+ "finish": null,
+ "startNote": "起终点待核：OSM 几何无法推导",
+ "userModified": false,
+ "isUserTrack": false
+}

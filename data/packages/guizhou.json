@@ -1,0 +1,170 @@
+{
+ "id": "guizhou",
+ "nameCn": "贵州骏驰国际赛车场",
+ "nameEn": "Guizhou Junchi International Circuit",
+ "region": "中国",
+ "version": 1,
+ "source": "osm",
+ "sourceDetail": "OSM way 1090073715（highway=raceway，area=yes，name=贵州骏驰国际赛车场）（© OpenStreetMap contributors，ODbL）",
+ "verification": "pending",
+ "verificationNote": "名称地点一致（贵州贵阳花溪）；闭合回路；但计算长度 1942 m 与公布 2.2 km 偏差 -11.7%，超出 verified 口径（≤10%），标待核；OSM 几何仅 20 节点较粗糙（弦切角可能缩短实测长度），且 2.2 km 公布长度本身置信度低",
+ "centerline": [
+  {
+   "lat": 26.328564,
+   "lon": 106.674745
+  },
+  {
+   "lat": 26.328761,
+   "lon": 106.675042
+  },
+  {
+   "lat": 26.328703,
+   "lon": 106.67605
+  },
+  {
+   "lat": 26.328471,
+   "lon": 106.676981
+  },
+  {
+   "lat": 26.32777,
+   "lon": 106.67755
+  },
+  {
+   "lat": 26.327255,
+   "lon": 106.678584
+  },
+  {
+   "lat": 26.327434,
+   "lon": 106.679063
+  },
+  {
+   "lat": 26.32744,
+   "lon": 106.679812
+  },
+  {
+   "lat": 26.327145,
+   "lon": 106.680375
+  },
+  {
+   "lat": 26.326658,
+   "lon": 106.681725
+  },
+  {
+   "lat": 26.32649,
+   "lon": 106.682003
+  },
+  {
+   "lat": 26.326101,
+   "lon": 106.682011
+  },
+  {
+   "lat": 26.325216,
+   "lon": 106.682011
+  },
+  {
+   "lat": 26.324978,
+   "lon": 106.682007
+  },
+  {
+   "lat": 26.324978,
+   "lon": 106.679088
+  },
+  {
+   "lat": 26.325169,
+   "lon": 106.678545
+  },
+  {
+   "lat": 26.326571,
+   "lon": 106.676387
+  },
+  {
+   "lat": 26.32828,
+   "lon": 106.674273
+  },
+  {
+   "lat": 26.328466,
+   "lon": 106.674628
+  },
+  {
+   "lat": 26.328564,
+   "lon": 106.674745
+  }
+ ],
+ "lengthM": 1941,
+ "publishedLengthM": 2200,
+ "corners": [
+  {
+   "number": 1,
+   "direction": "right",
+   "radiusM": 69,
+   "angleDeg": 33,
+   "lat": 26.328671,
+   "lon": 106.674906
+  },
+  {
+   "number": 2,
+   "direction": "right",
+   "radiusM": 51,
+   "angleDeg": 34,
+   "lat": 26.328504,
+   "lon": 106.676848
+  },
+  {
+   "number": 3,
+   "direction": "left",
+   "radiusM": 46,
+   "angleDeg": 38,
+   "lat": 26.327334,
+   "lon": 106.678425
+  },
+  {
+   "number": 4,
+   "direction": "right",
+   "radiusM": 65,
+   "angleDeg": 26,
+   "lat": 26.327439,
+   "lon": 106.679667
+  },
+  {
+   "number": 5,
+   "direction": "right",
+   "radiusM": 66,
+   "angleDeg": 52,
+   "lat": 26.32663,
+   "lon": 106.681771
+  },
+  {
+   "number": 6,
+   "direction": "right",
+   "radiusM": 24,
+   "angleDeg": 71,
+   "lat": 26.325122,
+   "lon": 106.682009
+  },
+  {
+   "number": 7,
+   "direction": "right",
+   "radiusM": 154,
+   "angleDeg": 33,
+   "lat": 26.325021,
+   "lon": 106.678966
+  },
+  {
+   "number": 8,
+   "direction": "right",
+   "radiusM": 19,
+   "angleDeg": 93,
+   "lat": 26.328193,
+   "lon": 106.674381
+  }
+ ],
+ "cornerSource": "osm-derived",
+ "sectorPoints": [],
+ "sectorNote": "分段点待核：OSM 几何无法推导官方分段线",
+ "gantry": null,
+ "start": null,
+ "finish": null,
+ "startNote": "起终点待核：OSM 几何无法推导",
+ "userModified": false,
+ "isUserTrack": false
+}
