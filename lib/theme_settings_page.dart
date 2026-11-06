@@ -243,8 +243,15 @@ class _VehicleMarkerSettingsSectionState
             const SizedBox(height: 8),
             for (final o in options)
               ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: markerFor(_selectionForRow(o.key), _tab, size: 44),
+                contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                minLeadingWidth: 64,
+                horizontalTitleGap: 12,
+                leading: VehicleMarkerPreviewTile(
+                  selection: _selectionForRow(o.key),
+                  mode: _tab,
+                  selected: o.sel == o.key,
+                  accentColor: widget.accentColor,
+                ),
                 title: Text(o.label),
                 trailing: o.sel == o.key
                     ? Icon(Icons.check, color: widget.accentColor)

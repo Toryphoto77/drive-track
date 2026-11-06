@@ -611,6 +611,13 @@ class LapTimer {
   /// 当前圈号：0 表示还在发车圈（未第一次穿越起终点），否则为进行中的圈号。
   int get currentLapNumber => _currentLapNumber;
 
+  /// 是否已第一次通过起终点线：发车圈（currentLapNumber == 0）时为假，
+  /// 第 1 圈开始计时起为真，之后保持真到本节结束。只读派生状态，
+  /// 不改计时判定。v1.3.5：Map 页赛道叠加层门控用——与幽灵车门控
+  /// “有最佳圈”（bestLap != null）不是同一个状态：发车圈过线后
+  /// 第 1 圈才开始，此时有过线、无最佳圈，叠加层已出现、幽灵车未出现。
+  bool get hasCrossedStartLine => _currentLapNumber >= 1;
+
   /// 是否因停车处于自动暂停中。
   bool get isPaused => _paused;
 

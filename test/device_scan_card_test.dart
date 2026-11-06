@@ -23,7 +23,7 @@ void main() {
               stopLabel: '停止扫描',
               onScanToggle: () {},
               statusLine: '尚未扫描：点上方「扫描适配设备」开始。',
-              footnote: '第一测试目标：DEXIAN D1 25Hz（用户确认）。',
+              footnote: '示例脚注：设备须开机、蓝牙打开。',
             ),
           ),
         ),
@@ -32,7 +32,7 @@ void main() {
       expect(find.text('外接 GPS'), findsOneWidget);
       expect(find.text('扫描适配设备'), findsOneWidget);
       expect(find.text('尚未扫描：点上方「扫描适配设备」开始。'), findsOneWidget);
-      expect(find.textContaining('DEXIAN D1 25Hz（用户确认）'), findsOneWidget);
+      expect(find.textContaining('示例脚注'), findsOneWidget);
       expect(find.byType(DeviceScanRipple), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(tester.takeException(), isNull);
@@ -78,7 +78,7 @@ void main() {
             body: DeviceScanRow(
               title: 'DEXIAN D1',
               badgeLabel: 'BLE',
-              detail: '名称匹配：DEXIAN D1（第一测试目标）。',
+              detail: '名称匹配：DEXIAN D1。',
               meta: '信号 -60 · AA:BB:CC:DD:EE:01',
               actionLabel: '点按连接',
               connectingLabel: '连接中',
@@ -206,11 +206,12 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // 空态：共用卡片在位，D1 诚实注记在卡片脚注里，状态行只出现一次。
+      // 空态：共用卡片在位，D1 专属脚注已删（不再有“第一测试目标”文案），
+      // 状态行只出现一次。
       expect(find.byType(DeviceScanCard), findsOneWidget);
       expect(find.text('外接 GPS'), findsOneWidget);
-      expect(find.textContaining('DEXIAN D1 25Hz（用户确认）'), findsOneWidget);
-      expect(find.textContaining('BLE 服务 UUID 仍未知'), findsOneWidget);
+      expect(find.textContaining('第一测试目标'), findsNothing);
+      expect(find.textContaining('BLE 服务 UUID 仍未知'), findsNothing);
       expect(find.text('尚未扫描：点上方「扫描适配设备」开始。'), findsOneWidget);
       expect(find.byType(DeviceScanRipple), findsNothing);
       expect(find.text('可适配设备'), findsOneWidget);

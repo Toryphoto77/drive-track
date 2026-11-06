@@ -161,7 +161,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 主入口在顶部；旧的按品牌卡片收进「高级 / 按品牌」，默认不在树里。
+    // 主入口在顶部；旧的按品牌卡片已删，设备中心里只有一个相机入口。
     expect(find.text('打开连接运动相机'), findsOneWidget);
     expect(find.text('扫描 GoPro 设备'), findsNothing);
     await tester.tap(find.text('打开连接运动相机'));

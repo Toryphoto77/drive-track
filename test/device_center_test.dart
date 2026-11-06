@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:drive_track/bt_gps_receiver.dart';
 import 'package:drive_track/device_center.dart';
 
 void main() {
@@ -31,19 +32,12 @@ void main() {
     );
     await tester.pump();
     expect(find.text('传感器：自定义 BLE 设备'), findsOneWidget);
-    // v1.2.12：GoPro 旧卡片收进设备中心「高级 / 按品牌」，默认收起时
-    // 不在树里；主入口是「打开连接运动相机」。先断言主入口，再展开旧区。
+    // 旧的按品牌三张卡已删：设备中心里「高级 / 按品牌」整个区不在，
+    // 相机唯一入口是「打开连接运动相机」（统一页覆盖 GoPro 直连与
+    // Insta360 / DJI 向导）。先断言主入口，再断言旧区与旧操作全不在树里。
     expect(find.text('打开连接运动相机'), findsOneWidget);
+    expect(find.text('高级 / 按品牌'), findsNothing);
     expect(find.text('扫描 GoPro 设备'), findsNothing);
-    await tester.scrollUntilVisible(
-      find.text('高级 / 按品牌'),
-      300,
-    );
-    await tester.pump();
-    await tester.tap(find.text('高级 / 按品牌'));
-    await tester.pumpAndSettle();
-    // GoPro 主操作是扫描，不再是“连接（需原生支持）”。
-    expect(find.text('扫描 GoPro 设备'), findsOneWidget);
     expect(find.text('连接（需原生支持）'), findsNothing);
     // 单入口主按钮在顶部；档案卡收进「高级 / 手动添加」，
     // 默认收起时不在树里，先展开再断言。
@@ -73,17 +67,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('v1.1.0 Dragy/DEXIAN profiles carry no UUID and honest badge', () {
-    for (final p in externalGpsProfiles) {
-      if (p.kind == ExternalGpsKind.dragy ||
-          p.kind == ExternalGpsKind.dexian) {
-        expect(p.serviceUuid, isNull);
-        expect(p.txUuid, isNull);
-        expect(p.hasNmeaPath, isFalse);
-        expect(p.supportBadge, contains('协议未公开'));
-        expect(p.supportBadge, contains('未实测验证'));
-      }
-    }
+  test('Dragy 档案无 UUID、私有协议 stub；DEXIAN D1 服务 UUID 已验证、二进制协议', () {
+    final dragy = externalGpsProfiles
+        .firstWhere((p) => p.kind == ExternalGpsKind.dragy);
+    expect(dragy.serviceUuid, isNull);
+    expect(dragy.txUuid, isNull);
+    expect(dragy.hasNmeaPath, isFalse);
+    expect(dragy.supportBadge, contains('协议未公开'));
+    expect(dragy.supportBadge, contains('未实测验证'));
+    final dexian = externalGpsProfiles
+        .firstWhere((p) => p.kind == ExternalGpsKind.dexian);
+    expect(dexian.name, 'DEXIAN D1');
+    expect(dexian.serviceUuid, dexianServiceUuid);
+    expect(dexian.txUuid, isNull);
+    expect(dexian.hasNmeaPath, isFalse);
+    expect(dexian.binaryProtocol, isTrue);
+    expect(dexian.supportBadge, contains('二进制协议'));
+    expect(dexian.supportBadge, contains('待实测'));
     expect(
       externalGpsProfiles
           .firstWhere((p) => p.kind == ExternalGpsKind.blediy)

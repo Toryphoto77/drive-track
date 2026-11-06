@@ -225,6 +225,16 @@ void main() {
       expect(btGpsNameMatches('JBL Flip', ['dexian', 'd1', 'garmin', 'glo']),
           isFalse);
     });
+
+    test('D1 官方广播名模式：dexian D1-XXXX，大小写不敏感', () {
+      final pattern =
+          RegExp(dexianBroadcastNamePattern, caseSensitive: false);
+      expect(pattern.hasMatch('dexian D1-AB12'), isTrue);
+      expect(pattern.hasMatch('DEXIAN D1-ab12'), isTrue);
+      expect(pattern.hasMatch('dexian D1'), isFalse);
+      expect(pattern.hasMatch('My Headphones'), isFalse);
+      expect(pattern.hasMatch('dexian'), isFalse);
+    });
   });
 
   group('档案诚实不变量', () {
@@ -233,15 +243,16 @@ void main() {
       expect(kinds.toSet().length, kinds.length);
     });
 
-    test('Dexian D1：无硬编 UUID、协议未公开、待真机验证', () {
+    test('Dexian D1：服务 UUID 已验证（官方 App 拆包）、二进制协议、包格式待实测', () {
       final dexian = externalGpsProfiles
           .firstWhere((p) => p.kind == ExternalGpsKind.dexian);
-      expect(dexian.serviceUuid, isNull);
+      expect(dexian.serviceUuid, dexianServiceUuid);
       expect(dexian.txUuid, isNull);
       expect(dexian.hasNmeaPath, isFalse);
-      expect(dexian.name, contains('D1'));
-      expect(dexian.supportBadge, contains('协议未公开'));
-      expect(dexian.supportBadge, contains('未实测验证'));
+      expect(dexian.binaryProtocol, isTrue);
+      expect(dexian.name, 'DEXIAN D1');
+      expect(dexian.supportBadge, contains('二进制协议'));
+      expect(dexian.supportBadge, contains('待实测'));
     });
 
     test('Dragy：无硬编 UUID、私有协议 stub', () {

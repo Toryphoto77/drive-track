@@ -154,7 +154,7 @@ class DeviceScanCard extends StatelessWidget {
   /// 未扫描时扫描按钮的图标（默认用 [icon]）；扫描中固定为停止图标。
   final IconData? scanButtonIcon;
 
-  /// 卡片底部小字脚注（如第一测试目标的诚实标注），可空。
+  /// 卡片底部小字脚注，可空。
   final String? footnote;
 
   /// 权限未授予时的提示（与“去系统设置”按钮一起出现），可空。

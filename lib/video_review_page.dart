@@ -6,6 +6,7 @@ import 'app_notice.dart';
 import 'package:flutter/services.dart';
 import 'models.dart';
 import 'native.dart';
+import 'video_map_gauge.dart';
 
 /// v0.1.7 追加项 3：视频回顾页（诚实回放叠加）。
 ///
@@ -92,6 +93,10 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
   bool _dragging = false;
   int _sliderMs = 0;
   bool _exporting = false;
+  // v1.3.6：地图仪表位置与显隐（只影响本页会话；跟随播放位置实时
+  // 更新，复用既有 250ms 轮询，不另起高频定时器）。
+  VideoGaugePosition _gaugePosition = VideoGaugePosition.topRight;
+  bool _gaugeHidden = false;
 
   Trip get _trip => widget.trip;
   List<String> get _videos => _trip.videoPaths;
@@ -311,8 +316,8 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
     b.writeln('视频段数：${_videos.length}（每段最长 10 分钟自动分段）');
     b.writeln('对齐方式：视频段起始时间 = 行程开始时间 + 段偏移；段偏移优先取段文件名时间戳，'
         '否则按段序号 × 10 分钟估算。对齐精度为秒级，不是帧级。');
-    b.writeln('重要：本清单与本页 HUD 均为回放时叠加/标注，未做烧录重编码；'
-        '原视频文件本身不含速度、G 值与事件标注。');
+    b.writeln('重要：本清单与本页 HUD、地图仪表均为回放时叠加/标注，未做烧录重编码；'
+        '原视频文件本身不含速度、G 值、轨迹地图与事件标注。');
     b.writeln('事件跳转：点事件跳到该事件前约 3 秒；seek 按关键帧就近定位，落点可能差 <1 秒。');
     if (_trip.events.isEmpty) {
       b.writeln('本行程无事件。');
@@ -406,6 +411,47 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                             '纵向 ${point.longG.toStringAsFixed(2)}g · 横向 ${point.latG.toStringAsFixed(2)}g'),
                       ),
                     ]),
+                  ),
+                // v1.3.6：地图仪表（与 HUD 同层逻辑，只在本页回放时叠加，
+                // 不同步进导出的视频文件；同步精度为秒级，不是帧级）。
+                // 画布区 IgnorePointer，只让角上的两个小按钮接收点击。
+                if (!_gaugeHidden)
+                  _gaugePositioned(
+                    child: Stack(children: [
+                      IgnorePointer(
+                        child: VideoMapGauge(
+                          points: trip.points,
+                          current: point,
+                        ),
+                      ),
+                      Positioned(
+                        right: 2,
+                        top: 2,
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          _gaugeButton(
+                            Icons.swap_horiz,
+                            '切换位置（当前${_gaugePosition.label}）',
+                            () => setState(
+                                () => _gaugePosition = _gaugePosition.next),
+                          ),
+                          _gaugeButton(
+                            Icons.visibility_off,
+                            '隐藏地图仪表',
+                            () => setState(() => _gaugeHidden = true),
+                          ),
+                        ]),
+                      ),
+                    ]),
+                  )
+                else
+                  Positioned(
+                    right: 8,
+                    top: 40,
+                    child: _gaugeButton(
+                      Icons.map,
+                      '显示地图仪表',
+                      () => setState(() => _gaugeHidden = false),
+                    ),
                   ),
               ]),
             ),
@@ -524,7 +570,8 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
             ),
           const Padding(
             padding: EdgeInsets.all(12),
-            child: Text('未做烧录重编码：HUD 只在本页回放时叠加，分享 / 导出的原视频文件不含 HUD 数据。',
+            child: Text('未做烧录重编码：HUD 与地图仪表只在本页回放时叠加，分享 / 导出的原视频文件不含 HUD 数据与轨迹地图；'
+                '仪表同步精度为秒级，不是帧级。',
                 style: TextStyle(color: Colors.orange, fontSize: 12)),
           ),
           // ---- 本段事件 ----
@@ -594,6 +641,41 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
             color: Colors.black54, borderRadius: BorderRadius.circular(8)),
         child: Text(text,
             style: const TextStyle(color: Colors.white, fontSize: 13)),
+      );
+
+  /// v1.3.6：地图仪表按当前位置定位（默认右上，位于 HUD 时间条下方，
+  /// 不遮 HUD；右下位于 G 值条对侧，同样不遮 HUD）。
+  Widget _gaugePositioned({required Widget child}) {
+    switch (_gaugePosition) {
+      case VideoGaugePosition.topLeft:
+        return Positioned(left: 8, top: 40, child: child);
+      case VideoGaugePosition.topRight:
+        return Positioned(right: 8, top: 40, child: child);
+      case VideoGaugePosition.bottomRight:
+        return Positioned(right: 8, bottom: 8, child: child);
+    }
+  }
+
+  /// v1.3.6：仪表角上的小按钮（切换位置 / 隐藏 / 恢复显示）。
+  Widget _gaugeButton(IconData icon, String tooltip, VoidCallback onTap) =>
+      Semantics(
+        label: tooltip,
+        button: true,
+        child: Material(
+          color: Colors.black54,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: Tooltip(
+              message: tooltip,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(icon, size: 14, color: Colors.white),
+              ),
+            ),
+          ),
+        ),
       );
 }
 

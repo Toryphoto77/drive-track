@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 
 import 'track_library.dart';
+import 'track_satellite_preview.dart';
 import 'track_widgets.dart';
 
 /// 选赛道列表（包版）。
@@ -46,7 +47,7 @@ class TrackPackageSelector extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
           child: Text(
-            '点行首 ⓘ 看赛道简介（办赛历史与最快圈速）；点行内其他区域选为本次赛道。示意图仅作示意，不用于导航与计时判定',
+            '点行首 ⓘ 看赛道简介（办赛历史与最快圈速）；点行内其他区域选为本次赛道。卡片为卫星预览（加载失败时回落示意图），仅作示意，不用于导航与计时判定',
             style: TextStyle(color: TrackTheme.textDim, fontSize: 11),
           ),
         ),
@@ -128,11 +129,17 @@ class TrackPackageSelector extends StatelessWidget {
                     children: [
                       SizedBox(
                         width: 96,
-                        child: info.outline.length >= 3
-                            ? TrackSchematicDiagram(
-                                track: info,
+                        child: pkg.hasCenterline
+                            ? TrackSatellitePreview(
+                                centerline: pkg.centerline,
+                                start: pkg.start,
+                                finish: pkg.finish,
                                 height: 64,
-                                showCaption: false,
+                                fallback: TrackSchematicDiagram(
+                                  track: info,
+                                  height: 64,
+                                  showCaption: false,
+                                ),
                               )
                             : Container(
                                 height: 64,

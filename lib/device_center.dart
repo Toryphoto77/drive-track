@@ -7,9 +7,7 @@ import 'package:flutter/material.dart';
 import 'blediy_gps.dart';
 import 'bt_gps_receiver.dart';
 import 'camera_connect_page.dart';
-import 'camera_guide.dart';
 import 'device_scan_card.dart';
-import 'gopro_protocol.dart';
 import 'native.dart';
 import 'satellite_settings_page.dart';
 
@@ -130,12 +128,17 @@ class DeviceCenterStore {
 /// 外接 GPS 模块的设备类别（v1.0.2，第 6 项；后扩至 RaceChrono
 /// 支持清单，每设备只出现一次，绝不平行建第二张表）。
 ///
-/// 支持程度必须如实标注，绝不冒充：只有“通用 NMEA 解析”本身是
-/// 已实现的（blediy_gps.dart 的 GGA / RMC / VTG / GSA）；厂商私有协议
-/// 只要没公开文档、没实测设备，一律标“协议未公开 / 未实测验证，
-/// 仅通用 NMEA 兼容”，且 [serviceUuid] / [txUuid] 保持 null，
-/// 绝不凭猜测填一个 UUID。无 UUID 不再等于“无法连接”：无 UUID 的
-/// 类别走名称匹配 + 通用 NUS 订阅尝试 + SPP 连接尝试（见本区连接逻辑）。
+/// 支持程度必须如实标注，绝不冒充，分三档：
+/// - 已实现通用 NMEA 解析（blediy_gps.dart 的 GGA / RMC / VTG / GSA），
+///   且服务 / 特征 UUID 已确认 → 正常订阅解析；
+/// - 服务 UUID 已验证、但协议是二进制且包格式未验证（如 DEXIAN D1，
+///   官方 App 拆包实锤）→ 只连通、不订阅、不解析，[binaryProtocol]
+///   为 true，[txUuid] 保持 null，绝不硬编特征 UUID 与解析逻辑；
+/// - 其余厂商私有协议只要没公开文档、没实测设备，一律标“协议未公开 /
+///   未实测验证，仅通用 NMEA 兼容”，且 [serviceUuid] / [txUuid] 保持 null，
+///   绝不凭猜测填一个 UUID。无 UUID 不再等于“无法连接”：无 UUID 的
+///   类别走名称匹配 + 通用 NUS 订阅尝试 + SPP 连接尝试（见本区连接逻辑）。
+///   二进制协议类别不走 NUS 订阅尝试（见 _connectScanned）。
 enum ExternalGpsKind {
   blediy,
   garminGlo,
@@ -155,7 +158,11 @@ enum ExternalGpsKind {
 /// 没有公开可确认的 BLE 服务 / 特征 UUID，本 App 不按 UUID 自动订阅它
 ///（改走名称匹配 / NUS 尝试 / SPP，见本区连接逻辑）。
 /// [nameHints]：扫描行名称匹配用（仅提示，不作身份断言；短提示词
-/// 按整词匹配，见 bt_gps_receiver.dart）。
+/// 按整词匹配，见 bt_gps_receiver.dart）；[namePattern]：官方广播名
+/// 模式字符串（如 D1 的 ^dexian\s+(\w+)-(\w+)$），命中即名称证据，优先于
+/// 短提示词兜底。
+/// [binaryProtocol]：二进制协议（非 NMEA），服务 UUID 已验证但包格式
+/// 未验证：只连通、不订阅、不解析定位，绝不落入通用 NUS 的 NMEA 订阅。
 /// [adapterId]：私有协议 stub 的注册表 id（bt_gps_receiver.dart），
 /// null = 无私有协议 stub、只走通用 NMEA。
 class ExternalGpsProfile {
@@ -166,6 +173,8 @@ class ExternalGpsProfile {
     this.serviceUuid,
     this.txUuid,
     this.nameHints = const [],
+    this.namePattern,
+    this.binaryProtocol = false,
     this.adapterId,
   });
 
@@ -175,15 +184,20 @@ class ExternalGpsProfile {
   final String? serviceUuid;
   final String? txUuid;
   final List<String> nameHints;
+  final String? namePattern;
+  final bool binaryProtocol;
   final String? adapterId;
 
   /// 是否有可确认的 NMEA 订阅路径（不是“厂商已完整支持”）。
   bool get hasNmeaPath => serviceUuid != null && txUuid != null;
 
   /// 页面上的支持程度徽标文案。
-  String get supportBadge => hasNmeaPath
-      ? '通用 NMEA 兼容（GGA / RMC / VTG / GSA 解析已实现）'
-      : '协议未公开 / 未实测验证，仅通用 NMEA 兼容';
+  String get supportBadge {
+    if (binaryProtocol) return '二进制协议（服务 UUID 已验证，包格式待实测）';
+    return hasNmeaPath
+        ? '通用 NMEA 兼容（GGA / RMC / VTG / GSA 解析已实现）'
+        : '协议未公开 / 未实测验证，仅通用 NMEA 兼容';
+  }
 }
 
 /// 四类外接 GPS 档案。调研结论（2026-11-03 公开搜索，见回执）：
@@ -193,13 +207,16 @@ class ExternalGpsProfile {
 ///   连接、10Hz（Pro 25Hz）与 u-blox 芯片，未找到官方 BLE 服务 /
 ///   特征 UUID 与数据格式文档；RaceChrono 支持 Dragy 是其自有
 ///   集成，不是公开协议。本 App 不解析 Dragy 私有数据流。
-/// - DEXIAN Timer（D1）：Dexian Timer 应用介绍称兼容 D1 25Hz GPS
-///   且支持 RaceChrono DIY 协议设备，RaceChrono 更新日志亦称已
-///   支持 Dexian D1；但未找到 D1 本身公开的 BLE 服务 / 特征 UUID
-///   与数据格式。RaceChrono BLE DIY 服务 UUID（00001ff8-…）是
-///   DIY 设备的公开规范，不是 D1 的实测值，绝不能硬说成 D1 的值，
-///   因此本档案不填它。2026-11-05 用户亲自确认 D1 兼容 25Hz
-///   （BLE 服务 UUID 仍未知，连接与定位仍待真机验证）。
+/// - DEXIAN D1：Dexian Timer 官方 App（1.3.2）拆包实锤（2026-11-06）：
+///   BLE 服务 UUID 为 00000003-0000-1000-8000-00805f9b34fb，官方 App
+///   扫描即按此服务过滤；设备广播名匹配 ^dexian\s+(\w+)-(\w+)$（如
+///   dexian D1-XXXX，大小写不敏感）；25Hz（用户确认）。D1 走二进制协议
+///   （非 NMEA），官方 App 里无任何 NMEA 句标识，位置数据是二进制包经
+///   ByteData 解析，订阅分 GPS 数据 / GPS 时间 / 电池三路；数据特征候选
+///   为 00000004-…与 00001ff8-…（哪路对应哪个未确认），包格式待实测抓包，
+///   本档案不硬编特征 UUID 与解析逻辑。RaceChrono BLE DIY 服务 UUID
+///   （00001ff8-…）是 DIY 设备的公开规范，不是 D1 的实测值，绝不能硬说成
+///   D1 的值。
 /// - 通用 NMEA BLE UART：默认 Nordic UART，可改填设备实际广播值。
 const List<ExternalGpsProfile> externalGpsProfiles = [
   ExternalGpsProfile(
@@ -259,13 +276,17 @@ const List<ExternalGpsProfile> externalGpsProfiles = [
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.dexian,
-    name: 'DEXIAN D1（第一测试目标）',
-    nameHints: ['dexian', 'd1'],
-    note: '25Hz（用户确认）；BLE 服务 UUID 仍未知、连接与定位仍待真机验证：'
-        '公开渠道无 D1 服务 UUID；RaceChrono v10.3.0 加入 D1 支持的同版把 BLE '
-        '优先级设为高，推测 D1 走 BLE。本 App 按标准 NMEA over Bluetooth 实现，'
-        '不硬编任何未证实的协议细节：点「扫描适配设备」按名称匹配走 BLE'
-        '（无 UUID 时自动尝试通用 NUS 订阅），不行再试 SPP；连接与定位均待真机验证。',
+    name: 'DEXIAN D1',
+    serviceUuid: dexianServiceUuid,
+    namePattern: dexianBroadcastNamePattern,
+    nameHints: ['dexian'],
+    binaryProtocol: true,
+    note: '25Hz（用户确认）；BLE 服务 UUID 已验证：Dexian Timer 官方 App（1.3.2）'
+        '拆包实锤，官方 App 扫描即按服务 00000003-0000-1000-8000-00805f9b34fb 过滤。'
+        'D1 走二进制协议（非 NMEA）：官方 App 里无任何 NMEA 句标识，位置数据是二进制包，'
+        '订阅分 GPS 数据 / GPS 时间 / 电池三路；数据特征候选为 00000004-…与 00001ff8-…'
+        '（哪路对应哪个未确认），包格式待实测抓包，本版只连通、不订阅、不解析定位。'
+        '点「扫描适配设备」按服务 UUID 优先、广播名模式（dexian D1-XXXX）兜底匹配。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.digspice,
@@ -300,34 +321,56 @@ const List<ExternalGpsProfile> externalGpsProfiles = [
   ),
 ];
 
-/// 单入口“可适配设备”过滤（纯函数，可单测）：名录匹配 12 张档案卡
-/// 的名称提示，或广播 NMEA UART / SPP 服务（NUS 6e400001、
-/// RaceBox NMEA、SPP 00001101）。名称与服务证据都没有的设备
-///（如耳机）不进主列表，只在高级区全部结果里出现；过滤不丢数据。
+/// 档案的名称证据：官方广播名模式（如 D1 的 ^dexian\s+(\w+)-(\w+)$）
+/// 命中即名称证据；模式未命中时短提示词兜底（见 btGpsNameMatches）。
+bool _profileNameMatches(ExternalGpsProfile p, String name) {
+  final pattern = p.namePattern;
+  if (pattern != null &&
+      RegExp(pattern, caseSensitive: false).hasMatch(name)) {
+    return true;
+  }
+  return btGpsNameMatches(name, p.nameHints);
+}
+
+/// 单入口“可适配设备”过滤（纯函数，可单测）：服务 UUID 证据优先——
+/// 档案里有已确认服务 UUID 的设备（如 DEXIAN D1 的 00000003-…、
+/// RaceBox NMEA 的 00001101），广播到即进主列表；其次是档案名录的
+/// 名称证据（官方广播名模式 / 提示词）；最后是通用 NUS / SPP 服务
+/// 广播。名称与服务证据都没有的设备（如耳机）不进主列表，只在高级区
+/// 全部结果里出现；过滤不丢数据。
 bool gpsDeviceIsAdaptable(Map<String, dynamic> dev) {
   final name = (dev['name'] ?? '').toString();
-  for (final p in externalGpsProfiles) {
-    if (btGpsNameMatches(name, p.nameHints)) return true;
-  }
   final uuids = ((dev['serviceUuids'] as List?) ?? [])
       .map((e) => e.toString().toLowerCase())
       .toList();
+  for (final p in externalGpsProfiles) {
+    final s = p.serviceUuid?.toLowerCase();
+    if (s != null && uuids.contains(s)) return true;
+  }
+  for (final p in externalGpsProfiles) {
+    if (_profileNameMatches(p, name)) return true;
+  }
   if (uuids.any((u) => u.contains('6e400001'))) return true;
   if (uuids.any((u) => u.contains('00001101'))) return true;
   return false;
 }
 
-/// 单入口自动连接的档案推导（纯函数，可单测）：名称匹配优先；
-/// RaceBox NMEA 服务广播 → RaceBox 档案；其余一律走通用 NMEA
-///（NUS 默认值），由连接逻辑按广播事实订阅。
+/// 单入口自动连接的档案推导（纯函数，可单测）：D1 服务 UUID 证据优先
+///（00000003-…只可能是 DEXIAN D1）；其次名称证据（官方广播名模式 /
+/// 提示词）；RaceBox NMEA 服务广播排在名称之后——00001101 也是通用
+/// SPP 服务 UUID，先按名称会误把 SPP 设备认成 RaceBox；其余一律走
+/// 通用 NMEA（NUS 默认值），由连接逻辑按广播事实订阅。
 ExternalGpsKind gpsProfileKindForDevice(Map<String, dynamic> dev) {
   final name = (dev['name'] ?? '').toString();
-  for (final p in externalGpsProfiles) {
-    if (btGpsNameMatches(name, p.nameHints)) return p.kind;
-  }
   final uuids = ((dev['serviceUuids'] as List?) ?? [])
       .map((e) => e.toString().toLowerCase())
       .toList();
+  if (uuids.contains(dexianServiceUuid.toLowerCase())) {
+    return ExternalGpsKind.dexian;
+  }
+  for (final p in externalGpsProfiles) {
+    if (_profileNameMatches(p, name)) return p.kind;
+  }
   if (uuids.contains(raceboxNmeaServiceUuid.toLowerCase())) {
     return ExternalGpsKind.racebox;
   }
@@ -338,12 +381,12 @@ ExternalGpsKind gpsProfileKindForDevice(Map<String, dynamic> dev) {
 /// 本区是 App 内唯一的蓝牙 GPS 连接入口，不另起平行入口。
 ///
 /// 单入口主流程（像系统蓝牙连接页）：顶部「扫描适配设备」一键扫完
-/// 全渠道（NUS 过滤扫描、无过滤 BLE 扫描、经典蓝牙发现、已配对 SPP），
-/// 结果按地址去重合并；主列表只显示过滤后的可适配设备（档案名录匹配
-/// 或广播 NMEA UART / SPP 服务），点行即自动连接（BLE 优先、只有 SPP
-/// 通道时走 SPP，档案由设备推导、不再要求先选档案卡）。行内显示
-/// 连接中 → 已连接 → 定位状态 / 卫星数 / 更新率。原有高级 / 手动能力
-///（档案卡浏览、自定义 UUID、分别扫描、SPP 说明、全部扫描结果）收进
+/// 全渠道（NUS / D1 服务过滤扫描、无过滤 BLE 扫描、经典蓝牙发现、已配对 SPP），
+/// 结果按地址去重合并；主列表只显示过滤后的可适配设备（档案名录匹配、
+/// 广播已验证的厂商服务如 DEXIAN D1 的 00000003，或广播 NMEA UART / SPP 服务），
+/// 点行即自动连接（BLE 优先、只有 SPP 通道时走 SPP，档案由设备推导、
+/// 不再要求先选档案卡）。行内显示连接中 → 已连接 → 定位状态 / 卫星数 / 更新率。
+/// 原有高级 / 手动能力（档案卡浏览、自定义 UUID、分别扫描、SPP 说明、全部扫描结果）收进
 /// 默认收起的「高级 / 手动添加」区，主流程看不到它们。
 ///
 /// 定位源切换复用现有链路，不另造一套：本区做扫描 → 连接 → 订阅 /
@@ -365,7 +408,7 @@ ExternalGpsKind gpsProfileKindForDevice(Map<String, dynamic> dev) {
 ///   页级“附近扫描结果”不会因此多出重复设备。
 ///
 /// 原生层限制（必须如实显示，不假装全量扫描）：
-/// - NUS 扫描带服务过滤：不广播 NUS 的设备扫不到，须用无过滤扫描
+/// - NUS / D1 服务过滤扫描：不广播这两个服务的设备扫不到，须用无过滤扫描
 ///   （名称匹配）或经典蓝牙 / 已配对 SPP 路径；主按钮已一次全扫。
 /// - 原生单 GATT：一次只能连一台 BLE 设备，连新设备会断开旧的；
 ///   SPP 不占 GATT 名额，可与 BLE 传感器共存。
@@ -555,8 +598,11 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         if (!mounted) return;
         setState(() {});
       } else if (type == 'bleNotification') {
-        // 只喂 NMEA 特征的通知进 GPS 解析器：页级传感器通知
+        // 二进制协议设备（如 DEXIAN D1）：通知字节不进 NMEA 解析器，
+        // 在门口直接丢弃（现有丢弃规则），绝不解析成定位、绝不出假定位。
+        // 正常路径仍只喂 NMEA 特征的通知进 GPS 解析器：页级传感器通知
         //（功率计 / 踏频 / 心率）不再误喂，避免二进制数据污染解析。
+        if (_profile.binaryProtocol) return;
         final cu = (e['characteristicUuid'] ?? '').toString().toLowerCase();
         final tx = _effectiveUuids?.tx.toLowerCase() ?? '';
         final isNmea =
@@ -754,7 +800,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     }
     if (!await _ensureBtPermissions()) return;
     try {
-      await Native.scanBleWithServices([nordicUartServiceUuid]);
+      // 服务过滤扫描同时带 NUS 与 DEXIAN D1 服务（00000003-…，官方 App
+      // 拆包已验证）：D1 广播该服务即被过滤扫描直接命中，不靠名称猜。
+      await Native.scanBleWithServices(
+          [nordicUartServiceUuid, dexianServiceUuid]);
       final bleOk = await Native.scanBleUnfiltered();
       final classicOk = await Native.startClassicDiscovery();
       final bonded = await Native.listBondedSppDevices();
@@ -802,6 +851,30 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     await _disconnectCurrentQuietlyIfOther(addr);
     final uuids = _effectiveUuids;
     if (uuids == null) {
+      if (_profile.binaryProtocol) {
+        // 二进制协议设备（如 DEXIAN D1）：服务 UUID 已验证，但数据特征
+        // 未确认、包格式待实测抓包。本版只连通 GATT，不订阅任何特征、
+        // 不解析定位；绝不落入通用 NUS 的 NMEA 订阅当 NMEA 设备用。
+        // 订阅按钮同样拒绝（见 _subscribeConnected），通知字节即使到达
+        // 也不进解析器（见 bleNotification 分支的丢弃守卫）。
+        try {
+          setState(() {
+            _notice = '正在连接“${dev['name']}”…D1 用二进制协议（非 NMEA）：'
+                '服务 UUID 已验证，包格式待实测抓包；本版只连通、不订阅、不解析定位。';
+            _connectingAddress = addr;
+            _pendingSubscribe = null;
+          });
+          await Native.setBleAutoReconnect(true);
+          await Native.connectBle(addr);
+        } catch (e) {
+          setState(() {
+            _connectingAddress = null;
+            _pendingSubscribe = null;
+            _notice = '连接失败：$e';
+          });
+        }
+        return;
+      }
       // 无公开 UUID 的类别：不猜 UUID。先连 GATT，连接成功后由
       // connected 事件自动尝试通用 NUS 订阅（设备实际广播为准）；
       // 若设备不广播 NUS 且支持经典蓝牙，请改用 SPP 连接。
@@ -877,7 +950,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   }
 
   /// 对已连接设备直接尝试订阅 NMEA 特征（不重新连接）。
-  /// SPP 通道无需订阅（串口直读）；无 UUID 的类别尝试通用 NUS 订阅。
+  /// SPP 通道无需订阅（串口直读）；无 UUID 的类别尝试通用 NUS 订阅；
+  /// 二进制协议设备（如 DEXIAN D1）不订阅：特征未确认、包格式待实测抓包。
   Future<void> _subscribeConnected() async {
     final addr = _connectedAddress;
     if (addr == null) {
@@ -887,6 +961,11 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     if (_connectedChannel == 'spp') {
       setState(() => _notice = 'SPP 通道无需订阅特征：NMEA 文本经串口直达解析器，'
           '有效定位已自动注入 Recorder。');
+      return;
+    }
+    if (_profile.binaryProtocol) {
+      setState(() => _notice = '当前设备（${_profile.name}）用二进制协议，'
+          '特征 UUID 与包格式待实测抓包：本版不订阅、不解析定位。');
       return;
     }
     final uuids = _effectiveUuids;
@@ -954,7 +1033,9 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     }
     final uuids = _effectiveUuids;
     if (addr == null || uuids == null) {
-      setState(() => _notice = '当前类别无可确认的 UUID，无法保存为可重连的特征配置。');
+      setState(() => _notice = _profile.binaryProtocol
+          ? 'DEXIAN D1 用二进制协议（数据特征 UUID 待确认），无法保存为可重连的特征配置。'
+          : '当前类别无可确认的 UUID，无法保存为可重连的特征配置。');
       return;
     }
     final saved = await DeviceCenterStore.load();
@@ -978,6 +1059,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     final uuids = ((dev['serviceUuids'] as List?) ?? [])
         .map((e) => e.toString().toLowerCase())
         .toList();
+    if (uuids.contains(dexianServiceUuid.toLowerCase())) {
+      return '广播含 DEXIAN D1 服务（00000003-…，官方 App 拆包已验证）：'
+          '二进制协议（非 NMEA），包格式待实测抓包，暂不解析定位。';
+    }
     if (uuids.any((u) => u.contains('6e400001'))) {
       return '广播含 Nordic UART 服务，可尝试订阅 NMEA。';
     }
@@ -989,7 +1074,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     }
     final name = (dev['name'] ?? '').toString();
     for (final p in externalGpsProfiles) {
-      if (btGpsNameMatches(name, p.nameHints)) {
+      if (_profileNameMatches(p, name)) {
+        if (p.binaryProtocol) {
+          return '名称匹配：${p.name}（二进制协议，服务 UUID 已验证，包格式待实测）。';
+        }
         return '名称匹配：${p.name}（仅名称提示，协议以实际输出为准）。';
       }
     }
@@ -1029,7 +1117,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           title: '外接 GPS',
           description: '点下方按钮一次扫完周围可适配的 GPS 设备（BLE + 经典蓝牙 + '
               '已配对），点列表里的设备即自动连接。BLE 优先、只有 SPP 通道时走 SPP；'
-              '12 张档案名录匹配或广播 NMEA UART / SPP 服务的设备才进主列表。',
+              '12 张档案名录匹配、广播已验证的厂商服务（如 DEXIAN D1 的 00000003）'
+              '或 NMEA UART / SPP 服务的设备才进主列表。',
           icon: Icons.satellite_alt,
           scanning: _adaptScanning,
           scanLabel: '扫描适配设备',
@@ -1037,8 +1126,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           onScanToggle: _toggleAdaptScan,
           statusLine: scanStatusLine,
           scanButtonIcon: Icons.bluetooth_searching,
-          footnote: '第一测试目标：DEXIAN D1 25Hz（用户确认）；BLE 服务 UUID 仍未知、'
-              '连接与定位仍待真机验证。',
           permNotice: _permNotice,
           onOpenSettings: () => Native.openAppSettings(),
         ),
@@ -1099,11 +1186,12 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           onExpansionChanged: (v) => setState(() => _advancedExpanded = v),
           children: [
             const Text(
-              '本区是唯一的蓝牙 GPS 连接入口：BLE（NUS / RaceBox NMEA UART / 名称匹配）'
-              '与经典蓝牙 SPP 双通道，扫描列表全渠道合并、一设备一行，连接状态单点管理。'
-              '定位源切换复用现有链路：BLE 订阅或 SPP 直读的 NMEA 经 main.dart 全局 '
-              'bleData 监听注入 Recorder（externalGpsActive = true，落点走 '
-              'Recorder.onExternalFix），外部源 5 秒无新定位或断线时自动回落手机 GPS。'
+              '本区是唯一的蓝牙 GPS 连接入口：BLE（NUS / RaceBox NMEA UART / '
+              'DEXIAN D1 二进制服务 / 名称匹配）与经典蓝牙 SPP 双通道，扫描列表全渠道合并、'
+              '一设备一行，连接状态单点管理。定位源切换复用现有链路：BLE 订阅或 SPP 直读的 '
+              'NMEA 经 main.dart 全局 bleData 监听注入 Recorder（externalGpsActive = true，'
+              '落点走 Recorder.onExternalFix），外部源 5 秒无新定位或断线时自动回落手机 GPS。'
+              'DEXIAN D1 只连通、不订阅、不解析定位（包格式待实测抓包）。'
               '原生单 GATT：一次只能连一台 BLE 设备，SPP 不占 GATT 名额。',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
@@ -1388,13 +1476,8 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   List<SavedDevice> _saved = [];
   final List<Map<String, dynamic>> _scanned = [];
   final Map<String, DeviceLinkStatus> _statusByAddress = {};
-  final Map<String, int> _batteryByAddress = {};
   bool _scanning = false;
   String? _notice;
-
-  DeviceLinkStatus _goproStatus = DeviceLinkStatus.disconnected;
-  int? _goproBattery; // 仅当原生层未来回传电量事件时才有值，否则始终为 null。
-  bool _goproScanning = false;
 
   StreamSubscription<Map<String, dynamic>>? _devSub;
   StreamSubscription<Map<String, dynamic>>? _dataSub;
@@ -1433,20 +1516,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             _statusByAddress[k] = DeviceLinkStatus.disconnected;
           }
           _gpsFeed.reset();
-        } else if (type == 'bleNotification') {
-          // GoPro 响应特征 GP-0073：原生层通用通知原样转发，Dart 侧按
-          // 特征 UUID 分发；收到响应才算 GoPro 链路通，之前只算“已下发查询”。
-          final cu = (e['characteristicUuid'] ?? '').toString().toLowerCase();
-          if (cu.contains('0073')) {
-            _goproStatus = DeviceLinkStatus.connected;
-            _notice = 'GoPro 已响应 Get Version 查询（GP-0073）：Open GoPro '
-                '链路通。快门等控制命令仍须在相机实际响应后核对，不先宣称可用。';
-          }
-        } else if (type == 'battery' && addr.isNotEmpty) {
-          // 原生层目前的 battery 事件不带 address（见 MainActivity），
-          // 这里只在带 address 时记录；不带 address 时不乱贴到某台设备。
-          final v = e['value'];
-          if (v is num) _batteryByAddress[addr] = v.toInt();
         }
       });
     }, onError: (_) {});
@@ -1512,83 +1581,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       setState(() {
         _statusByAddress[addr] = DeviceLinkStatus.disconnected;
         _notice = '连接失败：$e';
-      });
-    }
-  }
-
-  /// GoPro 扫描：原生层 scanBleWithServices（v0.1.3 起已有）带 FEA6
-  /// 过滤扫描；扫描结果走页面通用 bleDeviceStream，进下方扫描列表，
-  /// 在该行点“GoPro 连接”才真正连接并下发查询。
-  Future<void> _scanGoPro() async {
-    try {
-      if (_goproScanning) {
-        await Native.stopBleScan();
-        setState(() {
-          _goproScanning = false;
-          _notice = '已停止 GoPro 扫描。';
-        });
-      } else {
-        await Native.scanBleWithServices([goproAdvertisedServiceUuid]);
-        setState(() {
-          _goproScanning = true;
-          _notice = '正在扫描广播 FEA6 的 GoPro 设备…结果出现在下方扫描列表，'
-              '在 GoPro 设备行点“GoPro 连接”下发 Get Version 查询。';
-        });
-      }
-    } catch (e) {
-      setState(() => _notice = 'GoPro 扫描失败：$e');
-    }
-  }
-
-  /// GoPro 连接（v1.1.0 打通）：先 connectBle，再订阅响应特征
-  /// GP-0073（原生层只自动订阅功率/踏频/心率/电量，不自动订阅 GoPro
-  /// 响应，不订阅就收不到回复），最后用原生层已有的通用写特征方法
-  /// 下发 Get Version 只读查询（[0x01, 0x51]），绝不用快门命令作探测。
-  /// 旧版直接裸调 MethodChannel 且不带地址、不先连接，必然失败；
-  /// 本版走 Native.writeBleCharacteristic（带地址），失败原因如实显示。
-  Future<void> _connectGoProDevice(String address) async {
-    setState(() {
-      _goproStatus = DeviceLinkStatus.connecting;
-      _notice = '正在连接 GoPro（$address）…连接成功后订阅响应特征并下发查询。';
-    });
-    try {
-      await Native.setBleAutoReconnect(true);
-      await Native.connectBle(address);
-      final sub = await Native.subscribeBleCharacteristic(
-        address,
-        goproAdvertisedServiceUuid,
-        goproCommandResponseUuid,
-      );
-      if ((sub['ok'] as bool?) != true) {
-        setState(() {
-          _goproStatus = DeviceLinkStatus.unavailable;
-          _notice = 'GoPro 响应特征订阅失败：${sub['error'] ?? 'unknown'}。'
-              '常见原因：GATT 服务发现未完成，或该设备不是 Open GoPro 兼容设备。';
-        });
-        return;
-      }
-      final r = await Native.writeBleCharacteristic(
-        address,
-        goproAdvertisedServiceUuid,
-        goproCommandWriteUuid,
-        buildGoProGetVersion(),
-      );
-      if (!mounted) return;
-      setState(() {
-        if ((r['ok'] as bool?) == true) {
-          _goproStatus = DeviceLinkStatus.connecting;
-          _notice = 'Get Version 查询已下发：等待 GoPro 经 GP-0073 响应，'
-              '收到响应后状态才变“已连接”；电量仍以响应/电量事件为准，不编造。';
-        } else {
-          _goproStatus = DeviceLinkStatus.unavailable;
-          _notice = 'GoPro 查询下发失败：${r['error'] ?? 'unknown'}。';
-        }
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _goproStatus = DeviceLinkStatus.unavailable;
-        _notice = 'GoPro 连接失败：$e';
       });
     }
   }
@@ -1669,9 +1661,9 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             ),
           _sectionTitle('运动相机'),
           // v1.2.12：统一入口是「连接运动相机」新页（一个入口扫全部品牌，
-          // 品牌自动识别、点行即连）。下方三张旧的按品牌卡片只保留在
-          // 「高级 / 按品牌」区作直达入口，说法与新页一致：GoPro 直连，
-          // Insta360 / DJI 只走向导，不两套入口各说各话。
+          // 品牌自动识别、点行即连）。旧的按品牌三张卡（GoPro / Insta360 /
+          // DJI）已删：统一页已覆盖 GoPro 直连（含 GP-0073 Get Version 与
+          // 电量显示）与 Insta360 / DJI 向导跳转，只留一个入口，不两套并存。
           Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
@@ -1713,76 +1705,15 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               ],
             ),
           ),
-          ExpansionTile(
-            title: const Text('高级 / 按品牌',
-                style: TextStyle(color: Colors.white, fontSize: 14)),
-            subtitle: const Text('旧的按品牌直达入口：GoPro 扫描直连、Insta360 / DJI 向导',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
-            iconColor: Colors.white70,
-            collapsedIconColor: Colors.white70,
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: Text(
-                    '主入口是上方的「连接运动相机」；这里只保留旧的按品牌直达入口，'
-                    '两处说法一致：GoPro 直连，Insta360 / DJI 只走向导。',
-                    style: TextStyle(color: Colors.white60, fontSize: 12)),
-              ),
-              _cameraCard(
-                accent: accent,
-                name: 'GoPro',
-                subtitle: 'Open GoPro BLE：先点下方按钮扫描 FEA6 设备，再在扫描列表的 '
-                    'GoPro 行点“GoPro 连接”，依次完成连接 → 订阅响应特征 GP-0073 → '
-                    '下发 Get Version 只读查询；收到响应后状态才变已连接。',
-                status: _goproStatus,
-                batteryText: _goproBattery == null
-                    ? '电量：—（未收到电量事件，不显示假数值）'
-                    : '电量：$_goproBattery%',
-                actionLabel: _goproScanning ? '停止扫描 GoPro' : '扫描 GoPro 设备',
-                onAction: _scanGoPro,
-              ),
-              _cameraCard(
-                accent: accent,
-                name: 'Insta360',
-                subtitle: 'Beta / 向导式连接：Wi-Fi 热点 + Insta360 App 连接，'
-                    '本 App 不直连相机。',
-                status: DeviceLinkStatus.disconnected,
-                batteryText: '电量：—（请在品牌 App 内查看）',
-                actionLabel: '打开连接向导',
-                onAction: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => CameraGuidePage(
-                            brand: CameraGuideBrand.insta360,
-                            onBack: () => Navigator.of(context).pop(),
-                          )),
-                ),
-              ),
-              _cameraCard(
-                accent: accent,
-                name: 'DJI',
-                subtitle: 'Beta / 向导式连接：Wi-Fi 热点 + DJI Mimo App 连接，'
-                    '本 App 不直连相机。',
-                status: DeviceLinkStatus.disconnected,
-                batteryText: '电量：—（请在品牌 App 内查看）',
-                actionLabel: '打开连接向导',
-                onAction: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => CameraGuidePage(
-                            brand: CameraGuideBrand.dji,
-                            onBack: () => Navigator.of(context).pop(),
-                          )),
-                ),
-              ),
-            ],
-          ),
           const SizedBox(height: 8),
           _sectionTitle('外接 GPS 模块'),
           const Text(
-            '链路：BLE（NUS / RaceBox NMEA UART / 名称匹配）与经典蓝牙 SPP 双通道 → '
-            '连接 → 订阅 / 直读 NMEA → main.dart 全局监听把有效定位注入 Recorder，'
+            '链路：BLE（NUS / RaceBox NMEA UART / DEXIAN D1 二进制服务 / 名称匹配）与经典蓝牙 SPP '
+            '双通道 → 连接 → 订阅 / 直读 NMEA → main.dart 全局监听把有效定位注入 Recorder，'
             '5 秒无新定位自动回落手机 GPS。档案覆盖 RaceChrono 支持清单；'
-            'Dragy 私有协议与 DEXIAN D1 协议未公开 / 未实测验证，仅通用 NMEA 兼容，'
-            '不解析其私有数据流。',
+            'Dragy 私有协议未公开 / 未实测验证，仅通用 NMEA 兼容，不解析其私有数据流；'
+            'DEXIAN D1 服务 UUID 已验证（官方 App 拆包），走二进制协议（非 NMEA），'
+            '包格式待实测抓包，本版只连通、不订阅、不解析。',
             style: TextStyle(color: Colors.white60, fontSize: 12),
           ),
           const SizedBox(height: 8),
@@ -1869,35 +1800,21 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               title: Text((dev['name'] ?? '').toString(),
                   style: const TextStyle(color: Colors.white)),
               subtitle: Text(
-                  '${dev['address']} · ${dev['type']} · RSSI ${dev['rssi']}'
-                  '${_isGoProScanned(dev) ? ' · GoPro（广播含 FEA6）' : ''}',
+                  '${dev['address']} · ${dev['type']} · RSSI ${dev['rssi']}',
                   style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_isGoProScanned(dev))
-                    TextButton(
-                      onPressed: () {
-                        final addr = (dev['address'] ?? '').toString();
-                        if (addr.isNotEmpty) _connectGoProDevice(addr);
-                      },
-                      child: const Text('GoPro 连接'),
-                    ),
-                  TextButton(
-                    onPressed: () async {
-                      final addr = (dev['address'] ?? '').toString();
-                      if (addr.isEmpty) return;
-                      try {
-                        setState(() => _statusByAddress[addr] =
-                            DeviceLinkStatus.connecting);
-                        await Native.connectBle(addr);
-                      } catch (e) {
-                        setState(() => _notice = '连接失败：$e');
-                      }
-                    },
-                    child: const Text('连接'),
-                  ),
-                ],
+              trailing: TextButton(
+                onPressed: () async {
+                  final addr = (dev['address'] ?? '').toString();
+                  if (addr.isEmpty) return;
+                  try {
+                    setState(() => _statusByAddress[addr] =
+                        DeviceLinkStatus.connecting);
+                    await Native.connectBle(addr);
+                  } catch (e) {
+                    setState(() => _notice = '连接失败：$e');
+                  }
+                },
+                child: const Text('连接'),
               ),
             ),
         ],
@@ -1926,73 +1843,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           ),
         ),
       );
-
-  Widget _cameraCard({
-    required Color accent,
-    required String name,
-    required String subtitle,
-    required DeviceLinkStatus status,
-    required String batteryText,
-    required String actionLabel,
-    required VoidCallback onAction,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0E13),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: status == DeviceLinkStatus.connected
-                      ? Colors.green.withValues(alpha: 0.2)
-                      : accent.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(status.label,
-                    style: const TextStyle(color: Colors.white, fontSize: 12)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(subtitle,
-              style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          const SizedBox(height: 4),
-          Text(batteryText,
-              style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          const SizedBox(height: 8),
-          FilledButton(onPressed: onAction, child: Text(actionLabel)),
-        ],
-      ),
-    );
-  }
-
-  /// 扫描行是否为 GoPro：广播服务含 FEA6，或名称含 GoPro（名称仅提示，
-  /// 不作身份断言；真正连接仍走 FEA6 服务下的 GP-0072/0073 特征查找，
-  /// 找不到特征时如实报 characteristic_not_found）。
-  bool _isGoProScanned(Map<String, dynamic> dev) {
-    final uuids = ((dev['serviceUuids'] as List?) ?? [])
-        .map((e) => e.toString())
-        .toList();
-    if (isGoProAdvertisement(uuids)) return true;
-    return (dev['name'] ?? '').toString().toLowerCase().contains('gopro');
-  }
 
   Widget _savedRow(Color accent, SavedDevice device) {
     final addr = device.address;

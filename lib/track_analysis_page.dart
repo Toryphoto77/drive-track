@@ -29,6 +29,11 @@
 /// - 赛道模式不评分：本页不显示、不计算任何评分。
 /// - 第一版不做视频联动：本页不读 trip.videoPaths、不做视频同步。
 ///
+/// v1.3.4：参考圈叠加——全程走线图卡（卫星 / 回落示意）叠加参照圈
+/// 青色轨迹（开关默认开，只影响本页会话；无参照圈时开关不出现）；
+/// 速度曲线在参照圈 ≠ 分析圈时加第二条青色虚线（按距离插值速度，
+/// 见 _refSpeedAt）。只动这两处显示，不动任何计时与统计口径。
+///
 /// 数据口径：
 /// - [laps] 由调用方传入（LapTimer.laps，或 Trip.lapsJson 解码
 ///   `trip.lapsJson.map((j) => Lap.fromJson(j)).toList()`）。
@@ -45,6 +50,9 @@ import 'package:flutter/material.dart';
 
 import 'logic.dart';
 import 'models.dart';
+import 'replay_3d.dart';
+import 'satellite_tiles.dart';
+import 'track_analysis_geo.dart';
 import 'trip_detail_modules.dart';
 import 'track_sector_data.dart';
 import 'track_session_display.dart';
@@ -55,6 +63,9 @@ const Color _kCard = Color(0xFF141414);
 const Color _kBorder = Color(0xFF2A2A2A);
 const Color _kRed = Color(0xFFE10600);
 const Color _kGreen = Color(0xFF22C55E);
+
+/// v1.3.4：参考圈 / 幽灵车青色（与速度彩虹线、分析圈红色区分）。
+const Color _kGhostCyan = Color(0xFF22D3EE);
 
 /// 走线着色模式。
 enum TrackLineColorMode { speed, delta }
@@ -134,6 +145,27 @@ double _refElapsedAt(_LapSlice ref, double d) {
   return ref.elapsedMs.last.toDouble();
 }
 
+/// v1.3.4：参照圈在距离 [d] 处的速度（km/h，线性插值，超界钳制
+/// 到端点）。口径与 [_refElapsedAt] 一致，只把插值量换成速度，
+/// 供速度曲线画参照圈第二条线用。
+double _refSpeedAt(_LapSlice ref, double d) {
+  if (ref.points.isEmpty) return 0;
+  double kmhAt(int i) => ref.points[i].speed * 3.6;
+  if (d <= 0) return kmhAt(0);
+  if (d >= ref.totalDistance) return kmhAt(ref.points.length - 1);
+  for (var i = 1; i < ref.distances.length; i++) {
+    if (ref.distances[i] >= d) {
+      final d0 = ref.distances[i - 1];
+      final d1 = ref.distances[i];
+      final v0 = kmhAt(i - 1);
+      final v1 = kmhAt(i);
+      if (d1 <= d0) return v1;
+      return v0 + (v1 - v0) * (d - d0) / (d1 - d0);
+    }
+  }
+  return kmhAt(ref.points.length - 1);
+}
+
 class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
   late Lap? _selected;
   late Lap? _reference;
@@ -141,6 +173,27 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
   double _viewStart = 0;
   double _viewEnd = 1;
   double _scrub = 0;
+
+  // v1.3.1：各区块隐藏开关（默认全部展开；只影响本页会话状态，
+  // 不持久化、不影响任何统计口径）。
+  bool _hideOverview = false;
+  bool _hideSpeed = false;
+  bool _hideG = false;
+  bool _hideAltitude = false;
+  bool _hideTrackLine = false;
+
+  // v1.3.1：全程走线图底图切换（默认卫星；只影响本页会话状态）。
+  // true = 卫星地图，false = 归一化示意图（弱网与色弱用户兜底）。
+  bool _satelliteMap = true;
+
+  // v1.3.7：全程走线图 3D 回放模式（默认关，用户主动切过去；
+  // 只影响本页会话状态；开时卫星/示意两 chip 均不选中，走线图
+  // 区改画 Replay3dView，参考圈叠加开关与图例不出现）。
+  bool _replay3d = false;
+
+  // v1.3.4：全程走线图参考圈叠加开关（默认开，只影响本页会话状态；
+  // 无参照圈时开关不出现，见 _tripOverviewSection）。
+  bool _showReferenceOverlay = true;
 
   TrackSectorData? get _sectorData => sectorDataFor(widget.trip.trackId);
 
@@ -169,6 +222,41 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       _viewStart = 0;
       _viewEnd = 1;
     });
+  }
+
+  /// v1.3.1：区块标题行 + 隐藏开关（眼睛图标；默认展开）。
+  /// [keyName] 供 widget 测试定位开关；[hidden] 为当前隐藏状态。
+  Widget _sectionHeader(
+    String title,
+    String keyName,
+    bool hidden,
+    ValueChanged<bool> onChanged,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        IconButton(
+          key: ValueKey(keyName),
+          icon: Icon(
+            hidden ? Icons.visibility_off : Icons.visibility,
+            color: Colors.white70,
+            size: 20,
+          ),
+          tooltip: hidden ? '显示$title' : '隐藏$title',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => onChanged(!hidden),
+        ),
+      ],
+    );
   }
 
   /// v1.2.1 本节传感器总览：全部由 widget.trip 的实测点算出，
@@ -205,6 +293,20 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       wholeSlice = _LapSlice(
           pts, dists, pts.map((p) => p.timeMs - pts.first.timeMs).toList());
     }
+    // v1.3.4：参照圈切片（与 Delta 用同一个 _reference 对象；点数
+    // < 2 时不画叠加线）。全程走线图的底线是整节轨迹、不是分析圈，
+    // 因此参照圈 = 分析圈时叠加仍有意义（青色标出该圈轨迹），不按
+    // 速度曲线的“只画一条”门控隐藏。
+    _LapSlice? refSlice;
+    int? refLapNumber;
+    if (_reference != null) {
+      final s = _sliceLap(trip, _reference!);
+      if (s.points.length >= 2) {
+        refSlice = s;
+        refLapNumber = _reference!.number;
+      }
+    }
+    final showRefOverlay = _showReferenceOverlay && refSlice != null;
     final splits =
         trip.mode == TripMode.bike ? paceSplitsKm(pts) : const <double>[];
     final leanOver30 =
@@ -217,66 +319,147 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       const Text('无圈速时本节同样展示；赛道行程不评分。',
           style: TextStyle(color: Colors.white54, fontSize: 11)),
       const SizedBox(height: 8),
-      TripOverviewCard(trip: trip),
-      const SizedBox(height: 12),
-      _card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('关键极值',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 16, runSpacing: 8, children: [
-              _stat('总里程', '${(trip.distanceM / 1000).toStringAsFixed(2)} km'),
-              _stat('总时长', _fmtDur(durMs)),
-              _stat('平均时速', '${avgKmh.toStringAsFixed(0)} km/h'),
-              _stat('极速', '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h'),
-              _stat('纵向 G 极值', '加速 ${maxLong.toStringAsFixed(2)}g / 刹车 ${maxBrake.toStringAsFixed(2)}g'),
-              _stat('横向 G 极值', '${maxLat.toStringAsFixed(2)}g'),
-              _stat('最大合成 G',
-                  pts.isEmpty ? '暂无' : '${trip.maxG.toStringAsFixed(2)}g'),
-            ]),
-            const SizedBox(height: 8),
-            Text('海拔变化：$altRange',
-                style: const TextStyle(color: Colors.white70, fontSize: 13)),
-          ],
+      _sectionHeader('总览', 'hide-overview', _hideOverview,
+          (v) => setState(() => _hideOverview = v)),
+      if (!_hideOverview) ...[
+        TripOverviewCard(trip: trip),
+        const SizedBox(height: 12),
+        _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('关键极值',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 16, runSpacing: 8, children: [
+                _stat('总里程', '${(trip.distanceM / 1000).toStringAsFixed(2)} km'),
+                _stat('总时长', _fmtDur(durMs)),
+                _stat('平均时速', '${avgKmh.toStringAsFixed(0)} km/h'),
+                _stat('极速', '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h'),
+                _stat('纵向 G 极值', '加速 ${maxLong.toStringAsFixed(2)}g / 刹车 ${maxBrake.toStringAsFixed(2)}g'),
+                _stat('横向 G 极值', '${maxLat.toStringAsFixed(2)}g'),
+                _stat('最大合成 G',
+                    pts.isEmpty ? '暂无' : '${trip.maxG.toStringAsFixed(2)}g'),
+              ]),
+              const SizedBox(height: 8),
+              Text('海拔变化：$altRange',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            ],
+          ),
         ),
-      ),
+      ],
       const SizedBox(height: 12),
-      TripSpeedChartCard(points: pts, events: trip.events),
+      _sectionHeader('速度曲线', 'hide-speed', _hideSpeed,
+          (v) => setState(() => _hideSpeed = v)),
+      if (!_hideSpeed) TripSpeedChartCard(points: pts, events: trip.events),
       const SizedBox(height: 12),
-      TripGChartCard(points: pts),
+      _sectionHeader('G 值', 'hide-g', _hideG,
+          (v) => setState(() => _hideG = v)),
+      if (!_hideG) TripGChartCard(points: pts),
       const SizedBox(height: 12),
-      TripAltitudeCard(points: pts),
+      _sectionHeader('海拔', 'hide-altitude', _hideAltitude,
+          (v) => setState(() => _hideAltitude = v)),
+      if (!_hideAltitude) TripAltitudeCard(points: pts),
       const SizedBox(height: 12),
-      _card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('轨迹走线图',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            if (wholeSlice == null)
-              const Text('暂无轨迹点，走线为空',
-                  style: TextStyle(color: Colors.white54, fontSize: 12))
-            else
-              _TrackLineDiagram(
-                slice: wholeSlice,
-                deltaCurve: List<double>.filled(pts.length, 0),
-                mode: TrackLineColorMode.speed,
-                scrubIndex: 0,
+      _sectionHeader('轨迹走线图', 'hide-track-line', _hideTrackLine,
+          (v) => setState(() => _hideTrackLine = v)),
+      if (!_hideTrackLine)
+        _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // v1.3.1：底图切换（默认卫星；只影响本页会话状态）。
+              Wrap(
+                spacing: 6,
+                children: [
+                  ChoiceChip(
+                    key: const ValueKey('analysis-map-satellite'),
+                    label: const Text('卫星地图'),
+                    selected: _satelliteMap && !_replay3d,
+                    onSelected: (_) => setState(() {
+                      _satelliteMap = true;
+                      _replay3d = false;
+                    }),
+                  ),
+                  ChoiceChip(
+                    key: const ValueKey('analysis-map-schematic'),
+                    label: const Text('示意地图'),
+                    selected: !_satelliteMap && !_replay3d,
+                    onSelected: (_) => setState(() {
+                      _satelliteMap = false;
+                      _replay3d = false;
+                    }),
+                  ),
+                  // v1.3.7：3D 回放模式（与卫星/示意并列的切换，
+                  // 不取代原有内容；默认仍是现有视图）。
+                  ChoiceChip(
+                    key: const ValueKey('analysis-map-3d-replay'),
+                    label: const Text('3D 回放'),
+                    selected: _replay3d,
+                    onSelected: (_) =>
+                        setState(() => _replay3d = true),
+                  ),
+                  // v1.3.4：参考圈叠加开关（默认开，只影响本页会话；
+                  // 无参照圈时不出现，参照圈切片点数 < 2 时不画线；
+                  // 3D 回放模式下不出现，叠加只属于卫星/示意图）。
+                  if (_reference != null && !_replay3d)
+                    ChoiceChip(
+                      key: const ValueKey('reference-overlay-toggle'),
+                      label: const Text('参考圈叠加'),
+                      selected: _showReferenceOverlay,
+                      onSelected: (_) => setState(() =>
+                          _showReferenceOverlay = !_showReferenceOverlay),
+                    ),
+                ],
               ),
-            const Text('走线为实测轨迹归一化显示，按速度着色（白→红），仅作复盘示意，不用于计时判定',
-                style: TextStyle(color: Colors.white54, fontSize: 11)),
-          ],
+              const SizedBox(height: 8),
+              if (_replay3d)
+                Replay3dView(points: pts)
+              else if (wholeSlice == null)
+                const Text('暂无轨迹点，走线为空',
+                    style: TextStyle(color: Colors.white54, fontSize: 12))
+              else if (_satelliteMap)
+                _SatelliteTrackMap(
+                  slice: wholeSlice,
+                  referenceSlice: refSlice,
+                  referenceLapNumber: refLapNumber,
+                  showReferenceOverlay: _showReferenceOverlay,
+                )
+              else
+                _TrackLineDiagram(
+                  slice: wholeSlice,
+                  deltaCurve: List<double>.filled(pts.length, 0),
+                  mode: TrackLineColorMode.speed,
+                  scrubIndex: 0,
+                  referenceSlice: showRefOverlay ? refSlice : null,
+                ),
+              const SizedBox(height: 6),
+              Text(
+                _replay3d
+                    ? '3D 透视回放：实测轨迹按时间推进，不插值；仅作复盘示意，不用于计时判定'
+                    : _satelliteMap && wholeSlice != null
+                        ? '走线为 GPS 实测轨迹，按速度着色（蓝→绿→黄→红），仅作复盘示意，不用于计时判定'
+                        : '走线为实测轨迹归一化显示，按速度着色（白→红），仅作复盘示意，不用于计时判定',
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+              // v1.3.4：参考圈叠加图例（开关关 / 无参照圈 / 点数 < 2
+              // 时不出现；圈号取自 _reference，不冒充最佳圈；
+              // 3D 回放模式下不出现）。
+              if (showRefOverlay && !_replay3d)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '青色 = 参照圈（第 $refLapNumber 圈）',
+                    style: const TextStyle(
+                        color: _kGhostCyan, fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
         ),
-      ),
       if (trip.mode == TripMode.moto) ...[
         const SizedBox(height: 12),
         _card(
@@ -379,6 +562,19 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         : selSlice.distances
             .map((d) => d / selSlice!.totalDistance)
             .toList();
+    // v1.3.4：速度曲线参照圈第二条线——参照圈存在且不是当前分析圈
+    // 且切片点数 >= 2 时才画；参照圈 = 分析圈时只画一条，不画假线。
+    final showRefSpeedLine = selected != null &&
+        reference != null &&
+        reference.number != selected.number &&
+        refSlice != null &&
+        refSlice.points.length >= 2 &&
+        selSlice != null;
+    final refSpeedValues = showRefSpeedLine
+        ? [
+            for (final d in selSlice.distances) _refSpeedAt(refSlice, d),
+          ]
+        : null;
     // scrub 最近点下标（联动读数与走线高亮）。
     var scrubIndex = 0;
     if (fractions.isNotEmpty) {
@@ -681,6 +877,15 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                                         .toList(),
                                 color: _kRed,
                               ),
+                              // v1.3.4：参照圈速度线（青色虚线，按距离
+                              // 插值到分析圈的距离轴上；门控见
+                              // showRefSpeedLine）。
+                              if (showRefSpeedLine)
+                                _Series(
+                                  values: refSpeedValues!,
+                                  color: _kGhostCyan,
+                                  dashed: true,
+                                ),
                             ],
                             viewStart: _viewStart,
                             viewEnd: _viewEnd,
@@ -689,6 +894,16 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                                 sectorData?.boundaries ?? const [],
                             unit: 'km/h',
                           ),
+                          // v1.3.4：速度曲线图例（只在画了第二条线时出现）。
+                          if (showRefSpeedLine)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                '红色 = 第 ${selected.number} 圈 · 青色 = 参照圈（第 ${reference.number} 圈）',
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 11),
+                              ),
+                            ),
                           const SizedBox(height: 8),
                           _chartTitle('累计得失（相对参照圈，负 = 更快）'),
                           _SeriesChart(
@@ -1000,7 +1215,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
 class _Series {
   final List<double> values;
   final Color color;
-  const _Series({required this.values, required this.color});
+
+  /// v1.3.4：虚线（参照圈速度线用，与分析圈实线区分）。
+  final bool dashed;
+  const _Series(
+      {required this.values, required this.color, this.dashed = false});
 }
 
 /// 距离轴曲线：X 为圈距离分数（受 viewStart/viewEnd 窗口缩放），
@@ -1150,27 +1369,47 @@ class _SeriesPainter extends CustomPainter {
     }
     for (final s in series) {
       if (s.values.length < 2 || xs.length != s.values.length) continue;
-      final path = Path();
-      var started = false;
+      final pts = <Offset>[];
       for (var i = 0; i < xs.length; i++) {
         if (xs[i] < viewStart || xs[i] > viewEnd) continue;
-        final p = Offset(xToDx(xs[i]), yToDy(s.values[i]));
-        if (!started) {
-          path.moveTo(p.dx, p.dy);
-          started = true;
-        } else {
-          path.lineTo(p.dx, p.dy);
-        }
+        pts.add(Offset(xToDx(xs[i]), yToDy(s.values[i])));
       }
-      if (started) {
-        canvas.drawPath(
-          path,
-          Paint()
-            ..color = s.color
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..strokeJoin = StrokeJoin.round,
-        );
+      if (pts.length < 2) continue;
+      final paint = Paint()
+        ..color = s.color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeJoin = StrokeJoin.round;
+      if (s.dashed) {
+        // v1.3.4：虚线（6px 线 / 4px 空，跨段连续不断档）。
+        var drawOn = true;
+        var remaining = 6.0;
+        for (var i = 1; i < pts.length; i++) {
+          final a = pts[i - 1];
+          final b = pts[i];
+          final segLen = (b - a).distance;
+          if (segLen <= 0) continue;
+          final dir = (b - a) / segLen;
+          var travelled = 0.0;
+          while (travelled < segLen) {
+            final step = math.min(remaining, segLen - travelled);
+            final p0 = a + dir * travelled;
+            final p1 = a + dir * (travelled + step);
+            if (drawOn) canvas.drawLine(p0, p1, paint);
+            travelled += step;
+            remaining -= step;
+            if (remaining <= 0) {
+              drawOn = !drawOn;
+              remaining = drawOn ? 6.0 : 4.0;
+            }
+          }
+        }
+      } else {
+        final path = Path()..moveTo(pts.first.dx, pts.first.dy);
+        for (var i = 1; i < pts.length; i++) {
+          path.lineTo(pts[i].dx, pts[i].dy);
+        }
+        canvas.drawPath(path, paint);
       }
     }
     // scrub 竖线。
@@ -1192,17 +1431,21 @@ class _SeriesPainter extends CustomPainter {
 
 /// 走线图：归一化实测轨迹，按速度（白→红）或 delta（绿/红/灰）着色，
 /// scrub 点画白芯红边圆点。
+/// v1.3.4：[referenceSlice] 非 null 时把参照圈轨迹以青色单色线叠在
+/// 其上（3px，与主线区分；全程走线卡的卫星回落 / 示意模式共用）。
 class _TrackLineDiagram extends StatelessWidget {
   final _LapSlice slice;
   final List<double> deltaCurve;
   final TrackLineColorMode mode;
   final int scrubIndex;
+  final _LapSlice? referenceSlice;
 
   const _TrackLineDiagram({
     required this.slice,
     required this.deltaCurve,
     required this.mode,
     required this.scrubIndex,
+    this.referenceSlice,
   });
 
   @override
@@ -1220,6 +1463,7 @@ class _TrackLineDiagram extends StatelessWidget {
           deltaCurve: deltaCurve,
           mode: mode,
           scrubIndex: scrubIndex,
+          referenceSlice: referenceSlice,
         ),
       ),
     );
@@ -1231,12 +1475,14 @@ class _TrackLinePainter extends CustomPainter {
   final List<double> deltaCurve;
   final TrackLineColorMode mode;
   final int scrubIndex;
+  final _LapSlice? referenceSlice;
 
   _TrackLinePainter({
     required this.slice,
     required this.deltaCurve,
     required this.mode,
     required this.scrubIndex,
+    this.referenceSlice,
   });
 
   @override
@@ -1298,6 +1544,21 @@ class _TrackLinePainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
     }
+    // v1.3.4：参照圈叠加（青色单色 3px，画在主线之上；点数 < 2 不画）。
+    final refPts = referenceSlice?.points;
+    if (refPts != null && refPts.length >= 2) {
+      final refOffsets = refPts.map(toOffset).toList();
+      for (var i = 1; i < refOffsets.length; i++) {
+        canvas.drawLine(
+          refOffsets[i - 1],
+          refOffsets[i],
+          Paint()
+            ..color = _kGhostCyan
+            ..strokeWidth = 3
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
     if (scrubIndex >= 0 && scrubIndex < offsets.length) {
       canvas.drawCircle(offsets[scrubIndex], 7, Paint()..color = _kRed);
       canvas.drawCircle(
@@ -1307,4 +1568,264 @@ class _TrackLinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TrackLinePainter old) => true;
+}
+
+/// v1.3.1：全程走线卫星底图（地理版）。
+///
+/// 瓦片走 lib/satellite_tiles.dart（Esri World Imagery，z/y/x 顺序，
+/// WGS-84 直用），落点换算走 lib/track_analysis_geo.dart 的
+/// [AnalysisGeoProjector]（分析页自有 Mercator 投影，不复用编辑页
+/// 的 EditorViewTransform）。轨迹只用 GPS 实测点，按速度彩虹着色
+/// （蓝→绿→黄→红），图例区间取自本节实测最低–最高速度。
+///
+/// 回落：瓦片累计失败达到 [satelliteFallbackFailureThreshold]
+/// （3 张）即自动回落归一化示意图，不弹错、不白屏，状态行写明
+/// “卫星图未加载，已显示示意图”；卫星显示时写明署名
+/// [satelliteTileAttribution]。不做离线瓦片下载，不做 3D 回放。
+///
+/// v1.3.4：参考圈叠加——[referenceSlice] 非 null 且
+/// [showReferenceOverlay] 为真时，参照圈轨迹以青色单色线（3px）
+/// 叠在速度彩虹轨迹之上；回落示意图时同样经 _TrackLineDiagram
+/// 叠加，不丢参考圈。图例在调用方卡片内统一写（不冒充最佳圈）。
+class _SatelliteTrackMap extends StatefulWidget {
+  final _LapSlice slice;
+  final _LapSlice? referenceSlice;
+  final int? referenceLapNumber;
+  final bool showReferenceOverlay;
+
+  const _SatelliteTrackMap({
+    required this.slice,
+    this.referenceSlice,
+    this.referenceLapNumber,
+    this.showReferenceOverlay = true,
+  });
+
+  @override
+  State<_SatelliteTrackMap> createState() => _SatelliteTrackMapState();
+}
+
+class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
+  /// 已失败过的瓦片 URL（去重计数；单张失败只计一次）。
+  final Set<String> _failedTileUrls = {};
+
+  bool get _fallback =>
+      shouldFallbackToSchematic(_failedTileUrls.length);
+
+  void _onTileError(String url) {
+    if (_failedTileUrls.contains(url)) return;
+    _failedTileUrls.add(url);
+    // 图片加载失败发生在帧外，此处经 post-frame 再刷新，避免
+    // 在 build 期间 setState。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pts = widget.slice.points;
+    if (pts.length < 2) {
+      return const Text('暂无轨迹点，走线为空',
+          style: TextStyle(color: Colors.white54, fontSize: 12));
+    }
+    if (_fallback) {
+      // 回落示意图：复用现有归一化走线图，不画假线。
+      // v1.3.4：回落时参考圈叠加同样保留（经 _TrackLineDiagram）。
+      final refSlice = widget.referenceSlice;
+      final showRef = widget.showReferenceOverlay &&
+          refSlice != null &&
+          refSlice.points.length >= 2;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _TrackLineDiagram(
+            slice: widget.slice,
+            deltaCurve: List<double>.filled(pts.length, 0),
+            mode: TrackLineColorMode.speed,
+            scrubIndex: 0,
+            referenceSlice: showRef ? refSlice : null,
+          ),
+          const SizedBox(height: 6),
+          const Text('卫星图未加载，已显示示意图',
+              style: TextStyle(color: Colors.white70, fontSize: 12)),
+        ],
+      );
+    }
+    final speedsKmh = pts.map((p) => p.speed * 3.6).toList();
+    final minKmh = speedsKmh.reduce(math.min);
+    final maxKmh = speedsKmh.reduce(math.max);
+    final segments = speedLegendSegments(minKmh, maxKmh);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 320.0;
+        const height = 220.0;
+        final bounds = analysisGeoBounds(
+          pts.map((p) => (lat: p.lat, lon: p.lon)).toList(),
+        );
+        if (bounds == null) {
+          return const Text('暂无轨迹点，走线为空',
+              style: TextStyle(color: Colors.white54, fontSize: 12));
+        }
+        final zoom = analysisGeoZoom(
+          bounds: bounds,
+          widthPx: width,
+          heightPx: height,
+        );
+        final projector = AnalysisGeoProjector(
+          bounds: bounds,
+          zoom: zoom,
+          size: Size(width, height),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: height,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A0A0A),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _kBorder),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  for (var y = projector.tileRange.y0;
+                      y <= projector.tileRange.y1;
+                      y++)
+                    for (var x = projector.tileRange.x0;
+                        x <= projector.tileRange.x1;
+                        x++)
+                      Positioned.fromRect(
+                        rect: projector.tileScreenRect(x, y),
+                        child: Image.network(
+                          satelliteTileUrl(zoom, x, y),
+                          key: ValueKey('analysis-sat-$zoom-$x-$y'),
+                          headers: const {
+                            'User-Agent': 'DriveTrack/1.3.7',
+                          },
+                          fit: BoxFit.fill,
+                          gaplessPlayback: true,
+                          errorBuilder: (_, _, _) {
+                            _onTileError(satelliteTileUrl(zoom, x, y));
+                            return Container(
+                                color: const Color(0xFF0A0A0A));
+                          },
+                        ),
+                      ),
+                  CustomPaint(
+                    size: Size(width, height),
+                    painter: _GeoTrackPainter(
+                      projector: projector,
+                      points: pts,
+                      speedsKmh: speedsKmh,
+                      minKmh: minKmh,
+                      maxKmh: maxKmh,
+                      // v1.3.4：参考圈叠加（青色单色线，画在彩虹轨迹之上）。
+                      referencePoints:
+                          (widget.showReferenceOverlay &&
+                                  widget.referenceSlice != null &&
+                                  widget.referenceSlice!.points.length >= 2)
+                              ? widget.referenceSlice!.points
+                              : null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            // 速度图例：区间取自本节实测最低–最高速度。
+            Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              children: [
+                for (final s in segments)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: s.color,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${s.fromKmh.toStringAsFixed(0)}–${s.toKmh.toStringAsFixed(0)} km/h',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 11),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              satelliteTileAttribution,
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 地理版速度着色轨迹：按实测点投影落点，逐段彩虹着色。
+/// v1.3.4：[referencePoints] 非 null 时再叠一条青色单色参考圈轨迹。
+class _GeoTrackPainter extends CustomPainter {
+  final AnalysisGeoProjector projector;
+  final List<TrackPoint> points;
+  final List<double> speedsKmh;
+  final double minKmh;
+  final double maxKmh;
+  final List<TrackPoint>? referencePoints;
+
+  _GeoTrackPainter({
+    required this.projector,
+    required this.points,
+    required this.speedsKmh,
+    required this.minKmh,
+    required this.maxKmh,
+    this.referencePoints,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    final offsets = points
+        .map((p) => projector.project(p.lat, p.lon))
+        .toList();
+    for (var i = 1; i < offsets.length; i++) {
+      canvas.drawLine(
+        offsets[i - 1],
+        offsets[i],
+        Paint()
+          ..color = speedToRainbowColor(speedsKmh[i], minKmh, maxKmh)
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    final ref = referencePoints;
+    if (ref != null && ref.length >= 2) {
+      final refOffsets =
+          ref.map((p) => projector.project(p.lat, p.lon)).toList();
+      for (var i = 1; i < refOffsets.length; i++) {
+        canvas.drawLine(
+          refOffsets[i - 1],
+          refOffsets[i],
+          Paint()
+            ..color = _kGhostCyan
+            ..strokeWidth = 3
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GeoTrackPainter old) => true;
 }

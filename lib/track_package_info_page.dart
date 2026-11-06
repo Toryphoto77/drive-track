@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import 'track_guide.dart';
 import 'track_library.dart';
+import 'track_satellite_preview.dart';
 
 /// 包版赛道简介页。
 class TrackPackageInfoPage extends StatelessWidget {
@@ -30,7 +31,21 @@ class TrackPackageInfoPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (info.outline.length >= 3)
+            // 顶部大轮廓图：有经纬度中心线的包优先用卫星预览（卫星底图 +
+            // 真实中心线 + 起终点）；瓦片失败时回落原归一化轮廓示意图。
+            if (pkg.hasCenterline)
+              TrackSatellitePreview(
+                centerline: pkg.centerline,
+                start: pkg.start,
+                finish: pkg.finish,
+                height: 220,
+                showStatusLine: true,
+                fallback: OutlineDiagram(
+                  outline: info.outline,
+                  height: 220,
+                ),
+              )
+            else if (info.outline.length >= 3)
               OutlineDiagram(
                 outline: info.outline,
                 height: 220,

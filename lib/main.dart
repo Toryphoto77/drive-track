@@ -13,6 +13,7 @@ import 'native.dart';
 import 'tappable.dart';
 import 'permission_gate.dart';
 import 'recording_3d_map.dart';
+import 'recording_map_page.dart';
 import 'recorder.dart';
 import 'store.dart';
 import 'gps_source.dart';
@@ -512,6 +513,9 @@ class _HomePageState extends State<HomePage>
   final Recorder rec = Recorder();
   int tab = 0;
   late final PageController _modeController = PageController(initialPage: rec.mode.index);
+  // v1.3.2：记录页实时 Map 分页（计时页 / 地图页左右滑）。
+  late final PageController _recMapPageController = PageController();
+  int _recMapPageIndex = 0;
   List<TripMeta> trips = [];
   WeatherInfo? weather;
   double? weatherLat, weatherLon;
@@ -844,7 +848,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.3.0',
+          versionName: '1.4.0',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -888,6 +892,7 @@ class _HomePageState extends State<HomePage>
     if (_keepScreenOnActual) Native.setKeepScreenOn(false);
     _menuAnim.dispose();
     _modeController.dispose();
+    _recMapPageController.dispose();
     _locSub?.cancel();
     _senSub?.cancel();
     _bleDevSub?.cancel();
@@ -2574,6 +2579,44 @@ class _HomePageState extends State<HomePage>
     });
   }
 
+  /// v1.3.2：记录页分页指示点（圆点 + 文字），点按切页。
+  Widget _recMapPageTab(int index, String label) {
+    final active = _recMapPageIndex == index;
+    return RippleTap(
+      onTap: () {
+        if (_recMapPageIndex != index) {
+          _recMapPageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+          );
+        }
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: active ? const Color(0xFFE10600) : Colors.white38,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : Colors.white54,
+              fontSize: 12,
+              fontWeight: active ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRecording() {
     final cLat = rec.curLat != 0 ? rec.curLat : (rec.points.isNotEmpty ? rec.points.last.lat : 31.2304);
     final cLon = rec.curLon != 0 ? rec.curLon : (rec.points.isNotEmpty ? rec.points.last.lon : 121.4737);
@@ -2597,6 +2640,31 @@ class _HomePageState extends State<HomePage>
       }
       setState(() {});
     }
+    // v1.3.4：幽灵车（实时 Map 页）——参考圈取本节最佳圈
+    // （liveLapTimer.bestLap），按当前圈已用时长插值出位置；
+    // 门控缺一不可：赛道模式 + 有最佳圈 + 已过发车圈（currentLapNumber
+    // >= 1）+ 不在维修区内 + 当前圈已开始计时。街道模式不传（全 null）。
+    // 口径说明：currentLapMs 已扣暂停、参考圈切片 elapsed 是原始时间；
+    // 计入圈不会有超 30 秒停留（停留圈不计入最佳圈），漂移可忽略。
+    final ghostPos = (isTrackPage &&
+            liveLapTimer != null &&
+            liveLapTimer!.bestLap != null &&
+            liveLapTimer!.currentLapNumber >= 1 &&
+            !liveLapTimer!.inPit &&
+            liveLapTimer!.currentLapMs != null)
+        ? ghostPositionForLap(
+            rec.points, liveLapTimer!.bestLap!, liveLapTimer!.currentLapMs!)
+        : null;
+    // v1.3.5：地图过线后才出现——赛道叠加层门控取 LapTimer 派生状态
+    // hasCrossedStartLine（第一次通过起终点线后为真并保持到本节结束），
+    // 与幽灵车门控“有最佳圈”不是同一个状态：发车圈过线后第 1 圈才开始，
+    // 此时叠加层已出现、幽灵车仍须等最佳圈。街道模式不受门控影响
+    // （showTrackOverlayFor 内 !isTrack 即为真）。
+    final hasCrossedStartLine = liveLapTimer?.hasCrossedStartLine ?? false;
+    final showTrackOverlay = showTrackOverlayFor(
+      isTrack: isTrackPage,
+      hasCrossedStartLine: hasCrossedStartLine,
+    );
     return Column(children: [
       // v1.2.17：赛道模式隐藏顶部天气条容器（整块不渲染）；街道模式
       // 保留原样。GpsSourceBadge 在其下原样原位保留。
@@ -2693,146 +2761,203 @@ class _HomePageState extends State<HomePage>
       // 目录归一化轮廓点不是经纬度，绝不能换算成 GeoPoint 冒充
       // 扇区点。无包分段点的赛道计时器无扇区点，预测圈 / Delta /
       // 最优圈三者均为占位，分段格全为 '--'。
-      if (isTrackPage)
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(12),
-            child: Builder(builder: (_) {
-              final timer = liveLapTimer;
-              final sectorData = sectorDataFor(selectedTrack!.id);
-              // v1.2.15：分段标签以计时器实际配置的扇区点为准——
-              // 包分段点是经纬度实点，2 点 = S1/S2/S3、1 点 = S1/S2；
-              // 分数制 sectorData 只作无实点时的回落。勒芒等“包有
-              // 实点、分数数据却为 pending”的赛道，旧写法会把整行
-              // 分段格盖成“扇区待核”，delta 在算但格子不显示。
-              // 无实点时仍按 sectorData 标签 + 来源标注显示 '--'。
-              final hasSectorPoints =
-                  timer != null && timer.sectorPoints.isNotEmpty;
-              final labels = hasSectorPoints
-                  ? (timer.sectorPoints.length >= 2
-                      ? const ['S1', 'S2', 'S3']
-                      : const ['S1', 'S2'])
-                  : (sectorData?.sectorLabels ?? const []);
-              final completedDeltas =
-                  timer?.currentSectorDeltasVsBest ?? const <int?>[];
-              final count = labels.length > completedDeltas.length
-                  ? labels.length
-                  : completedDeltas.length;
-              final sectorDeltasMs = List<int?>.generate(
-                  count,
-                  (i) => i < completedDeltas.length
-                      ? completedDeltas[i]
-                      : null);
-              final laps = timer?.laps ?? const <Lap>[];
-              final bestMs = timer?.bestLap?.durationMs;
-              // 职业面板接线（诚实口径，见 track_session_display.dart）：
-              // - 预测圈：LapTimer.predictedLapMsVsBest（已完成分段实测 +
-              //   参照圈剩余分段，参照圈 = 本节最佳圈）；无分段点 / 无
-              //   参照圈时 getter 本身返回 null，显示占位，不编数。
-              // - 实时 Delta 只认真实扇区点：liveDeltaMsFor 内部按
-              //   hasSectorPoints 门控，Delta = 预测圈 - 最佳圈（分段级）。
-              // - 最优圈：有真实扇区点时才传 sessionOptimalLapMs（内部
-              //   先按最佳圈段数过滤，避免退化半圈与真实分段混算）；
-              //   无扇区点时传 null，不拿前后半圈拼假最优圈。
-              final completedTimes =
-                  timer?.currentCompletedSectorsMs ?? const <int>[];
-              final predictedMs = timer?.predictedLapMsVsBest;
-              final liveDelta = liveDeltaMsFor(
-                predictedLapMs: predictedMs,
-                bestLapMs: bestMs,
-                hasSectorPoints: hasSectorPoints,
-              );
-              final currentSectorIndex =
-                  hasSectorPoints && completedTimes.length < labels.length
-                      ? completedTimes.length
-                      : null;
-              final optimalLapMs =
-                  hasSectorPoints ? sessionOptimalLapMs(laps) : null;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TrackSessionDisplay(
-                    currentLapNumber: timer?.currentLapNumber ?? 0,
-                    currentLapMs: timer?.currentLapMs,
-                    // 大计时直播刷新：独立 ticker 插值，只重建大数字；
-                    // 暂停须合并 LapTimer 自动暂停与记录手动暂停，
-                    // 否则手动暂停期间显示仍会插值往前跑。
-                    timerLive: true,
-                    timerPaused: (timer?.isPaused ?? false) ||
-                        rec.state == RecState.paused,
-                    sectorDeltasMs: sectorDeltasMs,
-                    sectorTimesMs: completedTimes,
-                    currentSectorIndex: currentSectorIndex,
-                    liveDeltaMs: liveDelta,
-                    sectorLabels: labels,
-                    bestLapMs: bestMs,
+      // v1.3.2：记录页分页（计时页 / 地图页左右滑）：第 0 页为现有
+      // 内容原样不动（赛道 SingleChildScrollView、街道 Recording3dMap），
+      // 第 1 页为实时地图 RecordingMapPage（只看不操作）。
+      // GpsSourceBadge、天气条、赛道旗标头行在 PageView 之外原样原位。
+      Expanded(
+        child: PageView(
+          controller: _recMapPageController,
+          onPageChanged: (i) {
+            if (_recMapPageIndex != i) setState(() => _recMapPageIndex = i);
+          },
+          children: [
+            if (isTrackPage)
+              SingleChildScrollView(
+                padding: const EdgeInsets.all(12),
+                child: Builder(builder: (_) {
+                  final timer = liveLapTimer;
+                  final sectorData = sectorDataFor(selectedTrack!.id);
+                  // v1.2.15：分段标签以计时器实际配置的扇区点为准——
+                  // 包分段点是经纬度实点，2 点 = S1/S2/S3、1 点 = S1/S2；
+                  // 分数制 sectorData 只作无实点时的回落。勒芒等“包有
+                  // 实点、分数数据却为 pending”的赛道，旧写法会把整行
+                  // 分段格盖成“扇区待核”，delta 在算但格子不显示。
+                  // 无实点时仍按 sectorData 标签 + 来源标注显示 '--'。
+                  final hasSectorPoints =
+                      timer != null && timer.sectorPoints.isNotEmpty;
+                  final labels = hasSectorPoints
+                      ? (timer.sectorPoints.length >= 2
+                          ? const ['S1', 'S2', 'S3']
+                          : const ['S1', 'S2'])
+                      : (sectorData?.sectorLabels ?? const []);
+                  final completedDeltas =
+                      timer?.currentSectorDeltasVsBest ?? const <int?>[];
+                  final count = labels.length > completedDeltas.length
+                      ? labels.length
+                      : completedDeltas.length;
+                  final sectorDeltasMs = List<int?>.generate(
+                      count,
+                      (i) => i < completedDeltas.length
+                          ? completedDeltas[i]
+                          : null);
+                  final laps = timer?.laps ?? const <Lap>[];
+                  final bestMs = timer?.bestLap?.durationMs;
+                  // 职业面板接线（诚实口径，见 track_session_display.dart）：
+                  // - 预测圈：LapTimer.predictedLapMsVsBest（已完成分段实测 +
+                  //   参照圈剩余分段，参照圈 = 本节最佳圈）；无分段点 / 无
+                  //   参照圈时 getter 本身返回 null，显示占位，不编数。
+                  // - 实时 Delta 只认真实扇区点：liveDeltaMsFor 内部按
+                  //   hasSectorPoints 门控，Delta = 预测圈 - 最佳圈（分段级）。
+                  // - 最优圈：有真实扇区点时才传 sessionOptimalLapMs（内部
+                  //   先按最佳圈段数过滤，避免退化半圈与真实分段混算）；
+                  //   无扇区点时传 null，不拿前后半圈拼假最优圈。
+                  final completedTimes =
+                      timer?.currentCompletedSectorsMs ?? const <int>[];
+                  final predictedMs = timer?.predictedLapMsVsBest;
+                  final liveDelta = liveDeltaMsFor(
                     predictedLapMs: predictedMs,
-                    optimalLapMs: optimalLapMs,
-                    // 有真实扇区点时不标“扇区待核”：分段点来自赛道包
-                    // 经纬度实点（模拟器推导的待核状态见包 sectorNote
-                    // 与赛道 ⓘ 页，本行只标分段点是否真实存在）。
-                    sectorSourceNote: hasSectorPoints
-                        ? '真实分段点'
-                        : (sectorData?.sourceLabel ?? '扇区待核'),
-                    isPaused: timer?.isPaused ?? false,
-                    liveGSource: LiveGSource(
-                      listenable: rec,
-                      longG: () => rec.smoothLong,
-                      latG: () => rec.smoothLat,
-                      calibrated: () => rec.calibrated,
-                      peakLong: () => rec.tripPeakLong,
-                      peakLat: () => rec.tripPeakLat,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // v1.2.17：段速 + 到下一计时线距离行（赛道页内，
-                  // TrackSessionDisplay 下方）。段速取计时器
-                  // sectorSpeeds（与分段标签等长，未开始的段为 null，
-                  // 只取 GPS 实测点）；无真实分段点时显示占位
-                  // “段速 --”，不编数。下一计时线距离取计时器
-                  // nextLineDistanceM，为 null 时该段不显示。
-                  TrackSectorSpeedRow(
-                    sectorSpeeds:
-                        timer?.sectorSpeeds ?? const <SectorSpeed?>[],
-                    sectorLabels: labels,
+                    bestLapMs: bestMs,
                     hasSectorPoints: hasSectorPoints,
-                    nextLineDistanceM: timer?.nextLineDistanceM,
-                  ),
-                  const SizedBox(height: 12),
-                  _trackLapListCard(laps, bestMs,
-                      hasSectorPoints: hasSectorPoints),
-                  const SizedBox(height: 12),
-                  _trackSpeedCard(),
-                ],
-              );
-            }),
-          ),
-        )
-      else
-        // v0.1.8：记录页地图改 3D 黑色风格自绘（Recording3dMap），
-        // 不再用 RefinedMap 瓦片、瓦片源选择器在记录页不再展示；
-        // 详情页的 RefinedMap 这一处不动。速度/G/时间/圈速/语音/
-        // 事件标记都在本页其余部分原样保留。
-        Expanded(
-          child: Recording3dMap(
-            centerLat: cLat,
-            centerLon: cLon,
-            headingDeg: rec.curHeading,
-            points: rec.points.map((p) => Recording3dPoint(lat: p.lat, lon: p.lon, speedKmh: p.speed * 3.6)).toList(),
-            photoPoints: livePhotoPoints,
-            is3d: appPrefs.recordingMap3d,
-            onModeChanged: (v) => appPrefs.setRecordingMap3d(v),
-            zoom: mapZoom,
-            onZoomChanged: (z) => setState(() => mapZoom = z),
-            headingUp: mapHeadingUp,
-            onCompassTap: () => setState(() => mapHeadingUp = false),
-            accentColor: Theme.of(context).colorScheme.primary,
-            vehicleColor: _vehicleColor(rec.mode),
-            vehicleMarkerPainter: markerPainterFor(appPrefs.vehicleSelection, rec.mode, bodyColor: _vehicleColor(rec.mode)),
-          ),
+                  );
+                  final currentSectorIndex =
+                      hasSectorPoints && completedTimes.length < labels.length
+                          ? completedTimes.length
+                          : null;
+                  final optimalLapMs =
+                      hasSectorPoints ? sessionOptimalLapMs(laps) : null;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TrackSessionDisplay(
+                        currentLapNumber: timer?.currentLapNumber ?? 0,
+                        currentLapMs: timer?.currentLapMs,
+                        // 大计时直播刷新：独立 ticker 插值，只重建大数字；
+                        // 暂停须合并 LapTimer 自动暂停与记录手动暂停，
+                        // 否则手动暂停期间显示仍会插值往前跑。
+                        timerLive: true,
+                        timerPaused: (timer?.isPaused ?? false) ||
+                            rec.state == RecState.paused,
+                        sectorDeltasMs: sectorDeltasMs,
+                        sectorTimesMs: completedTimes,
+                        currentSectorIndex: currentSectorIndex,
+                        liveDeltaMs: liveDelta,
+                        sectorLabels: labels,
+                        bestLapMs: bestMs,
+                        predictedLapMs: predictedMs,
+                        optimalLapMs: optimalLapMs,
+                        // 有真实扇区点时不标“扇区待核”：分段点来自赛道包
+                        // 经纬度实点（模拟器推导的待核状态见包 sectorNote
+                        // 与赛道 ⓘ 页，本行只标分段点是否真实存在）。
+                        sectorSourceNote: hasSectorPoints
+                            ? '真实分段点'
+                            : (sectorData?.sourceLabel ?? '扇区待核'),
+                        isPaused: timer?.isPaused ?? false,
+                        liveGSource: LiveGSource(
+                          listenable: rec,
+                          longG: () => rec.smoothLong,
+                          latG: () => rec.smoothLat,
+                          calibrated: () => rec.calibrated,
+                          peakLong: () => rec.tripPeakLong,
+                          peakLat: () => rec.tripPeakLat,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // v1.2.17：段速 + 到下一计时线距离行（赛道页内，
+                      // TrackSessionDisplay 下方）。段速取计时器
+                      // sectorSpeeds（与分段标签等长，未开始的段为 null，
+                      // 只取 GPS 实测点）；无真实分段点时显示占位
+                      // “段速 --”，不编数。下一计时线距离取计时器
+                      // nextLineDistanceM，为 null 时该段不显示。
+                      TrackSectorSpeedRow(
+                        sectorSpeeds:
+                            timer?.sectorSpeeds ?? const <SectorSpeed?>[],
+                        sectorLabels: labels,
+                        hasSectorPoints: hasSectorPoints,
+                        nextLineDistanceM: timer?.nextLineDistanceM,
+                      ),
+                      const SizedBox(height: 12),
+                      _trackLapListCard(laps, bestMs,
+                          hasSectorPoints: hasSectorPoints),
+                      const SizedBox(height: 12),
+                      _trackSpeedCard(),
+                    ],
+                  );
+                }),
+              )
+            else
+              // v0.1.8：记录页地图改 3D 黑色风格自绘（Recording3dMap），
+              // 不再用 RefinedMap 瓦片、瓦片源选择器在记录页不再展示；
+              // 详情页的 RefinedMap 这一处不动。速度/G/时间/圈速/语音/
+              // 事件标记都在本页其余部分原样保留。
+              Recording3dMap(
+                centerLat: cLat,
+                centerLon: cLon,
+                headingDeg: rec.curHeading,
+                points: rec.points.map((p) => Recording3dPoint(lat: p.lat, lon: p.lon, speedKmh: p.speed * 3.6)).toList(),
+                photoPoints: livePhotoPoints,
+                is3d: appPrefs.recordingMap3d,
+                onModeChanged: (v) => appPrefs.setRecordingMap3d(v),
+                zoom: mapZoom,
+                onZoomChanged: (z) => setState(() => mapZoom = z),
+                headingUp: mapHeadingUp,
+                onCompassTap: () => setState(() => mapHeadingUp = false),
+                accentColor: Theme.of(context).colorScheme.primary,
+                vehicleColor: _vehicleColor(rec.mode),
+                vehicleMarkerPainter: markerPainterFor(appPrefs.vehicleSelection, rec.mode, bodyColor: _vehicleColor(rec.mode)),
+              ),
+            // 第 1 页：实时地图（只看不操作）。状态行：赛道模式为当前圈
+            // 用时 + 第 N 圈（无计时器时“等待定位”，未第一次过线时
+            // “等待通过起终点线”），街道模式为用时 + 里程。
+            // v1.3.5：赛道叠加层只在第一次过线后显示（showTrackOverlay），
+            // 过线前只显示卫星底图 + 当前位置箭头 + 已录轨迹。
+            RecordingMapPage(
+              isTrack: isTrackPage,
+              centerline: isTrackPage
+                  ? (selectedPackage?.centerline ?? const <GeoPoint>[])
+                  : const <GeoPoint>[],
+              start: isTrackPage ? selectedPackage?.start : null,
+              finish: isTrackPage ? selectedPackage?.finish : null,
+              sectorPoints: liveLapTimer?.sectorPoints ?? const <GeoPoint>[],
+              trail: rec.points.map((p) => GeoPoint(p.lat, p.lon)).toList(),
+              curLat: rec.curLat,
+              curLon: rec.curLon,
+              curHeading: rec.curHeading,
+              ghostLat: ghostPos?.lat,
+              ghostLon: ghostPos?.lon,
+              ghostHeading: ghostPos?.headingDeg,
+              showTrackOverlay: showTrackOverlay,
+              statusLine: isTrackPage
+                  ? trackMapStatusLine(
+                      hasTimer: liveLapTimer != null,
+                      hasCrossedStartLine: hasCrossedStartLine,
+                      lapLabel: (liveLapTimer?.currentLapNumber ?? 0) <= 0
+                          ? '发车圈'
+                          : '第 ${liveLapTimer!.currentLapNumber} 圈',
+                      currentLapDuration:
+                          fmtDur(liveLapTimer?.currentLapMs ?? rec.elapsedMs),
+                    )
+                  : '用时 ${fmtDur(rec.elapsedMs)} · 里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km',
+            ),
+          ],
         ),
+      ),
+      // v1.3.2：页指示点（计时 / 地图），可点切换。
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _recMapPageTab(0, '计时'),
+            const SizedBox(width: 16),
+            _recMapPageTab(1, '地图'),
+          ],
+        ),
+      ),
       // v1.0.2 记录页底部面板底色统一为卡片色 #1E1E1E（仅改色，不改结构/逻辑）。
-      Container(
+      // v1.3.2：底部按钮只在计时页（第 0 页）显示，地图页不显示操作区。
+      if (_recMapPageIndex == 0)
+        Container(
         padding: const EdgeInsets.all(12),
         color: CardStyle.cardColor,
         child: Column(children: [

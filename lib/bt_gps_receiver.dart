@@ -16,6 +16,18 @@ const String raceboxNmeaServiceUuid =
     '00001101-0000-1000-8000-00805F9B34FB';
 const String raceboxNmeaTxUuid = '00001103-0000-1000-8000-00805F9B34FB';
 
+/// DEXIAN D1 的 BLE 服务 UUID：Dexian Timer 官方 App（1.3.2）拆包实锤——
+/// 官方 App 扫描即按此服务过滤。D1 用二进制协议（非 NMEA），官方 App
+/// 订阅 GPS 数据 / GPS 时间 / 电池三路通知；数据特征候选为
+/// 00000004-…与 00001ff8-…（哪路是数据通道未确认），包格式待实测抓包，
+/// 绝不硬编。25Hz（用户确认）。
+const String dexianServiceUuid = '00000003-0000-1000-8000-00805f9b34fb';
+
+/// DEXIAN D1 的广播名模式（字符串）：官方 App 按此匹配设备名（如 dexian D1-XXXX），
+/// 匹配时大小写不敏感。Dart 3.13 的 RegExp 构造不是 const，因此档案里只存
+/// 模式字符串，匹配时再编译（见 device_center.dart 的 _profileNameMatches）。
+const String dexianBroadcastNamePattern = r'^dexian\s+(\w+)-(\w+)$';
+
 /// 蓝牙 GPS 的两种传输通道。
 enum BtGpsChannel { ble, spp }
 

@@ -4,6 +4,7 @@ import 'card_style.dart';
 import 'track_catalog.dart';
 import 'track_encyclopedia.dart';
 import 'track_library.dart';
+import 'track_satellite_preview.dart';
 import 'track_widgets.dart';
 
 /// 赛道库详情数据（v1.1.0 图鉴重做，现为选赛道 ⓘ 简介页的数据源）。
@@ -640,12 +641,19 @@ class TrackDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 顶部大轮廓图：有经纬度中心线的包优先用真实中心线画。
+            // 顶部大轮廓图：有经纬度中心线的包优先用卫星预览（卫星底图 +
+            // 真实中心线 + 起终点）；瓦片失败时回落原归一化轮廓示意图。
             if (package != null && package!.hasCenterline)
-              OutlineDiagram(
-                outline: normalizeLatLon(package!.centerline),
+              TrackSatellitePreview(
+                centerline: package!.centerline,
+                start: package!.start,
+                finish: package!.finish,
                 height: 220,
-                caption: '轮廓来源：赛道库数据包（经纬度中心线归一化显示）',
+                showStatusLine: true,
+                fallback: OutlineDiagram(
+                  outline: normalizeLatLon(package!.centerline),
+                  height: 220,
+                ),
               )
             else if (osm != null)
               OutlineDiagram(

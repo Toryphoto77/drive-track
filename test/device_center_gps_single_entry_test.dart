@@ -39,6 +39,40 @@ void main() {
           isTrue);
     });
 
+    test('D1 服务 UUID 进主列表：无名称证据也进（服务 UUID 优先）', () {
+      expect(
+          gpsDeviceIsAdaptable({
+            'name': 'Unknown Box',
+            'address': 'AA:BB:CC:DD:EE:05',
+            'serviceUuids': ['00000003-0000-1000-8000-00805f9b34fb'],
+          }),
+          isTrue);
+      expect(
+          gpsDeviceIsAdaptable({
+            'name': 'Unknown Box',
+            'address': 'AA:BB:CC:DD:EE:06',
+            'serviceUuids': ['00000004-0000-1000-8000-00805f9b34fb'],
+          }),
+          isFalse);
+    });
+
+    test('D1 广播名模式进主列表：dexian D1-XXXX（大小写不敏感）', () {
+      expect(
+          gpsDeviceIsAdaptable({
+            'name': 'dexian D1-AB12',
+            'address': 'AA:BB:CC:DD:EE:07',
+            'serviceUuids': <String>[],
+          }),
+          isTrue);
+      expect(
+          gpsDeviceIsAdaptable({
+            'name': 'DEXIAN D1',
+            'address': 'AA:BB:CC:DD:EE:08',
+            'serviceUuids': <String>[],
+          }),
+          isTrue);
+    });
+
     test('档案推导：D1 名称 → dexian，RaceBox 服务 → racebox，其余 → 通用',
         () {
       expect(
@@ -62,6 +96,21 @@ void main() {
             'serviceUuids': <String>[],
           }),
           ExternalGpsKind.genericNmea);
+    });
+
+    test('档案推导：D1 服务 UUID 优先于名称（无名设备也认 dexian）', () {
+      expect(
+          gpsProfileKindForDevice({
+            'name': 'Some Box',
+            'serviceUuids': ['00000003-0000-1000-8000-00805f9b34fb'],
+          }),
+          ExternalGpsKind.dexian);
+      expect(
+          gpsProfileKindForDevice({
+            'name': 'dexian D1-AB12',
+            'serviceUuids': <String>[],
+          }),
+          ExternalGpsKind.dexian);
     });
   });
 

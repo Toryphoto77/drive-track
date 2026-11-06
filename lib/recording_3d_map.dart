@@ -59,6 +59,7 @@ import 'package:flutter/material.dart';
 
 import 'map_layers.dart';
 import 'native.dart';
+import 'perspective_projection.dart';
 import 'photo_points.dart';
 
 /// 3D 地图用的最小轨迹点（经纬度 + 时速），调用方由 TrackPoint 映射，
@@ -1354,36 +1355,30 @@ class _Recording3dPainter extends CustomPainter {
 
   // 经纬度 -> 以中心为原点的东/北米制坐标，再按跟随模式转成
   // 前向（forward）/ 右向（right）米制坐标。
-  (double, double) _toForwardRight(double lat, double lon) {
-    final dx = (lon - centerLon) * math.cos(centerLat * math.pi / 180) * 111320;
-    final dy = (lat - centerLat) * 110540;
-    if (!headingUp) return (dy, dx);
-    final h = headingDeg * math.pi / 180;
-    final forward = dx * math.sin(h) + dy * math.cos(h);
-    final right = dx * math.cos(h) - dy * math.sin(h);
-    return (forward, right);
-  }
+  // v1.3.7：投影数学抽到 lib/perspective_projection.dart，
+  // 本方法只做委托，公式与常量与旧实现一字相同（3D 回放复用
+  // 同一套投影，不另写一套）。
+  (double, double) _toForwardRight(double lat, double lon) =>
+      forwardRightMeters(
+        centerLat: centerLat,
+        centerLon: centerLon,
+        headingDeg: headingDeg,
+        headingUp: headingUp,
+        lat: lat,
+        lon: lon,
+      );
 
-  Offset _project(Size size, double forward, double right, double pxPerM) {
-    if (!is3d) {
-      return Offset(size.width / 2 + right * pxPerM, size.height / 2 - forward * pxPerM);
-    }
-    // 透视：相机高度约 140 米，地平线 16% 高、车标 72% 高；
-    // factor = camH / (camH + 前向距离)，近大远小，远处收束到地平线。
-    const camH = 140.0;
-    final d = forward < -100 ? -100 : forward;
-    final factor = camH / (camH + d);
-    final horizonY = size.height * 0.16;
-    final vehY = size.height * 0.72;
-    return Offset(size.width / 2 + right * pxPerM * factor, horizonY + (vehY - horizonY) * factor);
-  }
+  Offset _project(Size size, double forward, double right, double pxPerM) =>
+      perspectiveProject(
+        size: size,
+        forward: forward,
+        right: right,
+        pxPerM: pxPerM,
+        is3d: is3d,
+      );
 
-  double _factorFor(double forward) {
-    if (!is3d) return 1;
-    const camH = 140.0;
-    final d = forward < -100 ? -100 : forward;
-    return camH / (camH + d);
-  }
+  double _factorFor(double forward) =>
+      perspectiveFactor(forward, is3d: is3d);
 
   Color _speedColor(double kmh) {
     final t = (kmh / 120).clamp(0.0, 1.0);

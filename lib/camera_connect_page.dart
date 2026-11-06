@@ -21,9 +21,8 @@ import 'native.dart';
 /// - 两者都不是 → 未知品牌，不进相机列表（只计入扫描总数）。
 ///
 /// 连接方式如实区分，绝不假装：
-/// - GoPro：复用现有 BLE 直连 + Get Version 查询
-///   （device_center.dart 的 _connectGoProDevice 同款流程：
-///   connectBle → 订阅 GP-0073 → 下发 Get Version [0x01, 0x51]，
+/// - GoPro：BLE 直连 + Get Version 查询
+///   （connectBle → 订阅 GP-0073 → 下发 Get Version [0x01, 0x51]，
 ///   收到响应并解析通过后状态才变“已连接”）。
 /// - Insta360 / DJI：现在仍只能走向导（连相机 Wi-Fi 热点、用各自 App），
 ///   点行即打开对应 CameraGuidePage，卡片上明确写“向导连接”，
@@ -329,8 +328,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
     }
   }
 
-  /// GoPro 连接：复用 device_center.dart 的 _connectGoProDevice 流程。
-  /// 先 connectBle，再订阅响应特征 GP-0073，最后下发 Get Version
+  /// GoPro 连接：先 connectBle，再订阅响应特征 GP-0073，最后下发 Get Version
   /// 只读查询（[0x01, 0x51]），绝不用快门命令作探测；收到响应并
   /// 解析通过后状态才变“已连接”。
   Future<void> _connectGoPro(ScannedCamera cam) async {

@@ -158,7 +158,7 @@ void main() {
     });
   });
 
-  group('vehicle marker painter (v1.2.0 contract)', () {
+  group('vehicle marker painter (v1.3.8 contract)', () {
     test('markerPainterFor signature unchanged: heading preserved, no throw', () {
       const sel = VehicleMarkerSelection();
       final painter = markerPainterFor(sel, TripMode.car, headingDeg: 90);
@@ -166,7 +166,7 @@ void main() {
       expect((painter as VehicleMarkerPainter).headingDeg, 90);
     });
 
-    test('paint does not throw for every mode/style at 52px and 48px', () {
+    test('paint does not throw for every mode/style at 56/40/36px', () {
       final cases = <VehicleMarkerPainter>[
         const VehicleMarkerPainter(mode: TripMode.car, styleKey: 'sedan'),
         const VehicleMarkerPainter(mode: TripMode.car, styleKey: 'sport'),
@@ -180,8 +180,9 @@ void main() {
         const VehicleMarkerPainter(
             mode: TripMode.car, styleKey: 'sedan', headingDeg: 135),
       ];
+      // 56 = 预览格内车标尺寸，40 = 地图层调用尺寸，36 = 地图最小可读尺寸。
       for (final p in cases) {
-        for (final s in [52.0, 48.0]) {
+        for (final s in [56.0, 40.0, 36.0]) {
           final recorder = ui.PictureRecorder();
           final canvas = Canvas(recorder, Offset.zero & Size(s, s));
           p.paint(canvas, Size(s, s));

@@ -9,6 +9,7 @@
 /// - 撤销栈多步、超限丢弃最旧；
 /// - 编辑页能正常渲染：工具卡片、缩放工具栏、撤销与保存入口齐全。
 
+import 'package:drive_track/satellite_tiles.dart';
 import 'package:drive_track/track_library.dart';
 import 'package:drive_track/track_package_editor.dart';
 import 'package:drive_track/track_timing.dart';
