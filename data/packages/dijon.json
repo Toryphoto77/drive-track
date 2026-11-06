@@ -3,11 +3,11 @@
  "nameCn": "第戎-普雷努瓦赛道",
  "nameEn": "Circuit Dijon-Prenois",
  "region": "法国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 14474019（type=circuit，name=Dijon Racetrack，空 role 成员）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 3886 改为 3801（FIA 2 级，3.801 km）。",
  "centerline": [
   {
    "lat": 47.360726,
@@ -519,7 +519,7 @@
   }
  ],
  "lengthM": 3723,
- "publishedLengthM": 3886,
+ "publishedLengthM": 3801,
  "corners": [
   {
    "number": 1,

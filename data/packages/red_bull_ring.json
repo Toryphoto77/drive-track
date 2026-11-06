@@ -3,11 +3,11 @@
  "nameCn": "红牛环",
  "nameEn": "Red Bull Ring",
  "region": "奥地利",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 5309181（type=circuit，name=Red Bull Ring，空 role 成员）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 4318 改为 4326（FIA 1 级，4.326 km）。",
  "centerline": [
   {
    "lat": 47.226014,
@@ -1003,7 +1003,7 @@
   }
  ],
  "lengthM": 4300,
- "publishedLengthM": 4318,
+ "publishedLengthM": 4326,
  "corners": [
   {
    "number": 1,

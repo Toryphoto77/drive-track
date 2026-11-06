@@ -3,11 +3,11 @@
  "nameCn": "广东国际赛车场",
  "nameEn": "Guangdong International Circuit",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM highway=raceway 单条闭合 way（© OpenStreetMap contributors，ODbL）",
  "verification": "pending",
- "verificationNote": "最大点间距 713m 过大，几何可能缺段",
+ "verificationNote": "最大点间距 713m 过大，几何可能缺段；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 2820 改为 2824（FIA 3 级，2.824 km）。",
  "centerline": [
   {
    "lat": 23.274544,
@@ -395,7 +395,7 @@
   }
  ],
  "lengthM": 2815,
- "publishedLengthM": 2820,
+ "publishedLengthM": 2824,
  "corners": [],
  "cornerSource": null,
  "sectorPoints": [],

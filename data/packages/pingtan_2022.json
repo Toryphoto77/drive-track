@@ -3,11 +3,11 @@
  "nameCn": "平潭如意湖国际城市赛道（2022 年布局）",
  "nameEn": "Pingtan Ruyi Lake International City Circuit",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM 公共道路拼合闭合回路（环湖路北段 + 如意路/安海南路南段；OSM 无 2022 年布局的赛道关系或 alt_name 标记）（© OpenStreetMap contributors，ODbL）",
  "verification": "pending",
- "verificationNote": "街道拼接，走向待核：OSM 无 2022 年布局的赛道关系或 alt_name 标记；本包由公共道路拼合，计算长度 4512m，与公布 4507m 偏差 +0.1%，北段湖湾弯角推导半径 364m 与官方如意弯半径 359.99m 吻合，但如意路/安海南路交汇区（T2–T5 一带）的具体走法、双幅路取哪幅无法从 OSM 确定，存在多条长度近似的候选回路。卡丁车场 raceway way 1383030673（957m）与本包无关。2022 年布局，17 弯；推导弯数 11 与官方 17 差异超容差，弯角表留空。",
+ "verificationNote": "街道拼接，走向待核：OSM 无 2022 年布局的赛道关系或 alt_name 标记；本包由公共道路拼合，计算长度 4512m，与公布 4507m 偏差 +0.1%，北段湖湾弯角推导半径 364m 与官方如意弯半径 359.99m 吻合，但如意路/安海南路交汇区（T2–T5 一带）的具体走法、双幅路取哪幅无法从 OSM 确定，存在多条长度近似的候选回路。卡丁车场 raceway way 1383030673（957m）与本包无关。2022 年布局，17 弯；推导弯数 11 与官方 17 差异超容差，弯角表留空。；FIA 交叉核对（2025-09-01 持照名单）：FIA 长度 4.555 km（3 级），不知对应哪个布局（2022 年布局为 4.507 km），暂不改 publishedLengthM。",
  "centerline": [
   {
    "lat": 25.475717,

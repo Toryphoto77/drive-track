@@ -3,11 +3,11 @@
  "nameCn": "多宁顿公园",
  "nameEn": "Donington Park",
  "region": "英国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 51165（type=circuit，name=Donington Park Grand Prix；关系直取 relation/full，GP 布局（脚本误取的 National 布局 51164 为 3.149km 短布局，已弃用））（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 4020 改为 4003（FIA 2 级，4.003 km）。",
  "centerline": [
   {
    "lat": 52.831499,
@@ -919,7 +919,7 @@
   }
  ],
  "lengthM": 3995,
- "publishedLengthM": 4020,
+ "publishedLengthM": 4003,
  "corners": [
   {
    "number": 1,

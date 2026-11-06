@@ -3,11 +3,11 @@
   "nameCn": "阿德莱德街道赛道",
   "nameEn": "Adelaide Street Circuit",
   "region": "澳大利亚",
-  "version": 1,
+  "version": 2,
   "source": "osm",
   "sourceDetail": "OSM circuit 3121459（type=circuit，name=Adelaide Street Circuit，空 role 成员）（© OpenStreetMap contributors，ODbL）",
   "verification": "verified",
-  "verificationNote": "口径说明：OSM 几何为现行 Supercars 布局（公开资料 3.219km/14 弯；计算 3.280km，偏差 +1.9%）；F1 年代布局为 3.780km/16 弯（1985–1995），长度仅作注记，不用于对照。名称一致；闭合回路；长度与现行布局公布值对照通过。起终点待核。",
+  "verificationNote": "口径说明：OSM 几何为现行 Supercars 布局（公开资料 3.219km/14 弯；计算 3.280km，偏差 +1.9%）；F1 年代布局为 3.780km/16 弯（1985–1995），长度仅作注记，不用于对照。名称一致；闭合回路；长度与现行布局公布值对照通过。起终点待核。；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 3219 改为 3220（FIA 3 级，3.22 km）。",
   "centerline": [
     {
       "lat": -34.927604,
@@ -507,7 +507,7 @@
     }
   ],
   "lengthM": 3280,
-  "publishedLengthM": 3219,
+  "publishedLengthM": 3220,
   "corners": [
     {
       "number": 1,

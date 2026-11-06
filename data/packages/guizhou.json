@@ -3,11 +3,11 @@
  "nameCn": "贵州骏驰国际赛车场",
  "nameEn": "Guizhou Junchi International Circuit",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM way 1090073715（highway=raceway，area=yes，name=贵州骏驰国际赛车场）（© OpenStreetMap contributors，ODbL）",
  "verification": "pending",
- "verificationNote": "名称地点一致（贵州贵阳花溪）；闭合回路；但计算长度 1942 m 与公布 2.2 km 偏差 -11.7%，超出 verified 口径（≤10%），标待核；OSM 几何仅 20 节点较粗糙（弦切角可能缩短实测长度），且 2.2 km 公布长度本身置信度低",
+ "verificationNote": "名称地点一致（贵州贵阳花溪）；闭合回路；但计算长度 1942 m 与公布 2.2 km 偏差 -11.7%，超出 verified 口径（≤10%），标待核；OSM 几何仅 20 节点较粗糙（弦切角可能缩短实测长度），且 2.2 km 公布长度本身置信度低；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 2200 改为 2008（FIA 4 级，2.008 km）。",
  "centerline": [
   {
    "lat": 26.328564,
@@ -91,7 +91,7 @@
   }
  ],
  "lengthM": 1941,
- "publishedLengthM": 2200,
+ "publishedLengthM": 2008,
  "corners": [
   {
    "number": 1,

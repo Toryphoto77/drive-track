@@ -3,11 +3,11 @@
  "nameCn": "厦门国际赛车场",
  "nameEn": "Xiamen International Circuit",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM way 1162854466（highway=raceway，area=yes，未命名）（© OpenStreetMap contributors，ODbL）",
  "verification": "pending",
- "verificationNote": "官方长度 1.82km、13 弯（厦门国际赛车场官网 xiamencircuit.com 场地规格，顺时针）；用户包所写 1.696km/16 弯与官方不符，未采信。OSM 中仅有未命名 area=yes 8 点粗略轮廓（way 1162854466），非精细中心线；实测周长 1544m，与官方 1820m 偏差 -15.2%（10–20% 区间，pending）。几何轮廓与官网赛道线行图大致相符（东西向长、顶部直道），但 8 个顶点无法推导 13 个弯道与起终点，corners 与起终点均留空待核。",
+ "verificationNote": "官方长度 1.82km、13 弯（厦门国际赛车场官网 xiamencircuit.com 场地规格，顺时针）；用户包所写 1.696km/16 弯与官方不符，未采信。OSM 中仅有未命名 area=yes 8 点粗略轮廓（way 1162854466），非精细中心线；实测周长 1544m，与官方 1820m 偏差 -15.2%（10–20% 区间，pending）。几何轮廓与官网赛道线行图大致相符（东西向长、顶部直道），但 8 个顶点无法推导 13 个弯道与起终点，corners 与起终点均留空待核。；FIA 交叉核对（2025-09-01 持照名单）：FIA 认证长度 1.696 km（4 级），与赛道官网 1.820 km 冲突；OSM 几何仅 8 点粗轮廓，实测 1.544 km 无法仲裁，暂不改 publishedLengthM。",
  "centerline": [
   {
    "lat": 24.65367,

@@ -3,11 +3,11 @@
  "nameCn": "滨海湾街道赛道",
  "nameEn": "Marina Bay Street Circuit",
  "region": "新加坡",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 421263（type=circuit，name=Marina Bay Street Circuit，forward/backward role 成员拼接）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过。街道赛：关系含双向车道重复 way，主回路取其中一条连续车道（49/99 段，未用段均贴合回路、为对向车道/重复段，非缺段）。",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过。街道赛：关系含双向车道重复 way，主回路取其中一条连续车道（49/99 段，未用段均贴合回路、为对向车道/重复段，非缺段）。；FIA 交叉核对（2025-09-01 持照名单）：FIA 长度 5.077 km（1 级），与已知布局均对不上（2023 年前 5.063 km、现行 4.940 km）；包内 4.940 km 为 F1 官方现行布局长度，暂不改 publishedLengthM。",
  "centerline": [
   {
    "lat": 1.289092,

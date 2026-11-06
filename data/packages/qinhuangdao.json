@@ -3,11 +3,11 @@
  "nameCn": "秦皇岛首钢赛车谷",
  "nameEn": "Qinhuangdao Shougang Motorsport Valley",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 17857789（type=circuit，name=首钢钢铁赛道，空 role 成员 way 1032966988 + pit_lane 成员 way 1302637385）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称地点一致（河北秦皇岛海港区杜庄镇；关系名“首钢钢铁赛道”与“首钢赛车谷”为同一场地）；单条闭合回路；计算长度 3736m，与公布 3800m 偏差 -1.7%。3.3km 一说为来源自相矛盾，以 3.8km 为准。半街道性质：利用首钢旧厂区原有道路 + 约 2km 新建沥青路。",
+ "verificationNote": "名称地点一致（河北秦皇岛海港区杜庄镇；关系名“首钢钢铁赛道”与“首钢赛车谷”为同一场地）；单条闭合回路；计算长度 3736m，与公布 3800m 偏差 -1.7%。3.3km 一说为来源自相矛盾，以 3.8km 为准。半街道性质：利用首钢旧厂区原有道路 + 约 2km 新建沥青路。；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 3800 改为 3740（FIA 2 级，3.74 km）。",
  "centerline": [
   {
    "lat": 40.015377,
@@ -355,7 +355,7 @@
   }
  ],
  "lengthM": 3736,
- "publishedLengthM": 3800,
+ "publishedLengthM": 3740,
  "corners": [
   {
    "number": 1,

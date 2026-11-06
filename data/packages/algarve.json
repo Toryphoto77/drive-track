@@ -3,11 +3,11 @@
  "nameCn": "阿尔加维国际赛道",
  "nameEn": "Algarve International Circuit",
  "region": "葡萄牙",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM route 7509968（type=route，name=Algarve International Circuit，非 pit 成员）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 4653 改为 4684（FIA 1 级，4.684 km）。",
  "centerline": [
   {
    "lat": 37.22644,
@@ -699,7 +699,7 @@
   }
  ],
  "lengthM": 4648,
- "publishedLengthM": 4653,
+ "publishedLengthM": 4684,
  "corners": [
   {
    "number": 1,

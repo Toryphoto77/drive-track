@@ -3,11 +3,11 @@
  "nameCn": "保罗·里卡德赛道",
  "nameEn": "Circuit Paul Ricard",
  "region": "法国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 10316343（type=circuit，name=Circuit Paul Ricard Piste GP，空 role 成员）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 交叉核对（2025-09-01 持照名单）：FIA 长度 5.822 km（1 级）为 1C 布局；包内 5.842 km 为 1C-V2 布局（F1 布局），暂不改 publishedLengthM。",
  "centerline": [
   {
    "lat": 43.249575,

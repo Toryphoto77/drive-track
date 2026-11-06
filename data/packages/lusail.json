@@ -3,11 +3,11 @@
  "nameCn": "卢赛尔国际赛道",
  "nameEn": "Lusail International Circuit",
  "region": "卡塔尔",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 21297662（type=circuit，name=Lusail Grand Prix Circuit，空 role 成员）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 5419 改为 5418（FIA 1 级，5.418 km）。",
  "centerline": [
   {
    "lat": 25.485002,
@@ -1203,7 +1203,7 @@
   }
  ],
  "lengthM": 5402,
- "publishedLengthM": 5419,
+ "publishedLengthM": 5418,
  "corners": [
   {
    "number": 1,

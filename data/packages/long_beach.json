@@ -3,11 +3,11 @@
  "nameCn": "长滩街道赛道",
  "nameEn": "Long Beach Street Circuit",
  "region": "美国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM route 18052024（type=route，name=Long Beach Grand Prix Course；关系直取 relation/full，街道赛：route 关系（type=route，route=road，sport=motor），forward/backward 成员 48 段全入环；Nominatim 原查询词无 venue，改由宽 bbox 发现该关系）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 交叉核对（2025-09-01 持照名单）：FIA 当前布局认证长度 3.168 km（2 级）；包内 3.275 km 为 F1 年代布局长度，OSM 实测 3.258 km 与之吻合，几何为 F1 年代布局，暂不改 publishedLengthM。",
  "centerline": [
   {
    "lat": 33.763139,

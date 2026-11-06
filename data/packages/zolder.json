@@ -3,11 +3,11 @@
  "nameCn": "佐尔德赛道",
  "nameEn": "Circuit Zolder",
  "region": "比利时",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 6006460（type=circuit，name=Circuit Zolder，空 role 成员）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 4262 改为 4000（FIA 2 级，4.0 km）。",
  "centerline": [
   {
    "lat": 50.994974,
@@ -883,7 +883,7 @@
   }
  ],
  "lengthM": 4082,
- "publishedLengthM": 4262,
+ "publishedLengthM": 4000,
  "corners": [
   {
    "number": 1,

@@ -3,11 +3,11 @@
  "nameCn": "北京金港国际赛车场",
  "nameEn": "Goldenport Park Circuit",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM highway=raceway 单条闭合 way（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 2390 改为 2391（FIA 3 级，2.391 km）。",
  "centerline": [
   {
    "lat": 40.014247,
@@ -415,7 +415,7 @@
   }
  ],
  "lengthM": 2380,
- "publishedLengthM": 2390,
+ "publishedLengthM": 2391,
  "corners": [
   {
    "number": 1,

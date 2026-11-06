@@ -3,11 +3,11 @@
  "nameCn": "埃斯托里尔赛道",
  "nameEn": "Autódromo do Estoril",
  "region": "葡萄牙",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 11266675（type=circuit，name=Circuito do Estoril，空 role 成员）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 交叉核对（2025-09-01 持照名单）：FIA 当前布局认证长度 4.182 km（1 级）；包内 4.360 km 为 F1 年代布局长度，OSM 实测 4.264 km 介于两者之间，几何所属布局无法仅凭长度判定，暂不改 publishedLengthM。",
  "centerline": [
   {
    "lat": 38.753206,

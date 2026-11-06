@@ -3,11 +3,11 @@
  "nameCn": "吉达滨海赛道",
  "nameEn": "Jeddah Corniche Circuit",
  "region": "沙特阿拉伯",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM highway=raceway 宽 bbox 人工选段拼接（9 段按共享节点拼接成环，弃平行复线/未用段 4 条；街道赛：无 circuit 关系，同名 raceway way 拼合；人工选段已排除 pit lane（1121870473→1257884704→1257884703 Pit Lane，122m 缺口未连入）与平行复线段；way 1359884756 带 fixme“v6 is some 234m too long”）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 6174 改为 6176（FIA 1 级，6.176 km）。",
  "centerline": [
   {
    "lat": 21.638979,
@@ -1359,7 +1359,7 @@
   }
  ],
  "lengthM": 6290,
- "publishedLengthM": 6174,
+ "publishedLengthM": 6176,
  "corners": [
   {
    "number": 1,

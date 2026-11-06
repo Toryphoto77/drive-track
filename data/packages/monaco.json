@@ -3,11 +3,11 @@
   "nameCn": "摩纳哥赛道",
   "nameEn": "Circuit de Monaco",
   "region": "摩纳哥",
-  "version": 2,
+  "version": 3,
   "source": "osm",
   "sourceDetail": "OSM circuit 148194（type=circuit，name=Circuit de Monaco，空 role 成员）（© OpenStreetMap contributors，ODbL）",
   "verification": "verified",
-  "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+  "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 3337 改为 3340（FIA 1 级，3.34 km）。",
   "centerline": [
     {
       "lat": 43.740362,
@@ -1511,7 +1511,7 @@
     }
   ],
   "lengthM": 3300,
-  "publishedLengthM": 3337,
+  "publishedLengthM": 3340,
   "corners": [
     {
       "number": 1,

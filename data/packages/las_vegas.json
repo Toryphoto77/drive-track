@@ -3,11 +3,11 @@
  "nameCn": "拉斯维加斯街道赛道",
  "nameEn": "Las Vegas Strip Circuit",
  "region": "美国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 16696508（type=circuit，name=Las Vegas Strip Circuit，forward/backward role 成员按关系顺序拼接）（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过。街道赛：关系 80 段全部入环、无拼接缺口；alternative 段与 pit_lane 段已排除。",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过。街道赛：关系 80 段全部入环、无拼接缺口；alternative 段与 pit_lane 段已排除。；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 6201 改为 6200（FIA 1 级，6.2 km）。",
  "centerline": [
   {
    "lat": 36.109284,
@@ -927,7 +927,7 @@
   }
  ],
  "lengthM": 6210,
- "publishedLengthM": 6201,
+ "publishedLengthM": 6200,
  "corners": [
   {
    "number": 1,

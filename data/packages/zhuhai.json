@@ -3,11 +3,11 @@
  "nameCn": "珠海国际赛车场",
  "nameEn": "Zhuhai International Circuit",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM circuit 20397790（type=circuit，name=Zhuhai International Circuit，空 role 成员）（© OpenStreetMap contributors，ODbL）",
  "verification": "pending",
- "verificationNote": "最大点间距 550m 过大，几何可能缺段",
+ "verificationNote": "最大点间距 550m 过大，几何可能缺段；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 4319 改为 4318（FIA 2 级，4.318 km）。",
  "centerline": [
   {
    "lat": 22.363178,
@@ -267,7 +267,7 @@
   }
  ],
  "lengthM": 4310,
- "publishedLengthM": 4319,
+ "publishedLengthM": 4318,
  "corners": [
   {
    "number": 1,

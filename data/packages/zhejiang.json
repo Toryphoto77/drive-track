@@ -3,11 +3,11 @@
  "nameCn": "浙江国际赛车场",
  "nameEn": "Zhejiang International Circuit",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM highway=raceway 单条闭合 way（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称一致；闭合回路；长度与公布值对照通过",
+ "verificationNote": "名称一致；闭合回路；长度与公布值对照通过；FIA 认证长度交叉核对（2025-09-01 持照名单）：publishedLengthM 由 3200 改为 3238（FIA 2 级，3.238 km）。",
  "centerline": [
   {
    "lat": 30.032856,
@@ -343,7 +343,7 @@
   }
  ],
  "lengthM": 3202,
- "publishedLengthM": 3200,
+ "publishedLengthM": 3238,
  "corners": [
   {
    "number": 1,

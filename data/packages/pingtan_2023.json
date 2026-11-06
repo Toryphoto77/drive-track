@@ -3,11 +3,11 @@
  "nameCn": "平潭如意湖国际城市赛道（2023 年布局）",
  "nameEn": "Pingtan Ruyi Lake International City Circuit",
  "region": "中国",
- "version": 1,
+ "version": 2,
  "source": "osm",
  "sourceDetail": "OSM 10 条 way 拼合闭合回路（均含 alt_name=平潭如意湖国际城市赛道、sport=motor）：1383030718、1383030717、1383030716、1383030715、1383030690、1383030689、1383030694、1383030693、1383030667、1383030719（© OpenStreetMap contributors，ODbL）",
  "verification": "verified",
- "verificationNote": "名称地点一致（福建福州平潭如意湖畔）；OSM 以 alt_name 标注的 10 条路段恰好拼成闭合回路；计算长度 2952m，与公布 2937m 偏差 +0.5%。2023 年升级后布局，14 弯，含如意弯。",
+ "verificationNote": "名称地点一致（福建福州平潭如意湖畔）；OSM 以 alt_name 标注的 10 条路段恰好拼成闭合回路；计算长度 2952m，与公布 2937m 偏差 +0.5%。2023 年升级后布局，14 弯，含如意弯。；FIA 交叉核对（2025-09-01 持照名单）：FIA 长度 4.555 km（3 级）不是 2023 年布局（2.937 km），暂不改 publishedLengthM。",
  "centerline": [
   {
    "lat": 25.475717,
