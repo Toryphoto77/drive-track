@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_notice.dart';
 import 'package:flutter/services.dart';
+import 'app_bar_style.dart';
 import 'glass_button.dart';
 import 'native.dart';
 
@@ -119,13 +120,17 @@ class _PermissionSettingsPageState extends State<PermissionSettingsPage> with Wi
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('权限检查'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(children: [
+          : ListView(
+              padding: withAppBarTopInset(
+                  context, const EdgeInsets.only(bottom: 24)),
+              children: [
               if (_error != null) Padding(padding: const EdgeInsets.all(16), child: Text(_error!, style: const TextStyle(color: Colors.orange))),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 4),

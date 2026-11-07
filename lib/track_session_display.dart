@@ -184,6 +184,12 @@ class TrackSessionDisplay extends StatelessWidget {
   /// '--'，不冒充连续 Delta。
   final int? liveDeltaMs;
 
+  /// 是否显示 Delta（实时 Delta 数字/条 + 分段格的 delta 行）：
+  /// 关掉时分段格只显示绝对分段用时，实时 Delta 显示 '--'、
+  /// Delta 条只画底条。对应赛道设置页“显示 Delta”开关
+  /// （RaceChrono“相对时间/绝对时间”切换的同款机制），默认 true。
+  final bool showDelta;
+
   /// 分段标签；默认 S1/S2/S3。扇区待核的赛道调用方应传
   /// [] 或通用标签并配 [sectorSourceNote]，不得硬标 S1/S2/S3。
   final List<String> sectorLabels;
@@ -233,6 +239,7 @@ class TrackSessionDisplay extends StatelessWidget {
     this.sectorTimesMs = const [],
     this.currentSectorIndex,
     this.liveDeltaMs,
+    this.showDelta = true,
     this.sectorLabels = const ['S1', 'S2', 'S3'],
     required this.bestLapMs,
     required this.predictedLapMs,
@@ -269,15 +276,20 @@ class TrackSessionDisplay extends StatelessWidget {
           // 纯 Text 原地换字，所有字符共用同一基线，不做任何竖直
           // 位移（旧竖条切片法会因行高对不上而上下错位，已弃用）；
           // 刷新节奏由独立 ticker 插值驱动，不再依赖 GPS 点到达才刷新。
-          LiveLapTimeText(
-            anchorMs: currentLapMs,
-            lapNumber: currentLapNumber,
-            paused: timerPaused,
-            live: timerLive,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 48,
-              fontWeight: FontWeight.bold,
+          // M1：大计时包一层 scaleDown，系统大字体下窄屏也不溢出。
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: LiveLapTimeText(
+              anchorMs: currentLapMs,
+              lapNumber: currentLapNumber,
+              paused: timerPaused,
+              live: timerLive,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 48,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           if (isPaused)
@@ -291,6 +303,9 @@ class TrackSessionDisplay extends StatelessWidget {
           const SizedBox(height: 8),
           // 职业面板主角之二：大的实时 Delta 数字 + 细的红绿 Delta 条。
           // Delta 为分段级（见 liveDeltaMsFor），无扇区点时为 '--'。
+          // 横屏窄栏：Delta 数字 28 号（"-0:00.170" 9 字）在 310 宽
+          // 下会溢出，与大计时同款处理——包 Flexible + scaleDown，
+          // 极窄/大字体时数字等比缩小不断行、不溢出。
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -299,18 +314,24 @@ class TrackSessionDisplay extends StatelessWidget {
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
               const SizedBox(width: 8),
-              Text(
-                LapTimer.formatDelta(liveDeltaMs),
-                style: TextStyle(
-                  color: sectorDeltaColor(liveDeltaMs),
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    LapTimer.formatDelta(showDelta ? liveDeltaMs : null),
+                    style: TextStyle(
+                      color: sectorDeltaColor(showDelta ? liveDeltaMs : null),
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          _DeltaBar(liveDeltaMs),
+          _DeltaBar(showDelta ? liveDeltaMs : null),
           const SizedBox(height: 10),
           // 实时 G 值行（G 圆 + 纵向/横向数值 + 本节峰值）：放在主角
           // 区（大计时 + Delta）下方、分段块上方，驾驶中一抬眼就能
@@ -338,7 +359,7 @@ class TrackSessionDisplay extends StatelessWidget {
                           vertical: 10, horizontal: 4),
                       decoration: BoxDecoration(
                         color: sectorDeltaColor(
-                                i < sectorDeltasMs.length
+                                showDelta && i < sectorDeltasMs.length
                                     ? sectorDeltasMs[i]
                                     : null)
                             .withValues(
@@ -350,7 +371,7 @@ class TrackSessionDisplay extends StatelessWidget {
                           color: currentSectorIndex == i
                               ? Colors.white
                               : sectorDeltaColor(
-                                  i < sectorDeltasMs.length
+                                  showDelta && i < sectorDeltasMs.length
                                       ? sectorDeltasMs[i]
                                       : null),
                         ),
@@ -380,12 +401,12 @@ class TrackSessionDisplay extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            i < sectorDeltasMs.length
+                            showDelta && i < sectorDeltasMs.length
                                 ? LapTimer.formatDelta(sectorDeltasMs[i])
                                 : '--',
                             style: TextStyle(
                               color: sectorDeltaColor(
-                                  i < sectorDeltasMs.length
+                                  showDelta && i < sectorDeltasMs.length
                                       ? sectorDeltasMs[i]
                                       : null),
                               fontSize: 13,

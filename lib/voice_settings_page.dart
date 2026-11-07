@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_notice.dart';
+import 'app_bar_style.dart';
 import 'glass_button.dart';
 import 'import_style.dart';
 import 'native.dart';
@@ -65,6 +66,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   bool _ttsSettingsBusy = false;
   late final TextEditingController _endpointCtrl = TextEditingController();
   late final TextEditingController _keyCtrl = TextEditingController();
+  late final TextEditingController _voiceCtrl = TextEditingController();
   String _provider = 'generic';
   String _mimoVoice = '冰糖';
 
@@ -81,6 +83,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
       final c = VoiceService.instance.customVoice;
       _endpointCtrl.text = c.endpoint;
       _keyCtrl.text = c.apiKey;
+      _voiceCtrl.text = c.voice;
       _provider = c.provider;
       _mimoVoice = c.mimoVoice;
       setState(() {
@@ -94,6 +97,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   void dispose() {
     _endpointCtrl.dispose();
     _keyCtrl.dispose();
+    _voiceCtrl.dispose();
     super.dispose();
   }
 
@@ -142,6 +146,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
       apiKey: _keyCtrl.text,
       provider: _provider,
       mimoVoice: _mimoVoice,
+      voice: _voiceCtrl.text.trim(),
     );
     await VoiceService.instance.updateCustomVoice(next);
     if (mounted) {
@@ -192,7 +197,8 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   Widget build(BuildContext context) {
     final svc = VoiceService.instance;
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('语音设置'),
       ),
@@ -200,7 +206,10 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
           ? const Center(child: CircularProgressIndicator())
           : ListenableBuilder(
               listenable: svc,
-              builder: (_, __) => ListView(children: [
+              builder: (_, __) => ListView(
+                    padding: withAppBarTopInset(
+                        context, const EdgeInsets.only(bottom: 24)),
+                    children: [
                     SwitchListTile(
                       title: const Text('语音播报总开关'),
                       subtitle: const Text('关掉后所有语音播报都不出声'),
@@ -215,10 +224,37 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: Column(children: [
                         SwitchListTile(title: const Text('事件播报'), subtitle: const Text('急加速、急刹车、过弯完成、压弯超阈值'), value: _s.announceEvents, onChanged: (v) => _apply(_s.copyWith(announceEvents: v))),
-                        SwitchListTile(title: const Text('圈速播报'), subtitle: const Text('每圈完成与最快圈'), value: _s.announceLaps, onChanged: (v) => _apply(_s.copyWith(announceLaps: v))),
+                        SwitchListTile(title: const Text('圈速播报'), subtitle: const Text('每圈完成与最快圈，非最快圈追加与最快圈的差值'), value: _s.announceLaps, onChanged: (v) => _apply(_s.copyWith(announceLaps: v))),
+                        SwitchListTile(title: const Text('分段播报'), subtitle: const Text('赛道模式：过 S1、S2 分段点时播报本段快慢（仅真实分段点）'), value: _s.announceSectors, onChanged: (v) => _apply(_s.copyWith(announceSectors: v))),
                         SwitchListTile(title: const Text('结束总结播报'), subtitle: const Text('里程、时长、评分、最快圈'), value: _s.announceSummary, onChanged: (v) => _apply(_s.copyWith(announceSummary: v))),
                         SwitchListTile(title: const Text('开始语音'), subtitle: const Text('开始记录时播报安全注意事项，倒数时报数（3、2、1、开始）'), value: _s.announceStart, onChanged: (v) => _apply(_s.copyWith(announceStart: v))),
                       ]),
+                    ),
+                    // 街道模式更多播报（仅街道模式播报；赛道模式报圈速、分段与开始计时，不报超速）。
+                    Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Column(children: [
+                        SwitchListTile(title: const Text('GPS 信号播报'), subtitle: const Text('外接 GPS 断开回落、手机 GPS 信号丢失与恢复'), value: _s.announceGps, onChanged: (v) => _apply(_s.copyWith(announceGps: v))),
+                        SwitchListTile(title: const Text('起步提示'), subtitle: const Text('开始记录后第一次拿到有效定位时播报“定位已就绪”'), value: _s.announceFirstFix, onChanged: (v) => _apply(_s.copyWith(announceFirstFix: v))),
+                        SwitchListTile(title: const Text('超速提醒'), subtitle: const Text('仅街道模式：超过下方设定时速时播报，持续超速每 60 秒最多补报一次'), value: _s.announceSpeeding, onChanged: (v) => _apply(_s.copyWith(announceSpeeding: v))),
+                        SwitchListTile(title: const Text('里程与时间播报'), subtitle: const Text('每 5 公里、每 10 分钟各播报一次'), value: _s.announceMilestones, onChanged: (v) => _apply(_s.copyWith(announceMilestones: v))),
+                        SwitchListTile(title: const Text('低精度提醒'), subtitle: const Text('定位精度差（水平精度大于 50 米）时播报，精度恢复后不再重复'), value: _s.announceLowAccuracy, onChanged: (v) => _apply(_s.copyWith(announceLowAccuracy: v))),
+                      ]),
+                    ),
+                    Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(children: [
+                          const SizedBox(width: 72, child: Text('超速阈值')),
+                          Expanded(child: Slider(value: _s.speedLimitKmh, min: 20, max: 200, divisions: 36, onChanged: (v) => _apply(_s.copyWith(speedLimitKmh: v)))),
+                          SizedBox(width: 64, child: Text('${_s.speedLimitKmh.round()} km/h', textAlign: TextAlign.right)),
+                        ]),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
+                      child: Text('以上五项只在街道模式播报；赛道模式只报圈速、分段与开始计时，不报超速。超速阈值默认 120 公里/小时，骑行一般用不到，可把超速提醒关掉。', style: TextStyle(color: Colors.white54, fontSize: 12)),
                     ),
                     _slider('语速', _s.rate, 0.5, 2.0, (v) => _apply(_s.copyWith(rate: v))),
                     _slider('音调', _s.pitch, 0.5, 2.0, (v) => _apply(_s.copyWith(pitch: v))),
@@ -376,11 +412,30 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                           items: const [
                             DropdownMenuItem(value: 'generic', child: Text('通用接口', style: TextStyle(fontSize: 13))),
                             DropdownMenuItem(value: 'mimo', child: Text('小米 MiMo（mimo-v2.5-tts）', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'openai', child: Text('OpenAI TTS（tts-1）', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'azure', child: Text('微软 Azure AI Speech', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'google', child: Text('Google Cloud TTS', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'minimax', child: Text('MiniMax T2A v2（speech-02-hd）', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'elevenlabs', child: Text('ElevenLabs（含克隆音色）', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'fish', child: Text('Fish Audio（含克隆音色）', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'doubao', child: Text('火山引擎豆包语音合成 V3', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'cosyvoice', child: Text('阿里 CosyVoice（百炼）', style: TextStyle(fontSize: 13))),
                           ],
                           onChanged: (v) {
                             if (v == null) return;
-                            setState(() => _provider = v);
+                            // 切提供方即清空音色框：上一个提供方的音色值
+                            // 对新提供方无意义，留空走各家默认音色；
+                            // 未点保存前磁盘上的旧配置不受影响。
+                            setState(() {
+                              _provider = v;
+                              _voiceCtrl.text = '';
+                            });
                           },
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _providerHint(),
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                         const SizedBox(height: 8),
                         if (_provider == 'mimo') ...[
@@ -409,16 +464,22 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                             },
                           ),
                         ] else ...[
-                          ImportBorderedTextField(
-                            controller: _endpointCtrl,
-                            label: '接口地址（你自己的服务地址）',
-                          ),
-                          const SizedBox(height: 8),
+                          if (_provider == 'generic' || _provider == 'azure') ...[
+                            ImportBorderedTextField(
+                              controller: _endpointCtrl,
+                              label: _provider == 'azure'
+                                  ? '区域端点（如 https://<区域>.tts.speech.microsoft.com/cognitiveservices/v1）'
+                                  : '接口地址（你自己的服务地址）',
+                            ),
+                            const SizedBox(height: 8),
+                          ],
                           ImportBorderedTextField(
                             controller: _keyCtrl,
-                            label: 'API Key（只存本机，不上传）',
+                            label: _keyLabel(),
                             obscureText: true,
                           ),
+                          const SizedBox(height: 8),
+                          _voiceField(),
                         ],
                         const SizedBox(height: 8),
                         SwitchListTile(
@@ -432,6 +493,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                               apiKey: _keyCtrl.text,
                               provider: _provider,
                               mimoVoice: _mimoVoice,
+                              voice: _voiceCtrl.text.trim(),
                             ));
                             if (mounted) setState(() {});
                           },
@@ -459,11 +521,9 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                           ),
                         ],
                         const SizedBox(height: 8),
-                        Text(
-                          _provider == 'mimo'
-                              ? 'MiMo 与通用接口不互通，选错提供方会明确报错。'
-                              : '通用接口：POST JSON {"text": "..."}、Authorization: Bearer <Key>，期望返回音频流；协议不符时测试会明确报错。',
-                          style: const TextStyle(color: Colors.white54, fontSize: 11),
+                        const Text(
+                          '各提供方协议不互通，选错提供方会明确报错；任一提供方失败时都回落系统 TTS，不会静默丢播报。Edge Read Aloud 未接：它没有公开接口，走的是浏览器内置 token 的 WebSocket，不符合接的标准。',
+                          style: TextStyle(color: Colors.white54, fontSize: 11),
                         ),
                       ]),
                     ),
@@ -471,6 +531,114 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                   ]),
             ),
     );
+  }
+
+  /// 各提供方的操作指导（去哪拿 Key、音色 ID 怎么来、有什么限制）：
+  /// 只写已核实的官方口径，不编价格与额度。
+  String _providerHint() {
+    switch (_provider) {
+      case 'mimo':
+        return '小米 MiMo：Key 在小米 MiMo 开放平台申请，模型 mimo-v2.5-tts。';
+      case 'openai':
+        return 'OpenAI TTS：Key 在 OpenAI 平台申请（platform.openai.com），模型 tts-1，接口固定，无需手填地址；需联网、可能按量计费。';
+      case 'azure':
+        return 'Azure AI Speech：先在 Azure 门户建 Speech 资源，Key 与区域端点在该资源的“密钥和终结点”页复制；端点按自己资源的区域填，形如 https://<区域>.tts.speech.microsoft.com/cognitiveservices/v1；需联网、可能按量计费。';
+      case 'google':
+        return 'Google Cloud TTS：先在 Google Cloud 控制台启用 Text-to-Speech API，再在“凭据”里建 API Key；接口固定，无需手填地址；需联网、可能按量计费。';
+      case 'minimax':
+        return 'MiniMax T2A v2：Key 在 MiniMax 开放平台申请，模型 speech-02-hd，接口固定；音色填系统音色名或自己的克隆 voice_id；需联网、可能按量计费。';
+      case 'elevenlabs':
+        return 'ElevenLabs：Key 在 ElevenLabs 控制台 API Keys 页申请；voice_id 在语音库点进音色详情复制，克隆音色先在网页控制台上传样本生成（Instant Voice Cloning）或用 Voice Design 设计，拿到 voice_id 填进来就能用；App 内不做训练；需联网、可能按量计费。';
+      case 'fish':
+        return 'Fish Audio：Key 在 Fish Audio 应用内 API Keys 页申请；reference_id 是语音模型 _id，在 Fish Audio 网页端语音库或自己的模型里复制填进来，留空用模型默认音色；克隆请先在网页端建好模型；需联网、可能按量计费。';
+      case 'doubao':
+        return '豆包语音合成 V3：Key 在火山引擎豆包语音控制台 API Key 管理处申请；音色 ID 在控制台音色库获取，声音复刻音色（S_ 开头）先在控制台生成再填进来；需联网、可能按量计费。';
+      case 'cosyvoice':
+        return 'CosyVoice（百炼）：Key 是阿里云百炼（DashScope）华北 2（北京）地域的 API Key，只能调北京端点，其他地域的 Key 会报 401；音色 ID 见百炼音色列表，克隆 / Voice Design 音色先在百炼控制台生成再填进来；需联网、可能按量计费。';
+      default:
+        return '通用接口：POST JSON {"text": "..."}、Authorization: Bearer <Key>，期望返回音频流；协议不符时测试会明确报错。';
+    }
+  }
+
+  String _keyLabel() {
+    switch (_provider) {
+      case 'openai':
+        return 'OpenAI API Key（只存本机，不上传）';
+      case 'azure':
+        return 'Azure 资源 Key（只存本机，不上传）';
+      case 'google':
+        return 'Google Cloud API Key（只存本机，不上传）';
+      case 'minimax':
+        return 'MiniMax API Key（只存本机，不上传）';
+      case 'elevenlabs':
+        return 'ElevenLabs API Key（只存本机，不上传）';
+      case 'fish':
+        return 'Fish Audio API Key（只存本机，不上传）';
+      case 'doubao':
+        return '豆包语音 API Key（X-Api-Key，只存本机，不上传）';
+      case 'cosyvoice':
+        return 'DashScope API Key（华北 2 北京地域，只存本机，不上传）';
+      default:
+        return 'API Key（只存本机，不上传）';
+    }
+  }
+
+  /// 各提供方的音色字段：OpenAI / Google / Azure 用下拉（官方音色表），
+  /// MiniMax / ElevenLabs / Fish / 豆包 / CosyVoice 用手填（音色 ID
+  /// 来自各家控制台，克隆音色也是填 ID；留空用各家默认音色）。
+  Widget _voiceField() {
+    const lists = {
+      'openai': openAiTtsVoices,
+      'google': googleTtsVoices,
+      'azure': azureTtsVoices,
+    };
+    final list = lists[_provider];
+    if (list != null) {
+      final saved = _voiceCtrl.text.trim();
+      final value = list.contains(saved) ? saved : list.first;
+      return DropdownButton<String>(
+        value: value,
+        isExpanded: true,
+        dropdownColor: const Color(0xFF2A2A2A),
+        items: list
+            .map((v) => DropdownMenuItem(
+                value: v, child: Text('音色：$v', style: const TextStyle(fontSize: 13))))
+            .toList(),
+        onChanged: (v) {
+          if (v == null) return;
+          setState(() => _voiceCtrl.text = v);
+        },
+      );
+    }
+    switch (_provider) {
+      case 'minimax':
+        return ImportBorderedTextField(
+          controller: _voiceCtrl,
+          label: '音色 ID（留空用 male-qn-qingse，克隆音色填自己的 voice_id）',
+        );
+      case 'elevenlabs':
+        return ImportBorderedTextField(
+          controller: _voiceCtrl,
+          label: 'voice_id（留空用默认音色 Rachel，克隆音色填自己的 voice_id）',
+        );
+      case 'fish':
+        return ImportBorderedTextField(
+          controller: _voiceCtrl,
+          label: 'reference_id（留空用模型默认音色，克隆音色填模型 _id）',
+        );
+      case 'doubao':
+        return ImportBorderedTextField(
+          controller: _voiceCtrl,
+          label: '音色 ID（留空用 zh_female_vv_uranus_bigtts，复刻音色填 S_ 开头的 ID）',
+        );
+      case 'cosyvoice':
+        return ImportBorderedTextField(
+          controller: _voiceCtrl,
+          label: '音色 ID（留空用 longanyang，克隆音色填自己的 voice）',
+        );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _slider(String label, double value, double min, double max, ValueChanged<double> onChanged) {

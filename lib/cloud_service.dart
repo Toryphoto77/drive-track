@@ -58,6 +58,48 @@ const String cloudTripsTable = 'trips';
 /// 见 cloudbase/README.md；对象路径 <user id>/<trip id>.json）。
 const String cloudTripsBucket = 'trip-files';
 
+/// PG 模式公开资料表（public schema；控制台先按
+/// cloudbase/profiles-public.sql 建表 + 跑 RLS）。
+/// 一行 = 一个云端账号的公开资料（昵称 / 简介 / 头像路径）。
+const String cloudProfilesTable = 'profiles';
+
+/// PG 模式公开文件桶（控制台 → 云存储 → Bucket 管理先建桶，
+/// 名字 public-files；见 cloudbase/profiles-public-steps.md）。
+/// 只放公开文件：公开行程的轨迹文件与公开头像；本人可写、他人只读。
+/// 私有行程仍走 [cloudTripsBucket]，绝不放进这个桶。
+const String cloudPublicBucket = 'public-files';
+
+/// 公开资料昵称 / 简介长度上限（与 profiles 表的 varchar 一致；
+/// 保存时超长直接拒绝，不静默截断）。
+const int cloudProfileNicknameMaxLength = 32;
+const int cloudProfileBioMaxLength = 200;
+
+/// storage_path 的桶前缀约定：公开行存
+/// `public-files/<user id>/<trip id>.json`，私有行存
+/// `<user id>/<trip id>.json`（不带前缀 = trip-files 私有桶，
+/// 与 v1.4.1 已有行兼容）。头像路径同样以前缀区分桶。
+String cloudBucketForStoragePath(String storagePath) =>
+    storagePath.startsWith('$cloudPublicBucket/')
+        ? cloudPublicBucket
+        : cloudTripsBucket;
+
+/// storage_path 去掉桶前缀后的对象路径（传给 Storage API 用）。
+String cloudObjectPathForStoragePath(String storagePath) =>
+    storagePath.startsWith('$cloudPublicBucket/')
+        ? storagePath.substring(cloudPublicBucket.length + 1)
+        : storagePath;
+
+/// 头像文件扩展名 → Content-Type（未知扩展名按通用二进制算）。
+String cloudAvatarContentType(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'application/octet-stream';
+}
+
 /// PostgREST 根路径（public schema only，表名直接拼后面）。
 const String _postgrestBasePath = '/v1/rdb/rest';
 
@@ -465,6 +507,100 @@ class _CloudBaseHttp {
   void close() {
     _http.close(force: true);
   }
+
+  /// 从 PG Storage API 直取对象字节（GET
+  /// /v1/storages/object/<bucket>/<path>，与上传同一端点）。
+  /// 公开桶的对象任何人可读（RLS 公开读策略放行），私有桶的
+  /// 对象只放行本人；读不到时抛 CloudBaseApiException，不返回空字节。
+  /// 注意：该端点形态按上传端点同款推断，未在真实网关上验证过，
+  /// 联调时先核对（见 cloudbase/profiles-public-steps.md 步骤 4）。
+  Future<Uint8List> getStorageBytes(String path,
+      {bool allowRetry = true}) async {
+    final uri = Uri.parse('$_baseUrl$path');
+    final deviceId = await _deviceIdValue();
+    HttpClientResponse resp;
+    try {
+      final req = await _http.getUrl(uri).timeout(
+            const Duration(seconds: 30),
+          );
+      req.headers.set('Accept-Language', 'zh-CN');
+      req.headers.set('X-SDK-Version', '@cloudbase/flutter-sdk/1.2.2');
+      req.headers.set('x-device-id', deviceId);
+      req.headers.set('x-request-id', _newUuidV4());
+      final token = session?.accessToken;
+      if (token != null && token.isNotEmpty) {
+        req.headers.set('Authorization', 'Bearer $token');
+      }
+      resp = await req.close().timeout(const Duration(minutes: 2));
+    } on TimeoutException {
+      throw const CloudBaseApiException(
+          'timeout', '下载超时，请检查网络后重试');
+    } on SocketException catch (e) {
+      throw CloudBaseApiException('network', '网络不可用：$e');
+    }
+    if (resp.statusCode == 401 && allowRetry) {
+      final refreshed = await onRefreshSession?.call() ?? false;
+      if (refreshed) {
+        return getStorageBytes(path, allowRetry: false);
+      }
+      throw const CloudBaseApiException(
+          'session_expired', '登录已过期，请重新登录');
+    }
+    if (resp.statusCode >= 400) {
+      throw CloudBaseApiException(
+          'download_failed', '文件下载失败（${resp.statusCode}）');
+    }
+    final bytes = <int>[];
+    await for (final chunk in resp) {
+      bytes.addAll(chunk);
+    }
+    return Uint8List.fromList(bytes);
+  }
+
+  /// 从 PG Storage API 删一个对象（DELETE
+  /// /v1/storages/object/<bucket>/<path>）。
+  /// 用途：行程改回仅自己可见时，删掉公开桶里的旧文件。
+  /// 注意：该端点形态按上传端点同款推断，未在真实网关上验证过。
+  Future<void> deleteStorageObject(String path,
+      {bool allowRetry = true}) async {
+    final uri = Uri.parse('$_baseUrl$path');
+    final deviceId = await _deviceIdValue();
+    HttpClientResponse resp;
+    try {
+      final req = await _http.deleteUrl(uri).timeout(
+            const Duration(seconds: 30),
+          );
+      req.headers.set('Accept-Language', 'zh-CN');
+      req.headers.set('X-SDK-Version', '@cloudbase/flutter-sdk/1.2.2');
+      req.headers.set('x-device-id', deviceId);
+      req.headers.set('x-request-id', _newUuidV4());
+      final token = session?.accessToken;
+      if (token != null && token.isNotEmpty) {
+        req.headers.set('Authorization', 'Bearer $token');
+      }
+      resp = await req.close().timeout(const Duration(seconds: 30));
+      await resp.transform(utf8.decoder).join().timeout(
+            const Duration(seconds: 30),
+          );
+    } on TimeoutException {
+      throw const CloudBaseApiException(
+          'timeout', '删除超时，请检查网络后重试');
+    } on SocketException catch (e) {
+      throw CloudBaseApiException('network', '网络不可用：$e');
+    }
+    if (resp.statusCode == 401 && allowRetry) {
+      final refreshed = await onRefreshSession?.call() ?? false;
+      if (refreshed) {
+        return deleteStorageObject(path, allowRetry: false);
+      }
+      throw const CloudBaseApiException(
+          'session_expired', '登录已过期，请重新登录');
+    }
+    if (resp.statusCode >= 400) {
+      throw CloudBaseApiException(
+          'delete_failed', '文件删除失败（${resp.statusCode}）');
+    }
+  }
 }
 
 /// 云端初始化状态（My 页云端卡片与云端页共用）。
@@ -497,6 +633,10 @@ extension CloudUploadStatusLabel on CloudUploadStatus {
 
 /// 上传队列表项：元数据快照随队列表项一起落盘，重试时不需要
 /// 再读行程对象（暂存文件 + 队列表项 = 全部所需）。
+/// [isPublic] 是入队时行程的公开标记：公开行程的轨迹文件传
+/// public-files 公开桶、trips 行写 is_public = true；私有行程
+/// 走 trip-files 私有桶、is_public = false。上传后改公开标记
+/// 不改这条快照，走 [CloudService.republishTrip] 重新发布。
 class CloudQueueEntry {
   final String tripId;
   final String mode;
@@ -507,6 +647,7 @@ class CloudQueueEntry {
   final String source;
   final double maxSpeedKmh;
   final int score;
+  final bool isPublic;
   final CloudUploadStatus status;
   final int attempts;
   final String lastError;
@@ -522,6 +663,7 @@ class CloudQueueEntry {
     required this.source,
     required this.maxSpeedKmh,
     required this.score,
+    this.isPublic = false,
     required this.status,
     required this.attempts,
     required this.lastError,
@@ -533,6 +675,7 @@ class CloudQueueEntry {
     int? attempts,
     String? lastError,
     int? updatedAtMs,
+    bool? isPublic,
   }) =>
       CloudQueueEntry(
         tripId: tripId,
@@ -544,6 +687,7 @@ class CloudQueueEntry {
         source: source,
         maxSpeedKmh: maxSpeedKmh,
         score: score,
+        isPublic: isPublic ?? this.isPublic,
         status: status ?? this.status,
         attempts: attempts ?? this.attempts,
         lastError: lastError ?? this.lastError,
@@ -560,6 +704,7 @@ class CloudQueueEntry {
         'source': source,
         'maxSpeedKmh': maxSpeedKmh,
         'score': score,
+        'isPublic': isPublic,
         'status': status.name,
         'attempts': attempts,
         'lastError': lastError,
@@ -577,6 +722,7 @@ class CloudQueueEntry {
         source: (j['source'] as String?) ?? 'phone',
         maxSpeedKmh: (j['maxSpeedKmh'] as num?)?.toDouble() ?? 0,
         score: (j['score'] as num?)?.toInt() ?? 0,
+        isPublic: (j['isPublic'] as bool?) ?? false,
         status:
             CloudUploadStatusLabel.fromKey((j['status'] as String?) ?? ''),
         attempts: (j['attempts'] as num?)?.toInt() ?? 0,
@@ -585,7 +731,12 @@ class CloudQueueEntry {
       );
 
   /// trips 表的一行：只存摘要，轨迹点在云存储文件里。
-  /// owner 是创建者 user id，RLS 只放行 owner 自己的读写。
+  /// owner 是创建者 user id，RLS 只放行 owner 自己的读写；
+  /// is_public = true 的行另有 trips_select_public 公开读策略，
+  /// 任何人可读。storage_path 带桶前缀约定（见
+  /// [cloudBucketForStoragePath]）：公开行是
+  /// `public-files/<user id>/<trip id>.json`，私有行是
+  /// `<user id>/<trip id>.json`。
   Map<String, dynamic> toTripRow(String userId, String storagePath) => {
         'owner': userId,
         'mode': mode,
@@ -600,15 +751,19 @@ class CloudQueueEntry {
         'source': source,
         'max_speed_kmh': maxSpeedKmh,
         'score': score,
+        'is_public': isPublic,
         'storage_path': storagePath,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       };
 }
 
 /// 云端行程列表的一行（读 trips 表；id 是 bigserial，PostgREST
-/// 返回整数，也兼容字符串 _id）。
+/// 返回整数，也兼容字符串 _id）。[owner] 是创建者 user id，
+/// [isPublic] 是 trips 表的 is_public 列（控制台 SQL 执行前
+/// 老行缺该列时按 false 处理）。
 class CloudTripRow {
   final String id;
+  final String owner;
   final String mode;
   final int startedAtMs;
   final int endedAtMs;
@@ -617,10 +772,12 @@ class CloudTripRow {
   final String source;
   final double maxSpeedKmh;
   final int score;
+  final bool isPublic;
   final String storagePath;
 
   const CloudTripRow({
     required this.id,
+    this.owner = '',
     required this.mode,
     required this.startedAtMs,
     required this.endedAtMs,
@@ -629,6 +786,7 @@ class CloudTripRow {
     required this.source,
     required this.maxSpeedKmh,
     required this.score,
+    this.isPublic = false,
     required this.storagePath,
   });
 
@@ -645,6 +803,7 @@ class CloudTripRow {
         id: (j['id'] is num)
             ? (j['id'] as num).toString()
             : ((j['id'] as String?) ?? (j['_id'] as String?) ?? ''),
+        owner: (j['owner'] as String?) ?? '',
         mode: (j['mode'] as String?) ?? 'car',
         startedAtMs: _parseTime(j['started_at']),
         endedAtMs: _parseTime(j['ended_at']),
@@ -653,8 +812,73 @@ class CloudTripRow {
         source: (j['source'] as String?) ?? 'phone',
         maxSpeedKmh: (j['max_speed_kmh'] as num?)?.toDouble() ?? 0,
         score: (j['score'] as num?)?.toInt() ?? 0,
+        isPublic: (j['is_public'] as bool?) ?? false,
         storagePath: (j['storage_path'] as String?) ?? '',
       );
+}
+
+/// 公开资料（读 profiles 表的一行）。[avatarPath] 是公开桶里的
+/// 对象路径（形如 `public-files/<user id>/avatar.jpg`），空 = 未设头像。
+/// 注意：profiles 公开读，任何拿到环境 ID 的人都能读到这些字段。
+class PublicProfile {
+  final String userId;
+  final String nickname;
+  final String bio;
+  final String avatarPath;
+  final int updatedAtMs;
+
+  const PublicProfile({
+    required this.userId,
+    this.nickname = '',
+    this.bio = '',
+    this.avatarPath = '',
+    this.updatedAtMs = 0,
+  });
+
+  static int _parseTime(dynamic v) {
+    if (v is DateTime) return v.millisecondsSinceEpoch;
+    if (v is num) return v.toInt();
+    if (v is String) {
+      return DateTime.tryParse(v)?.millisecondsSinceEpoch ?? 0;
+    }
+    return 0;
+  }
+
+  static PublicProfile fromJson(Map<String, dynamic> j) => PublicProfile(
+        userId: (j['user_id'] as String?) ?? '',
+        nickname: (j['nickname'] as String?) ?? '',
+        bio: (j['bio'] as String?) ?? '',
+        avatarPath: (j['avatar_path'] as String?) ?? '',
+        updatedAtMs: _parseTime(j['updated_at']),
+      );
+
+  /// profiles 表的一行：user_id 是云端账号 id（auth.uid()），
+  /// 不是本机 profile.json 里的 DT-xxxx。
+  Map<String, dynamic> toRow() => {
+        'user_id': userId,
+        'nickname': nickname,
+        'bio': bio,
+        'avatar_path': avatarPath,
+        'updated_at': DateTime.fromMillisecondsSinceEpoch(updatedAtMs)
+            .toUtc()
+            .toIso8601String(),
+      };
+}
+
+/// 保存公开资料的结果。资料行本身保存失败时 [ok] 为 false；
+/// 只有头像上传失败时 [ok] 仍为 true，但 [avatarError] 非空、
+/// [message] 会说明头像没同步上（昵称/简介已同步）。
+class CloudProfileResult {
+  final bool ok;
+  final bool notConfigured;
+  final String message;
+  final String avatarError;
+  const CloudProfileResult({
+    required this.ok,
+    this.notConfigured = false,
+    required this.message,
+    this.avatarError = '',
+  });
 }
 
 /// 上传调用结果（调用方只按 ok / notConfigured / message 走，
@@ -765,14 +989,42 @@ abstract class CloudBackend {
 
   String? get currentUserId;
 
-  /// 上传字节到云存储路径（如 `<user_id>/<trip_id>.json`）。
+  /// 上传字节到云存储路径（如 `<user_id>/<trip_id>.json`，
+  /// 默认进 trip-files 私有桶）。
   Future<void> uploadBytes(String path, Uint8List bytes);
+
+  /// 上传字节到指定桶的指定对象路径（如公开桶
+  /// `public-files` 里的 `<user_id>/<trip_id>.json` 或
+  /// `<user_id>/avatar.jpg`）。[contentType] 按文件类型传。
+  Future<void> uploadBytesToBucket(
+      String bucket, String path, Uint8List bytes, String contentType);
+
+  /// 从指定桶下载对象字节（公开桶任何人可读，私有桶只放行本人）。
+  Future<Uint8List> downloadBytes(String bucket, String path);
+
+  /// 删指定桶里的一个对象（行程改回私有后删公开桶旧文件用）。
+  Future<void> deleteObject(String bucket, String path);
 
   /// 往 trips 集合插一条行程文档。
   Future<void> insertTripRow(Map<String, dynamic> row);
 
+  /// 按 storage_path 更新 trips 行（改公开标记 / 搬桶后改
+  /// storage_path 用），返回实际改到的行数（0 = 云端没这行）。
+  Future<int> updateTripRowByStoragePath(
+      String storagePath, Map<String, dynamic> patch);
+
   /// 读某用户的云端行程（时间倒序）。
   Future<List<Map<String, dynamic>>> listTripRows(String userId);
+
+  /// 读某用户的公开行程（is_public = true，时间倒序）。
+  /// 读的是别人的公开行也走这里：RLS 公开读策略放行。
+  Future<List<Map<String, dynamic>>> listPublicTripRows(String userId);
+
+  /// 读某用户的公开资料（profiles 表一行），没有返回 null。
+  Future<Map<String, dynamic>?> fetchProfileRow(String userId);
+
+  /// 写自己的公开资料（按 user_id upsert：有则更新、无则插入）。
+  Future<void> upsertProfileRow(Map<String, dynamic> row);
 
   /// 当前用户是否匿名（未登录 / 匿名登录都算匿名）。
   bool get isAnonymous;
@@ -1049,6 +1301,14 @@ class CloudBaseCloudBackend implements CloudBackend {
 
   @override
   Future<void> uploadBytes(String path, Uint8List bytes) async {
+    // 私有行程默认进 trip-files 私有桶（v1.4.1 行为不变）。
+    await uploadBytesToBucket(
+        cloudTripsBucket, path, bytes, 'application/json');
+  }
+
+  @override
+  Future<void> uploadBytesToBucket(
+      String bucket, String path, Uint8List bytes, String contentType) async {
     // PG 模式：直接 POST 到 Storage API（/v1/storages/object/
     // <bucket>/<path>），raw body + x-upsert；不走传统模式的
     // get-objects-upload-info + COS 预签名直传。
@@ -1056,14 +1316,33 @@ class CloudBaseCloudBackend implements CloudBackend {
     final encoded =
         clean.split('/').map(Uri.encodeComponent).join('/');
     await _http.postStorageBytes(
-      '/v1/storages/object/$cloudTripsBucket/$encoded',
+      '/v1/storages/object/$bucket/$encoded',
       bytes,
-      contentType: 'application/json',
+      contentType: contentType,
       upsert: true,
     );
   }
 
+  @override
+  Future<Uint8List> downloadBytes(String bucket, String path) async {
+    final clean = path.startsWith('/') ? path.substring(1) : path;
+    final encoded =
+        clean.split('/').map(Uri.encodeComponent).join('/');
+    return _http.getStorageBytes('/v1/storages/object/$bucket/$encoded');
+  }
+
+  @override
+  Future<void> deleteObject(String bucket, String path) async {
+    final clean = path.startsWith('/') ? path.substring(1) : path;
+    final encoded =
+        clean.split('/').map(Uri.encodeComponent).join('/');
+    await _http.deleteStorageObject(
+        '/v1/storages/object/$bucket/$encoded');
+  }
+
   String get _tripsPath => '$_postgrestBasePath/$cloudTripsTable';
+
+  String get _profilesPath => '$_postgrestBasePath/$cloudProfilesTable';
 
   @override
   Future<void> insertTripRow(Map<String, dynamic> row) async {
@@ -1072,6 +1351,20 @@ class CloudBaseCloudBackend implements CloudBackend {
     await _http.postgrest('POST', _tripsPath,
         body: row,
         extraHeaders: const {'Prefer': 'return=representation'});
+  }
+
+  @override
+  Future<int> updateTripRowByStoragePath(
+      String storagePath, Map<String, dynamic> patch) async {
+    // PostgREST：PATCH + storage_path=eq.<路径> 定位行（storage_path
+    // 在同一账号下唯一：<user id>/<trip id>.json，公开行带
+    // public-files/ 前缀）。RLS update_own 只放行本人改自己的行。
+    final res = await _http.postgrest('PATCH', _tripsPath,
+        query: {'storage_path': 'eq.$storagePath'},
+        body: patch,
+        extraHeaders: const {'Prefer': 'return=representation'});
+    if (res is List) return res.length;
+    return 0;
   }
 
   @override
@@ -1090,6 +1383,52 @@ class CloudBaseCloudBackend implements CloudBackend {
         .whereType<Map>()
         .map((e) => e.cast<String, dynamic>())
         .toList();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> listPublicTripRows(
+      String userId) async {
+    // 公开行程：owner=eq.<uid> 且 is_public=eq.true；RLS
+    // trips_select_public 放行任何人读公开行。私有行不会返回。
+    final res = await _http.postgrest('GET', _tripsPath, query: {
+      'select': '*',
+      'owner': 'eq.$userId',
+      'is_public': 'eq.true',
+      'order': 'created_at.desc',
+      'limit': '50',
+    });
+    if (res is! List) return [];
+    return res
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>?> fetchProfileRow(String userId) async {
+    // profiles 公开读：任何人可读。没有该用户资料时返回空数组 → null。
+    final res = await _http.postgrest('GET', _profilesPath, query: {
+      'select': '*',
+      'user_id': 'eq.$userId',
+      'limit': '1',
+    });
+    if (res is List && res.isNotEmpty && res.first is Map) {
+      return (res.first as Map).cast<String, dynamic>();
+    }
+    return null;
+  }
+
+  @override
+  Future<void> upsertProfileRow(Map<String, dynamic> row) async {
+    // PostgREST upsert：POST + on_conflict=user_id +
+    // Prefer: resolution=merge-duplicates（user_id 是主键，
+    // 冲突时按主键合并更新，不插重复行）。
+    await _http.postgrest('POST', _profilesPath,
+        query: const {'on_conflict': 'user_id'},
+        body: row,
+        extraHeaders: const {
+          'Prefer': 'resolution=merge-duplicates,return=representation',
+        });
   }
 
   @override
@@ -1479,6 +1818,7 @@ class CloudService {
       source: source,
       maxSpeedKmh: trip.maxSpeed * 3.6,
       score: trip.score.round(),
+      isPublic: trip.isPublic,
       status: CloudUploadStatus.pending,
       attempts: 0,
       lastError: '',
@@ -1496,6 +1836,10 @@ class CloudService {
   }
 
   /// 上传一条队列表项：先传云存储文件，再插 trips 文档。
+  /// 公开行程传 public-files 公开桶、行写 is_public = true；
+  /// 私有行程传 trip-files 私有桶、is_public = false。
+  /// 公开桶尚未在控制台建好时上传失败进 failed + lastError，
+  /// 可重试；行程不丢。
   /// 失败留队列（failed + lastError），可重试；不抛错。
   Future<CloudUploadResult> _processEntry(String tripId) async {
     final backend = _backend;
@@ -1513,9 +1857,16 @@ class CloudService {
     await _saveQueue();
     try {
       final bytes = await File(_stagingFile(tripId)).readAsBytes();
-      final path = '$userId/$tripId.json';
-      await backend.uploadBytes(path, bytes);
-      await backend.insertTripRow(entry.toTripRow(userId, path));
+      // storage_path 带桶前缀约定（见 cloudBucketForStoragePath）：
+      // 公开行 public-files/<uid>/<trip>.json，私有行 <uid>/<trip>.json。
+      final storagePath = entry.isPublic
+          ? '$cloudPublicBucket/$userId/$tripId.json'
+          : '$userId/$tripId.json';
+      final bucket = cloudBucketForStoragePath(storagePath);
+      final objectPath = cloudObjectPathForStoragePath(storagePath);
+      await backend.uploadBytesToBucket(
+          bucket, objectPath, bytes, 'application/json');
+      await backend.insertTripRow(entry.toTripRow(userId, storagePath));
       // 写回时用当前队列表项（已含本轮 attempts+1），不要用入队前的旧快照。
       _upsertQueue((_entryFor(tripId) ?? entry).copyWith(
         status: CloudUploadStatus.done,
@@ -1583,6 +1934,244 @@ class CloudService {
     } catch (_) {
       return [];
     }
+  }
+
+  /// 读某用户的公开资料（profiles 表一行）。未配置 / 未就绪 /
+  /// 对方没设过资料时返回 null，不抛错。
+  Future<PublicProfile?> fetchPublicProfile(String userId) async {
+    await initialized;
+    final backend = _backend;
+    if (!isConfigured || backend == null || userId.isEmpty) return null;
+    try {
+      final row = await backend.fetchProfileRow(userId);
+      if (row == null) return null;
+      return PublicProfile.fromJson(row);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 读某用户的公开行程（is_public = true，时间倒序，只含公开行）。
+  /// 未配置 / 未就绪 / 对方无公开行程时返回空列表，不抛错。
+  Future<List<CloudTripRow>> listPublicTrips(String userId) async {
+    await initialized;
+    final backend = _backend;
+    if (!isConfigured || backend == null || userId.isEmpty) return [];
+    try {
+      final rows = await backend.listPublicTripRows(userId);
+      return rows.map(CloudTripRow.fromJson).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// 按 storage_path 下文件字节（公开桶 / 私有桶按路径前缀区分）。
+  /// 路径为空或下载失败返回 null，不抛错。
+  Future<Uint8List?> downloadFileByStoragePath(String storagePath) async {
+    await initialized;
+    final backend = _backend;
+    if (!isConfigured || backend == null || storagePath.isEmpty) {
+      return null;
+    }
+    try {
+      return await backend.downloadBytes(
+        cloudBucketForStoragePath(storagePath),
+        cloudObjectPathForStoragePath(storagePath),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 下一条云端行程的轨迹文件字节（行程详情 / 公开行程查看用）。
+  /// 公开行的文件在公开桶里，任何人可读；私有行的文件只放行本人。
+  /// 下载失败返回 null，不抛错。
+  Future<Uint8List?> downloadTripFile(CloudTripRow row) =>
+      downloadFileByStoragePath(row.storagePath);
+
+  /// 下公开头像字节（公开资料页用）。头像路径为空或下载失败
+  /// 返回 null，不抛错。
+  Future<Uint8List?> downloadAvatar(PublicProfile profile) =>
+      downloadFileByStoragePath(profile.avatarPath);
+
+  /// 保存自己的公开资料（昵称 / 简介同步到 profiles 表，头像
+  /// 传到 public-files 公开桶）。
+  ///
+  /// 昵称不能为空、昵称最多 32 字、简介最多 200 字，超了直接
+  /// 拒绝（本地资料不受影响，调用方先存本机、再调这里同步）。
+  /// 头像本地文件不存在 / 没传新头像时沿用云端已有的头像路径，
+  /// 不写空覆盖；只有头像上传失败时本次头像不同步（avatarError 非空）。
+  /// 头像上传失败不影响资料行保存：昵称/简介照常同步，
+  /// 结果里 avatarError 非空、message 说明头像没同步上。
+  /// 公开桶尚未在控制台建好时头像上传失败、资料行保存也可能失败
+  /// （profiles 表不存在），结果如实返回，不抛错。
+  Future<CloudProfileResult> saveProfile({
+    required String nickname,
+    required String bio,
+    String? avatarLocalPath,
+  }) async {
+    await initialized;
+    if (!isConfigured) {
+      return const CloudProfileResult(
+        ok: false,
+        notConfigured: true,
+        message: '云端未配置，资料只保存在本机',
+      );
+    }
+    final backend = _backend;
+    final userId = currentUserId;
+    if (backend == null || userId == null || userId.isEmpty) {
+      return const CloudProfileResult(
+          ok: false, message: '云端账号未就绪，请稍后再试');
+    }
+    final name = nickname.trim();
+    if (name.isEmpty) {
+      return const CloudProfileResult(ok: false, message: '昵称不能为空');
+    }
+    if (name.length > cloudProfileNicknameMaxLength) {
+      return const CloudProfileResult(ok: false, message: '昵称最多 32 个字');
+    }
+    final intro = bio.trim();
+    if (intro.length > cloudProfileBioMaxLength) {
+      return const CloudProfileResult(ok: false, message: '简介最多 200 个字');
+    }
+    var avatarPath = '';
+    var avatarError = '';
+    final localAvatar = avatarLocalPath;
+    if (localAvatar != null && localAvatar.isNotEmpty) {
+      try {
+        final file = File(localAvatar);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final ext = localAvatar.contains('.')
+              ? localAvatar
+                  .substring(localAvatar.lastIndexOf('.'))
+                  .toLowerCase()
+              : '';
+          final objectPath = '$userId/avatar$ext';
+          await backend.uploadBytesToBucket(cloudPublicBucket, objectPath,
+              bytes, cloudAvatarContentType(localAvatar));
+          avatarPath = '$cloudPublicBucket/$objectPath';
+        }
+      } catch (e) {
+        // 头像失败不影响资料行：记下来继续保存昵称/简介。
+        avatarError = '头像同步失败：$e';
+      }
+    }
+    if (avatarPath.isEmpty) {
+      // 本次没传新头像：沿用云端已有的头像路径，不写空覆盖掉它；
+      // 读不到旧资料时按未设头像处理。
+      try {
+        final existing = await backend.fetchProfileRow(userId);
+        if (existing != null) {
+          avatarPath = (existing['avatar_path'] as String?) ?? '';
+        }
+      } catch (_) {}
+    }
+    try {
+      final profile = PublicProfile(
+        userId: userId,
+        nickname: name,
+        bio: intro,
+        avatarPath: avatarPath,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+      await backend.upsertProfileRow(profile.toRow());
+    } catch (e) {
+      return CloudProfileResult(
+          ok: false, message: '公开资料同步失败：$e', avatarError: avatarError);
+    }
+    if (avatarError.isNotEmpty) {
+      return CloudProfileResult(
+          ok: true,
+          message: '昵称、简介已同步到云端；$avatarError',
+          avatarError: avatarError);
+    }
+    return const CloudProfileResult(ok: true, message: '公开资料已同步到云端');
+  }
+
+  /// 已上传行程改公开标记后重新发布（个人页 / 详情页切公开时调）。
+  ///
+  /// 只处理队列里已是 done 的行程：没上传过的行程直接返回提示，
+  /// 下次点“上传到云端”时按新标记走对应桶。
+  /// 做法：轨迹文件重传到新标记对应的桶，再 PATCH trips 行的
+  /// is_public 与 storage_path；改回私有后删掉公开桶里的旧文件
+  /// （删失败会在 message 里说明，旧公开文件可能仍可访问）。
+  /// 失败不改本地公开标记、不丢队列；成功后更新队列表项的标记。
+  Future<CloudUploadResult> republishTrip(Trip trip) async {
+    await initialized;
+    if (!isConfigured) {
+      return const CloudUploadResult(
+          ok: false, notConfigured: true, message: '云端未配置');
+    }
+    final backend = _backend;
+    final userId = currentUserId;
+    final entry = _entryFor(trip.id);
+    if (backend == null || userId == null || entry == null) {
+      return const CloudUploadResult(ok: false, message: '云端还没有这条行程，请先上传到云端');
+    }
+    if (entry.status != CloudUploadStatus.done) {
+      return const CloudUploadResult(ok: false, message: '这条行程还没上传成功，公开标记会在下次上传时生效');
+    }
+    if (entry.isPublic == trip.isPublic) {
+      return const CloudUploadResult(ok: true, message: '云端公开状态已是最新');
+    }
+    final oldStoragePath = entry.isPublic
+        ? '$cloudPublicBucket/$userId/${trip.id}.json'
+        : '$userId/${trip.id}.json';
+    final newStoragePath = trip.isPublic
+        ? '$cloudPublicBucket/$userId/${trip.id}.json'
+        : '$userId/${trip.id}.json';
+    final newBucket = cloudBucketForStoragePath(newStoragePath);
+    final bytes = utf8.encode(jsonEncode(trip.toJson()));
+    try {
+      await backend.uploadBytesToBucket(newBucket,
+          cloudObjectPathForStoragePath(newStoragePath), bytes, 'application/json');
+    } catch (e) {
+      return CloudUploadResult(ok: false, message: '重新发布失败：$e');
+    }
+    var affected = 0;
+    try {
+      affected = await backend.updateTripRowByStoragePath(oldStoragePath, {
+        'is_public': trip.isPublic,
+        'storage_path': newStoragePath,
+      });
+      if (affected == 0) {
+        // 上轮可能已改过 storage_path：按新路径再定位一次。
+        affected = await backend.updateTripRowByStoragePath(newStoragePath, {
+          'is_public': trip.isPublic,
+          'storage_path': newStoragePath,
+        });
+      }
+    } catch (e) {
+      return CloudUploadResult(ok: false, message: '云端行程更新失败：$e');
+    }
+    if (affected == 0) {
+      return const CloudUploadResult(
+          ok: false, message: '云端找不到这条行程，请重新上传到云端');
+    }
+    _upsertQueue(entry.copyWith(
+      isPublic: trip.isPublic,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    ));
+    await _saveQueue();
+    var deleteNote = '';
+    if (oldStoragePath != newStoragePath) {
+      try {
+        await backend.deleteObject(
+          cloudBucketForStoragePath(oldStoragePath),
+          cloudObjectPathForStoragePath(oldStoragePath),
+        );
+      } catch (e) {
+        deleteNote = trip.isPublic
+            ? ''
+            : '；但旧公开文件删除失败，可能仍可访问，请稍后重试';
+      }
+    }
+    return CloudUploadResult(
+      ok: true,
+      message: trip.isPublic ? '已设为公开，他人打开你的公开资料页可见' : '已改回仅自己可见$deleteNote',
+    );
   }
 
   CloudAuthResult _notConfiguredAuth() => const CloudAuthResult(

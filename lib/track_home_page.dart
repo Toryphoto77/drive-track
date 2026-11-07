@@ -21,6 +21,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'models.dart';
 import 'store.dart';
@@ -102,9 +103,10 @@ class TrackHomePage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: _kBg,
-      appBar: AppBar(title: const Text('赛道'), backgroundColor: _kBg),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('赛道')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

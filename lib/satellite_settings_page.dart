@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'glass_button.dart';
 import 'satellite_pill.dart';
 import 'satellite_service.dart';
@@ -147,12 +148,13 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
     final totalVisible = svc.visibleCount;
 
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('外部 GPS · 可视化配置'),
       ),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 24)),
         children: [
           // 顶部设备连接状态卡。
           Card(

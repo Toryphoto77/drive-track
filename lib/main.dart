@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
@@ -122,8 +123,10 @@ class AppPrefs extends ChangeNotifier {
   // 记录地图 3D 透视（默认开启，关闭为 2D 俯视示意，存 profile.json）。
   bool keepScreenOn = true;
   bool recordingMap3d = true;
-  // v1.0.3：可切换启动图标（profile.json 'appIcon'，'red' 默认，见 AppIconChoice）。
-  String appIcon = 'red';
+  // 街道记录 3D 视角俯仰角（65° 默认 → 50° → 35°，存 profile.json）。
+  double recordingMapPitch = 65.0;
+  // v1.0.3：可切换启动图标（profile.json 'appIcon'，'steering' 默认，见 AppIconChoice）。
+  String appIcon = 'steering';
   // v1.0.7：安全守则“今日内不再弹出”（按日期 + 模式 + 街道/赛道记，
   // 只存本机 profile.json，不上传）。
   String safetyAckDate = '';
@@ -167,6 +170,8 @@ class AppPrefs extends ChangeNotifier {
         directSatellite = (j['directSatellite'] as bool?) ?? directSatellite;
         keepScreenOn = (j['keepScreenOn'] as bool?) ?? keepScreenOn;
         recordingMap3d = (j['recordingMap3d'] as bool?) ?? recordingMap3d;
+        final rp = (j['recordingMapPitch'] as num?)?.toDouble();
+        recordingMapPitch = (rp == 50.0 || rp == 35.0) ? rp! : 65.0;
         appIcon = AppIconChoice.normalize(j['appIcon'] as String?);
         safetyAckDate = (j['safetyAckDate'] as String?) ?? '';
         safetyAckMode = (j['safetyAckMode'] as String?) ?? '';
@@ -234,6 +239,7 @@ class AppPrefs extends ChangeNotifier {
         'directSatellite': directSatellite,
         'keepScreenOn': keepScreenOn,
         'recordingMap3d': recordingMap3d,
+        'recordingMapPitch': recordingMapPitch,
         'appIcon': appIcon,
         'safetyAckDate': safetyAckDate,
         'safetyAckMode': safetyAckMode,
@@ -320,6 +326,13 @@ class AppPrefs extends ChangeNotifier {
 
   Future<void> setRecordingMap3d(bool v) async {
     recordingMap3d = v;
+    notifyListeners();
+    await save();
+  }
+
+  /// 街道记录 3D 视角俯仰角（只取 65°/50°/35° 三档，其它值归到 65°）。
+  Future<void> setRecordingMapPitch(double v) async {
+    recordingMapPitch = (v == 50.0 || v == 35.0) ? v : 65.0;
     notifyListeners();
     await save();
   }
@@ -591,6 +604,11 @@ class _HomePageState extends State<HomePage>
   bool _listSelecting = false;
   final Set<String> _selectedTripIds = {};
 
+  /// 赛道实况是否显示 Delta（赛道设置页“显示 Delta”开关，
+  /// 默认 true）。本字段在 _init 读盘、设置页 onChanged 回写；
+  /// 开关本身早已存在但此前无人读取，属未接线开关，本轮接上。
+  bool _showTrackDelta = true;
+
   @override
   void initState() {
     super.initState();
@@ -610,6 +628,7 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _init() async {
     await VoiceService.instance.load();
+    _showTrackDelta = (await TrackSettingsStore.load()).showDelta;
     SatelliteService.instance.start();
     if (appPrefs.directSatellite) SatelliteService.instance.setDirectMode(true);
     await store.init();
@@ -629,6 +648,10 @@ class _HomePageState extends State<HomePage>
       if (_blediyActive && _blediyFeed.shouldFallbackToPhoneGps()) {
         _blediyActive = false;
         rec.externalGpsActive = false;
+        // v1.4.x 街道语音：外接 GPS 断开回落时播一次（赛道模式不跑）。
+        if (rec.isRecording && !trackMode) {
+          VoiceService.instance.announceGpsFallback();
+        }
       }
       rec.onLocation(e);
       SatelliteService.instance.noteLocationProvider(e['provider'] as String?);
@@ -643,6 +666,16 @@ class _HomePageState extends State<HomePage>
         if (rec.mode == TripMode.moto && rec.rollDeg.abs() > 30) {
           VoiceService.instance.announceEvent(kind: VoiceEventKind.leanOver, leanDeg: rec.rollDeg, speedKmh: rec.curSpeed * 3.6);
         }
+      }
+      // v1.4.x 街道语音：起步 / 超速 / 里程时间 / 低精度（VoiceService 内节流）；
+      // 赛道模式不跑（圈速播报走 _drainLapTimer 的 announceLap）。
+      if (rec.isRecording && !trackMode) {
+        VoiceService.instance.noteStreetLocation(
+          speedKmh: rec.curSpeed * 3.6,
+          hAcc: rec.curHAcc,
+          distanceKm: rec.distanceM / 1000,
+          elapsedMs: rec.elapsedMs,
+        );
       }
       // v0.1.3 赛道实时计时：赛道模式下，首点定为起终点，逐点喂 LapTimer
       //（排空见 _drainLapTimer；外接 GPS 回调里同样触发，见 _bleDataSub）。
@@ -711,6 +744,12 @@ class _HomePageState extends State<HomePage>
       // 跑，实时显示最多滞后约 1 秒。在此同样触发一次排空，只改
       // 触发时机，不改排空逻辑、不改落点/存储频率（见 _drainLapTimer）。
       if (fedExternalFix) unawaited(_drainLapTimer());
+      // v1.4.x 街道语音：外接 GPS 定位同样刷新 GPS 看门狗（手机定位
+      // 回调不经过外接路径；只刷新看门狗，不跑超速/里程等街道播报，
+      // 那些仍以手机定位回调的 noteStreetLocation 为准）。
+      if (fedExternalFix && rec.isRecording && !trackMode) {
+        VoiceService.instance.noteExternalFix();
+      }
       if (e['type'] == 'sppDisconnected') {
         _blediyFeed.reset();
         _blediyActive = false;
@@ -752,11 +791,44 @@ class _HomePageState extends State<HomePage>
       liveLapTimer ??= await _buildLapTimer();
       final prevBest = liveLapTimer!.bestLap?.durationMs;
       final prevLapCount = liveLapTimer!.laps.length;
+      // v1.4.x 赛道语音新增：发车圈过线（开始计时）与分段 Delta
+      // 播报。排空前记下旧状态，排空后只报新增的部分，不重复报。
+      final prevCrossed = liveLapTimer!.hasCrossedStartLine;
+      final prevSectorCount =
+          liveLapTimer!.currentCompletedSectorsMs.length;
       _lapFedCount = drainLapTimerPoints(liveLapTimer!, rec.points, _lapFedCount);
       final nb = liveLapTimer!.bestLap;
-      if (liveLapTimer!.laps.length > prevLapCount) {
+      final lapCompleted = liveLapTimer!.laps.length > prevLapCount;
+      if (!prevCrossed && liveLapTimer!.hasCrossedStartLine) {
+        VoiceService.instance.announceTimingStarted();
+      }
+      // 分段 Delta：本排空内无完圈时才报（完圈会重置分段计数，
+      // 旧圈段数与新圈段数不能混着比）；只报新增的段，参照圈为
+      // 本节最快圈（排空内不产生新最快圈，参照口径不变）。
+      if (!lapCompleted) {
+        final done = liveLapTimer!.currentCompletedSectorsMs.length;
+        final deltas = liveLapTimer!.currentSectorDeltasVsBest;
+        for (var i = prevSectorCount; i < done; i++) {
+          final d = i < deltas.length ? deltas[i] : null;
+          if (d != null) {
+            VoiceService.instance
+                .announceSector(sectorIndex: i, deltaMs: d);
+          }
+        }
+      }
+      if (lapCompleted) {
         final done = liveLapTimer!.laps.last;
-        if (done.counted) VoiceService.instance.announceLap(lapNumber: done.number, lapMs: done.durationMs, isBest: nb != null && done.durationMs == nb.durationMs);
+        if (done.counted) {
+          final isBest =
+              nb != null && done.durationMs == nb.durationMs;
+          VoiceService.instance.announceLap(
+              lapNumber: done.number,
+              lapMs: done.durationMs,
+              isBest: isBest,
+              deltaVsBestMs: (!isBest && prevBest != null)
+                  ? done.durationMs - prevBest
+                  : null);
+        }
       } else if (nb != null && nb.counted && prevBest != null && nb.durationMs < prevBest) {
         VoiceService.instance.announceLap(lapNumber: nb.number, lapMs: nb.durationMs, isBest: true);
       }
@@ -854,7 +926,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.4.1',
+          versionName: '1.5.0',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1242,6 +1314,9 @@ class _HomePageState extends State<HomePage>
     _lapFedCount = 0;
     livePhotoPoints = [];
     await rec.start();
+    // v1.4.x 街道语音：开录即启动 GPS 信号看门狗与起步 / 里程计数
+    //（赛道模式只计圈，不跑街道提示）。
+    VoiceService.instance.setTripActive(true, isTrack: trackMode);
     // v0.1.8 熄屏根因是系统锁屏超时自动熄屏，不是定位权限问题：
     // 记录开始后按设置开关自动开常亮；暂停时仍在记录页，保持开启
     // 更安全（暂停 ≠ 结束，用户随时恢复，不应中途熄屏）。
@@ -1363,6 +1438,9 @@ class _HomePageState extends State<HomePage>
       videoActive = false;
     }
     await rec.stop();
+    // v1.4.x 街道语音：行程结束即停 GPS 信号看门狗（总结播报仍走
+    // 下面的 announceSummary；行程太短未保存时同样停，不漏）。
+    VoiceService.instance.setTripActive(false);
     // v0.1.8：记录结束（无论行程是否够长保存）都关闭常亮。
     await _setKeepScreenOn(false);
     if (pts.length < 10) {
@@ -1501,7 +1579,13 @@ class _HomePageState extends State<HomePage>
     // 位移/缩放/圆角由同一动画值同步驱动；AnimatedBuilder 的 child 参数
     // 缓存主界面，动画帧不再重建地图/轨迹/G 图（只做变换），避免重活拖帧。
     // 只改菜单这一处，页面切换、倒计时等节奏不动。
-    const menuW = 280.0;
+    // M4：左拉菜单宽随屏宽收窄（320dp 屏上取屏宽 85%，其余 280），
+    // 与 _buildMenuPanel 里的面板宽取同值，保持面板与位移一致；
+    // MediaQuery 宽度不可用（≤0，如测试里被覆盖的 MediaQuery）时回落到 280。
+    final screenW = MediaQuery.of(context).size.width;
+    final menuW = screenW <= 0
+        ? 280.0
+        : (screenW * 0.85 < 280.0 ? screenW * 0.85 : 280.0);
     return AnimatedBuilder(
       animation: _menuAnim,
       builder: (_, child) {
@@ -1555,8 +1639,8 @@ class _HomePageState extends State<HomePage>
     final bottomInset = MediaQuery.of(context).padding.bottom;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         // v1.0.2 顶部按钮去边框：无圆形外框/圆形背景块的纯图标按钮，
         // 图标保留、点击区 44×44（SizedBox 定死，不用 GlassButton 的圆底）。
         leading: SizedBox(
@@ -1653,10 +1737,15 @@ class _HomePageState extends State<HomePage>
     // inset 或药丸遮挡：SafeArea 已处理系统 inset，药丸随主界面右移、
     // 并不压在菜单上；也不是 ListTile 本身不换行——它在 280px 内会换行，
     // 只是之前从没拿到过 280px 的约束。
-    // 修法：面板定宽 280（与主界面右移量 menuW 一致），副标题在 280px
+    // 修法：面板宽与主界面右移量同值（280，窄屏取屏宽 85%），副标题在面板宽内
     // 内自动换行，列表本身已是 ListView（可滚动），小屏与大字体下
     // 最后一项也可滚出来，不再被裁切。
-    const menuW = 280.0;
+    // M4：与 build 里主界面右移量取同值（320dp 屏上 272，其余 280）；
+    // MediaQuery 宽度不可用（≤0）时回落到 280。
+    final screenW = MediaQuery.of(context).size.width;
+    final menuW = screenW <= 0
+        ? 280.0
+        : (screenW * 0.85 < 280.0 ? screenW * 0.85 : 280.0);
     return SizedBox(
       width: menuW,
       child: Material(
@@ -1793,15 +1882,20 @@ class _HomePageState extends State<HomePage>
     // 拉取失败重试入口逻辑一律不动，只是位置上移：重试入口跟天气条
     // 一起移到模式行上方。v0.1.4 的模式图标正下方切换已删，
     // 不要再放回去；天气点按进独立天气页。
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
-        child: WeatherStrip(segments: _weatherSegments, onTap: _openWeatherPage),
-      ),
-      // v0.1.9：拉取失败才出现的重试入口（加载中与已有天气时不出现）。
-      // v1.0.6：跟天气条一起移到模式行上方，逻辑不动。
-      if (weatherFailed && weather == null)
-        Padding(
+    final weatherStrip = Padding(
+      // v1.4.2：顶栏改半透 + 主框架 extendBodyBehindAppBar，顶部叠加
+      // 状态栏 + AppBar 高，天气条静止时才不会藏进顶栏后（横竖屏共用）。
+      padding: EdgeInsets.fromLTRB(16, 6 + appBarTopInset(context), 16, 8),
+      child: WeatherStrip(segments: _weatherSegments, onTap: _openWeatherPage),
+    );
+    // 横屏：固定 Column 会溢出（天气条 + 模式行 + 切换行 + 128 大方块
+    // + 底部留白 ≈ 400，高于横屏可用高约 304），改整页滚动、
+    // PageView 给定高 220；竖屏保持原结构（Expanded PageView +
+    // 大方块贴底）。各段内容、回调全不动，只改组装方式。
+    // v0.1.9：拉取失败才出现的重试入口（加载中与已有天气时不出现）。
+    // v1.0.6：跟天气条一起移到模式行上方，逻辑不动。
+    final retryEntry = (weatherFailed && weather == null)
+        ? Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
           child: Align(
             alignment: Alignment.centerLeft,
@@ -1811,25 +1905,51 @@ class _HomePageState extends State<HomePage>
               onPressed: _retryWeather,
             ),
           ),
-        ),
+        )
+        : const SizedBox.shrink();
+    final modePageView = PageView(
+      controller: _modeController,
+      onPageChanged: (i) => rec.setMode(TripMode.values[i]),
+      children: [for (final _ in TripMode.values) _buildIdleHome()],
+    );
+    if (MediaQuery.of(context).orientation == Orientation.landscape) {
+      return SingleChildScrollView(
+        // v1.4.2：显式零 padding——不吃主框架 extendBodyBehindAppBar
+        // 带来的 MediaQuery 顶垫，顶垫只由 weatherStrip 的一处叠加承担，
+        // 否则横屏顶部会多出一倍空隙。
+        padding: EdgeInsets.zero,
+        child: Column(children: [
+          weatherStrip,
+          retryEntry,
+          _buildModeSwitcher(),
+          SizedBox(height: 220, child: modePageView),
+          _buildSurfaceSwitch(),
+          _homeBottomButtons(),
+        ]),
+      );
+    }
+    return Column(children: [
+      weatherStrip,
+      retryEntry,
       _buildModeSwitcher(),
-      Expanded(
-        child: PageView(
-          controller: _modeController,
-          onPageChanged: (i) => rec.setMode(TripMode.values[i]),
-          children: [for (final _ in TripMode.values) _buildIdleHome()],
-        ),
-      ),
+      Expanded(child: modePageView),
       _buildSurfaceSwitch(),
-      // v1.0.6：只修首页大方块贴底回归。首页是固定 Column（非滚动页），
-      // v1.0.5 删掉主框架 navSafe 后大方块直接贴底边、与悬浮药丸重叠。
-      // 只给大方块外层 Padding 加底部留白，不把主框架 Positioned.fill
-      // 的底部 padding 加回去，不动滚动页（我的页/记录页仍从药丸下方
-      // 划过、透过毛玻璃可见）。
-      // 底部留白 = 药丸高 56 + 药丸底部 12 + 系统底部 inset + 间隙 12
-      //          = 80 + MediaQuery.of(context).padding.bottom（实时算，
-      //            不写死固定数）；大方块本身 128 高、圆角、内容、逻辑不动。
-      Padding(
+      _homeBottomButtons(),
+    ]);
+  }
+
+  /// 首页底部大方块（标定 / 开始记录）。
+  /// v1.0.4：首页性能测试入口卡已删，入口只在左拉菜单（红字加粗）。
+  Widget _homeBottomButtons() {
+    // v1.0.6：只修首页大方块贴底回归。首页竖屏是固定 Column（非滚动页），
+    // v1.0.5 删掉主框架 navSafe 后大方块直接贴底边、与悬浮药丸重叠。
+    // 只给大方块外层 Padding 加底部留白，不把主框架 Positioned.fill
+    // 的底部 padding 加回去，不动滚动页（我的页/记录页仍从药丸下方
+    // 划过、透过毛玻璃可见）。横屏时本页整页滚动，留白照旧。
+    // 底部留白 = 药丸高 56 + 药丸底部 12 + 系统底部 inset + 间隙 12
+    //          = 80 + MediaQuery.of(context).padding.bottom（实时算，
+    //            不写死固定数）；大方块本身 128 高、圆角、内容、逻辑不动。
+    return Padding(
         padding: EdgeInsets.fromLTRB(16, 4, 16, kPillNavHeight + 12 + MediaQuery.of(context).padding.bottom + 12),
         child: BigActionButtons(
           calibrationState: rec.waitingCalibration
@@ -1846,9 +1966,7 @@ class _HomePageState extends State<HomePage>
           // v0.1.5：赛道模式下开始记录大方块右上角方格旗角标。
           showTrackBadge: trackMode && rec.mode != TripMode.bike,
         ),
-      ),
-      // v1.0.4：首页性能测试入口卡已删，入口只在左拉菜单（红字加粗）。
-    ]);
+      );
   }
 
   void _showCalibrationSheet() {
@@ -2018,9 +2136,23 @@ class _HomePageState extends State<HomePage>
             if (mounted) setState(() {});
           },
           onTogglePublic: () async {
-            await store.updateTripSocial(m.id, isPublic: !m.isPublic);
+            final nt = await store.updateTripSocial(m.id, isPublic: !m.isPublic);
             trips = await store.loadIndex();
             if (mounted) setState(() {});
+            // 已上传的行程改公开标记后重新发布（搬桶 + 改云端行）；
+            // 没上传过的下次上传时按新标记走对应桶。
+            if (nt != null &&
+                CloudService.instance.queueStatusFor(m.id) ==
+                    CloudUploadStatus.done) {
+              final r = await CloudService.instance.republishTrip(nt);
+              if (mounted) {
+                showAppNotice(
+                  context,
+                  r.message,
+                  r.ok ? AppNoticeKind.success : AppNoticeKind.error,
+                );
+              }
+            }
           },
         );
     return MyPage(
@@ -2037,6 +2169,21 @@ class _HomePageState extends State<HomePage>
         if (r.avatarPath != null) appPrefs.avatarPath = r.avatarPath;
         await appPrefs.save();
         if (mounted) setState(() {});
+        // 公开资料同步：昵称/简介写 profiles 表，头像传公开桶；
+        // 本机资料已存，云端失败只报提示、不回滚本机。
+        // 未配置云端时不弹提示（本机保存即预期行为，云端卡片会说明）。
+        final pr = await CloudService.instance.saveProfile(
+          nickname: r.username,
+          bio: r.bio,
+          avatarLocalPath: r.avatarPath,
+        );
+        if (mounted && !pr.notConfigured) {
+          showAppNotice(
+            context,
+            pr.message,
+            pr.ok ? AppNoticeKind.success : AppNoticeKind.error,
+          );
+        }
       },
       onPickAvatar: () async => await Native.pickFile('image'),
       onShareInvite: _shareInvite,
@@ -2251,7 +2398,18 @@ class _HomePageState extends State<HomePage>
   }
 
   void _openTrackSettings() {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const TrackSettingsPage()));
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => TrackSettingsPage(
+                  onChanged: (ts) {
+                    if (mounted) {
+                      setState(() => _showTrackDelta = ts.showDelta);
+                    }
+                  },
+                  onOpenDeviceCenter: _openDeviceCenter,
+                  onOpenSensorCalibration: _openSensorCalibration,
+                )));
   }
 
   void _openLocationSettings() {
@@ -2671,7 +2829,11 @@ class _HomePageState extends State<HomePage>
       isTrack: isTrackPage,
       hasCrossedStartLine: hasCrossedStartLine,
     );
-    return Column(children: [
+    final topWidgets = <Widget>[
+      // v1.4.2：顶栏改半透 + 主框架 extendBodyBehindAppBar，首位占位
+      // 状态栏 + AppBar 高，天气条 / GPS 徽标静止时才不会藏进顶栏后
+      //（街道 / 赛道、横 / 竖屏四种组合共用此一处）。
+      SizedBox(height: appBarTopInset(context)),
       // v1.2.17：赛道模式隐藏顶部天气条容器（整块不渲染）；街道模式
       // 保留原样。GpsSourceBadge 在其下原样原位保留。
       if (!isTrackPage)
@@ -2771,8 +2933,11 @@ class _HomePageState extends State<HomePage>
       // 内容原样不动（赛道 SingleChildScrollView、街道 Recording3dMap），
       // 第 1 页为实时地图 RecordingMapPage（只看不操作）。
       // GpsSourceBadge、天气条、赛道旗标头行在 PageView 之外原样原位。
-      Expanded(
-        child: PageView(
+    ];
+    // 横屏分栏：下面三段（PageView / 页指示点 / 底部面板）先建成
+    // 局部变量，末尾按方向组装——竖屏保持原 Column 结构，横屏
+    // 改左右分栏。内容、顺序、回调全不动，只改组装方式。
+    final pageViewWidget = PageView(
           controller: _recMapPageController,
           onPageChanged: (i) {
             if (_recMapPageIndex != i) setState(() => _recMapPageIndex = i);
@@ -2845,6 +3010,7 @@ class _HomePageState extends State<HomePage>
                         timerPaused: (timer?.isPaused ?? false) ||
                             rec.state == RecState.paused,
                         sectorDeltasMs: sectorDeltasMs,
+                        showDelta: _showTrackDelta,
                         sectorTimesMs: completedTimes,
                         currentSectorIndex: currentSectorIndex,
                         liveDeltaMs: liveDelta,
@@ -2904,6 +3070,8 @@ class _HomePageState extends State<HomePage>
                 photoPoints: livePhotoPoints,
                 is3d: appPrefs.recordingMap3d,
                 onModeChanged: (v) => appPrefs.setRecordingMap3d(v),
+                initialPitchDeg: appPrefs.recordingMapPitch,
+                onPitchChanged: (v) => appPrefs.setRecordingMapPitch(v),
                 zoom: mapZoom,
                 onZoomChanged: (z) => setState(() => mapZoom = z),
                 headingUp: mapHeadingUp,
@@ -2946,10 +3114,9 @@ class _HomePageState extends State<HomePage>
                   : '用时 ${fmtDur(rec.elapsedMs)} · 里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km',
             ),
           ],
-        ),
-      ),
+        );
       // v1.3.2：页指示点（计时 / 地图），可点切换。
-      Padding(
+      final pageTabs = Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -2959,14 +3126,21 @@ class _HomePageState extends State<HomePage>
             _recMapPageTab(1, '地图'),
           ],
         ),
-      ),
+      );
       // v1.0.2 记录页底部面板底色统一为卡片色 #1E1E1E（仅改色，不改结构/逻辑）。
       // v1.3.2：底部按钮只在计时页（第 0 页）显示，地图页不显示操作区。
-      if (_recMapPageIndex == 0)
-        Container(
-        padding: const EdgeInsets.all(12),
-        color: CardStyle.cardColor,
-        child: Column(children: [
+      // 横屏时底部面板不包 Flexible（Flexible 只能是 Flex 的直接子级），
+      // 只留可滚动内容容器，末尾按方向包 Flexible 或定宽 SizedBox。
+      final bottomPanelWidget = Container(
+            color: CardStyle.cardColor,
+            child: SingleChildScrollView(
+              // v1.4.2：显式零 padding——不吃主框架 extendBodyBehindAppBar
+              // 带来的 MediaQuery 顶垫，否则底部面板顶部会多出一段空隙。
+              padding: EdgeInsets.zero,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                color: CardStyle.cardColor,
+                child: Column(children: [
           // 赛道面板不用街道的速度/G 值区，只留标记/暂停/结束。
           if (!isTrackPage) ...[
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2983,6 +3157,8 @@ class _HomePageState extends State<HomePage>
                   Text(
                     '功率 ${rec.powerW == null ? '—' : '${rec.powerW!.toStringAsFixed(0)}W${rec.powerEstimated ? '（估算）' : ''}'} · 踏频 ${rec.cadenceRpm == null ? '未接入' : '${rec.cadenceRpm!.toStringAsFixed(0)} rpm'} · 心率 ${rec.heartRate ?? '—'}',
                     style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
               ]),
             ),
@@ -3062,7 +3238,43 @@ class _HomePageState extends State<HomePage>
           const SizedBox(height: 4),
           Text(rec.calibrationNote, style: const TextStyle(color: Colors.white54, fontSize: 11)),
         ]),
-      ),
+              ),
+            ),
+          );
+    // ---- 按方向组装（竖屏原样 / 横屏左右分栏）----
+    // 横屏（800×360 这类）：左右分栏。左侧 = 地图/计时 PageView
+    // + 页指示点；右侧 = 底部操作区（定宽、可纵向滚动）；地图页
+    // （第 1 页）不显示操作区，地图占满宽。竖屏：保持原 Column
+    // 结构不动（Expanded PageView + 指示点 + Flexible 底部面板）。
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    if (isLandscape) {
+      // 右栏宽取屏宽 42%，夹在 300~380：800 宽屏上 336，窄横屏
+      // 上不低于 300（速度 44 号字 + 110 G 圆仍放得下），左侧
+      // 地图/计时区至少留约 340。
+      final panelW =
+          (MediaQuery.of(context).size.width * 0.42).clamp(300.0, 380.0);
+      return Column(children: [
+        ...topWidgets,
+        Expanded(
+          child: Row(children: [
+            Expanded(
+              child: Column(children: [
+                Expanded(child: pageViewWidget),
+                pageTabs,
+              ]),
+            ),
+            if (_recMapPageIndex == 0)
+              SizedBox(width: panelW, child: bottomPanelWidget),
+          ]),
+        ),
+      ]);
+    }
+    return Column(children: [
+      ...topWidgets,
+      Expanded(child: pageViewWidget),
+      pageTabs,
+      if (_recMapPageIndex == 0) Flexible(child: bottomPanelWidget),
     ]);
   }
 
@@ -3123,7 +3335,9 @@ class _HomePageState extends State<HomePage>
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(formatLapSectorTimes(lap),
-                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
                     ),
                 ],
               ),
@@ -3228,7 +3442,7 @@ class _HomePageState extends State<HomePage>
       child: Column(children: [
         // 分区一：标题 + 分析入口。
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: EdgeInsets.fromLTRB(16, 12 + appBarTopInset(context), 16, 4),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('行程记录',
                 style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
@@ -3418,9 +3632,10 @@ class _GPageState extends State<GPage> {
     final trail = rec.gHistory.where((g) => now - g.timeMs <= 5000).toList();
     final mag = math.sqrt(rec.smoothLong * rec.smoothLong + rec.smoothLat * rec.smoothLat);
     return Scaffold(
-      appBar: AppBar(title: const Text('G 值实时')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('G 值实时')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
         child: Column(children: [
           GCirlce(
             longG: rec.smoothLong,
@@ -3815,7 +4030,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
   @override
   Widget build(BuildContext context) {
     final t = trip;
-    if (t == null) return Scaffold(appBar: AppBar(title: const Text('行程详情')), body: const Center(child: CircularProgressIndicator()));
+    if (t == null) return Scaffold(extendBodyBehindAppBar: true, appBar: DtAppBar(title: const Text('行程详情')), body: const Center(child: CircularProgressIndicator()));
     final _fk = selectedScoreKey.isEmpty ? null : scoreKeyToEventKinds(selectedScoreKey);
     final _kinds = (_fk == null || _fk.isEmpty) ? null : _fk;
     final corners = t.events.where((e) => e.kind == 'corner' && (_kinds == null || _kinds.contains(e.kind))).toList()..sort((a, b) => b.peakLatG.abs().compareTo(a.peakLatG.abs()));
@@ -3851,7 +4066,8 @@ class _TripDetailPageState extends State<TripDetailPage> {
     final cads = t.points.where((p) => p.cadenceRpm != null).map((p) => p.cadenceRpm!).toList();
     final avgCad = cads.isEmpty ? 0.0 : cads.reduce((a, b) => a + b) / cads.length;
     return Scaffold(
-      appBar: AppBar(leading: GlassButton.back(onPressed: () => Navigator.pop(context)), title: Text('${t.mode.label}行程 · ${fmtDate(t.startMs)}')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(leading: GlassButton.back(onPressed: () => Navigator.pop(context)), title: Text('${t.mode.label}行程 · ${fmtDate(t.startMs)}')),
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // v0.1.3 详情页地图同步精细化（跟随关闭、北向上、源切换回调为空时内部切换）。
@@ -4176,6 +4392,23 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   () async {
                     final nt = await widget.store.updateTripSocial(t.id, isPublic: !t.isPublic);
                     if (nt != null && mounted) setState(() => trip = nt);
+                    // 已上传的行程改公开标记后重新发布（搬桶 + 改云端行）；
+                    // 没上传过的下次上传时按新标记走对应桶。
+                    if (nt != null &&
+                        CloudService.instance.queueStatusFor(t.id) ==
+                            CloudUploadStatus.done) {
+                      final r =
+                          await CloudService.instance.republishTrip(nt);
+                      if (mounted) {
+                        showAppNotice(
+                          context,
+                          r.message,
+                          r.ok
+                              ? AppNoticeKind.success
+                              : AppNoticeKind.error,
+                        );
+                      }
+                    }
                   },
                   selected: t.isPublic,
                 ),

@@ -27,6 +27,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'card_style.dart';
 
@@ -180,8 +181,8 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
     final vehicles = _library.vehicles;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         title: const Text('车辆档案'),
         actions: [
           Semantics(
@@ -194,7 +195,7 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
         children: [
           const Text(
             '行程油耗优先用所绑车辆的油耗，未绑定或未填时回退全局值。',
@@ -605,12 +606,12 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
     final editing = widget.existing != null;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         title: Text(editing ? '编辑车辆' : '新增车辆'),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
         children: [
           const Text(
             '除名称外全部可空。',
@@ -803,9 +804,10 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
     final measured = measuredConsumption(_logs);
     final intervals = measuredIntervals(_logs);
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.vehicle.name} · 加油记录')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: Text('${widget.vehicle.name} · 加油记录')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
         children: [
           Text(
             measured == null

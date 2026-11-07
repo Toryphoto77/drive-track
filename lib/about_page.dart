@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 
 import 'app_icon_choice.dart';
@@ -57,7 +58,7 @@ class AboutPage extends StatefulWidget {
     this.channelLabel = '正式版',
     this.displayFont = 'DriveTrackDisplay',
     this.updateConfig = const UpdateConfig.unconfigured(),
-    this.appIconKey = AppIconChoice.red,
+    this.appIconKey = AppIconChoice.steering,
     this.scrollToSafety = false,
     this.onOpenBackup,
   });
@@ -160,12 +161,13 @@ class _AboutPageState extends State<AboutPage> {
     final check = _check;
     final accent = CardStyle.accent(context);
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('关于'),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 24, 16, 32)),
         children: [
           // ---- 顶部一张有边框大卡：图标 + App 名 + 正式版胶囊 +
           // ---- 版本 / 包名 / 图标 / 开发者 / 数据存储（分行显示） ----
@@ -390,12 +392,13 @@ class DonationPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('打赏支持'),
       ),
-      body: const Padding(
-        padding: EdgeInsets.all(24),
+      body: Padding(
+        padding: EdgeInsets.fromLTRB(24, 24 + appBarTopInset(context), 24, 24),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('感谢支持', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           SizedBox(height: 12),

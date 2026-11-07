@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'card_style.dart';
 import 'cloud_auth_page.dart';
 import 'cloud_service.dart';
 import 'models.dart';
+import 'public_profile_page.dart';
 
 String _fmtDate(int ms) {
   final d = DateTime.fromMillisecondsSinceEpoch(ms);
@@ -24,17 +27,34 @@ class CloudPage extends StatefulWidget {
 
 class _CloudPageState extends State<CloudPage> {
   late Future<List<CloudTripRow>> _tripsFuture;
+  late Future<PublicProfile?> _ownProfileFuture;
+  final TextEditingController _otherUserIdCtrl = TextEditingController();
   bool _retryingAll = false;
 
   @override
   void initState() {
     super.initState();
     _tripsFuture = CloudService.instance.listCloudTrips();
+    _ownProfileFuture = _loadOwnProfile();
+  }
+
+  Future<PublicProfile?> _loadOwnProfile() async {
+    await CloudService.instance.initialized;
+    final id = CloudService.instance.currentUserId;
+    if (id == null || id.isEmpty) return null;
+    return CloudService.instance.fetchPublicProfile(id);
+  }
+
+  @override
+  void dispose() {
+    _otherUserIdCtrl.dispose();
+    super.dispose();
   }
 
   void _refresh() {
     setState(() {
       _tripsFuture = CloudService.instance.listCloudTrips();
+      _ownProfileFuture = _loadOwnProfile();
     });
   }
 
@@ -61,9 +81,10 @@ class _CloudPageState extends State<CloudPage> {
   Widget build(BuildContext context) {
     final svc = CloudService.instance;
     return Scaffold(
-      appBar: AppBar(title: const Text('云端')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('云端')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -110,6 +131,8 @@ class _CloudPageState extends State<CloudPage> {
                       _queueCard(svc),
                       const SizedBox(height: 12),
                       _cloudTripsCard(),
+                      const SizedBox(height: 12),
+                      _publicProfileCard(svc),
                     ],
                   );
                 },
@@ -146,6 +169,11 @@ class _CloudPageState extends State<CloudPage> {
                 ? '匿名登录无密码；账号只存在本机与云端，不收集手机号与邮箱。绑定邮箱后可升级为正式账号，行程不丢。'
                 : '退出后回到匿名账号；邮箱账号下的云端行程仍在，重新登录可见。',
             style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '个人页的用户名、简介、头像会同步到云端公开资料，他人打开你的公开资料页可见；邮箱只存本机，不会同步。',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -279,6 +307,9 @@ class _CloudPageState extends State<CloudPage> {
             ),
           ]),
           const SizedBox(height: 4),
+          const Text('设为公开并上传的行程，他人打开你的公开资料页可见；仅自己可见的行程只有你能看到。',
+              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          const SizedBox(height: 4),
           FutureBuilder<List<CloudTripRow>>(
             future: _tripsFuture,
             builder: (context, snap) {
@@ -307,7 +338,7 @@ class _CloudPageState extends State<CloudPage> {
                                   color: Colors.white, fontSize: 14),
                             ),
                             Text(
-                              '${(r.distanceM / 1000).toStringAsFixed(1)} km · ${(r.durationS ~/ 60)} 分钟 · 评分 ${r.score} · ${r.source == 'device' ? '外接设备' : '手机'}',
+                              '${(r.distanceM / 1000).toStringAsFixed(1)} km · ${(r.durationS ~/ 60)} 分钟 · 评分 ${r.score} · ${r.source == 'device' ? '外接设备' : '手机'}${r.isPublic ? ' · 公开' : ''}',
                               style: const TextStyle(
                                   color: Colors.white54, fontSize: 12),
                             ),
@@ -320,6 +351,109 @@ class _CloudPageState extends State<CloudPage> {
                 ],
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 公开资料区：自己的公开资料自查 + 按云端用户 ID 打开他人公开资料。
+  /// 没有用户发现/搜索入口：想看谁的资料，就让对方把云端页里的
+  /// “复制我的云端用户 ID”发过来，粘贴到下面打开。
+  Widget _publicProfileCard(CloudService svc) {
+    final myId = svc.currentUserId ?? '';
+    return DriveTrackCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('公开资料',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          FutureBuilder<PublicProfile?>(
+            future: _ownProfileFuture,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Text('正在加载…',
+                    style: TextStyle(color: Colors.white54, fontSize: 13));
+              }
+              final p = snap.data;
+              if (p == null) {
+                return const Text('还没同步过公开资料：去个人页编辑昵称、简介后保存即可同步。',
+                    style: TextStyle(color: Colors.white54, fontSize: 13));
+              }
+              return Text(
+                '我的公开资料：${p.nickname.isEmpty ? '未设置昵称' : p.nickname}'
+                '${p.bio.isEmpty ? '' : ' · ${p.bio}'}',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              );
+            },
+          ),
+          const SizedBox(height: 4),
+          const Text('昵称、简介、头像与公开行程所有人可见；想收回就把行程改回仅自己可见。',
+              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: myId.isEmpty
+                    ? null
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                PublicProfilePage(userId: myId),
+                          ),
+                        );
+                      },
+                child: const Text('查看我的公开资料页'),
+              ),
+              OutlinedButton(
+                onPressed: myId.isEmpty
+                    ? null
+                    : () async {
+                        await Clipboard.setData(
+                            ClipboardData(text: myId));
+                        if (context.mounted) {
+                          showAppNotice(context, '云端用户 ID 已复制',
+                              AppNoticeKind.success);
+                        }
+                      },
+                child: const Text('复制我的云端用户 ID'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _otherUserIdCtrl,
+            decoration: const InputDecoration(
+              labelText: '对方云端用户 ID',
+              hintText: '粘贴对方发来的云端用户 ID',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () {
+                final id = _otherUserIdCtrl.text.trim();
+                if (id.isEmpty) {
+                  showAppNotice(context, '请先输入对方云端用户 ID',
+                      AppNoticeKind.warning);
+                  return;
+                }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PublicProfilePage(userId: id),
+                  ),
+                );
+              },
+              child: const Text('打开他人公开资料'),
+            ),
           ),
         ],
       ),

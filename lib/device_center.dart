@@ -4,10 +4,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'blediy_gps.dart';
 import 'bt_gps_receiver.dart';
 import 'camera_connect_page.dart';
 import 'device_scan_card.dart';
+import 'gps_source.dart';
 import 'native.dart';
 import 'satellite_settings_page.dart';
 
@@ -416,6 +418,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   String? _notice;
   String? _permNotice;
   String? _connectedAddress;
+  // 已连接外置 GPS 的广播名（供共享状态显示用，见 _publishGpsStatus）。
+  String? _connectedName;
   // 本区唯一的连接通道：'ble' | 'spp'；null = 未连接。
   String? _connectedChannel;
   // 本区正在发起连接的地址：connected / sppConnected 事件只认它，
@@ -536,6 +540,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _connectedChannel = addr.isEmpty ? null : 'ble';
           _connectingAddress = null;
         });
+        _publishGpsStatus();
         final pending = _pendingSubscribe;
         if (pending != null && pending.address == addr) {
           await _doSubscribe(pending.address, pending.service, pending.tx);
@@ -550,6 +555,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _connectingAddress = null;
           _notice = '外接 GPS 已断开，行程定位已回落手机 GPS。';
         });
+        _connectedName = null;
+        _publishGpsStatus();
         _feed.reset();
       } else if (type == 'sppConnected') {
         final addr = (e['address'] ?? '').toString();
@@ -561,6 +568,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _subscribed = false;
           _notice = 'SPP 已连接，行程改用外接 GPS。';
         });
+        _publishGpsStatus();
       } else if (type == 'sppDisconnected') {
         if (_connectedChannel != 'spp') return;
         setState(() {
@@ -571,6 +579,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _connectingAddress = null;
           _notice = 'SPP 已断开（${e['reason'] ?? ''}），行程定位回落手机 GPS。';
         });
+        _connectedName = null;
+        _publishGpsStatus();
         _feed.reset();
       } else if (type == 'sppNmea') {
         final line = (e['line'] ?? '').toString();
@@ -637,6 +647,24 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     }
   }
 
+  /// 把本区连接状态同步到共享源（gps_source.dart 的
+  /// externalGpsStatus），供赛道设置页等处只读显示。唯一写入方
+  /// 在这里；状态只在内存里，不持久化。D1 这类二进制协议设备
+  /// binaryOnly 为 true：已连通但不出定位。
+  void _publishGpsStatus() {
+    final addr = _connectedAddress;
+    if (addr == null) {
+      updateExternalGpsStatus(ExternalGpsStatus.disconnected);
+      return;
+    }
+    updateExternalGpsStatus(ExternalGpsStatus(
+      connected: true,
+      deviceName: _connectedName ?? addr,
+      channel: _connectedChannel ?? 'ble',
+      binaryOnly: _profile.binaryProtocol,
+    ));
+  }
+
   /// 连新设备前若已连其它地址，先静默断开旧连接（单点状态）。
   Future<void> _disconnectCurrentQuietlyIfOther(String addr) async {
     if (_connectedAddress != null && _connectedAddress != addr) {
@@ -656,6 +684,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         _pendingSubscribe = null;
         _connectingAddress = null;
       });
+      _connectedName = null;
+      _publishGpsStatus();
     }
   }
 
@@ -826,6 +856,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   Future<void> _connectScanned(Map<String, dynamic> dev) async {
     final addr = (dev['address'] ?? '').toString();
     if (addr.isEmpty) return;
+    _connectedName = (dev['name'] ?? '').toString();
     if (!await _ensureBtPermissions()) return;
     await _disconnectCurrentQuietlyIfOther(addr);
     final uuids = _effectiveUuids;
@@ -901,6 +932,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   Future<void> _connectSppDevice(Map<String, dynamic> dev) async {
     final addr = (dev['address'] ?? '').toString();
     if (addr.isEmpty) return;
+    _connectedName = (dev['name'] ?? '').toString();
     if (!await _ensureBtPermissions()) return;
     await _disconnectCurrentQuietlyIfOther(addr);
     try {
@@ -994,6 +1026,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       _connectingAddress = null;
       _notice = '已断开外接 GPS，行程定位回落手机 GPS。';
     });
+    _connectedName = null;
+    _publishGpsStatus();
   }
 
   Future<void> _saveConnectedAsSaved() async {
@@ -1571,8 +1605,8 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
@@ -1580,7 +1614,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         title: const Text('外接设备中心', style: TextStyle(color: Colors.white)),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
         children: [
           if (_notice != null)
             Container(

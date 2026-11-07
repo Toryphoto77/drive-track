@@ -12,10 +12,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const DriveTrackApp());
-    // v0.1.9：启动页约 1.2 秒动画跑完才进首页；用定长 pump 推进，
+    // v0.1.9：启动页约 1.5 秒动画跑完才进首页；用定长 pump 推进，
     // 不用 pumpAndSettle（权限引导页的 CircularProgressIndicator
     // 会无限动画，pumpAndSettle 永远等不到 settle）。
-    await tester.pump(const Duration(milliseconds: 1300));
+    await tester.pump(const Duration(milliseconds: 1600));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     // 顶部居中加粗展示字体 logo（v0.1.2 起为 DriveTrackDisplay 替代衬线体）

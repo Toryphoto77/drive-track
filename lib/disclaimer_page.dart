@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'card_style.dart';
 import 'glass_button.dart';
 
@@ -32,12 +33,13 @@ class DisclaimerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('免责声明'),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 24, 16, 32)),
         children: [
           const Text(
             '免责声明',

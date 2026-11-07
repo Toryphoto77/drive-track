@@ -32,6 +32,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'satellite_tiles.dart';
 import 'track_library.dart';
@@ -900,9 +901,9 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         title: Text('编辑：${widget.package.nameCn}'),
-        backgroundColor: const Color(0xFF121212),
         actions: [
           IconButton(
             icon: const Icon(Icons.undo),
@@ -919,7 +920,7 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 0)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1939,7 +1940,7 @@ class _SatelliteTiles extends StatelessWidget {
             child: Image.network(
               satelliteTileUrl(t.z, t.x, t.y),
               key: ValueKey('sat-${t.z}-${t.x}-${t.y}'),
-              headers: const {'User-Agent': 'DriveTrack/1.4.1'},
+              headers: const {'User-Agent': 'DriveTrack/1.5.0'},
               fit: BoxFit.fill,
               gaplessPlayback: true,
               errorBuilder: (_, _, _) {

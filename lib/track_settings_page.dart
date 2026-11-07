@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_bar_style.dart';
+import 'gps_source.dart';
 import 'native.dart';
 import 'track_timing.dart';
 import 'voice_service.dart';
@@ -75,6 +77,14 @@ class TrackSettings {
   /// 赛道图配色键，默认 'red'（见 [TrackColorSchemes.presets]）。
   final String trackColorKey;
 
+  /// 定位采样率（Hz）：10 / 20 / 25 三档，默认 25（DEXIAN D1 与
+  /// 自研硬件 NEO-M9N 最高都是 25Hz；Dragy 三档也是 10/20/25）。
+  /// 注意：目前只保存设置、暂未生效——采样率要等固件支持：
+  /// D1 走二进制协议、包格式待实测抓包才解析，自研硬件尚未组装
+  /// 调试；手机 GPS 采样率也不受本项控制。界面必须如实标注
+  /// “待固件支持”，不得谎称改了就生效。
+  final int sampleRateHz;
+
   const TrackSettings({
     required this.crossingRadiusM,
     required this.dwellThresholdSec,
@@ -84,6 +94,7 @@ class TrackSettings {
     required this.bestLapVibration,
     required this.showDelta,
     required this.trackColorKey,
+    required this.sampleRateHz,
   });
 
   static const defaults = TrackSettings(
@@ -95,6 +106,7 @@ class TrackSettings {
     bestLapVibration: true,
     showDelta: true,
     trackColorKey: 'red',
+    sampleRateHz: 25,
   );
 
   TrackSettings copyWith({
@@ -106,6 +118,7 @@ class TrackSettings {
     bool? bestLapVibration,
     bool? showDelta,
     String? trackColorKey,
+    int? sampleRateHz,
   }) =>
       TrackSettings(
         crossingRadiusM: (crossingRadiusM ?? this.crossingRadiusM)
@@ -119,12 +132,20 @@ class TrackSettings {
         bestLapVibration: bestLapVibration ?? this.bestLapVibration,
         showDelta: showDelta ?? this.showDelta,
         trackColorKey: trackColorKey ?? this.trackColorKey,
+        sampleRateHz: _snapSampleRate(sampleRateHz ?? this.sampleRateHz),
       );
+
+  /// 采样率只认 10 / 20 / 25 三档，其余值就近归档。
+  static int _snapSampleRate(int v) {
+    if (v <= 15) return 10;
+    if (v <= 22) return 20;
+    return 25;
+  }
 
   /// 本机存储键名（track_settings.json 的 JSON 键，固定不变）：
   /// crossing_radius_m / dwell_threshold_sec / dwell_speed_ms /
   /// sector_mode / best_lap_voice / best_lap_vibration / show_delta /
-  /// track_color。
+  /// track_color / sample_rate_hz。
   Map<String, dynamic> toJson() => {
         'crossing_radius_m': crossingRadiusM,
         'dwell_threshold_sec': dwellThresholdSec,
@@ -134,6 +155,7 @@ class TrackSettings {
         'best_lap_vibration': bestLapVibration,
         'show_delta': showDelta,
         'track_color': trackColorKey,
+        'sample_rate_hz': sampleRateHz,
       };
 
   static TrackSettings fromJson(Map<String, dynamic> j) => TrackSettings(
@@ -151,6 +173,8 @@ class TrackSettings {
         bestLapVibration: (j['best_lap_vibration'] as bool?) ?? true,
         showDelta: (j['show_delta'] as bool?) ?? true,
         trackColorKey: (j['track_color'] as String?) ?? 'red',
+        sampleRateHz: _snapSampleRate(
+            (j['sample_rate_hz'] as num?)?.toInt() ?? 25),
       );
 
   /// 给 LapTimer 构造用的阈值（record 解构，字段名与 LapTimer 构造参数一致）。
@@ -221,7 +245,21 @@ class TrackSettingsPage extends StatefulWidget {
   /// （LapTimer 构造后阈值不可改，需用新阈值重建计时器，见文末接线说明）。
   final ValueChanged<TrackSettings>? onChanged;
 
-  const TrackSettingsPage({super.key, this.initial, this.onChanged});
+  /// 外置 GPS 入口回调：总协调传推设备中心页的跳转（main.dart 的
+  /// _openDeviceCenter）。不传时入口只显示提示，不跳转、不伪造。
+  final VoidCallback? onOpenDeviceCenter;
+
+  /// IMU 标定入口回调：总协调传推传感器校准页的跳转（main.dart 的
+  /// _openSensorCalibration，需 Recorder）。不传时入口只显示提示。
+  final VoidCallback? onOpenSensorCalibration;
+
+  const TrackSettingsPage({
+    super.key,
+    this.initial,
+    this.onChanged,
+    this.onOpenDeviceCenter,
+    this.onOpenSensorCalibration,
+  });
 
   @override
   State<TrackSettingsPage> createState() => _TrackSettingsPageState();
@@ -257,11 +295,12 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('赛道模式设置')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('赛道模式设置')),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
               children: [
                 _section('圈速判定'),
                 ListTile(
@@ -368,6 +407,52 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                       ),
                   ],
                 ),
+                _section('外置设备与采样'),
+                _hardwareStatusTile(),
+                ListTile(
+                  leading: const Icon(Icons.satellite_alt),
+                  title: const Text('外置 GPS'),
+                  subtitle: Text(widget.onOpenDeviceCenter == null
+                      ? '从设置首页 → 设备中心进入，可扫描、连接外置 GPS 接收器'
+                      : '扫描、连接 DEXIAN D1 与其它外置 GPS 接收器'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: widget.onOpenDeviceCenter,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.sensors),
+                  title: const Text('IMU 标定（传感器校准）'),
+                  subtitle: Text(widget.onOpenSensorCalibration == null
+                      ? '从设置首页 → 传感器校准进入'
+                      : '静置校零、车头方向标定、罗盘 8 字提示。标定结果只保存在内存里，退出 App 后失效，下次使用前需重校。'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: widget.onOpenSensorCalibration,
+                ),
+                const SizedBox(height: 8),
+                const Text('定位采样率（待固件支持）',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                const Text(
+                  '仅保存设置，暂未生效：采样率要等固件支持——D1 走二进制协议，包格式待设备回来抓包确认后才解析；自研硬件尚未组装调试。当前仍按设备实际输出采样；手机 GPS 采样率不受本项控制。',
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final hz in [10, 20, 25])
+                      ChoiceChip(
+                        label: Text('$hz Hz'),
+                        selected: _s.sampleRateHz == hz,
+                        onSelected: (_) =>
+                            _apply(_s.copyWith(sampleRateHz: hz)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '自研硬件在研：ESP32-S3 + NEO-M9N（最高 25Hz）+ BMI088 + BMP390，车顶外壳已定型，尚未组装调试。',
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
                 const SizedBox(height: 24),
                 OutlinedButton(
                   onPressed: () => _apply(TrackSettings.defaults),
@@ -380,6 +465,39 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                 ),
               ],
             ),
+    );
+  }
+
+  /// 外置设备连接状态行：只读设备中心写入的共享状态
+  /// （gps_source.dart 的 externalGpsStatus），本页不自己猜。
+  /// 未连接 = 手机 GPS；D1（二进制）已连通也不出定位，仍用手机 GPS。
+  Widget _hardwareStatusTile() {
+    return ValueListenableBuilder<ExternalGpsStatus>(
+      valueListenable: externalGpsStatus,
+      builder: (context, st, _) {
+        final String title;
+        final String subtitle;
+        final IconData icon;
+        if (!st.connected) {
+          title = '未连接外置设备';
+          subtitle = '当前定位来源：手机 GPS。去设备中心扫描并连接外置 GPS。';
+          icon = Icons.gps_not_fixed;
+        } else if (st.binaryOnly) {
+          title = '已连接 ${st.deviceName}';
+          subtitle = '仅连接，不出定位：二进制包格式待实测确认。当前定位来源仍是手机 GPS。';
+          icon = Icons.bluetooth_connected;
+        } else {
+          title = '已连接 ${st.deviceName}';
+          subtitle =
+              '通道：${st.channel == 'spp' ? '经典蓝牙 SPP' : 'BLE'}；行程定位优先用外接设备，5 秒无新定位自动回落手机 GPS。';
+          icon = Icons.satellite_alt;
+        }
+        return ListTile(
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: Text(subtitle),
+        );
+      },
     );
   }
 
@@ -411,3 +529,15 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
 /// BestLapNotifier.notifyBestLap(settings: settings, voice: voice, lap: best)。
 /// Delta 显示：showDelta 为 false 时隐藏 timer.currentDeltaMs 一行，
 /// 不改动计时逻辑本身。
+///
+/// ---- 外置设备与采样接线（总协调） ----
+/// - TrackSettingsPage 构造时传 onOpenDeviceCenter: _openDeviceCenter
+///   与 onOpenSensorCalibration: _openSensorCalibration（main.dart
+///   已有这两个方法，设置首页也在用同一入口），本页的两个入口即
+///   可跳转；不传时入口只显示“从设置首页进入”的提示。
+/// - 连接状态不由本页维护：device_center.dart 的 ExternalGpsSection
+///   在连接 / 断开事件里写 gps_source.dart 的 externalGpsStatus，
+///   本页只监听显示。
+/// - sampleRateHz 目前只持久化到 track_settings.json，不接任何
+///   采样逻辑：D1 二进制包未解析、自研硬件未组装，固件支持后再由
+///   总协调接线；接线前不得去掉“待固件支持”的标注。

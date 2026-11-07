@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'package:flutter/services.dart';
 import 'models.dart';
@@ -351,8 +352,10 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
     final maxMs = _durationMs > 0 ? _durationMs : 10 * 60 * 1000;
     final events = _segmentEvents;
     return Scaffold(
-      appBar: AppBar(title: const Text('视频回顾')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('视频回顾')),
       body: SingleChildScrollView(
+        padding: withAppBarTopInset(context, EdgeInsets.zero),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // ---- 段切换 ----
           if (_videos.length > 1)
@@ -419,6 +422,8 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                         child: VideoMapGauge(
                           points: trip.points,
                           current: point,
+                          width: _gaugeWidth(context),
+                          height: _gaugeWidth(context) * 112 / 148,
                         ),
                       ),
                       Positioned(
@@ -630,6 +635,10 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
         child: Text(text,
             style: const TextStyle(color: Colors.white, fontSize: 13)),
       );
+
+  /// M5：回放地图仪表宽按屏宽比例缩放（窄屏/横屏不再占近半宽）。
+  double _gaugeWidth(BuildContext context) =>
+      math.min(148, MediaQuery.of(context).size.width * 0.36);
 
   /// v1.3.6：地图仪表按当前位置定位（默认右上，位于 HUD 时间条下方，
   /// 不遮 HUD；右下位于 G 值条对侧，同样不遮 HUD）。

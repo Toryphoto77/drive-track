@@ -14,6 +14,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'models.dart';
 import 'native.dart';
@@ -396,14 +397,14 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     };
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         title: const Text('赛道库'),
-        backgroundColor: const Color(0xFF121212),
       ),
       body: snap == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
               children: [
                 // 顶部：赛道库版本卡片（标题 + 当前版本 + 状态行 + 两个主按钮）。
                 // 显示的全部是本 App 真实数据：版本取 manifest 的 dataVersion，

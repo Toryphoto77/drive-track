@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 
+import 'app_icon_choice.dart';
+
 /// 与 Android 原生通道的唯一接口。零 pub 插件，全部走手写 Method/EventChannel。
 class Native {
   static const MethodChannel _m = MethodChannel('drivetrack/native');
@@ -217,13 +219,18 @@ class Native {
 
   /// v1.0.3：切换桌面启动图标 alias（见 AndroidManifest 的
   /// LauncherRed / LauncherRb17 / LauncherValkyrie / LauncherSteering /
-  /// LauncherCheckered）。原生侧用 DONT_KILL_APP，不在
+  /// LauncherCheckered；alias 定义一个不删，见 app_icon_choice.dart）。
+  /// 原生侧用 DONT_KILL_APP，不在
   /// 切换瞬间杀 App、不丢数据；部分厂商启动器刷新有延迟，见主题页
   /// 回落说明。返回 false = 原生切换未成功（选择本身仍已持久化，
   /// 下次冷启动会按持久化选择重新同步一次）。
+  /// 图标删减后：被删键（'red'/'rb17'/'valkyrie'/'blue'/'gray'）与非法键
+  /// 在 Dart 侧先经 AppIconChoice.normalize 折到 'steering' 再发原生，
+  /// 原生永远收不到被删键；MainActivity 里的旧映射仅作兜底保留。
   static Future<bool> setAppIcon(String key) async {
     try {
-      final r = await _m.invokeMethod('setAppIcon', {'icon': key});
+      final r = await _m.invokeMethod(
+          'setAppIcon', {'icon': AppIconChoice.normalize(key)});
       return r == true;
     } catch (_) {
       return false;

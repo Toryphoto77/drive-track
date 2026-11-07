@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'glass_button.dart';
 import 'native.dart';
 import 'recorder.dart';
@@ -131,14 +132,15 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
   Widget build(BuildContext context) {
     final rec = _rec;
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('传感器校准'),
       ),
       body: AnimatedBuilder(
         animation: rec,
         builder: (_, __) => ListView(
-          padding: const EdgeInsets.all(16),
+          padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
           children: [
             _stepper(),
             const SizedBox(height: 16),

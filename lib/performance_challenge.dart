@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'native.dart';
 import 'recorder.dart';
 
@@ -586,8 +587,8 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
         _engine.phase == ChallengePhase.running;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
@@ -595,7 +596,7 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
         title: const Text('性能测试', style: TextStyle(color: Colors.white)),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
         children: [
           // 顶部第一块：安全提示（第 7 项硬性要求）。
           Container(

@@ -38,10 +38,19 @@
 // Overpass 拉不到时图层优雅缺失（只显示路网），高德兜底只覆盖主
 // 干路、不提供水体与建筑。
 //
-// 视角：跟随车头的 3D 俯视透视，俯仰角约 60-70 度（地平线在画面
-// 约 16% 高处、车标在约 72% 高处，近大远小）；车头朝上为默认跟随
-// 模式（headingUp=true 时场景按车头朝向旋转，车标恒朝上；
+// 视角：跟随车头的 3D 俯视透视，俯仰角可调（默认 65°，地平线在画面
+// 约 16% 高处、车标在约 72% 高处，近大远小）；右上角角度按钮点按
+// 循环 65° → 50° → 35° → 65°，角度越小越接近俯视、透视越弱，
+// 角度越大看得越平、透视越强。车头朝上为默认跟随模式
+// （headingUp=true 时场景按车头朝向旋转，车标恒朝上；
 // headingUp=false 时北向上，车标按朝向旋转）。
+// 俯仰数学见 lib/perspective_projection.dart（默认 65° 与旧值一字
+// 相同）；车标按俯仰角纵向压扁（65° 时 0.90，与旧值一致）+ 朝向锥
+// 与阴影随角度变化，接近高德导航 3D 视角的感觉——但这仍是
+// CustomPainter 伪 3D（地面透视 + 车标压扁/挤出/阴影），不是带
+// 网格与材质的真 3D 模型实时渲染：离线构建拿不到 3D 模型渲染包，
+// 本文件不假装它是真 3D。2D 俯视是同一场景去掉透视的俯视投影，
+// 不是瓦片地图。
 // 2D 俯视是同一场景去掉透视的俯视投影，不是瓦片地图。
 //
 // 性能：投影是 O(n) 的简单三角运算；绘制前按屏幕距离抽稀
@@ -1029,6 +1038,14 @@ class Recording3dMap extends StatefulWidget {
   // 外层已按朝向旋转，避免双重旋转）；为空时回落旧三角车体。
   final CustomPainter? vehicleMarkerPainter;
 
+  /// 初始俯仰角（度，默认 65°，与旧视角一字相同）；点角度按钮后
+  /// 由本组件内部状态接管，不回写调用方（调用方如需持久化，
+  /// 用 [onPitchChanged] 接）。
+  final double initialPitchDeg;
+
+  /// 俯仰角变化回调（点角度按钮时调，不传则只改本组件内部视角）。
+  final ValueChanged<double>? onPitchChanged;
+
   const Recording3dMap({
     super.key,
     required this.centerLat,
@@ -1045,6 +1062,8 @@ class Recording3dMap extends StatefulWidget {
     required this.accentColor,
     required this.vehicleColor,
     this.vehicleMarkerPainter,
+    this.initialPitchDeg = perspectiveDefaultPitchDeg,
+    this.onPitchChanged,
   });
 
   @override
@@ -1071,6 +1090,18 @@ class _Recording3dMapState extends State<Recording3dMap> {
   double? _layerFetchLat;
   double? _layerFetchLon;
   DateTime? _layerLastAttempt;
+  // 俯仰角（度，内部状态，默认 65° 与旧视角一致）：点右上角角度
+  // 按钮循环 65° → 50° → 35° → 65°；只在 3D 模式下有意义。
+  late double _pitchDeg = widget.initialPitchDeg;
+
+  /// 俯仰角循环档位（度）：65° 默认（旧视角）→ 50° → 35°（近俯视）。
+  static const _pitchSteps = [65.0, 50.0, 35.0];
+
+  void _cyclePitch() {
+    final next = _pitchSteps[(_pitchSteps.indexOf(_pitchDeg) + 1) % _pitchSteps.length];
+    setState(() => _pitchDeg = next);
+    widget.onPitchChanged?.call(next);
+  }
 
   @override
   void initState() {
@@ -1232,6 +1263,7 @@ class _Recording3dMapState extends State<Recording3dMap> {
             is3d: widget.is3d,
             headingUp: widget.headingUp,
             zoom: widget.zoom,
+            pitchDeg: _pitchDeg,
             accentColor: widget.accentColor,
             vehicleColor: widget.vehicleColor,
             vehicleMarkerPainter: widget.vehicleMarkerPainter,
@@ -1256,35 +1288,56 @@ class _Recording3dMapState extends State<Recording3dMap> {
           ),
         ),
       ),
-      // 右上角控制：指南针 / 缩放 / 3D-2D 切换（回退开关）。
+      // 右上角控制：指南针 / 缩放 / 3D-2D 切换（回退开关）/ 俯仰角。
+      // M3：地图矮时（横屏记录页）控制列改横排，避免底部按钮被裁。
       Positioned(
         top: 12,
         right: 12,
-        child: Column(children: [
-          _ctlButton(
-            onTap: widget.onCompassTap,
-            child: Transform.rotate(
-              angle: widget.headingUp ? -widget.headingDeg * math.pi / 180 : 0,
-              child: const Icon(Icons.navigation, size: 20, color: Colors.white),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _ctlButton(
-            onTap: () => widget.onZoomChanged((widget.zoom + 1).clamp(12, 19)),
-            child: const Icon(Icons.add, size: 20, color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          _ctlButton(
-            onTap: () => widget.onZoomChanged((widget.zoom - 1).clamp(12, 19)),
-            child: const Icon(Icons.remove, size: 20, color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          _ctlButton(
-            onTap: () => widget.onModeChanged(!widget.is3d),
-            child: Text(widget.is3d ? '3D' : '2D',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-        ]),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxHeight < 220;
+            final gap = SizedBox(width: compact ? 8 : 0, height: compact ? 0 : 8);
+            return Flex(
+              direction: compact ? Axis.horizontal : Axis.vertical,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ctlButton(
+                  onTap: widget.onCompassTap,
+                  child: Transform.rotate(
+                    angle: widget.headingUp ? -widget.headingDeg * math.pi / 180 : 0,
+                    child: const Icon(Icons.navigation, size: 20, color: Colors.white),
+                  ),
+                ),
+                gap,
+                _ctlButton(
+                  onTap: () => widget.onZoomChanged((widget.zoom + 1).clamp(12, 19)),
+                  child: const Icon(Icons.add, size: 20, color: Colors.white),
+                ),
+                gap,
+                _ctlButton(
+                  onTap: () => widget.onZoomChanged((widget.zoom - 1).clamp(12, 19)),
+                  child: const Icon(Icons.remove, size: 20, color: Colors.white),
+                ),
+                gap,
+                _ctlButton(
+                  onTap: () => widget.onModeChanged(!widget.is3d),
+                  child: Text(widget.is3d ? '3D' : '2D',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+                // 俯仰角：仅 3D 模式显示，点按循环 65° → 50° → 35°；
+                // 2D 俯视下无俯仰可言，不显示。
+                if (widget.is3d) ...[
+                  gap,
+                  _ctlButton(
+                    onTap: _cyclePitch,
+                    child: Text('${_pitchDeg.toInt()}°',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
       ),
       // 左下角：风格化声明小字。
       const Positioned(
@@ -1333,6 +1386,7 @@ class _Recording3dPainter extends CustomPainter {
   /// 拉取的路网肉眼可分，避免把 1~2 公里外邻格的路当成本地路。
   final bool roadsDimmed;
   final bool is3d, headingUp;
+  final double pitchDeg;
   final Color accentColor, vehicleColor;
   final CustomPainter? vehicleMarkerPainter;
 
@@ -1348,6 +1402,7 @@ class _Recording3dPainter extends CustomPainter {
     required this.is3d,
     required this.headingUp,
     required this.zoom,
+    this.pitchDeg = perspectiveDefaultPitchDeg,
     required this.accentColor,
     required this.vehicleColor,
     this.vehicleMarkerPainter,
@@ -1375,10 +1430,11 @@ class _Recording3dPainter extends CustomPainter {
         right: right,
         pxPerM: pxPerM,
         is3d: is3d,
+        pitchDeg: pitchDeg,
       );
 
   double _factorFor(double forward) =>
-      perspectiveFactor(forward, is3d: is3d);
+      perspectiveFactor(forward, is3d: is3d, pitchDeg: pitchDeg);
 
   Color _speedColor(double kmh) {
     final t = (kmh / 120).clamp(0.0, 1.0);
@@ -1561,9 +1617,10 @@ class _Recording3dPainter extends CustomPainter {
     final pxPerM = (is3d ? size.width / 170 : size.width / 300) * zoomScale;
 
     // 远处地平线微光 + 风格化暗色光晕（固定屏幕位置的装饰，
-    // 不是真实建筑；透视模式下只画在地平线附近）。
+    // 不是真实建筑；透视模式下只画在地平线附近，地平线位置
+    // 随俯仰角变）。
     if (is3d) {
-      final horizonY = size.height * 0.16;
+      final horizonY = size.height * perspectiveHorizonFractionForPitch(pitchDeg);
       final glow = Paint()
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
@@ -1730,18 +1787,25 @@ class _Recording3dPainter extends CustomPainter {
 
     // 场景中心车标：阴影 + 朝向锥 + 车体（朝向跟随 headingDeg；
     // headingUp 时场景已旋转故车标恒朝上，否则按朝向旋转）。
-    // v1.2.0：车标盒不再固定 56px——3D 时 52px 且纵向 0.90 压扁
-    // （贴合透视地面、前大后小方向与场景一致），2D 时 48px 方形；
-    // 盒子缩小 + 朝向锥减淡（0.25 -> 0.18），轨迹先画、车标后画
-    // 但不遮挡轨迹。画笔调用约定不变（headingDeg=0，外层旋转）。
-    final veh = is3d ? Offset(size.width / 2, size.height * 0.72) : Offset(size.width / 2, size.height / 2);
+    // v1.2.0：车标盒不再固定 56px——3D 时 52px 且按俯仰角压扁
+    // （65° 时纵向 0.90，与旧值一致；角度越小越接近方形），
+    // 2D 时 48px 方形；盒子缩小 + 朝向锥减淡（0.25 -> 0.18），
+    // 轨迹先画、车标后画但不遮挡轨迹。画笔调用约定不变
+    // （headingDeg=0，外层旋转；画笔 pitchDeg=0，压扁只做一次）。
+    final veh = is3d
+        ? Offset(size.width / 2,
+            size.height * perspectiveVehicleFractionForPitch(pitchDeg))
+        : Offset(size.width / 2, size.height / 2);
     final markerSize = is3d ? 52.0 : 48.0;
     final shadow = Paint()..color = Colors.black.withValues(alpha: 0.5);
     canvas.drawOval(Rect.fromCenter(center: Offset(veh.dx + 3, veh.dy + 12), width: 40, height: 14), shadow);
     canvas.save();
     canvas.translate(veh.dx, veh.dy);
     canvas.rotate(headingUp ? 0 : headingDeg * math.pi / 180);
-    if (is3d) canvas.scale(1.04, 0.90);
+    if (is3d) {
+      final (msx, msy) = perspectiveMarkerScale(pitchDeg);
+      canvas.scale(msx, msy);
+    }
     final cone = Path()
       ..moveTo(-12, 6)
       ..lineTo(0, -50)
@@ -1780,6 +1844,7 @@ class _Recording3dPainter extends CustomPainter {
       old.photoPoints != photoPoints ||
       old.is3d != is3d ||
       old.headingUp != headingUp ||
+      old.pitchDeg != pitchDeg ||
       old.vehicleMarkerPainter != vehicleMarkerPainter ||
       old.zoom != zoom;
 }

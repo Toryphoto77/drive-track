@@ -42,17 +42,17 @@ void main() {
     expect(selected, 1);
   });
 
-  test('v1.2.2 app icon choice: red default, legacy blue/gray fall back to red', () {
-    expect(AppIconChoice.normalize(null), AppIconChoice.red);
-    expect(AppIconChoice.normalize('bogus'), AppIconChoice.red);
-    expect(AppIconChoice.normalize('gray'), AppIconChoice.red);
-    expect(AppIconChoice.normalize('blue'), AppIconChoice.red);
+  test('app icon choice: steering default, legacy keys fall back to steering', () {
+    expect(AppIconChoice.normalize(null), AppIconChoice.steering);
+    expect(AppIconChoice.normalize('bogus'), AppIconChoice.steering);
+    expect(AppIconChoice.normalize('gray'), AppIconChoice.steering);
+    expect(AppIconChoice.normalize('blue'), AppIconChoice.steering);
     expect(AppIconChoice.isValid('blue'), isFalse);
     expect(AppIconChoice.isValid('gray'), isFalse);
-    expect(AppIconChoice.assetFor(AppIconChoice.red), 'assets/app_icon_red.png');
-    expect(AppIconChoice.assetFor('blue'), 'assets/app_icon_red.png');
-    expect(AppIconChoice.labelFor(AppIconChoice.red), '红赛车');
-    expect(AppIconChoice.labelFor('blue'), '红赛车');
+    expect(AppIconChoice.assetFor(AppIconChoice.steering), 'assets/app_icon_steering.png');
+    expect(AppIconChoice.assetFor('blue'), 'assets/app_icon_steering.png');
+    expect(AppIconChoice.labelFor(AppIconChoice.steering), '方向盘');
+    expect(AppIconChoice.labelFor('blue'), '方向盘');
   });
 
   test('v1.2.2 app icon choice: steering and checkered keys valid, distinct assets/labels', () {
@@ -66,22 +66,20 @@ void main() {
     expect(AppIconChoice.labelFor('checkered'), '方格旗');
     expect(AppIconChoice.assetFor('steering'),
         isNot(AppIconChoice.assetFor('checkered')));
-    expect(AppIconChoice.assetFor('steering'),
-        isNot(AppIconChoice.assetFor(AppIconChoice.red)));
   });
 
-  test('v1.1.3 app icon choice: rb17 and valkyrie keys valid, distinct assets/labels', () {
-    expect(AppIconChoice.isValid('rb17'), isTrue);
-    expect(AppIconChoice.isValid('valkyrie'), isTrue);
-    expect(AppIconChoice.normalize('rb17'), 'rb17');
-    expect(AppIconChoice.normalize('valkyrie'), 'valkyrie');
-    expect(AppIconChoice.assetFor('rb17'), 'assets/app_icon_rb17.png');
-    expect(AppIconChoice.assetFor('valkyrie'), 'assets/app_icon_valkyrie.png');
-    expect(AppIconChoice.labelFor('rb17'), 'RB17');
-    expect(AppIconChoice.labelFor('valkyrie'), '女武神');
-    expect(AppIconChoice.assetFor('rb17'),
-        isNot(AppIconChoice.assetFor('valkyrie')));
-    expect(AppIconChoice.assetFor('rb17'),
-        isNot(AppIconChoice.assetFor(AppIconChoice.red)));
+  test('app icon choice: deleted rb17/valkyrie/red keys fall back to steering', () {
+    expect(AppIconChoice.isValid('rb17'), isFalse);
+    expect(AppIconChoice.isValid('valkyrie'), isFalse);
+    expect(AppIconChoice.isValid('red'), isFalse);
+    expect(AppIconChoice.normalize('rb17'), 'steering');
+    expect(AppIconChoice.normalize('valkyrie'), 'steering');
+    expect(AppIconChoice.normalize('red'), 'steering');
+    expect(AppIconChoice.assetFor('rb17'), 'assets/app_icon_steering.png');
+    expect(AppIconChoice.assetFor('valkyrie'), 'assets/app_icon_steering.png');
+    expect(AppIconChoice.assetFor('red'), 'assets/app_icon_steering.png');
+    expect(AppIconChoice.labelFor('rb17'), '方向盘');
+    expect(AppIconChoice.labelFor('valkyrie'), '方向盘');
+    expect(AppIconChoice.labelFor('red'), '方向盘');
   });
 }

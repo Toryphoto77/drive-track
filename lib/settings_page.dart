@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'package:flutter/services.dart';
 
@@ -477,9 +478,10 @@ class _SettingsPageState extends State<SettingsPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(title: const Text('设置')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('设置')),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 24)),
         children: [
           _sectionTitle('权限检查'),
           const Padding(

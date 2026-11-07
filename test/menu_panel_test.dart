@@ -16,7 +16,7 @@ void main() {
         child: const DriveTrackApp(),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 1300));
+    await tester.pump(const Duration(milliseconds: 1600));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.byIcon(Icons.menu).first);

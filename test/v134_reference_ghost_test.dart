@@ -232,7 +232,11 @@ void main() {
     testWidgets('切换分析圈后速度曲线出现参照圈第二条线与图例',
         (tester) async {
       await _pumpAnalysis(tester, [_lap1(), _lap2()]);
-      await tester.ensureVisible(find.text('第 2 圈').first);
+      // 顶栏半透后，滚到视口顶端的内容会滑到栏下、点按被顶栏拦截，
+      // 故先把目标滚到视口中部再点（模拟真实使用）。
+      await Scrollable.ensureVisible(
+          tester.element(find.text('第 2 圈').first),
+          alignment: 0.5);
       await tester.pumpAndSettle();
       await tester.tap(find.text('第 2 圈').first);
       await tester.pumpAndSettle();
@@ -245,8 +249,10 @@ void main() {
     testWidgets('关闭叠加开关后走线图例消失，开关本身仍在', (tester) async {
       await _pumpAnalysis(tester, [_lap1(), _lap2()]);
       expect(find.text('青色 = 参照圈（第 1 圈）'), findsOneWidget);
-      await tester.ensureVisible(
-          find.byKey(const ValueKey('reference-overlay-toggle')));
+      await Scrollable.ensureVisible(
+          tester.element(
+              find.byKey(const ValueKey('reference-overlay-toggle'))),
+          alignment: 0.5);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('reference-overlay-toggle')));
       await tester.pumpAndSettle();

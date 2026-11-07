@@ -30,6 +30,9 @@ if [ -f .cloudbase-env ]; then
   CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")
 fi
 flutter build apk --debug --target-platform android-arm64 --no-android-gradle-daemon "${CLOUDBASE_DEFINE[@]}"
-cp build/app/outputs/flutter-apk/app-debug.apk ./DriveTrack-v0.1.10-debug-arm64.apk
-ls -la ./DriveTrack-v0.1.10-debug-arm64.apk
+# 版本号从 pubspec.yaml 读（与新增多 ABI 脚本同法，不再硬编码旧版号）。
+VERSION="$(sed -n 's/^version: \([0-9][0-9.]*\)+.*/\1/p' pubspec.yaml)"
+if [ -z "$VERSION" ]; then echo "读不到 pubspec.yaml 的 version"; exit 1; fi
+cp build/app/outputs/flutter-apk/app-debug.apk "./DriveTrack-v${VERSION}-debug-arm64-v8a.apk"
+ls -la "./DriveTrack-v${VERSION}-debug-arm64-v8a.apk"
 echo BUILD_DONE

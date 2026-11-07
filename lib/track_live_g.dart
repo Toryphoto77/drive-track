@@ -108,18 +108,27 @@ class TrackLiveGRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 横屏窄栏：两个 G 数值（17 号粗体）并排在 210 宽内
+                  // 会溢出，各包 Flexible + scaleDown，极窄/大字体
+                  // 时数字等比缩小不断行、不溢出（与大计时同款处理）。
                   Row(
                     children: [
                       const Text('纵向',
                           style: TextStyle(
                               color: Colors.white54, fontSize: 12)),
                       const SizedBox(width: 4),
-                      Text(
-                        '${formatSignedG(lo)}g',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '${formatSignedG(lo)}g',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -127,12 +136,18 @@ class TrackLiveGRow extends StatelessWidget {
                           style: TextStyle(
                               color: Colors.white54, fontSize: 12)),
                       const SizedBox(width: 4),
-                      Text(
-                        '${formatSignedG(la)}g',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '${formatSignedG(la)}g',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'card_style.dart';
 import 'cloud_service.dart';
@@ -144,9 +145,10 @@ class _CloudAuthPageState extends State<CloudAuthPage> {
   Widget build(BuildContext context) {
     final mode = widget.mode;
     return Scaffold(
-      appBar: AppBar(title: Text(mode.title)),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: Text(mode.title)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

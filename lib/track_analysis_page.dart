@@ -48,6 +48,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'logic.dart';
 import 'models.dart';
 import 'replay_3d.dart';
@@ -585,14 +586,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
 
     return Scaffold(
       backgroundColor: _kBg,
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         title: Text(widget.trip.trackName.isEmpty
             ? '赛道分析'
             : '${widget.trip.trackName} · 赛道分析'),
-        backgroundColor: _kBg,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1698,7 +1699,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                           satelliteTileUrl(zoom, x, y),
                           key: ValueKey('analysis-sat-$zoom-$x-$y'),
                           headers: const {
-                            'User-Agent': 'DriveTrack/1.4.1',
+                            'User-Agent': 'DriveTrack/1.5.0',
                           },
                           fit: BoxFit.fill,
                           gaplessPlayback: true,

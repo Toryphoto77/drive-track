@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 
 import 'card_style.dart';
@@ -267,6 +268,16 @@ class _MyPageState extends State<MyPage> {
       setState(() => _editError = '用户名不能为空，请填写后再保存。');
       return;
     }
+    // 公开资料上限（与云端 profiles 表的 varchar 一致）：超长直接
+    // 拒绝，不静默截断。
+    if (name.length > 32) {
+      setState(() => _editError = '用户名最多 32 个字。');
+      return;
+    }
+    if (_bioCtrl.text.trim().length > 200) {
+      setState(() => _editError = '简介最多 200 个字。');
+      return;
+    }
     final email = _emailCtrl.text.trim();
     if (email.isNotEmpty &&
         !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
@@ -453,6 +464,11 @@ class _MyPageState extends State<MyPage> {
               border: OutlineInputBorder(),
             ),
           ),
+          const SizedBox(height: 4),
+          const Text(
+            '昵称与简介保存后会同步到云端公开资料，他人打开你的公开资料页可见。',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _emailCtrl,
@@ -472,6 +488,10 @@ class _MyPageState extends State<MyPage> {
             onPressed: _pickingAvatar ? null : _pickAvatar,
             icon: const Icon(Icons.image, size: 16),
             label: Text(_pickingAvatar ? '选择头像中…' : '换头像'),
+          ),
+          const Text(
+            '头像会上传到公开桶：保存后他人打开你的公开资料页可见。不想公开就不要换头像。',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
           if (_editError != null)
             Text(_editError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
@@ -606,8 +626,8 @@ class _MyPageState extends State<MyPage> {
             : svc.status == CloudStatus.uninitialized
                 ? '同步中…'
                 : svc.isAnonymous
-                    ? '匿名账号 · 待上传 ${svc.pendingCount} 条 · 失败 ${svc.failedCount} 条'
-                    : '已登录 · 待上传 ${svc.pendingCount} 条 · 失败 ${svc.failedCount} 条';
+                    ? '匿名账号 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条'
+                    : '已登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条';
         return _card(
           child: InkWell(
             onTap: () {
@@ -630,6 +650,10 @@ class _MyPageState extends State<MyPage> {
                     Text(subtitle,
                         style: const TextStyle(
                             color: Colors.white54, fontSize: 12)),
+                    const SizedBox(height: 2),
+                    const Text('昵称、简介、头像会同步到云端公开资料，他人打开你的公开资料页可见；邮箱只存本机。',
+                        style: TextStyle(
+                            color: Colors.white38, fontSize: 11)),
                   ],
                 ),
               ),
@@ -643,10 +667,20 @@ class _MyPageState extends State<MyPage> {
   }
 
   Widget _sectionBar() {
+    // 分区药丸带真实条数：行程 / 动态 / 收藏为条数，成就为“已达成 / 全部”。
+    final achieved =
+        widget.achievements.where((a) => a.achieved).length;
+    String label(MyPageSection s) => switch (s) {
+          MyPageSection.trips => '行程 ${widget.trips.length}',
+          MyPageSection.posts => '动态 ${widget.posts.length}',
+          MyPageSection.favorites => '收藏 ${widget.favorites.length}',
+          MyPageSection.achievements =>
+            '成就 $achieved/${widget.achievements.length}',
+        };
     return Row(children: [
       for (final s in MyPageSection.values) ...[
         if (s != MyPageSection.trips) const SizedBox(width: 8),
-        Expanded(child: _pillButton(label: s.label, selected: _section == s, onTap: () => _select(s))),
+        Expanded(child: _pillButton(label: label(s), selected: _section == s, onTap: () => _select(s))),
       ],
     ]);
   }
@@ -729,7 +763,9 @@ class _MyPageState extends State<MyPage> {
     return SingleChildScrollView(
       // v1.0.5：底部 padding 由 48 改回 16，仅作正常内容边距；
       // 不再与主框架叠加留出空黑条，内容在药丸下方划过、透过毛玻璃可见。
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      // v1.4.2：顶栏改半透 + 主框架 extendBodyBehindAppBar，顶部再加
+      // 状态栏 + AppBar 高，首张卡片静止时才不会藏进顶栏后。
+      padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 16)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         _profileCard(),
         const SizedBox(height: 12),
@@ -755,6 +791,13 @@ class _MyPageState extends State<MyPage> {
             ],
         ],
         if (_section == MyPageSection.posts) ...[
+          _card(
+            child: const Text(
+              '公开说明：设为公开并上传到云端的行程，他人打开你的公开资料页可见；没上传的行程只在你本机动态里。',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 8),
           if (widget.posts.isEmpty)
             _empty('暂无动态\n把行程设为公开后会显示在这里')
           else

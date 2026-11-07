@@ -13,6 +13,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'weather_service.dart';
 
 /// 独立天气页：Scaffold + AppBar 返回，点系统/导航返回即顺畅退出。
@@ -148,8 +149,8 @@ class WeatherPage extends StatelessWidget {
     final w = weather;
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF000000),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         title: const Text(
           '天气',
           style: TextStyle(fontFamily: 'DriveTrackDisplay', fontWeight: FontWeight.w700, color: Colors.white),
@@ -180,7 +181,7 @@ class WeatherPage extends StatelessWidget {
               ),
             )
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
               children: [
                 _section(context, '当前天气', [
                   Row(

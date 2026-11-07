@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'track_guide.dart';
 import 'track_library.dart';
 import 'track_satellite_preview.dart';
@@ -22,12 +23,12 @@ class TrackPackageInfoPage extends StatelessWidget {
     final info = trackInfoForPackage(pkg);
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         title: Text(pkg.nameCn),
-        backgroundColor: const Color(0xFF121212),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

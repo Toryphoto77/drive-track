@@ -1,7 +1,7 @@
 name: drive_track
 description: "驰迹 DriveTrack：极简风轨迹记录 App（汽车 / 摩托 / 骑行）"
 publish_to: 'none'
-version: 1.4.1+54
+version: 1.5.0+55
 
 environment:
   sdk: ^3.13.7
@@ -17,9 +17,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/app_icon_red.png
-    - assets/app_icon_rb17.png
-    - assets/app_icon_valkyrie.png
+    # 图标删减后只留方向盘 / 方格旗两项。被删三图的 PNG 文件仍在磁盘
+    # （桌面启动图标本身就是红赛车 @mipmap/ic_launcher_red，不可删），
+    # 仅从 Flutter assets 移除，不再打包进 App。
     - assets/app_icon_steering.png
     - assets/app_icon_checkered.png
     # 赛道库种子数据（manifest + 包 JSON，随仓库走；缺失时库页回落内置迁移包）。

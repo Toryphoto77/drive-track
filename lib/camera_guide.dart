@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'app_bar_style.dart';
 
 /// Insta360 与 DJI 的向导式连接说明数据与页面。
 ///
@@ -134,8 +135,8 @@ class _CameraGuidePageState extends State<CameraGuidePage> {
     final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
@@ -144,7 +145,7 @@ class _CameraGuidePageState extends State<CameraGuidePage> {
             style: const TextStyle(color: Colors.white)),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
         children: [
           Container(
             padding: const EdgeInsets.all(12),

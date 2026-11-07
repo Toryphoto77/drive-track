@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'glass_button.dart';
 import 'import_style.dart';
 import 'models.dart';
@@ -259,13 +260,16 @@ class _DataExportPageState extends State<DataExportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('数据导出 / 备份'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
+              padding: withAppBarTopInset(
+                  context, const EdgeInsets.only(bottom: 24)),
               children: [
                 _settingsBackupSection(),
                 const Padding(

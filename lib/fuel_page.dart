@@ -18,6 +18,7 @@
 ///   改后历史行程的估算值会随新值重算。
 
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 
 import 'models.dart';
@@ -291,9 +292,10 @@ class _FuelSettingsPageState extends State<FuelSettingsPage> {
     final bothFilled =
         _consumptionCtrl.text.trim().isNotEmpty && _priceCtrl.text.trim().isNotEmpty;
     return Scaffold(
-      appBar: AppBar(title: const Text('油耗费用')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('油耗费用')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
         children: [
           const Text(
             '仅汽车 / 摩托可用。',

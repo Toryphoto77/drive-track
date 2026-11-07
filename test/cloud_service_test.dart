@@ -20,11 +20,16 @@ class FakeCloudBackend implements CloudBackend {
   bool failUpload = false;
   bool failInsert = false;
   bool failSignIn = false;
+  bool failBucketUpload = false;
   String? _pendingEmail;
   final List<String> uploadedPaths = [];
   final List<Uint8List> uploadedBytes = [];
   final List<Map<String, dynamic>> insertedRows = [];
   List<Map<String, dynamic>> listedRows = [];
+  // 公开资料与公开行程：按桶+对象路径记文件，按 user_id 记资料行。
+  final Map<String, Uint8List> bucketObjects = {};
+  final Map<String, Map<String, dynamic>> profiles = {};
+  List<Map<String, dynamic>> publicTripRows = [];
 
   @override
   Future<String?> ensureSignedIn() async => userId;
@@ -40,11 +45,37 @@ class FakeCloudBackend implements CloudBackend {
 
   @override
   Future<void> uploadBytes(String path, Uint8List bytes) async {
+    await uploadBytesToBucket(
+        cloudTripsBucket, path, bytes, 'application/json');
+  }
+
+  @override
+  Future<void> uploadBytesToBucket(
+      String bucket, String path, Uint8List bytes, String contentType) async {
     if (failUpload) {
       throw const CloudBaseApiException('upload_failed', '模拟上传失败');
     }
+    if (bucket == cloudPublicBucket && failBucketUpload) {
+      throw const CloudBaseApiException(
+          'bucket_missing', '模拟公开桶不存在');
+    }
+    bucketObjects['$bucket/$path'] = bytes;
     uploadedPaths.add(path);
     uploadedBytes.add(bytes);
+  }
+
+  @override
+  Future<Uint8List> downloadBytes(String bucket, String path) async {
+    final bytes = bucketObjects['$bucket/$path'];
+    if (bytes == null) {
+      throw const CloudBaseApiException('download_failed', '模拟文件不存在');
+    }
+    return bytes;
+  }
+
+  @override
+  Future<void> deleteObject(String bucket, String path) async {
+    bucketObjects.remove('$bucket/$path');
   }
 
   @override
@@ -56,8 +87,40 @@ class FakeCloudBackend implements CloudBackend {
   }
 
   @override
+  Future<int> updateTripRowByStoragePath(
+      String storagePath, Map<String, dynamic> patch) async {
+    var count = 0;
+    for (final row in insertedRows) {
+      if (row['storage_path'] == storagePath) {
+        row.addAll(patch);
+        count++;
+      }
+    }
+    return count;
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> listTripRows(String userId) async =>
       listedRows;
+
+  @override
+  Future<List<Map<String, dynamic>>> listPublicTripRows(
+      String userId) async {
+    return publicTripRows
+        .where((r) =>
+            r['owner'] == userId && (r['is_public'] as bool? ?? false))
+        .toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>?> fetchProfileRow(String userId) async =>
+      profiles[userId];
+
+  @override
+  Future<void> upsertProfileRow(Map<String, dynamic> row) async {
+    profiles[(row['user_id'] as String?) ?? ''] =
+        Map<String, dynamic>.from(row);
+  }
 
   @override
   Future<CloudAuthResult> signUpWithEmail(
@@ -156,7 +219,7 @@ TrackPoint _point(int t, double lat, double lon, double speed) => TrackPoint(
       calibrated: true,
     );
 
-Trip _sampleTrip({String id = 'trip-1'}) => Trip(
+Trip _sampleTrip({String id = 'trip-1', bool isPublic = false}) => Trip(
       id: id,
       mode: TripMode.car,
       startMs: DateTime.utc(2026, 11, 7, 10).millisecondsSinceEpoch,
@@ -169,6 +232,7 @@ Trip _sampleTrip({String id = 'trip-1'}) => Trip(
       score: 88.5,
       subScores: {},
       scoreReasons: [],
+      isPublic: isPublic,
     );
 
 Future<Directory> _tempDir() =>
@@ -176,9 +240,9 @@ Future<Directory> _tempDir() =>
 
 void main() {
   group('CloudBase 配置与版本', () {
-    test('pubspec 版本仍是 1.4.1+54，且不含 supabase / cloudbase_flutter', () {
+    test('pubspec 版本仍是 1.5.0+55，且不含 supabase / cloudbase_flutter', () {
       final content = File('pubspec.yaml').readAsStringSync();
-      expect(content, contains('version: 1.4.1+54'));
+      expect(content, contains('version: 1.5.0+55'));
       expect(content.toLowerCase(), isNot(contains('supabase')));
       // HTTP API 路由：零新增 pub 依赖，SDK 不进 pubspec。
       expect(content, isNot(contains('cloudbase_flutter')));
@@ -472,6 +536,357 @@ void main() {
       expect(row.storagePath, '');
       expect(CloudTripRow.fromJson({'id': 42}).id, '42');
       expect(CloudTripRow.fromJson({'id': 'abc-1'}).id, 'abc-1');
+    });
+  });
+
+  group('公开资料与公开行程', () {
+    late Directory dir;
+    late FakeCloudBackend fake;
+
+    setUp(() async {
+      dir = await _tempDir();
+      fake = FakeCloudBackend();
+    });
+
+    tearDown(() async {
+      if (await dir.exists()) await dir.delete(recursive: true);
+    });
+
+    CloudService _service({String envId = 'test-env'}) => CloudService(
+          backend: fake,
+          filesDir: dir.path,
+          envIdOverride: envId,
+        );
+
+    test('profiles-public.sql：建表 + RLS + is_public 列 + 公开桶策略', () {
+      final sql = File('cloudbase/profiles-public.sql').readAsStringSync();
+      expect(sql, contains('CREATE TABLE IF NOT EXISTS public.profiles'));
+      expect(sql, contains('user_id varchar(64) PRIMARY KEY'));
+      expect(sql, contains('nickname varchar(32)'));
+      expect(sql, contains('bio varchar(200)'));
+      expect(sql, contains('avatar_path text'));
+      expect(sql, contains('updated_at timestamptz'));
+      expect(sql, contains('profiles_select_public'));
+      expect(sql, contains('profiles_insert_own'));
+      expect(sql, contains('profiles_update_own'));
+      expect(sql, contains('profiles_delete_own'));
+      expect(sql, contains('ADD COLUMN IF NOT EXISTS is_public'));
+      expect(sql, contains('trips_select_public'));
+      expect(sql, contains('USING (is_public = true)'));
+      expect(sql, contains("bucket_id = 'public-files'"));
+      expect(sql, contains('public_files_select_public'));
+      expect(sql, contains('public_files_insert_own'));
+      expect(sql, contains('TO anon, authenticated'));
+      expect(File('cloudbase/profiles-public-steps.md').existsSync(),
+          isTrue);
+      final steps =
+          File('cloudbase/profiles-public-steps.md').readAsStringSync();
+      expect(steps, contains('public-files'));
+      expect(steps, contains('profiles-public.sql'));
+      expect(steps, contains('is_public'));
+      final readme = File('cloudbase/README.md').readAsStringSync();
+      expect(readme, contains('public-files'));
+      expect(readme, contains('profiles-public-steps.md'));
+    });
+
+    test('storage_path 桶前缀约定与头像 Content-Type', () {
+      expect(cloudBucketForStoragePath('public-files/u1/t1.json'),
+          cloudPublicBucket);
+      expect(cloudBucketForStoragePath('u1/t1.json'), cloudTripsBucket);
+      expect(cloudObjectPathForStoragePath('public-files/u1/t1.json'),
+          'u1/t1.json');
+      expect(cloudObjectPathForStoragePath('u1/t1.json'), 'u1/t1.json');
+      expect(cloudAvatarContentType('a.jpg'), 'image/jpeg');
+      expect(cloudAvatarContentType('a.PNG'), 'image/png');
+      expect(cloudAvatarContentType('a.webp'), 'image/webp');
+      expect(cloudAvatarContentType('a.bin'), 'application/octet-stream');
+    });
+
+    test('PublicProfile fromJson 缺字段有默认值，toRow 字段齐全', () {
+      final p = PublicProfile.fromJson({'user_id': 'u1'});
+      expect(p.userId, 'u1');
+      expect(p.nickname, '');
+      expect(p.bio, '');
+      expect(p.avatarPath, '');
+      final row = PublicProfile(
+        userId: 'u1',
+        nickname: '柴西',
+        bio: 'hello',
+        avatarPath: 'public-files/u1/avatar.jpg',
+        updatedAtMs:
+            DateTime.utc(2026, 11, 7, 10).millisecondsSinceEpoch,
+      ).toRow();
+      expect(row['user_id'], 'u1');
+      expect(row['nickname'], '柴西');
+      expect(row['avatar_path'], 'public-files/u1/avatar.jpg');
+      expect(row['updated_at'], '2026-11-07T10:00:00.000Z');
+    });
+
+    test('CloudTripRow fromJson：owner 与 is_public 有默认值', () {
+      final row = CloudTripRow.fromJson({'id': 7});
+      expect(row.id, '7');
+      expect(row.owner, '');
+      expect(row.isPublic, isFalse);
+      final pub = CloudTripRow.fromJson({
+        'id': 8,
+        'owner': 'u2',
+        'is_public': true,
+        'storage_path': 'public-files/u2/trip-9.json',
+      });
+      expect(pub.owner, 'u2');
+      expect(pub.isPublic, isTrue);
+      expect(pub.storagePath, 'public-files/u2/trip-9.json');
+    });
+
+    test('CloudQueueEntry isPublic 落盘往返，toTripRow 带 is_public', () {
+      final entry = CloudQueueEntry(
+        tripId: 'trip-1',
+        mode: 'car',
+        startedAtMs: 0,
+        endedAtMs: 3600000,
+        distanceM: 1000,
+        durationS: 3600,
+        source: 'phone',
+        maxSpeedKmh: 72,
+        score: 88,
+        isPublic: true,
+        status: CloudUploadStatus.pending,
+        attempts: 0,
+        lastError: '',
+        updatedAtMs: 0,
+      );
+      expect(
+          CloudQueueEntry.fromJson(entry.toJson()).isPublic, isTrue);
+      expect(
+          CloudQueueEntry.fromJson({'tripId': 't'}).isPublic, isFalse);
+      final row = entry.toTripRow('user-1', 'public-files/user-1/trip-1.json');
+      expect(row['is_public'], isTrue);
+      expect(row['storage_path'], 'public-files/user-1/trip-1.json');
+    });
+
+    test('saveProfile 成功：昵称/简介写 profiles 表，无头像时 avatar_path 为空', () async {
+      final svc = _service();
+      await svc.init();
+      final r = await svc.saveProfile(nickname: '柴西', bio: 'hello');
+      expect(r.ok, isTrue);
+      expect(r.avatarError, isEmpty);
+      final saved = fake.profiles['fake-user-1']!;
+      expect(saved['nickname'], '柴西');
+      expect(saved['bio'], 'hello');
+      expect(saved['avatar_path'], '');
+      expect(saved['updated_at'], isA<String>());
+      expect(await svc.fetchPublicProfile('fake-user-1'), isNotNull);
+      expect(
+          (await svc.fetchPublicProfile('fake-user-1'))!.nickname, '柴西');
+      expect(await svc.fetchPublicProfile('nobody'), isNull);
+    });
+
+    test('saveProfile 校验：空昵称 / 超长昵称 / 超长简介直接拒绝', () async {
+      final svc = _service();
+      await svc.init();
+      expect((await svc.saveProfile(nickname: '  ', bio: '')).ok, isFalse);
+      expect(
+          (await svc.saveProfile(
+                  nickname: '昵' * 33, bio: '')).ok,
+          isFalse);
+      expect(
+          (await svc.saveProfile(
+                  nickname: '柴西', bio: '简' * 201)).ok,
+          isFalse);
+      expect(fake.profiles, isEmpty);
+    });
+
+    test('saveProfile 带头像：头像进公开桶，资料行记带前缀的头像路径', () async {
+      final svc = _service();
+      await svc.init();
+      final avatar = File('${dir.path}/avatar.jpg');
+      await avatar.writeAsBytes([1, 2, 3]);
+      final r = await svc.saveProfile(
+          nickname: '柴西', bio: '', avatarLocalPath: avatar.path);
+      expect(r.ok, isTrue);
+      expect(fake.bucketObjects['public-files/fake-user-1/avatar.jpg'],
+          [1, 2, 3]);
+      expect(fake.profiles['fake-user-1']!['avatar_path'],
+          'public-files/fake-user-1/avatar.jpg');
+    });
+
+    test('saveProfile 头像失败不影响资料行：ok 仍为 true，avatarError 非空', () async {
+      final svc = _service();
+      await svc.init();
+      final avatar = File('${dir.path}/avatar.jpg');
+      await avatar.writeAsBytes([1, 2, 3]);
+      fake.failBucketUpload = true;
+      final r = await svc.saveProfile(
+          nickname: '柴西', bio: 'hello', avatarLocalPath: avatar.path);
+      expect(r.ok, isTrue);
+      expect(r.avatarError, isNotEmpty);
+      expect(r.message, contains('头像'));
+      expect(fake.profiles['fake-user-1']!['nickname'], '柴西');
+      expect(fake.profiles['fake-user-1']!['avatar_path'], '');
+    });
+
+    test('saveProfile 没传新头像时沿用云端已有头像路径', () async {
+      final svc = _service();
+      await svc.init();
+      final avatar = File('${dir.path}/avatar.jpg');
+      await avatar.writeAsBytes([1, 2, 3]);
+      await svc.saveProfile(
+          nickname: '柴西', bio: '', avatarLocalPath: avatar.path);
+      final r = await svc.saveProfile(nickname: '柴西二', bio: 'new');
+      expect(r.ok, isTrue);
+      expect(fake.profiles['fake-user-1']!['avatar_path'],
+          'public-files/fake-user-1/avatar.jpg');
+    });
+
+    test('公开行程上传：文件进公开桶，行写 is_public 与带前缀 storage_path', () async {
+      final svc = _service();
+      await svc.init();
+      final r = await svc.enqueueUpload(_sampleTrip(isPublic: true));
+      expect(r.ok, isTrue);
+      expect(svc.queueStatusFor('trip-1'), CloudUploadStatus.done);
+      expect(fake.bucketObjects['public-files/fake-user-1/trip-1.json'],
+          isNotNull);
+      expect(fake.bucketObjects['trip-files/fake-user-1/trip-1.json'],
+          isNull);
+      final row = fake.insertedRows.single;
+      expect(row['is_public'], isTrue);
+      expect(row['storage_path'], 'public-files/fake-user-1/trip-1.json');
+      expect(svc.queue.single.isPublic, isTrue);
+    });
+
+    test('私有行程上传不变：文件进私有桶，is_public 为 false', () async {
+      final svc = _service();
+      await svc.init();
+      final r = await svc.enqueueUpload(_sampleTrip());
+      expect(r.ok, isTrue);
+      expect(fake.bucketObjects['trip-files/fake-user-1/trip-1.json'],
+          isNotNull);
+      expect(fake.insertedRows.single['is_public'], isFalse);
+      expect(fake.insertedRows.single['storage_path'],
+          'fake-user-1/trip-1.json');
+    });
+
+    test('公开桶不存在时公开上传失败进 failed，可重试', () async {
+      final svc = _service();
+      await svc.init();
+      fake.failBucketUpload = true;
+      final r = await svc.enqueueUpload(_sampleTrip(isPublic: true));
+      expect(r.ok, isFalse);
+      expect(svc.queueStatusFor('trip-1'), CloudUploadStatus.failed);
+      fake.failBucketUpload = false;
+      expect((await svc.retryEntry('trip-1')).ok, isTrue);
+      expect(svc.queueStatusFor('trip-1'), CloudUploadStatus.done);
+    });
+
+    test('republishTrip：私有→公开搬桶改行删旧文件，再改回私有', () async {
+      final svc = _service();
+      await svc.init();
+      expect((await svc.enqueueUpload(_sampleTrip())).ok, isTrue);
+      // 改公开。
+      final toPublic =
+          await svc.republishTrip(_sampleTrip(isPublic: true));
+      expect(toPublic.ok, isTrue);
+      expect(fake.insertedRows.single['is_public'], isTrue);
+      expect(fake.insertedRows.single['storage_path'],
+          'public-files/fake-user-1/trip-1.json');
+      expect(fake.bucketObjects['public-files/fake-user-1/trip-1.json'],
+          isNotNull);
+      expect(fake.bucketObjects['trip-files/fake-user-1/trip-1.json'],
+          isNull);
+      expect(svc.queue.single.isPublic, isTrue);
+      // 改回私有。
+      final toPrivate = await svc.republishTrip(_sampleTrip());
+      expect(toPrivate.ok, isTrue);
+      expect(fake.insertedRows.single['is_public'], isFalse);
+      expect(fake.insertedRows.single['storage_path'],
+          'fake-user-1/trip-1.json');
+      expect(fake.bucketObjects['trip-files/fake-user-1/trip-1.json'],
+          isNotNull);
+      expect(fake.bucketObjects['public-files/fake-user-1/trip-1.json'],
+          isNull);
+    });
+
+    test('republishTrip：没上传过的行程直接提示，不写队列', () async {
+      final svc = _service();
+      await svc.init();
+      final r = await svc.republishTrip(_sampleTrip(isPublic: true));
+      expect(r.ok, isFalse);
+      expect(svc.queue, isEmpty);
+    });
+
+    test('listPublicTrips 只返回公开行，带 owner 与 isPublic', () async {
+      final svc = _service();
+      await svc.init();
+      fake.publicTripRows = [
+        {
+          'id': 7,
+          'owner': 'fake-user-1',
+          'mode': 'car',
+          'started_at': '2026-11-07T10:00:00.000Z',
+          'ended_at': '2026-11-07T11:00:00.000Z',
+          'distance_m': 1000,
+          'duration_s': 3600,
+          'source': 'phone',
+          'max_speed_kmh': 72,
+          'score': 88,
+          'is_public': true,
+          'storage_path': 'public-files/fake-user-1/trip-1.json',
+        },
+        {
+          'id': 8,
+          'owner': 'fake-user-1',
+          'mode': 'car',
+          'started_at': '2026-11-07T10:00:00.000Z',
+          'ended_at': '2026-11-07T11:00:00.000Z',
+          'distance_m': 2000,
+          'duration_s': 3600,
+          'source': 'phone',
+          'max_speed_kmh': 72,
+          'score': 90,
+          'is_public': false,
+          'storage_path': 'fake-user-1/trip-2.json',
+        },
+      ];
+      final rows = await svc.listPublicTrips('fake-user-1');
+      expect(rows, hasLength(1));
+      expect(rows.single.id, '7');
+      expect(rows.single.owner, 'fake-user-1');
+      expect(rows.single.isPublic, isTrue);
+    });
+
+    test('downloadTripFile：按 storage_path 前缀分桶，读不到返回 null', () async {
+      final svc = _service();
+      await svc.init();
+      fake.bucketObjects['public-files/u1/trip-1.json'] =
+          Uint8List.fromList([9, 9]);
+      final okRow = CloudTripRow.fromJson({
+        'id': 7,
+        'mode': 'car',
+        'started_at': '2026-11-07T10:00:00.000Z',
+        'ended_at': '2026-11-07T11:00:00.000Z',
+        'storage_path': 'public-files/u1/trip-1.json',
+      });
+      expect(await svc.downloadTripFile(okRow), [9, 9]);
+      final missingRow = CloudTripRow.fromJson({
+        'id': 8,
+        'mode': 'car',
+        'started_at': '2026-11-07T10:00:00.000Z',
+        'ended_at': '2026-11-07T11:00:00.000Z',
+        'storage_path': 'public-files/u1/trip-9.json',
+      });
+      expect(await svc.downloadTripFile(missingRow), isNull);
+      expect(
+          await svc.downloadFileByStoragePath(''), isNull);
+    });
+
+    test('未配置时资料与公开行程接口返回空，不抛错', () async {
+      final svc = _service(envId: '');
+      await svc.init();
+      expect(await svc.fetchPublicProfile('u1'), isNull);
+      expect(await svc.listPublicTrips('u1'), isEmpty);
+      final r = await svc.saveProfile(nickname: '柴西', bio: '');
+      expect(r.ok, isFalse);
+      expect(r.notConfigured, isTrue);
     });
   });
 

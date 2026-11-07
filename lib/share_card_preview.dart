@@ -19,6 +19,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'models.dart';
 import 'track_sector_data.dart';
 import 'track_timing.dart';
@@ -339,9 +340,10 @@ class _ShareCardPreviewPageState extends State<ShareCardPreviewPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(title: const Text('分享卡预览')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('分享卡预览')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
         child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SegmentedButton<ShareCardStyle>(

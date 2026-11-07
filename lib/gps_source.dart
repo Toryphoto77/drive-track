@@ -98,3 +98,43 @@ class GpsSourceChip extends StatelessWidget {
     );
   }
 }
+
+/// 外接 GPS 的实时连接状态（设备中心写入、赛道设置页等处只读）。
+///
+/// 只有一个写入方：device_center.dart 的 ExternalGpsSection 在
+/// 连接 / 断开事件里调 [updateExternalGpsStatus]；其余页面只
+/// 通过 [externalGpsStatus] 监听显示，不自己猜状态。
+/// App 启动时默认未连接；状态只在内存里，不持久化。
+class ExternalGpsStatus {
+  /// 是否已连上外置 GPS（BLE 或 SPP）。
+  final bool connected;
+
+  /// 已连接设备的广播名（未连接时为空串）。
+  final String deviceName;
+
+  /// 连接通道：'ble' 或 'spp'，未连接时为空串。
+  final String channel;
+
+  /// 二进制协议设备（如 DEXIAN D1）：已连通 GATT 但不订阅、不解析、
+  /// 不出定位，行程仍用手机 GPS。false = NMEA / SPP 路径，定位
+  /// 优先用外接设备。
+  final bool binaryOnly;
+
+  const ExternalGpsStatus({
+    this.connected = false,
+    this.deviceName = '',
+    this.channel = '',
+    this.binaryOnly = false,
+  });
+
+  static const disconnected = ExternalGpsStatus();
+}
+
+/// 外接 GPS 连接状态的唯一共享源。
+final ValueNotifier<ExternalGpsStatus> externalGpsStatus =
+    ValueNotifier<ExternalGpsStatus>(ExternalGpsStatus.disconnected);
+
+/// 设备中心在连接状态变化时调用（唯一写入入口）。
+void updateExternalGpsStatus(ExternalGpsStatus status) {
+  externalGpsStatus.value = status;
+}

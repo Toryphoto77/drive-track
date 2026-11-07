@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 
 import 'import_style.dart';
@@ -274,9 +275,10 @@ class _MapImportPageState extends State<MapImportPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(title: const Text('地图资源导入')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('地图资源导入')),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 24)),
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 8),

@@ -96,8 +96,8 @@ class UpdateCheckResult {
 }
 
 class UpdateService {
-  static const String currentVersionName = '1.4.1';
-  static const int currentVersionCode = 54;
+  static const String currentVersionName = '1.5.0';
+  static const int currentVersionCode = 55;
   static const String packageName = 'com.chixi.drive_track';
   static const String channelLabel = '正式版';
 

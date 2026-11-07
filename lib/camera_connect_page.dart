@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'camera_guide.dart';
 import 'device_center.dart';
@@ -473,8 +474,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
     final connectedCam = connected.isEmpty ? null : connected.first;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
@@ -482,7 +483,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         title: const Text('连接运动相机', style: TextStyle(color: Colors.white)),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
         children: [
           // 大卡片：扫描入口 + 扫描动画（转圈 + 波纹），共用组件，
           // 与外接 GPS 页同一套样式。

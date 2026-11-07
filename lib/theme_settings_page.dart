@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_notice.dart';
 
+import 'app_bar_style.dart';
 import 'app_icon_choice.dart';
 import 'models.dart';
 import 'vehicle_markers.dart';
@@ -128,9 +129,15 @@ class DriveTrackTheme {
       cardColor: card,
       cardTheme: const CardThemeData(color: card),
       appBarTheme: const AppBarTheme(
-        backgroundColor: bg,
+        // v1.4.2：顶栏改深色半透（#121212，65% 不透明，与磨砂导航栏
+        // 约 0.65 的不透明度一致）。真正磨砂层由 DtAppBar 的
+        // flexibleSpace（BackdropFilter 模糊 28）提供；此处只改
+        // 全局兜底值，万一某处仍用原生 AppBar 也不回落到不透明。
+        backgroundColor: Color(0xA6121212),
         foregroundColor: text,
         centerTitle: true,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
       textTheme: const TextTheme(
         bodyLarge: TextStyle(color: text, fontSize: 16),
@@ -279,7 +286,7 @@ class ThemeSettingsPage extends StatefulWidget {
   final VehicleMarkerSelection vehicleMarkerInitial;
   final ValueChanged<VehicleMarkerSelection>? onVehicleMarkerChanged;
 
-  /// v1.0.3：APP 图标选择。v1.1.3 扩展到四张：红赛车 / 蓝仪表 / RB17 / 女武神。
+  /// v1.0.3：APP 图标选择，现只剩方向盘 / 方格旗两项（默认方向盘）。
   /// 总协调接线：appIconInitial 传 appPrefs.appIcon，
   /// onAppIconChanged 传持久化 + Native.setAppIcon 的回调。
   final String appIconInitial;
@@ -296,7 +303,7 @@ class ThemeSettingsPage extends StatefulWidget {
     this.onAccentChanged,
     this.vehicleMarkerInitial = const VehicleMarkerSelection(),
     this.onVehicleMarkerChanged,
-    this.appIconInitial = AppIconChoice.red,
+    this.appIconInitial = AppIconChoice.steering,
     this.onAppIconChanged,
     this.onImportFont,
     this.onClearFont,
@@ -315,10 +322,19 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     text: '#${widget.initial.accent.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
   );
   String? _hexError;
+  // 自定义颜色输入框焦点态：聚焦时预览圆点与输入框描边改用主题 accent 色。
+  late final FocusNode _hexFocusNode = FocusNode()
+    ..addListener(() {
+      if (_hexFocused != _hexFocusNode.hasFocus) {
+        setState(() => _hexFocused = _hexFocusNode.hasFocus);
+      }
+    });
+  bool _hexFocused = false;
 
   @override
   void dispose() {
     _hexCtrl.dispose();
+    _hexFocusNode.dispose();
     super.dispose();
   }
 
@@ -399,6 +415,64 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     );
   }
 
+  /// v1.0.4 字体选项卡：与 APP 图标选项同一视觉语言（深色卡、圆角 16、
+  /// 选中时 accent 色 2px 描边 + 对勾）。预览用对应字体渲染示例文字；
+  /// 未导入自带字体时不伪造预览，只写明导入后才显示效果。
+  /// 点选即切换：内置卡在已导入时点选等于清除恢复内置；自带卡在未导入
+  /// 时点选等于导入。实际导入/清除走传入的回调（main.dart 里
+  /// pickFile('font') + FontLoader），本页不另做 setState、不闪烁。
+  Widget _fontOption({
+    required bool selected,
+    required String title,
+    required String subtitle,
+    required Widget preview,
+    required VoidCallback? onTap,
+    Widget? action,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? _accent : Colors.white24,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(title,
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                  if (selected)
+                    Icon(Icons.check_circle, size: 16, color: _accent),
+                ],
+              ),
+              const SizedBox(height: 8),
+              preview,
+              const SizedBox(height: 8),
+              Text(subtitle,
+                  style:
+                      const TextStyle(fontSize: 11, color: Colors.white54)),
+              if (action != null) ...[
+                const SizedBox(height: 8),
+                action,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _sectionTitle(String text) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -413,9 +487,10 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     // AppPrefs 并在整个 App 内实时生效，返回首页即可看到新主题色。
     // 每项只留名称与一行必要说明，不再堆描述文字。
     return Scaffold(
-        appBar: AppBar(title: const Text('主题设置')),
+        extendBodyBehindAppBar: true,
+        appBar: DtAppBar(title: const Text('主题设置')),
         body: ListView(
-          padding: const EdgeInsets.only(bottom: 24),
+          padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 24)),
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -486,41 +561,110 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // 预览圆点：与上方色板预设圆点同为 36px 圆点；聚焦时
+                        // 改用主题 accent 色描边，与输入框焦点态呼应。
                         Container(
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
                             color: _accent,
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white24),
+                            border: Border.all(
+                              color: _hexFocused ? _accent : Colors.white24,
+                              width: _hexFocused ? 2 : 1,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: TextField(
                             controller: _hexCtrl,
+                            focusNode: _hexFocusNode,
+                            textCapitalization: TextCapitalization.characters,
+                            textInputAction: TextInputAction.done,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 15),
                             decoration: InputDecoration(
+                              filled: true,
+                              fillColor: const Color(0xFF121212),
                               labelText: '十六进制颜色（#RRGGBB）',
-                              border: const OutlineInputBorder(),
+                              labelStyle: const TextStyle(
+                                  color: Colors.white54, fontSize: 13),
+                              floatingLabelStyle: TextStyle(
+                                  color: _accent, fontSize: 13),
+                              hintText: '#E10600',
+                              hintStyle: const TextStyle(
+                                  color: Colors.white38, fontSize: 15),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: Colors.white24, width: 1),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: Colors.white24, width: 1),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                    color: _accent, width: 1.5),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: Color(0xFFE53935), width: 1),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: Color(0xFFE53935), width: 1.5),
+                              ),
                               errorText: _hexError,
+                              errorStyle: const TextStyle(
+                                  color: Color(0xFFE57373), fontSize: 12),
                             ),
+                            onChanged: (_) {
+                              // 输入中清掉旧报错；是否合法仍由点应用时
+                              // parseHexColor 判定，解析逻辑未动。
+                              if (_hexError != null) {
+                                setState(() => _hexError = null);
+                              }
+                            },
                             onSubmitted: (_) => _applyHex(),
                           ),
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
                           onPressed: _applyHex,
-                          style: FilledButton.styleFrom(backgroundColor: _accent),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _accent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                          ),
                           child: const Text('应用'),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '输入 #RRGGBB 后点应用，非法值只提示、不改当前主题色。',
+                      style: TextStyle(fontSize: 11, color: Colors.white54),
                     ),
                   ],
                 ),
               ),
             ),
-            // v1.0.3：APP 图标分区。v1.2.2 扩展到五张，3+2 两行并排，点选即切换。
+            // v1.0.3：APP 图标分区。图标删减后只剩方向盘 / 方格旗两项，
+            // 同一行并排；IntrinsicHeight 让两张卡等高，预览图同为 72×72。
             _sectionTitle('APP 图标'),
             Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -529,22 +673,15 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        _appIconOption(AppIconChoice.red),
-                        const SizedBox(width: 12),
-                        _appIconOption(AppIconChoice.rb17),
-                        const SizedBox(width: 12),
-                        _appIconOption(AppIconChoice.valkyrie),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _appIconOption(AppIconChoice.steering),
-                        const SizedBox(width: 12),
-                        _appIconOption(AppIconChoice.checkered),
-                      ],
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _appIconOption(AppIconChoice.steering),
+                          const SizedBox(width: 12),
+                          _appIconOption(AppIconChoice.checkered),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
                     const Text(
@@ -573,33 +710,125 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               accentColor: _accent,
             ),
             // v1.0.4：字体分区（从设置首页移入，功能不变）。
+            // 两张等大选项卡并排：内置字体 / 自带字体，选中态为 accent
+            // 描边 + 对勾；各卡内用对应字体渲染示例文字作预览。
             _sectionTitle('字体'),
             Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.font_download),
-                    title: const Text('导入自带字体'),
-                    subtitle: const Text('导入自己合法取得的 .ttf/.otf'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: widget.onImportFont,
-                  ),
-                  if (widget.hasCustomFont)
-                    ListTile(
-                      leading: const Icon(Icons.clear),
-                      title: const Text('清除自带字体'),
-                      subtitle: const Text('恢复内置字体'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: widget.onClearFont,
-                    )
-                  else
-                    const ListTile(
-                      leading: Icon(Icons.check),
-                      title: Text('当前使用内置字体'),
-                      subtitle: Text('导入后可在此清除恢复'),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _fontOption(
+                            selected: !widget.hasCustomFont,
+                            title: '内置字体',
+                            subtitle: widget.hasCustomFont
+                                ? '点选恢复内置字体'
+                                : '当前使用内置字体',
+                            preview: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text('驰迹',
+                                    style: TextStyle(
+                                        fontFamily: 'DriveTrackDisplay',
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white)),
+                                SizedBox(height: 2),
+                                Text('DriveTrack 0123456789',
+                                    style: TextStyle(
+                                        fontFamily: 'DriveTrackSans',
+                                        fontSize: 12,
+                                        color: Colors.white70)),
+                              ],
+                            ),
+                            onTap: widget.hasCustomFont
+                                ? widget.onClearFont
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          _fontOption(
+                            selected: widget.hasCustomFont,
+                            title: '自带字体',
+                            subtitle: widget.hasCustomFont
+                                ? '已导入自定义字体'
+                                : '导入自己合法取得的 .ttf/.otf',
+                            preview: widget.hasCustomFont
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: const [
+                                      Text('驰迹',
+                                          style: TextStyle(
+                                              fontFamily:
+                                                  'DriveTrackCustom',
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white)),
+                                      SizedBox(height: 2),
+                                      Text('DriveTrack 0123456789',
+                                          style: TextStyle(
+                                              fontFamily:
+                                                  'DriveTrackCustom',
+                                              fontSize: 12,
+                                              color: Colors.white70)),
+                                    ],
+                                  )
+                                : const Text('导入后此处显示该字体效果',
+                                    style: TextStyle(
+                                        fontFamily: 'DriveTrackSans',
+                                        fontSize: 12,
+                                        color: Colors.white38)),
+                            onTap: widget.hasCustomFont
+                                ? null
+                                : widget.onImportFont,
+                            action: widget.hasCustomFont
+                                ? SizedBox(
+                                    width: double.infinity,
+                                    child: TextButton(
+                                      onPressed: widget.onClearFont,
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 4),
+                                      ),
+                                      child: const Text('清除，恢复内置字体',
+                                          style: TextStyle(fontSize: 12)),
+                                    ),
+                                  )
+                                : SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton(
+                                      onPressed: widget.onImportFont,
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: _accent,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 8),
+                                      ),
+                                      child: const Text('导入字体文件',
+                                          style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
-                ],
+                    const SizedBox(height: 12),
+                    const Text(
+                      '导入后立即生效，清除后恢复内置字体。',
+                      style: TextStyle(fontSize: 12, color: Colors.white54),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

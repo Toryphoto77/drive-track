@@ -30,7 +30,7 @@ import 'app_icon_choice.dart';
 /// - 图标：当前选择的启动图标（assets/app_icon_*.png，
 ///   与桌面 alias 同源生成），不再固定用旧转速表图；
 /// - 文字“驰迹 DriveTrack”淡入，slogan“记录每一次出发”随后淡入；
-/// - 总时长约 1.2 秒，缓动 easeOut；动画跑完才切首页，启动页不留
+/// - 总时长约 1.5 秒，缓动 easeOut；动画跑完才切首页，启动页不留
 ///   在返回栈里（pushReplacement）。
 class SplashPage extends StatefulWidget {
   /// 动画完成后的回调；不传时默认走命名路由 '/home'（main.dart 已注册）。
@@ -38,10 +38,10 @@ class SplashPage extends StatefulWidget {
 
   /// v1.0.3：启动图标选择（'red' 默认，见 AppIconChoice），与桌面 alias 同步；
   /// 由 DriveTrackApp 在 build 时传当前 appPrefs.appIcon，load 完成
-  /// 后 AnimatedBuilder 重建会同步刷新（动画 1.2 秒内通常已加载完）。
+  /// 后 AnimatedBuilder 重建会同步刷新（动画 1.5 秒内通常已加载完）。
   final String appIconKey;
 
-  const SplashPage({super.key, this.onFinished, this.appIconKey = AppIconChoice.red});
+  const SplashPage({super.key, this.onFinished, this.appIconKey = AppIconChoice.steering});
 
   @override
   State<SplashPage> createState() => _SplashPageState();
@@ -53,7 +53,7 @@ class _SplashPageState extends State<SplashPage>
 
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1200),
+    duration: const Duration(milliseconds: 1500),
   )..addStatusListener((s) {
       if (s == AnimationStatus.completed && mounted && !_navigated) {
         _navigated = true;

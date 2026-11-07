@@ -22,6 +22,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'models.dart';
 import 'store.dart';
 import 'track_timing.dart';
@@ -289,11 +290,12 @@ class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
     final inputs = _inputs;
     final summary = inputs == null ? null : summarizeAnalyticsTrips(_filtered);
     return Scaffold(
-      appBar: AppBar(title: const Text('行程分析')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: const Text('行程分析')),
       body: inputs == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
               children: [
                 Wrap(spacing: 8, children: [
                   _rangeChip(AnalyticsRange.all, '全部'),

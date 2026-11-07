@@ -41,6 +41,11 @@ GUH=$HOME/.gradle
 mkdir -p "$GUH/init.d"
 printf 'gradle.startParameter.offline = true\n' > "$GUH/init.d/offline.gradle"
 trap cleanup EXIT
+# 版本号从 pubspec.yaml 读（形如 version: 1.4.1+54，取 + 前的部分）；
+# 读不到即停，不编出文件名带空版本号的包（与新增多 ABI 脚本同法，
+# 不再硬编码 v1.4.1；文件名用完整 ABI 名 arm64-v8a）。
+VERSION="$(sed -n 's/^version: \([0-9][0-9.]*\)+.*/\1/p' pubspec.yaml)"
+if [ -z "$VERSION" ]; then echo "读不到 pubspec.yaml 的 version"; exit 1; fi
 # v1.2.5：高德 Web 服务 Key（仅本地 .amap-key 文件，600 权限，
 # gitignore，不进仓库、不进推送清单）：有则以 --dart-define 注入，
 # 无则不传，代码侧空值即禁用高德源；Key 绝不回显到日志。
@@ -56,6 +61,6 @@ if [ -f .cloudbase-env ]; then
   CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")
 fi
 flutter build apk --release --target-platform android-arm64 --no-android-gradle-daemon "${AMAP_DEFINE[@]}" "${CLOUDBASE_DEFINE[@]}"
-cp build/app/outputs/flutter-apk/app-release.apk ./DriveTrack-v1.4.1-release-arm64.apk
-ls -la ./DriveTrack-v1.4.1-release-arm64.apk
+cp build/app/outputs/flutter-apk/app-release.apk "./DriveTrack-v${VERSION}-release-arm64-v8a.apk"
+ls -la "./DriveTrack-v${VERSION}-release-arm64-v8a.apk"
 echo BUILD_DONE

@@ -29,6 +29,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
 
 import 'import_style.dart';
@@ -651,7 +652,8 @@ class _TripAlbumPageState extends State<TripAlbumPage> {
         _selectedId == null ? null : visible.indexWhere((p) => p.resolvedId == _selectedId);
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(title: Text('${widget.title}（${_points.length}）')),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(title: Text('${widget.title}（${_points.length}）')),
       body: _points.isEmpty
           ? const Center(
               child: Text('暂无照片点\n记录中点“事件标记”添加，结束后可附照片',
@@ -660,7 +662,7 @@ class _TripAlbumPageState extends State<TripAlbumPage> {
           : Column(children: [
               Container(
                 height: 180,
-                margin: const EdgeInsets.all(16),
+                margin: EdgeInsets.fromLTRB(16, 16 + appBarTopInset(context), 16, 16),
                 decoration: BoxDecoration(
                   color: const Color(0xFF141414),
                   borderRadius: BorderRadius.circular(14),
@@ -932,8 +934,8 @@ class _PhotoViewerPage extends StatelessWidget {
     final f = point.photoPath == null ? null : File(point.photoPath!);
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-          backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
           title: Text(point.hasTitle
               ? point.title!
               : '照片点 ${index + 1} · ${_fmtDateTime(point.timeMs)}')),

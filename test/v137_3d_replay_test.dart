@@ -421,8 +421,12 @@ void main() {
     testWidgets('切到 3D 回放出现播放条，再切回卫星恢复原视图',
         (tester) async {
       await pumpPage(tester, _tripWithPoints(_eastRun()));
-      await tester.ensureVisible(
-          find.byKey(const ValueKey('analysis-map-3d-replay')));
+      // 顶栏半透后，滚到视口顶端的内容会滑到栏下、点按被顶栏拦截，
+      // 故先把目标滚到视口中部再点（模拟真实使用）。
+      await Scrollable.ensureVisible(
+          tester.element(
+              find.byKey(const ValueKey('analysis-map-3d-replay'))),
+          alignment: 0.5);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('analysis-map-3d-replay')));
       await tester.pumpAndSettle();
@@ -430,8 +434,10 @@ void main() {
           findsOneWidget);
       expect(find.text('36 km/h'), findsOneWidget);
       expect(find.textContaining('3D 透视回放'), findsOneWidget);
-      await tester.ensureVisible(
-          find.byKey(const ValueKey('analysis-map-satellite')));
+      await Scrollable.ensureVisible(
+          tester.element(
+              find.byKey(const ValueKey('analysis-map-satellite'))),
+          alignment: 0.5);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('analysis-map-satellite')));
       await tester.pumpAndSettle();

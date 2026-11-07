@@ -56,3 +56,37 @@ Google / 微信登录这期不做，不用开。手机号登录是二期，
 （POST `/v1/storages/object/trip-files/<路径>`，带
 `x-upsert: true`，同路径重传会覆盖），权限由第 1 步的
 `storage.objects` 策略控制，不公开列举。
+
+## 5. 公开资料 + 公开行程（本轮新增）
+
+执行步骤见 `cloudbase/profiles-public-steps.md`（按顺序做：
+先建 `public-files` 公开桶，再执行 `profiles-public.sql`，
+最后按文件里的查询核对）。
+
+它做的事：
+
+- 建 `public.profiles` 表（`user_id` 主键、昵称、简介、头像路径、
+  更新时间）+ RLS：读公开（任何人）、写仅本人；
+- `public.trips` 表加 `is_public` 列（默认 `false`，已有行程不受影响）
+  + `trips_select_public` 公开读策略（原 4 条仅本人策略不动）；
+- 给 `storage.objects` 加 4 条 `public-files` 桶策略：写仅本人、
+  读公开。
+
+App 侧分桶规则（代码见 `lib/cloud_service.dart`）：
+
+- 公开行程：轨迹文件传 `public-files` 公开桶，`trips` 行写
+  `is_public = true`，`storage_path` 为
+  `public-files/<user id>/<trip id>.json`；
+- 私有行程：轨迹文件传 `trip-files` 私有桶，`is_public = false`，
+  `storage_path` 为 `<user id>/<trip id>.json`（不带前缀，与旧行兼容）；
+- 公开头像：传 `public-files` 公开桶，路径
+  `<user id>/avatar.jpg`（或 `.png`），`profiles` 行的
+  `avatar_path` 存带 `public-files/` 前缀的完整路径；
+- 已上传行程改公开标记后，App 会把轨迹文件重传到新标记对应的桶，
+  再改 `trips` 行的 `is_public` 与 `storage_path`，改回私有后
+  删掉公开桶里的旧文件。
+
+公开含义：`profiles` 公开读意味着任何拿到环境 ID 的人都能读到
+全部用户的昵称、简介与头像路径；`trips` 公开读意味着任何拿到
+环境 ID 的人都能读到 `is_public = true` 的行程摘要与公开桶里的
+轨迹文件。这是公开资料的固有含义，不另加限制。

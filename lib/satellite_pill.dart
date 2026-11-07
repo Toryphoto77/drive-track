@@ -42,10 +42,16 @@ class CompactTogglePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = accentColor ?? Theme.of(context).colorScheme.primary;
     final enabled = onChanged != null;
+    // M2：窄屏上药丸宽取屏宽 - 32（320dp 屏上 288→仍取 280）；MediaQuery
+    // 宽度不可用（≤32，如测试里被覆盖的 MediaQuery）时回落到 280，不崩溃。
+    final screenW = MediaQuery.of(context).size.width;
+    final pillW = (screenW <= 32 || screenW - 32 >= kTogglePillWidth)
+        ? kTogglePillWidth
+        : screenW - 32;
     return Opacity(
       opacity: enabled ? 1 : 0.5,
       child: SizedBox(
-        width: kTogglePillWidth,
+        width: pillW,
         height: 44,
         child: Material(
           color: Colors.transparent,
@@ -53,7 +59,7 @@ class CompactTogglePill extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             onTap: enabled ? () => onChanged!(!value) : null,
             child: Container(
-              width: kTogglePillWidth,
+              width: pillW,
               height: 32,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_bar_style.dart';
 import 'glass_button.dart';
 import 'card_style.dart';
 
@@ -62,11 +63,14 @@ class SettingsHomePage extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
         title: const Text('设置'),
       ),
       body: ListView(
+        padding: withAppBarTopInset(
+            context, const EdgeInsets.only(bottom: 24)),
         children: [
           const SizedBox(height: 8),
           entry(Icons.verified_user, '权限检查', '补齐授权或去系统设置取消授权', onOpenPermission),
