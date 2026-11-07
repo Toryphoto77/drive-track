@@ -291,6 +291,21 @@ class Native {
     }
   }
 
+  /// v1.5.1 可控时长震动：倒计时 3-2-1 与 GO 用原生 Vibrator 震指定
+  /// 毫秒（HapticFeedback 没有时长参数，heavyImpact 只有约 20ms，
+  /// 用户反馈 321 强震感不够、GO 要一次长震）。原生失败 / 无马达
+  /// 时返回 false，调用方回落 HapticFeedback.heavyImpact()，不抛错。
+  /// 毫秒数 clamp 到 50~2000，避免误传 0 或过大值。
+  static Future<bool> vibrate(int milliseconds) async {
+    try {
+      final ms = milliseconds.clamp(50, 2000);
+      final r = await _m.invokeMethod('vibrate', {'ms': ms});
+      return r == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 设备静音判断（v1.2.1）：只看媒体音量是否为 0，即 muted=true。
   /// TTS 走媒体流，振动/静音响铃模式不再禁播报；响铃模式仍回传，
   /// 供诊断页展示。返回 {muted, ringerMode:

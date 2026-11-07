@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'app_bar_style.dart';
-import 'app_notice.dart';
 
 import 'card_style.dart';
 import 'cloud_page.dart';
@@ -73,20 +72,29 @@ class MyAchievement {
   const MyAchievement({required this.title, required this.achieved, this.progress});
 }
 
-/// 页内编辑的结果：用户名 / 简介 / 头像本机路径，由总协调持久化
-/// （建议写回 profile.json 的 username / bio / avatarPath 三个已有键，
-/// 与 AppPrefs.save 保持一致，不要另起一套资料存储）。
+/// 编辑页回传的结果：用户名 / 简介 / 头像本机路径 / 扩展资料，由
+/// 总协调持久化（写回 profile.json 的同名字段）并同步云端公开资料。
+/// 邮箱仅存本机，不发服务器。
 class ProfileEditResult {
   final String username;
   final String bio;
   final String? avatarPath;
-  /// v1.0.7：邮箱（仅存本机，不验证、不发服务器）。
   final String email;
+  final String gender;
+  final String birthday;
+  final String industry;
+  final String vehicleBrand;
+  final String vehicleModel;
   const ProfileEditResult({
     required this.username,
     required this.bio,
     this.avatarPath,
     this.email = '',
+    this.gender = '',
+    this.birthday = '',
+    this.industry = '',
+    this.vehicleBrand = '',
+    this.vehicleModel = '',
   });
 }
 
@@ -98,17 +106,11 @@ class MyPage extends StatefulWidget {
   final String bio;
   /// v1.0.7：邮箱（本机存储，见 ProfileEditResult 说明）。
   final String email;
+
+  /// 编辑入口：v1.5.1 起点“编辑”推全页编辑页（ProfileEditPage），
+  /// 不再在卡片内展开编辑器、不再弹对话框。
   final VoidCallback? onEditProfile;
 
-  /// v0.1.4：页内编辑的保存回调。传了它，资料卡“编辑”钮就在我的页内
-  /// 展开编辑器（改用户名 / 简介 / 换头像），保存后即时回显；
-  /// 不传时退回旧行为：点“编辑”调 [onEditProfile]（main 侧对话框）。
-  final ValueChanged<ProfileEditResult>? onProfileSaved;
-
-  /// v0.1.4：页内编辑时的换头像回调，总协调传 Native.pickFile('image')
-  /// 一类实现（返回本机路径，取消返回 null）。不传时点头像只提示
-  /// “待接线”，不伪造头像。
-  final Future<String?> Function()? onPickAvatar;
   final VoidCallback? onShareInvite;
 
   /// 统计卡：调用方传入（行程数 / 总里程 / 总时长 / 平均评分等）。
@@ -141,8 +143,6 @@ class MyPage extends StatefulWidget {
     required this.bio,
     this.email = '',
     this.onEditProfile,
-    this.onProfileSaved,
-    this.onPickAvatar,
     this.onShareInvite,
     required this.stats,
     this.monthlyStats = const [],
@@ -166,138 +166,15 @@ class MyPage extends StatefulWidget {
 class _MyPageState extends State<MyPage> {
   late MyPageSection _section = widget.initialSection;
 
-  // v0.1.4 页内资料编辑：本地显示值（保存后即时回显，不等父级重建）。
-  late String _localUsername = widget.username;
-  late String _localBio = widget.bio;
-  late String _localEmail = widget.email;
-  late String? _localAvatarPath = widget.avatarPath;
-  bool _editing = false;
-  bool _pickingAvatar = false;
-  String? _editError;
-  late final TextEditingController _nameCtrl =
-      TextEditingController(text: widget.username);
-  late final TextEditingController _bioCtrl =
-      TextEditingController(text: widget.bio);
-  late final TextEditingController _emailCtrl =
-      TextEditingController(text: widget.email);
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _bioCtrl.dispose();
-    _emailCtrl.dispose();
-    super.dispose();
-  }
-
   @override
   void didUpdateWidget(covariant MyPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     // v0.1.7 菜单“收藏”跳转必需：已在我的页时，父级 initialSection
     // 变化（如切到收藏分区）同步到内部 _section；否则只改 myTab
-    // 不会切换已挂载页面的分区。编辑中不覆盖用户输入的规则不变，
-    // 分区同步与编辑互不干扰。
+    // 不会切换已挂载页面的分区。
     if (widget.initialSection != oldWidget.initialSection) {
       _section = widget.initialSection;
     }
-    // 未在编辑时，父级传入的新值同步到本地显示；编辑中不覆盖用户输入。
-    if (!_editing) {
-      if (widget.username != oldWidget.username) {
-        _localUsername = widget.username;
-        _nameCtrl.text = widget.username;
-      }
-      if (widget.bio != oldWidget.bio) {
-        _localBio = widget.bio;
-        _bioCtrl.text = widget.bio;
-      }
-      if (widget.email != oldWidget.email) {
-        _localEmail = widget.email;
-        _emailCtrl.text = widget.email;
-      }
-      if (widget.avatarPath != oldWidget.avatarPath) {
-        _localAvatarPath = widget.avatarPath;
-      }
-    }
-  }
-
-  void _enterEditing() {
-    _nameCtrl.text = _localUsername;
-    _bioCtrl.text = _localBio;
-    _emailCtrl.text = _localEmail;
-    setState(() {
-      _editing = true;
-      _editError = null;
-    });
-  }
-
-  void _cancelEditing() {
-    setState(() {
-      _editing = false;
-      _editError = null;
-      _nameCtrl.text = _localUsername;
-      _bioCtrl.text = _localBio;
-      _emailCtrl.text = _localEmail;
-    });
-  }
-
-  Future<void> _pickAvatar() async {
-    if (widget.onPickAvatar == null) {
-      if (mounted) showAppNotice(context, '换头像暂不可用。', AppNoticeKind.info);
-      return;
-    }
-    if (_pickingAvatar) return;
-    setState(() => _pickingAvatar = true);
-    try {
-      final path = await widget.onPickAvatar!();
-      // 取消返回 null：不改头像、不报错。
-      if (path != null && path.isNotEmpty && mounted) {
-        setState(() => _localAvatarPath = path);
-      }
-    } catch (e) {
-      if (mounted) {
-        showAppNotice(context, '换头像失败：$e', AppNoticeKind.error);
-      }
-    } finally {
-      if (mounted) setState(() => _pickingAvatar = false);
-    }
-  }
-
-  void _saveEditing() {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      // 空用户名不保存、不关闭编辑器，只报错，不崩溃。
-      setState(() => _editError = '用户名不能为空，请填写后再保存。');
-      return;
-    }
-    // 公开资料上限（与云端 profiles 表的 varchar 一致）：超长直接
-    // 拒绝，不静默截断。
-    if (name.length > 32) {
-      setState(() => _editError = '用户名最多 32 个字。');
-      return;
-    }
-    if (_bioCtrl.text.trim().length > 200) {
-      setState(() => _editError = '简介最多 200 个字。');
-      return;
-    }
-    final email = _emailCtrl.text.trim();
-    if (email.isNotEmpty &&
-        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      setState(() => _editError = '邮箱格式不对，请检查后再保存（可留空不填）。');
-      return;
-    }
-    final result = ProfileEditResult(
-      username: name,
-      bio: _bioCtrl.text.trim(),
-      avatarPath: _localAvatarPath,
-      email: email,
-    );
-    setState(() {
-      _localUsername = result.username;
-      _localBio = result.bio;
-      _localEmail = result.email;
-      _editing = false;
-      _editError = null;
-    });
-    widget.onProfileSaved?.call(result);
   }
 
   // v1.0.2 卡片统一：大卡 #1E1E1E、圆角 26、细亮边框（见 card_style.dart）。
@@ -355,6 +232,7 @@ class _MyPageState extends State<MyPage> {
             ),
             child: Text(
               label,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: selected ? Colors.white : Colors.white,
                 fontWeight: selected ? FontWeight.bold : FontWeight.normal,
@@ -367,7 +245,7 @@ class _MyPageState extends State<MyPage> {
   }
 
   Widget _avatar() {
-    final path = _localAvatarPath;
+    final path = widget.avatarPath;
     final file = path != null && path.isNotEmpty ? File(path) : null;
     final hasFile = file != null && file.existsSync();
     return Container(
@@ -392,115 +270,46 @@ class _MyPageState extends State<MyPage> {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          // 编辑中点头像换头像；非编辑态头像不可点（不跳转别处）。
-          _editing
-              ? GestureDetector(
-                  onTap: _pickingAvatar ? null : _pickAvatar,
-                  child: Stack(
-                    children: [
-                      _avatar(),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            color: widget.accentColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _pickingAvatar ? Icons.hourglass_empty : Icons.camera_alt,
-                            size: 12,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : _avatar(),
+          _avatar(),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(_localUsername, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(widget.username, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
               Text('ID · ${widget.userId}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
               const SizedBox(height: 4),
               Text(
-                _localBio.isEmpty ? '暂无简介，点“编辑”添加' : _localBio,
-                style: TextStyle(color: _localBio.isEmpty ? Colors.white38 : Colors.white70, fontSize: 13),
+                widget.bio.isEmpty ? '暂无简介，点“编辑”添加' : widget.bio,
+                style: TextStyle(color: widget.bio.isEmpty ? Colors.white38 : Colors.white70, fontSize: 13),
               ),
-              if (_localEmail.isNotEmpty)
+              if (widget.email.isNotEmpty)
                 Text(
-                  _localEmail,
+                  widget.email,
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
             ]),
           ),
           const SizedBox(width: 8),
-          // v0.1.4：有 onProfileSaved 时在页内编辑；否则退回旧 onEditProfile。
+          // v1.5.1：点“编辑”推全页编辑页，不再在卡片内展开编辑器。
           _pillButton(
-            label: _editing ? '取消' : '编辑',
+            label: '编辑',
             selected: false,
-            onTap: _editing
-                ? _cancelEditing
-                : (widget.onProfileSaved != null ? _enterEditing : widget.onEditProfile),
+            onTap: widget.onEditProfile,
           ),
         ]),
-        if (_editing) ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: _nameCtrl,
-            decoration: const InputDecoration(
-              labelText: '用户名',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _bioCtrl,
-            decoration: const InputDecoration(
-              labelText: '简介',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '昵称与简介保存后会同步到云端公开资料，他人打开你的公开资料页可见。',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _emailCtrl,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: '邮箱（仅存本机，用作反馈联系方式）',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '邮箱仅存本机，不会发到服务器。',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: _pickingAvatar ? null : _pickAvatar,
-            icon: const Icon(Icons.image, size: 16),
-            label: Text(_pickingAvatar ? '选择头像中…' : '换头像'),
-          ),
-          const Text(
-            '头像会上传到公开桶：保存后他人打开你的公开资料页可见。不想公开就不要换头像。',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-          if (_editError != null)
-            Text(_editError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: double.infinity,
-            child: _pillButton(label: '保存', selected: true, onTap: _saveEditing),
-          ),
-        ],
+        // v1.5.1：关注/粉丝/获赞并进资料卡（原独立社交卡已删）；
+        // 数字为调用方传入的真实本机数字，为 0 时显示“暂无”，不编数。
+        const SizedBox(height: 14),
+        Container(
+          height: 1,
+          color: Colors.white.withValues(alpha: 0.08),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          _socialCell('关注', widget.following),
+          _socialCell('粉丝', widget.followers),
+          _socialCell('获赞', widget.likes),
+        ]),
         if (widget.onShareInvite != null) ...[
           const SizedBox(height: 12),
           SizedBox(
@@ -511,6 +320,16 @@ class _MyPageState extends State<MyPage> {
       ]),
     );
   }
+
+  /// 资料卡内的社交数字格：数字在上、标签在下，居中。
+  Widget _socialCell(String label, int n) => Expanded(
+        child: Column(children: [
+          Text(n > 0 ? '$n' : '暂无',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        ]),
+      );
 
   Widget _statsCard() {
     if (widget.stats.isEmpty) return const SizedBox.shrink();
@@ -593,26 +412,6 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
-  /// 社交行：数字原样传入；为 0 时显示“暂无”，不显示假数字，
-  /// 也不在卡片外另贴解释长文。
-  Widget _socialCard() {
-    String show(int n) => n > 0 ? '$n' : '暂无';
-    Widget cell(String label, int n) => Expanded(
-          child: Column(children: [
-            Text(show(n), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          ]),
-        );
-    return _card(
-      child: Row(children: [
-        cell('关注', widget.following),
-        cell('粉丝', widget.followers),
-        cell('获赞', widget.likes),
-      ]),
-    );
-  }
-
   // 云端一期：个人页云端入口（账号状态 + 同步状态，点进云端页）。
   // 本卡只读 CloudService 的同步状态、不发任何网络请求；
   // 未配置时只显示“云端未配置”，点进去看说明。
@@ -666,23 +465,97 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
+  /// 分区分段控件（v1.5.1 重做，替代旧的四个独立药丸）：
+  /// - 旧药丸的文字错位：标签与数字拼在同一个 Text 里（'行程 12'），
+  ///   中文与数字混排时基线不一致、看起来错位；现标签与数字分开
+  ///   两个 Text、同一行居中，窄屏下 FittedBox 等比缩小不断行；
+  /// - 每段 Expanded 均分、内容用 alignment.center + textAlign.center
+  ///   双重居中。
   Widget _sectionBar() {
-    // 分区药丸带真实条数：行程 / 动态 / 收藏为条数，成就为“已达成 / 全部”。
     final achieved =
         widget.achievements.where((a) => a.achieved).length;
-    String label(MyPageSection s) => switch (s) {
-          MyPageSection.trips => '行程 ${widget.trips.length}',
-          MyPageSection.posts => '动态 ${widget.posts.length}',
-          MyPageSection.favorites => '收藏 ${widget.favorites.length}',
+    (String, String) parts(MyPageSection s) => switch (s) {
+          MyPageSection.trips => ('行程', '${widget.trips.length}'),
+          MyPageSection.posts => ('动态', '${widget.posts.length}'),
+          MyPageSection.favorites => ('收藏', '${widget.favorites.length}'),
           MyPageSection.achievements =>
-            '成就 $achieved/${widget.achievements.length}',
+            ('成就', '$achieved/${widget.achievements.length}'),
         };
-    return Row(children: [
-      for (final s in MyPageSection.values) ...[
-        if (s != MyPageSection.trips) const SizedBox(width: 8),
-        Expanded(child: _pillButton(label: label(s), selected: _section == s, onTap: () => _select(s))),
-      ],
-    ]);
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: CardStyle.borderColor),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: Row(children: [
+          for (final s in MyPageSection.values)
+            Expanded(
+              child: _sectionSegment(
+                label: parts(s).$1,
+                count: parts(s).$2,
+                selected: _section == s,
+                onTap: () => _select(s),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _sectionSegment({
+    required String label,
+    required String count,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? CardStyle.accent(context) : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight:
+                        selected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  count,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight:
+                        selected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _tripRow(MyTripItem item, {bool showPublicToggle = false}) {
@@ -774,8 +647,6 @@ class _MyPageState extends State<MyPage> {
           const SizedBox(height: 12),
           _monthlyStatsCard(),
         ],
-        const SizedBox(height: 12),
-        _socialCard(),
         const SizedBox(height: 12),
         _cloudCard(),
         const SizedBox(height: 12),

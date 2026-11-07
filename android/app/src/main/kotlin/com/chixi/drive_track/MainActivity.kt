@@ -46,6 +46,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.WindowManager
 import android.os.Handler
 import android.os.IBinder
@@ -597,6 +599,30 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             ))
                         } catch (_: Exception) {
                             result.success(mapOf("muted" to false, "ringerMode" to "unknown", "musicVolume" to -1))
+                        }
+                    }
+                    // v1.5.1 可控时长震动：倒计时 3-2-1 与 GO 用。HapticFeedback
+                    // 没有时长参数（heavyImpact 约 20ms），用户反馈 321 强震感
+                    // 不够、GO 要一次长震，改走原生 Vibrator 一次性震动。
+                    // ms clamp 到 50~2000；无马达 / 异常返回 false，Dart 侧
+                    // 回落 heavyImpact。VIBRATE 是普通权限，无需运行时申请。
+                    "vibrate" -> {
+                        try {
+                            val ms = (call.argument<Int>("ms") ?: 200).coerceIn(50, 2000).toLong()
+                            val vib = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                            if (vib == null || !vib.hasVibrator()) {
+                                result.success(false)
+                            } else {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    vib.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    vib.vibrate(ms)
+                                }
+                                result.success(true)
+                            }
+                        } catch (_: Exception) {
+                            result.success(false)
                         }
                     }
                     // v0.1.4 直连卫星：只用 GPS_PROVIDER 出位置，网络仅辅星历；

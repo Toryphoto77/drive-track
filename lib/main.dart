@@ -34,6 +34,7 @@ import 'track_package_selector.dart';
 import 'track_timing.dart';
 import 'track_widgets.dart';
 import 'my_page.dart';
+import 'profile_edit_page.dart';
 import 'refined_map.dart';
 import 'weather_strip.dart';
 import 'weather_service.dart';
@@ -90,7 +91,16 @@ import 'performance_challenge.dart';
 // 个人页云端入口）。环境 ID 只走 --dart-define，不进仓库。
 import 'cloud_service.dart';
 
-void main() => runApp(const DriveTrackApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // v1.5.1：全局默认只允许竖屏（用户要求：横屏只在记录页放开，
+  // 其他页一律竖屏）。记录页在进入/退出记录态时另行放开/收回，
+  // 见 _applyRecordingOrientation。
+  unawaited(SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]));
+  runApp(const DriveTrackApp());
+}
 
 // ---------- v0.1.2 本机偏好：主题色 / 个人资料 / 自带字体 ----------
 // 全部只存本机 profile.json，不登录、不上传。用户名默认“柴西”（用户自报），
@@ -103,6 +113,14 @@ class AppPrefs extends ChangeNotifier {
   // v1.0.7：个人页邮箱（仅存本机 profile.json，不发验证码、
   // 不是账号登录绑定、不发到任何服务器）。
   String email = '';
+  // v1.5.1：个人资料扩展字段（只存本机 profile.json，随昵称/简介
+  // 一起同步到云端公开资料）：性别（''=未填，'男'/'女'）、生日
+  // （'yyyy-MM-dd' 或 ''）、行业、座驾品牌、座驾型号。
+  String gender = '';
+  String birthday = '';
+  String industry = '';
+  String vehicleBrand = '';
+  String vehicleModel = '';
   String? avatarPath;
   String? customFontPath;
   bool customFontLoaded = false;
@@ -186,6 +204,11 @@ class AppPrefs extends ChangeNotifier {
         userId = (j['userId'] as String?) ?? '';
         bio = (j['bio'] as String?) ?? '';
         email = (j['email'] as String?) ?? '';
+        gender = (j['gender'] as String?) ?? '';
+        birthday = (j['birthday'] as String?) ?? '';
+        industry = (j['industry'] as String?) ?? '';
+        vehicleBrand = (j['vehicleBrand'] as String?) ?? '';
+        vehicleModel = (j['vehicleModel'] as String?) ?? '';
         avatarPath = j['avatarPath'] as String?;
         customFontPath = j['customFontPath'] as String?;
       }
@@ -229,6 +252,11 @@ class AppPrefs extends ChangeNotifier {
         'userId': userId,
         'bio': bio,
         'email': email,
+        'gender': gender,
+        'birthday': birthday,
+        'industry': industry,
+        'vehicleBrand': vehicleBrand,
+        'vehicleModel': vehicleModel,
         'avatarPath': avatarPath,
         'customFontPath': customFontPath,
         'countdownVibration': countdownVibration,
@@ -926,7 +954,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.5.0',
+          versionName: '1.5.1',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1630,8 +1658,32 @@ class _HomePageState extends State<HomePage>
   static Color _speedColor(double kmh) =>
       kmh < 60 ? Colors.white : (kmh <= 100 ? Colors.yellow : Colors.red);
 
+  /// v1.5.1 横屏门控的当前状态：true = 已放开横屏（记录态）。
+  /// 只在状态变化时调平台通道，避免每帧重复调用。
+  bool _orientationLandscapeAllowed = false;
+
+  void _applyRecordingOrientation(bool recording) {
+    final allow = recording;
+    if (allow == _orientationLandscapeAllowed) return;
+    _orientationLandscapeAllowed = allow;
+    unawaited(SystemChrome.setPreferredOrientations(
+      allow
+          ? const [
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]
+          : const [DeviceOrientation.portraitUp],
+    ));
+  }
+
   Widget _buildMainScaffold() {
     final recording = rec.isRecording || rec.state == RecState.paused;
+    // v1.5.1 横屏门控：只在记录态（街道计时 / 赛道计时）放开横屏，
+    // 其余页面一律竖屏；状态变化时才调一次平台通道，不每帧调用。
+    _applyRecordingOrientation(recording);
+    final isLandscapeRecording = recording &&
+        MediaQuery.of(context).orientation == Orientation.landscape;
     // v1.0.5：删掉 navSafe 底部安全区公式。内容不再为药丸留空，
     // 直接延伸到屏幕底边、从药丸下方划过；药丸周边不再是空底色条，
     // 而是页面内容本身透过毛玻璃可见。用户明确不要为“最后一条完整
@@ -1640,7 +1692,11 @@ class _HomePageState extends State<HomePage>
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(
+      // v1.5.1：横屏记录时不显示 App 顶栏（用户要求：横屏只专注计时），
+      // 顶栏隐藏后记录页顶垫只留状态栏高（见 _buildRecording）。
+      appBar: isLandscapeRecording
+          ? null
+          : DtAppBar(
         // v1.0.2 顶部按钮去边框：无圆形外框/圆形背景块的纯图标按钮，
         // 图标保留、点击区 44×44（SizedBox 定死，不用 GlassButton 的圆底）。
         leading: SizedBox(
@@ -2081,31 +2137,60 @@ class _HomePageState extends State<HomePage>
     ];
   }
 
+  /// v1.5.1：点“编辑”推全页编辑页（ProfileEditPage），不再弹对话框、
+  /// 不再在卡片内展开编辑器。保存回调：先写本机 profile.json，再
+  /// 同步云端公开资料；本机已存、云端失败只报提示、不回滚本机。
   Future<void> _editProfile() async {
-    final nameCtrl = TextEditingController(text: appPrefs.username);
-    final bioCtrl = TextEditingController(text: appPrefs.bio);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('编辑个人资料'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: '用户名')),
-          TextField(controller: bioCtrl, decoration: const InputDecoration(labelText: '简介')),
-          const SizedBox(height: 8),
-          Text('ID：${appPrefs.userId}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
-        ],
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileEditPage(
+          username: appPrefs.username,
+          bio: appPrefs.bio,
+          email: appPrefs.email,
+          gender: appPrefs.gender,
+          birthday: appPrefs.birthday,
+          industry: appPrefs.industry,
+          vehicleBrand: appPrefs.vehicleBrand,
+          vehicleModel: appPrefs.vehicleModel,
+          avatarPath: appPrefs.avatarPath,
+          onPickAvatar: () async => await Native.pickFile('image'),
+          onSave: (r) async {
+            appPrefs.username = r.username;
+            appPrefs.bio = r.bio;
+            appPrefs.email = r.email;
+            appPrefs.gender = r.gender;
+            appPrefs.birthday = r.birthday;
+            appPrefs.industry = r.industry;
+            appPrefs.vehicleBrand = r.vehicleBrand;
+            appPrefs.vehicleModel = r.vehicleModel;
+            if (r.avatarPath != null) appPrefs.avatarPath = r.avatarPath;
+            await appPrefs.save();
+            if (mounted) setState(() {});
+            // 公开资料同步：昵称/简介/扩展字段写 profiles 表，头像传公开桶；
+            // 本机资料已存，云端失败只报提示、不回滚本机。
+            // 未配置云端时不弹提示（本机保存即预期行为，云端卡片会说明）。
+            final pr = await CloudService.instance.saveProfile(
+              nickname: r.username,
+              bio: r.bio,
+              avatarLocalPath: r.avatarPath,
+              gender: r.gender,
+              birthday: r.birthday,
+              industry: r.industry,
+              vehicleBrand: r.vehicleBrand,
+              vehicleModel: r.vehicleModel,
+            );
+            if (mounted && !pr.notConfigured) {
+              showAppNotice(
+                context,
+                pr.message,
+                pr.ok ? AppNoticeKind.success : AppNoticeKind.error,
+              );
+            }
+          },
+        ),
       ),
     );
-    if (ok == true) {
-      appPrefs.username = nameCtrl.text.trim().isEmpty ? appPrefs.username : nameCtrl.text.trim();
-      appPrefs.bio = bioCtrl.text.trim();
-      await appPrefs.save();
-      if (mounted) setState(() {});
-    }
   }
 
   Future<void> _shareInvite() async {
@@ -2162,30 +2247,6 @@ class _HomePageState extends State<HomePage>
       bio: appPrefs.bio,
       email: appPrefs.email,
       onEditProfile: _editProfile,
-      onProfileSaved: (r) async {
-        appPrefs.username = r.username;
-        appPrefs.bio = r.bio;
-        appPrefs.email = r.email;
-        if (r.avatarPath != null) appPrefs.avatarPath = r.avatarPath;
-        await appPrefs.save();
-        if (mounted) setState(() {});
-        // 公开资料同步：昵称/简介写 profiles 表，头像传公开桶；
-        // 本机资料已存，云端失败只报提示、不回滚本机。
-        // 未配置云端时不弹提示（本机保存即预期行为，云端卡片会说明）。
-        final pr = await CloudService.instance.saveProfile(
-          nickname: r.username,
-          bio: r.bio,
-          avatarLocalPath: r.avatarPath,
-        );
-        if (mounted && !pr.notConfigured) {
-          showAppNotice(
-            context,
-            pr.message,
-            pr.ok ? AppNoticeKind.success : AppNoticeKind.error,
-          );
-        }
-      },
-      onPickAvatar: () async => await Native.pickFile('image'),
       onShareInvite: _shareInvite,
       stats: [
         MyStat(label: '行程', value: '${real.length}'),
@@ -2833,7 +2894,12 @@ class _HomePageState extends State<HomePage>
       // v1.4.2：顶栏改半透 + 主框架 extendBodyBehindAppBar，首位占位
       // 状态栏 + AppBar 高，天气条 / GPS 徽标静止时才不会藏进顶栏后
       //（街道 / 赛道、横 / 竖屏四种组合共用此一处）。
-      SizedBox(height: appBarTopInset(context)),
+      // v1.5.1：横屏记录时顶栏隐藏，此处只留状态栏高。
+      SizedBox(
+        height: MediaQuery.of(context).orientation == Orientation.landscape
+            ? MediaQuery.of(context).padding.top
+            : appBarTopInset(context),
+      ),
       // v1.2.17：赛道模式隐藏顶部天气条容器（整块不渲染）；街道模式
       // 保留原样。GpsSourceBadge 在其下原样原位保留。
       if (!isTrackPage)
@@ -3129,8 +3195,8 @@ class _HomePageState extends State<HomePage>
       );
       // v1.0.2 记录页底部面板底色统一为卡片色 #1E1E1E（仅改色，不改结构/逻辑）。
       // v1.3.2：底部按钮只在计时页（第 0 页）显示，地图页不显示操作区。
-      // 横屏时底部面板不包 Flexible（Flexible 只能是 Flex 的直接子级），
-      // 只留可滚动内容容器，末尾按方向包 Flexible 或定宽 SizedBox。
+      // v1.5.1：本面板只用于竖屏（横屏用 landscapeControls）；竖屏
+      // 组装时直接作 Column 子级、不包 Flexible（见末尾注释）。
       final bottomPanelWidget = Container(
             color: CardStyle.cardColor,
             child: SingleChildScrollView(
@@ -3241,17 +3307,83 @@ class _HomePageState extends State<HomePage>
               ),
             ),
           );
+    // v1.5.1 横屏控制列（重做）：横屏只专注计时，右侧只放计时核心
+    // + 两个大按钮——暂停（64 高、主题色）与长按结束（64 高、红色、
+    // 仍只响应长按防误触）。速度/G 圆/标记按钮不在横屏出现，竖屏
+    // 底部面板原样保留。只在计时页（第 0 页）显示，地图页不显示。
+    final landscapeControls = Container(
+      color: CardStyle.cardColor,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isTrackPage) ...[
+            Text(
+              liveLapTimer == null
+                  ? '等待定位'
+                  : '第 ${liveLapTimer!.currentLapNumber <= 0 ? '发车圈' : '${liveLapTimer!.currentLapNumber} 圈'}',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text('本节用时 ${fmtDur(rec.elapsedMs)}',
+                style: const TextStyle(color: Colors.white70, fontSize: 14)),
+          ] else ...[
+            Text('${(rec.curSpeed * 3.6).toStringAsFixed(0)}',
+                style: TextStyle(
+                    fontSize: 56,
+                    fontWeight: FontWeight.bold,
+                    color: _speedColor(rec.curSpeed * 3.6))),
+            const Text('km/h', style: TextStyle(color: Colors.white60)),
+            const SizedBox(height: 4),
+            Text(
+                '里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km · ${fmtDur(rec.elapsedMs)}',
+                style: const TextStyle(color: Colors.white70)),
+          ],
+          const Spacer(),
+          SizedBox(
+            height: 64,
+            child: FilledButton(
+              onPressed: togglePause,
+              child: Text(rec.isRecording ? '暂停' : '恢复',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          RippleTap(
+            borderRadius: BorderRadius.circular(16),
+            onLongPress: _endTrip,
+            child: Container(
+              height: 64,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(16)),
+              child: const Text('长按结束',
+                  style:
+                      TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(rec.calibrationNote,
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              textAlign: TextAlign.center),
+        ],
+      ),
+    );
     // ---- 按方向组装（竖屏原样 / 横屏左右分栏）----
     // 横屏（800×360 这类）：左右分栏。左侧 = 地图/计时 PageView
-    // + 页指示点；右侧 = 底部操作区（定宽、可纵向滚动）；地图页
-    // （第 1 页）不显示操作区，地图占满宽。竖屏：保持原 Column
-    // 结构不动（Expanded PageView + 指示点 + Flexible 底部面板）。
+    // + 页指示点；右侧 = 横屏控制列（定宽）；地图页（第 1 页）
+    // 不显示操作区，地图占满宽。竖屏：保持原 Column 结构
+    // （Expanded PageView + 指示点 + 底部面板，不包 Flexible）。
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     if (isLandscape) {
       // 右栏宽取屏宽 42%，夹在 300~380：800 宽屏上 336，窄横屏
-      // 上不低于 300（速度 44 号字 + 110 G 圆仍放得下），左侧
-      // 地图/计时区至少留约 340。
+      // 上不低于 300，左侧地图/计时区至少留约 340。
       final panelW =
           (MediaQuery.of(context).size.width * 0.42).clamp(300.0, 380.0);
       return Column(children: [
@@ -3265,7 +3397,7 @@ class _HomePageState extends State<HomePage>
               ]),
             ),
             if (_recMapPageIndex == 0)
-              SizedBox(width: panelW, child: bottomPanelWidget),
+              SizedBox(width: panelW, child: landscapeControls),
           ]),
         ),
       ]);
@@ -3274,7 +3406,13 @@ class _HomePageState extends State<HomePage>
       ...topWidgets,
       Expanded(child: pageViewWidget),
       pageTabs,
-      if (_recMapPageIndex == 0) Flexible(child: bottomPanelWidget),
+      // v1.5.1 竖屏回归：底部面板不包 Flexible。1.5.0 横屏分栏时
+      // 误把底部面板包进 Flexible（默认 flex 1），它与 Expanded
+      // 的 PageView 平分剩余空间：PageView 只拿到一半高度、赛道
+      // 面板从分段格处被拦腰截断，剩下一半空间在屏底空着——这就是
+      // 用户截图里竖屏赛道计时页的问题根因。底部面板按内容高度
+      // 自然排列，Expanded 的 PageView 拿走全部剩余高度。
+      if (_recMapPageIndex == 0) bottomPanelWidget,
     ]);
   }
 

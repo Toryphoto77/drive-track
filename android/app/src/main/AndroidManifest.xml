@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- v0.1.5 在线更新：调起系统安装器安装下载的 APK 所需 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

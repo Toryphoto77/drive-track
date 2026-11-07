@@ -827,12 +827,28 @@ class PublicProfile {
   final String avatarPath;
   final int updatedAtMs;
 
+  /// v1.5.1 个人资料扩展字段（与 profiles 表新增列对应，见
+  /// cloudbase/profiles-v2-fields.sql）：性别（''=未填，'男'/'女'）、
+  /// 生日（'yyyy-MM-dd' 或 ''）、行业、座驾品牌、座驾型号。全部
+  /// 为公开资料的一部分，随昵称/简介一起同步；缺字段的旧行读回
+  /// 时按 '' 处理，不崩。
+  final String gender;
+  final String birthday;
+  final String industry;
+  final String vehicleBrand;
+  final String vehicleModel;
+
   const PublicProfile({
     required this.userId,
     this.nickname = '',
     this.bio = '',
     this.avatarPath = '',
     this.updatedAtMs = 0,
+    this.gender = '',
+    this.birthday = '',
+    this.industry = '',
+    this.vehicleBrand = '',
+    this.vehicleModel = '',
   });
 
   static int _parseTime(dynamic v) {
@@ -850,6 +866,11 @@ class PublicProfile {
         bio: (j['bio'] as String?) ?? '',
         avatarPath: (j['avatar_path'] as String?) ?? '',
         updatedAtMs: _parseTime(j['updated_at']),
+        gender: (j['gender'] as String?) ?? '',
+        birthday: (j['birthday'] as String?) ?? '',
+        industry: (j['industry'] as String?) ?? '',
+        vehicleBrand: (j['vehicle_brand'] as String?) ?? '',
+        vehicleModel: (j['vehicle_model'] as String?) ?? '',
       );
 
   /// profiles 表的一行：user_id 是云端账号 id（auth.uid()），
@@ -862,6 +883,11 @@ class PublicProfile {
         'updated_at': DateTime.fromMillisecondsSinceEpoch(updatedAtMs)
             .toUtc()
             .toIso8601String(),
+        'gender': gender,
+        'birthday': birthday,
+        'industry': industry,
+        'vehicle_brand': vehicleBrand,
+        'vehicle_model': vehicleModel,
       };
 }
 
@@ -2009,6 +2035,11 @@ class CloudService {
     required String nickname,
     required String bio,
     String? avatarLocalPath,
+    String gender = '',
+    String birthday = '',
+    String industry = '',
+    String vehicleBrand = '',
+    String vehicleModel = '',
   }) async {
     await initialized;
     if (!isConfigured) {
@@ -2019,8 +2050,23 @@ class CloudService {
       );
     }
     final backend = _backend;
-    final userId = currentUserId;
-    if (backend == null || userId == null || userId.isEmpty) {
+    if (backend == null) {
+      return const CloudProfileResult(
+          ok: false, message: '云端账号未就绪，请稍后再试');
+    }
+    // v1.5.1 保存失败兜底：之前只读 currentUserId，会话过期或
+    // 会话丢失时直接失败（用户反馈点保存弹保存失败）。现先重建
+    // 一次会话（恢复已存会话 / 换票 / 匿名登录，与行程上传同款），
+    // 仍拿不到 user id 才报错。
+    var userId = currentUserId;
+    if (userId == null || userId.isEmpty) {
+      try {
+        userId = await backend
+            .ensureSignedIn()
+            .timeout(const Duration(seconds: 15));
+      } catch (_) {}
+    }
+    if (userId == null || userId.isEmpty) {
       return const CloudProfileResult(
           ok: false, message: '云端账号未就绪，请稍后再试');
     }
@@ -2068,15 +2114,41 @@ class CloudService {
         }
       } catch (_) {}
     }
+    PublicProfile buildProfile(String uid) => PublicProfile(
+          userId: uid,
+          nickname: name,
+          bio: intro,
+          avatarPath: avatarPath,
+          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+          gender: gender,
+          birthday: birthday,
+          industry: industry,
+          vehicleBrand: vehicleBrand,
+          vehicleModel: vehicleModel,
+        );
     try {
-      final profile = PublicProfile(
-        userId: userId,
-        nickname: name,
-        bio: intro,
-        avatarPath: avatarPath,
-        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-      );
-      await backend.upsertProfileRow(profile.toRow());
+      await backend.upsertProfileRow(buildProfile(userId).toRow());
+    } on CloudBaseApiException catch (e) {
+      // 会话过期导致写失败：postgrest 内已换票重试过一次；这里再
+      // 重建一次会话（恢复/换票/匿名登录）后重试一次 upsert，仍
+      // 失败才报保存失败。重建后 user id 通常不变（同一匿名账号），
+      // 极少数换了新账号时本次头像路径沿用旧值，下次换头像即纠正。
+      var retried = false;
+      if (e.code == 'session_expired') {
+        try {
+          final newId = await backend
+              .ensureSignedIn()
+              .timeout(const Duration(seconds: 15));
+          if (newId != null && newId.isNotEmpty) {
+            await backend.upsertProfileRow(buildProfile(newId).toRow());
+            retried = true;
+          }
+        } catch (_) {}
+      }
+      if (!retried) {
+        return CloudProfileResult(
+            ok: false, message: '公开资料同步失败：$e', avatarError: avatarError);
+      }
     } catch (e) {
       return CloudProfileResult(
           ok: false, message: '公开资料同步失败：$e', avatarError: avatarError);

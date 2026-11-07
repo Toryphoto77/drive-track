@@ -18,7 +18,8 @@ import 'package:flutter/material.dart';
 ///   的不透明度一致；静止时盖在同为 #121212 的脚手架底色上，与改前
 ///   不透明观感无缝衔接，滚动时内容从栏下透出；
 /// - 模糊 sigma 28，与磨砂导航栏的 BackdropFilter（28）一致；
-/// - 底部一条白 8% 细线，内容滑到栏下时帮助区分标题与正文。
+/// - 底部细线已删（v1.5.1，用户反馈：半透栏下的白 8% 细线在真机上
+///   看着像一条白色边框线）；标题与正文的区分靠磨砂模糊本身。
 ///
 /// 实现要点：
 /// - [DtAppBar] 是 [AppBar] 的子类：底色透明 + elevation /
@@ -64,7 +65,7 @@ class DtAppBar extends AppBar {
         );
 }
 
-/// 顶栏磨砂层：BackdropFilter 模糊 + 65% 黑 + 底部细线。
+/// 顶栏磨砂层：BackdropFilter 模糊 + 65% 黑（无底部细线）。
 class _AppBarFrost extends StatelessWidget {
   const _AppBarFrost();
 
@@ -77,14 +78,7 @@ class _AppBarFrost extends StatelessWidget {
           sigmaY: kAppBarBlurSigma,
         ),
         child: Container(
-          decoration: BoxDecoration(
-            color: kAppBarBackground,
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
-            ),
-          ),
+          color: kAppBarBackground,
         ),
       ),
     );

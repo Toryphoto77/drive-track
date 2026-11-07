@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'native.dart';
 import 'voice_service.dart';
 
 /// 全屏倒计时页（v0.1.3 新建文件，不改旧文件）。
@@ -17,11 +18,11 @@ import 'voice_service.dart';
 /// 再调回调，因此总协调的 onFinish/onCancel 里不要再 pop 一次
 /// （否则会多弹一层路由）。
 ///
-/// 震动说明（必须如实传达）：Flutter 的 HapticFeedback 没有时长参数，
-/// 开始记录倒数全程用最强的 HapticFeedback.heavyImpact()（用户要求
-/// 倒数用强震动），没有原生震动马达或系统关闭触感反馈时无震动但不崩
-/// （全部 try/catch）。如需真正可控时长的长震动（如 500ms），总协调
-/// 需补一个原生震动方法，本页再换调该方法。
+/// 震动说明（v1.5.1 改原生可控时长震动）：Flutter 的 HapticFeedback
+/// 没有时长参数，heavyImpact 只有约 20ms，用户反馈 321 强震感不够、
+/// GO 要一次长震——现改走原生 Vibrator：每拍 200ms 强震、GO 时
+/// 700ms 长震（见 [_vibrateTick] / [_vibrateGo]）；原生失败或无马达
+/// 时回落 heavyImpact，不崩。全部 try/catch，静默。
 /// [vibrationEnabled] 为 false 时全程不震动。
 
 class CountdownPage extends StatefulWidget {
@@ -107,13 +108,23 @@ class _CountdownPageState extends State<CountdownPage> {
     super.dispose();
   }
 
-  void _vibrateLong() {
+  /// 倒数每拍的强震：原生 200ms，失败回落 heavyImpact。
+  Future<void> _vibrateTick() async {
     if (!widget.vibrationEnabled) return;
-    try {
-      // HapticFeedback 无时长参数，heavyImpact 是最强的近似长震动。
-      HapticFeedback.heavyImpact();
-    } catch (_) {
-      // 同上，静默。
+    if (!await Native.vibrate(200)) {
+      try {
+        HapticFeedback.heavyImpact();
+      } catch (_) {}
+    }
+  }
+
+  /// GO 时的长震：原生 700ms 一次，失败回落 heavyImpact。
+  Future<void> _vibrateGo() async {
+    if (!widget.vibrationEnabled) return;
+    if (!await Native.vibrate(700)) {
+      try {
+        HapticFeedback.heavyImpact();
+      } catch (_) {}
     }
   }
 
@@ -122,14 +133,15 @@ class _CountdownPageState extends State<CountdownPage> {
     if (_remaining > 1) {
       setState(() => _remaining--);
       // 倒数每拍都用强震动（用户要求），不再轻震。
-      _vibrateLong();
+      unawaited(_vibrateTick());
       // 报数与视觉节拍对齐：数字变到几就报几。
       if (widget.speakCountdown) {
         unawaited(VoiceService.instance.speakCountdown('$_remaining'));
       }
     } else if (_remaining == 1) {
       setState(() => _remaining = 0);
-      _vibrateLong();
+      // GO 时触发一次长震（用户要求）。
+      unawaited(_vibrateGo());
       // GO 时报“开始”，与屏幕上的 GO / 出发同步。
       if (widget.speakCountdown) {
         unawaited(VoiceService.instance.speakCountdown('开始'));

@@ -131,6 +131,36 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                                     : Colors.white70,
                                 fontSize: 13),
                           ),
+                          // v1.5.1：公开资料扩展字段（只显示已填的，空的不占位）。
+                          if (profile.gender.isNotEmpty ||
+                              profile.birthday.isNotEmpty ||
+                              profile.industry.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              [
+                                if (profile.gender.isNotEmpty)
+                                  profile.gender,
+                                if (profile.birthday.isNotEmpty)
+                                  profile.birthday,
+                                if (profile.industry.isNotEmpty)
+                                  profile.industry,
+                              ].join(' · '),
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 12),
+                            ),
+                          ],
+                          if (profile.vehicleBrand.isNotEmpty ||
+                              profile.vehicleModel.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '座驾：${[
+                                profile.vehicleBrand,
+                                profile.vehicleModel
+                              ].where((s) => s.isNotEmpty).join(' ')}',
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 12),
+                            ),
+                          ],
                         ],
                       ),
                     ),

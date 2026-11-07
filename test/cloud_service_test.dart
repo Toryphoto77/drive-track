@@ -240,9 +240,9 @@ Future<Directory> _tempDir() =>
 
 void main() {
   group('CloudBase 配置与版本', () {
-    test('pubspec 版本仍是 1.5.0+55，且不含 supabase / cloudbase_flutter', () {
+    test('pubspec 版本仍是 1.5.1+56，且不含 supabase / cloudbase_flutter', () {
       final content = File('pubspec.yaml').readAsStringSync();
-      expect(content, contains('version: 1.5.0+55'));
+      expect(content, contains('version: 1.5.1+56'));
       expect(content.toLowerCase(), isNot(contains('supabase')));
       // HTTP API 路由：零新增 pub 依赖，SDK 不进 pubspec。
       expect(content, isNot(contains('cloudbase_flutter')));
@@ -736,6 +736,31 @@ void main() {
       expect(r.ok, isTrue);
       expect(fake.profiles['fake-user-1']!['avatar_path'],
           'public-files/fake-user-1/avatar.jpg');
+    });
+
+    test('saveProfile 扩展字段：性别/生日/行业/座驾品牌型号写 profiles 表', () async {
+      final svc = _service();
+      await svc.init();
+      final r = await svc.saveProfile(
+        nickname: '柴西',
+        bio: 'hello',
+        gender: '男',
+        birthday: '1996-09-29',
+        industry: '影视、电视、广播制作',
+        vehicleBrand: '宝马',
+        vehicleModel: 'M4',
+      );
+      expect(r.ok, isTrue);
+      final saved = fake.profiles['fake-user-1']!;
+      expect(saved['gender'], '男');
+      expect(saved['birthday'], '1996-09-29');
+      expect(saved['industry'], '影视、电视、广播制作');
+      expect(saved['vehicle_brand'], '宝马');
+      expect(saved['vehicle_model'], 'M4');
+      // 读回时新字段同样解析。
+      expect((await svc.fetchPublicProfile('fake-user-1'))!.gender, '男');
+      expect((await svc.fetchPublicProfile('fake-user-1'))!.vehicleModel,
+          'M4');
     });
 
     test('公开行程上传：文件进公开桶，行写 is_public 与带前缀 storage_path', () async {
