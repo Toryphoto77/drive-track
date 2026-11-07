@@ -519,7 +519,7 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
       return;
     }
     if (!_hasSource) {
-      setState(() => _notice = '未接入定位源：本页不自建定位，请由调用方传入 Recorder 或速度样本流。');
+      setState(() => _notice = '未接入定位源，无法计时。');
       return;
     }
     setState(() {
@@ -527,8 +527,8 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
       _lastOutcome = null;
       _badSamples = 0;
       _notice = _type == ChallengeType.accel0100
-          ? '已待命：车辆起步、速度首次 ≥ 3 km/h 时起表，到 100 km/h 停表。'
-          : '已待命：请先加速到 100 km/h 以上，速度跌破 100 km/h 时起表，到 ≤ 2 km/h 停表。';
+          ? '已待命：起步 ≥ 3 km/h 起表，到 100 km/h 停表。'
+          : '已待命：先加速到 100 km/h 以上，跌破 100 km/h 起表，到 ≤ 2 km/h 停表。';
     });
   }
 
@@ -651,8 +651,7 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
-                '未接入定位源：本页不自建定位、不启动定位通道。调用方须传入已有 '
-                'Recorder 或速度样本流（主协调接线），否则无法计时。',
+                '未接入定位源，无法计时。',
                 style: TextStyle(color: Colors.white, fontSize: 13),
               ),
             ),
@@ -756,8 +755,8 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                   Text(
                     _lastOutcome!.valid
                         ? '成绩：${_lastOutcome!.durationSeconds!.toStringAsFixed(2)} 秒'
-                            '（最高 ${_lastOutcome!.maxSpeedKmh?.toStringAsFixed(1) ?? '—'} km/h，已保存）'
-                        : '无效：${_lastOutcome!.invalidReason ?? '未知原因'}（未记入历史与最好成绩）',
+                            '（最高 ${_lastOutcome!.maxSpeedKmh?.toStringAsFixed(1) ?? '—'} km/h）'
+                        : '无效：${_lastOutcome!.invalidReason ?? '未知原因'}',
                     style: TextStyle(
                         color: _lastOutcome!.valid
                             ? Colors.greenAccent
@@ -791,7 +790,7 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
           ]),
           const SizedBox(height: 8),
           if (_history.isEmpty)
-            const Text('暂无有效成绩：无效成绩不会出现在这里。',
+            const Text('暂无有效成绩。',
                 style: TextStyle(color: Colors.white54, fontSize: 12)),
           for (final r in _history)
             Container(
@@ -825,13 +824,9 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
             ),
           const SizedBox(height: 12),
           const Text(
-            '计时规则：0-100 从速度首次 ≥ 3 km/h 起表（0–3 km/h 段不计入，'
-            '过滤静止漂移），到首次 ≥ 100 km/h 停表；100-0 须先达 100 km/h，'
-            '随后首次跌破 100 km/h 起表，到首次 ≤ 2 km/h 停表。计时分辨率受 '
-            'GPS 采样间隔限制，不做插值。无效判定：计时中精度超门槛（hAcc > 20 m '
-            '或速度精度 > 2.0 m/s）、采样中断超 2 秒、单步跳变 > 50 km/h、'
-            '全程无精度信息，一律不记成绩。经 Recorder 的外接 GPS 路径目前无'
-            '精度字段，其成绩将判未验证，须后续透传精度信息后才可验证。',
+            '计时规则：0-100 自 ≥ 3 km/h 起表，到 100 km/h 停表；100-0 先达 100 km/h，'
+            '跌破 100 km/h 起表，到 ≤ 2 km/h 停表。无效判定：计时中精度超门槛（hAcc > 20 m '
+            '或速度精度 > 2.0 m/s）、采样中断超 2 秒、单步跳变 > 50 km/h、全程无精度信息。',
             style: TextStyle(color: Colors.white60, fontSize: 12),
           ),
         ],

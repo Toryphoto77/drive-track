@@ -652,7 +652,7 @@ void main() {
         fetcher: fake,
       );
       expect(r.status, UpdateCheckStatus.error);
-      expect(r.message, '网络不通：两个更新源都连不上，请检查网络或代理后重试');
+      expect(r.message, '网络不通，请检查网络或代理后重试');
       expect(r.message, isNot(contains('boom')));
     });
 

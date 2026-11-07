@@ -122,7 +122,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
           u.isNew
               ? '远端新增包 v${u.remoteVersion}，下载后加入本地库。'
               : '本地 v${u.localVersion} → 远端 v${u.remoteVersion}。'
-                    '用户改过的包不会被覆盖；更新失败不影响本地数据。',
+                    '用户改过的包不会被覆盖。',
         ),
         actions: [
           TextButton(
@@ -148,8 +148,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       builder: (ctx) => AlertDialog(
         title: const Text('更新全部可更新包？'),
         content: Text(
-          '共 ${updates.length} 个包。用户改过的包不会被覆盖；'
-          '单个包下载失败不影响其他包与本地数据。',
+          '共 ${updates.length} 个包。用户改过的包不会被覆盖。',
         ),
         actions: [
           TextButton(
@@ -271,7 +270,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('恢复「${pkg.nameCn}」默认？'),
-        content: const Text('本地版本（用户改动或远端更新）将被删除，回到打包种子 / 内置迁移版本。'),
+        content: const Text('本地版本将被删除，回到默认版本。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -312,7 +311,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
             ),
             const SizedBox(height: 4),
             const Text(
-              '取该行程的 GPS 轨迹作轮廓与起终点（闭合回路时起终点同点）。',
+              '取该行程的 GPS 轨迹作轮廓与起终点。',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -383,7 +382,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     if (!mounted) return;
     showAppNotice(
       context,
-      '已用行程更新「${target.nameCn}」（本地改动，远端不覆盖）',
+      '已用行程更新「${target.nameCn}」',
       AppNoticeKind.success,
     );
   }
@@ -759,7 +758,7 @@ class LibraryVersionCard extends StatelessWidget {
           if (c != null && c.skippedUserModified.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              '${c.skippedUserModified.length} 个包因本地改动未列入更新（远端不覆盖本地改动）',
+              '${c.skippedUserModified.length} 个包因本地改动未列入更新',
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ],

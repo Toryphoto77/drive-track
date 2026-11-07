@@ -110,9 +110,9 @@ GoProCommandResponse parseGoProCommandResponse(
         raw: List<int>.unmodifiable(bytes),
         error: reason,
       );
-  if (bytes.length < 3) return fail('响应过短：至少需要长度、ID、状态 3 字节');
+  if (bytes.length < 3) return fail('响应过短');
   if (bytes[0] != bytes.length - 1) {
-    return fail('长度字节与实际长度不符，可能为分片或非 TLV 响应');
+    return fail('响应长度不符');
   }
   if (expectedCommandId != null && bytes[1] != expectedCommandId) {
     return fail('响应命令 ID 与期望不符');

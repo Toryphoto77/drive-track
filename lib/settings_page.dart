@@ -50,29 +50,10 @@ class SettingsPage extends StatefulWidget {
   /// 倒计时震动开关变更回调。
   final ValueChanged<bool> onCountdownVibrationChanged;
 
-  /// 以下 5 组 App 内停用开关全部可选：传了 value + 回调才渲染开关，
-  /// 未传时该行只显示说明文字（不谎称已停用），总协调按需补接线。
-  /// - locationRecording：App 内停用定位记录（关掉后即使系统权限
-  ///   还在，App 也不再用定位记录轨迹）。
-  final bool? locationRecordingEnabled;
-  final ValueChanged<bool>? onLocationRecordingChanged;
-
-  /// - backgroundLocation：App 内停用后台定位使用。
-  final bool? backgroundLocationEnabled;
-  final ValueChanged<bool>? onBackgroundLocationChanged;
-
-  /// - notifications：App 内停用通知。
-  final bool? notificationsEnabled;
-  final ValueChanged<bool>? onNotificationsChanged;
-
-  /// - bluetooth：App 内停用蓝牙连接。
+  /// App 内停用蓝牙连接（唯一已接线的 App 内停用开关；其余权限行
+  /// 无 App 内开关，只走系统授权）。
   final bool? bluetoothEnabled;
   final ValueChanged<bool>? onBluetoothChanged;
-
-  /// - videoRecording：App 内停用视频录制。相机与麦克风目前只随
-  ///   同步视频使用，因此相机行与麦克风行共用这一个开关。
-  final bool? videoRecordingEnabled;
-  final ValueChanged<bool>? onVideoRecordingChanged;
 
   /// v0.1.3 统合补：旧设置弹窗里的其余行（可选，传了才显示）。
   final VoidCallback? onImportFont;
@@ -108,16 +89,8 @@ class SettingsPage extends StatefulWidget {
     required this.onThemeSelected,
     required this.countdownVibrationEnabled,
     required this.onCountdownVibrationChanged,
-    this.locationRecordingEnabled,
-    this.onLocationRecordingChanged,
-    this.backgroundLocationEnabled,
-    this.onBackgroundLocationChanged,
-    this.notificationsEnabled,
-    this.onNotificationsChanged,
     this.bluetoothEnabled,
     this.onBluetoothChanged,
-    this.videoRecordingEnabled,
-    this.onVideoRecordingChanged,
     required this.onOpenDevices,
     this.version = '0.1.3',
   });
@@ -147,12 +120,9 @@ class _PermSpec {
   /// App 内停用开关的文案；null 表示该行无对应开关概念。
   final String? inAppLabel;
 
-  /// 开关当前值与回调（总协调传入；任一为空时不渲染开关，只显示说明）。
+  /// 开关当前值与回调（总协调传入；任一为空时不渲染开关）。
   final bool? inAppValue;
   final ValueChanged<bool>? onInAppChanged;
-
-  /// 开关未接线时显示的说明。
-  final String? inAppUnwiredNote;
 
   const _PermSpec({
     required this.id,
@@ -165,7 +135,6 @@ class _PermSpec {
     this.inAppLabel,
     this.inAppValue,
     this.onInAppChanged,
-    this.inAppUnwiredNote,
   });
 }
 
@@ -314,7 +283,7 @@ class _SettingsPageState extends State<SettingsPage>
       _PermSpec(
         id: 'location',
         title: '精确定位',
-        subtitle: '记录轨迹与车速必需。系统里关闭后 App 将无法记录轨迹。',
+        subtitle: '记录轨迹与车速必需。',
         icon: Icons.my_location,
         step: 'foreground',
         statusKey: 'location',
@@ -322,41 +291,29 @@ class _SettingsPageState extends State<SettingsPage>
           'android.permission.ACCESS_FINE_LOCATION',
           'android.permission.ACCESS_COARSE_LOCATION',
         ],
-        inAppLabel: 'App 内停用定位记录',
-        inAppValue: widget.locationRecordingEnabled,
-        onInAppChanged: widget.onLocationRecordingChanged,
-        inAppUnwiredNote: 'App 内停用开关未接线：总协调传入 onLocationRecordingChanged 后显示。',
       ),
       _PermSpec(
         id: 'background',
         title: '后台定位',
-        subtitle: '切后台后继续记录。申请前须先授予精确定位，否则系统不拉框。',
+        subtitle: '切后台后继续记录。须先授予精确定位。',
         icon: Icons.location_on,
         step: 'background',
         statusKey: 'background',
         androidPerms: const ['android.permission.ACCESS_BACKGROUND_LOCATION'],
-        inAppLabel: 'App 内停用后台定位使用',
-        inAppValue: widget.backgroundLocationEnabled,
-        onInAppChanged: widget.onBackgroundLocationChanged,
-        inAppUnwiredNote: 'App 内停用开关未接线：总协调传入 onBackgroundLocationChanged 后显示。',
       ),
       _PermSpec(
         id: 'notifications',
         title: '通知',
-        subtitle: '后台记录时显示常驻通知。与蓝牙同属 extras 一步，一并申请。',
+        subtitle: '后台记录时显示常驻通知。',
         icon: Icons.notifications,
         step: 'extras',
         statusKey: 'notifications',
         androidPerms: const ['android.permission.POST_NOTIFICATIONS'],
-        inAppLabel: 'App 内停用通知',
-        inAppValue: widget.notificationsEnabled,
-        onInAppChanged: widget.onNotificationsChanged,
-        inAppUnwiredNote: 'App 内停用开关未接线：总协调传入 onNotificationsChanged 后显示。',
       ),
       _PermSpec(
         id: 'bluetooth',
         title: '蓝牙扫描 / 连接',
-        subtitle: '连接骑行功率计、踏频、心率带。与通知同属 extras 一步，一并申请。',
+        subtitle: '连接骑行功率计、踏频、心率带。',
         icon: Icons.bluetooth,
         step: 'extras',
         statusKey: 'bluetooth',
@@ -367,35 +324,26 @@ class _SettingsPageState extends State<SettingsPage>
         inAppLabel: 'App 内停用蓝牙连接',
         inAppValue: widget.bluetoothEnabled,
         onInAppChanged: widget.onBluetoothChanged,
-        inAppUnwiredNote: 'App 内停用开关未接线：总协调传入 onBluetoothChanged 后显示。',
       ),
       _PermSpec(
         id: 'camera',
         title: '相机',
-        subtitle: '仅随同步视频使用（后置摄像头无预览录像），不用于拍照。',
+        subtitle: '仅随同步视频使用，不用于拍照。',
         icon: Icons.videocam,
         step: 'camera',
         statusKey: 'camera',
         androidPerms: const ['android.permission.CAMERA'],
-        inAppLabel: 'App 内停用视频录制',
-        inAppValue: widget.videoRecordingEnabled,
-        onInAppChanged: widget.onVideoRecordingChanged,
-        inAppUnwiredNote: 'App 内停用开关未接线：总协调传入 onVideoRecordingChanged 后显示。',
       ),
       // v0.1.3 统合：原生已补 microphone 键与独立分步（requestCode 1005），
       // 本行直接用独立状态与独立拉框，不再复用相机步。
       _PermSpec(
         id: 'microphone',
         title: '麦克风',
-        subtitle: '仅随同步视频使用；当前视频实现不设音频源，麦克风被拒仍可录无声视频。',
+        subtitle: '仅随同步视频使用；被拒仍可录无声视频。',
         icon: Icons.mic,
         step: 'microphone',
         statusKey: 'microphone',
         androidPerms: const ['android.permission.RECORD_AUDIO'],
-        inAppLabel: 'App 内停用视频录制（麦克风随视频开关停用）',
-        inAppValue: widget.videoRecordingEnabled,
-        onInAppChanged: widget.onVideoRecordingChanged,
-        inAppUnwiredNote: 'App 内停用开关未接线：总协调传入 onVideoRecordingChanged 后显示。',
       ),
     ];
   }
@@ -473,7 +421,7 @@ class _SettingsPageState extends State<SettingsPage>
                         child: Text(busy
                             ? '等待系统框…'
                             : spec.id == 'microphone'
-                                ? '补齐授权（随相机一步申请）'
+                                ? '补齐授权'
                                 : '补齐授权'),
                       ),
                     ),
@@ -490,8 +438,7 @@ class _SettingsPageState extends State<SettingsPage>
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
                 child: Text(
-                  '原生未单独上报该权限的授予状态：只有在本次会话内刚申请过、'
-                  '复查仍被系统标记为永久拒绝时，本行才会显示“永久拒绝”。',
+                  '状态未知，请点“刷新”重试。',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ),
@@ -499,7 +446,7 @@ class _SettingsPageState extends State<SettingsPage>
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
                 child: Text(
-                  '系统已标记为永久拒绝，App 内无法再拉框，请去系统设置里手动开启。',
+                  '已永久拒绝，请去系统设置里手动开启。',
                   style: TextStyle(color: Colors.redAccent, fontSize: 12),
                 ),
               ),
@@ -507,17 +454,9 @@ class _SettingsPageState extends State<SettingsPage>
               SwitchListTile(
                 value: spec.inAppValue!,
                 title: Text(spec.inAppLabel!),
-                subtitle: const Text('只停用 App 自己的调用，不等于系统权限吊销'),
+                subtitle: const Text('只停用 App 自己的调用，不吊销系统权限'),
                 onChanged: spec.onInAppChanged,
               )
-            else if (spec.inAppLabel != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                child: Text(
-                  spec.inAppUnwiredNote ?? 'App 内停用开关未接线。',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ),
           ],
         ),
       ),
@@ -546,9 +485,7 @@ class _SettingsPageState extends State<SettingsPage>
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              '回到本页时自动刷新。App 无法自行吊销权限：“取消授权”只打开系统'
-              '设置页，请在系统里关闭；同时可用每行下方的 App 内开关停用对应功能。'
-              '低版本 Android 上系统无对应权限概念时，原生恒返回已授予。',
+              'App 无法自行吊销权限：“取消授权”只打开系统设置页，请在系统里关闭；也可用每行下方的 App 内开关停用对应功能。',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ),
@@ -628,7 +565,7 @@ class _SettingsPageState extends State<SettingsPage>
                   const SizedBox(height: 8),
                   Text(
                     '当前：#${widget.currentThemeColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}'
-                    '（主题色全 App 生效；G 值绿黄红为语义色，不随主题变）',
+                    '（G 值绿黄红不随主题变）',
                     style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ],
@@ -641,7 +578,7 @@ class _SettingsPageState extends State<SettingsPage>
             child: SwitchListTile(
               value: widget.countdownVibrationEnabled,
               title: const Text('倒计时震动提醒'),
-              subtitle: const Text('3-2-1 每秒短震动，GO 时长震动；关掉后倒计时不震动'),
+              subtitle: const Text('3-2-1 每秒短震动，GO 时长震动'),
               onChanged: widget.onCountdownVibrationChanged,
             ),
           ),

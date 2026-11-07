@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'blediy_gps.dart';
 import 'glass_button.dart';
 import 'satellite_pill.dart';
 import 'satellite_service.dart';
@@ -15,9 +14,6 @@ import 'satellite_service.dart';
 /// - 顶部设备连接状态卡：已连接/未连接、设备名、信号状态 pill；
 /// - 卫星状态可视化：卫星数、星座分布条、CN0 信号格；
 /// - 连接步骤图：搜索 → 配对 → 解析 NMEA → 定位，当前步高亮；
-/// - 关键参数卡片：波特率/协议/UUID 只读展示，不编默认值
-///   （BLE UART 无波特率概念，如实写“—”而不是编一个数字；
-///   UUID 为 Nordic UART 默认值，明确标注非 RaceChrono 官方专属值）。
 class SatelliteSettingsPage extends StatefulWidget {
   const SatelliteSettingsPage({super.key});
   @override
@@ -179,7 +175,7 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'BleDIY 外接：原生尚未订阅 UART，暂无 NMEA 数据流（见设备中心说明）。',
+                  '外接 GPS：暂无 NMEA 数据流。',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
@@ -190,11 +186,6 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
                     onChanged: _busy ? null : _toggle,
                     satelliteCount: snap == null ? null : svc.visibleCount,
                   ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: Text('开启后位置只用卫星定位，不再用网络定位出位置',
-                      style: TextStyle(color: Colors.white54, fontSize: 12)),
                 ),
                 if (_error != null)
                   Padding(
@@ -228,7 +219,7 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
                   if (snap.l5Seen)
                     const Padding(
                       padding: EdgeInsets.only(top: 4),
-                      child: Text('本历元见过 L5 信号（不是机型双频能力的鉴定结论）',
+                      child: Text('本历元见过 L5 信号（不等同于支持双频）',
                           style: TextStyle(color: Colors.white54, fontSize: 12)),
                     ),
                 ],
@@ -292,31 +283,8 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('当前：${steps[step]}${snap == null ? '（请在室外开阔处等待首次定位）' : ''}',
+                Text('当前：${steps[step]}',
                     style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              ]),
-            ),
-          ),
-          // 关键参数卡片（只读，不编默认值）。
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('关键参数（只读）', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                _paramRow('协议', 'NMEA 0183（GGA / RMC / VTG / GSA）'),
-                _paramRow('传输', 'BLE GATT 通知（Nordic UART 风格）'),
-                _paramRow('服务 UUID', nordicUartServiceUuid),
-                _paramRow('特征 TX', nordicUartTxUuid),
-                _paramRow('波特率', '—（BLE UART 无波特率概念，不编默认值）'),
-                _paramRow('回落', '外部源 5 秒无新定位时切回手机 GPS'),
-                const SizedBox(height: 6),
-                const Text(
-                  'UUID 为 Nordic UART 默认值，非 RaceChrono 官方为 BleDIY 公布的专属值；'
-                  '实际设备以广播为准。',
-                  style: TextStyle(color: Colors.white54, fontSize: 11),
-                ),
               ]),
             ),
           ),
@@ -329,13 +297,4 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
     );
   }
 
-  Widget _paramRow(String key, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 72, child: Text(key, style: const TextStyle(color: Colors.white54, fontSize: 12))),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
-      ]),
-    );
-  }
 }

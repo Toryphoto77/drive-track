@@ -793,7 +793,7 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('清空轮廓？'),
-        content: const Text('轮廓点列将全部删除（起点 / 终点 / 维修区入口 / 维修区出口 / 分段点不受影响），保存后生效。'),
+        content: const Text('轮廓点将全部删除（起点、终点、维修区出入口、分段点不受影响）。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -924,7 +924,7 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '按住画布拖动准星，松手落点；按住已有落点可拖动微调；捏合缩放、双指平移。保存后本地生效，核对状态回落为待核；弯角表本版不改动。',
+                  '按住画布拖动准星，松手落点；按住已有落点可拖动微调；捏合缩放、双指平移。保存后核对状态回落为待核。',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 const SizedBox(height: 10),
@@ -1390,7 +1390,7 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
                             Text(
                               _selected == null
                                   ? '未选中落点：点画布上的点或上方列表选中。'
-                                  : '已选中 ${_selectedLabel(_selected!)}，方向键按步长移动（不二次吸附）。',
+                                  : '已选中 ${_selectedLabel(_selected!)}，方向键按步长移动。',
                               style: const TextStyle(
                                 color: Colors.white54,
                                 fontSize: 12,
@@ -1939,7 +1939,7 @@ class _SatelliteTiles extends StatelessWidget {
             child: Image.network(
               satelliteTileUrl(t.z, t.x, t.y),
               key: ValueKey('sat-${t.z}-${t.x}-${t.y}'),
-              headers: const {'User-Agent': 'DriveTrack/1.3.7'},
+              headers: const {'User-Agent': 'DriveTrack/1.4.1'},
               fit: BoxFit.fill,
               gaplessPlayback: true,
               errorBuilder: (_, _, _) {

@@ -360,13 +360,13 @@ class AccelSection extends StatelessWidget {
           if (stats.zeroToHundredEligible)
             const Padding(
               padding: EdgeInsets.only(top: 6),
-              child: Text('基于 1Hz GPS + IMU 估算，非专业计时',
+              child: Text('估算值，非专业计时',
                   style: TextStyle(color: Colors.white54, fontSize: 12)),
             ),
           if (!stats.hasCalibratedPoint)
             const Padding(
               padding: EdgeInsets.only(top: 6),
-              child: Text('未标定：纵向加速度为设备坐标，仅供参考',
+              child: Text('未标定：纵向加速度仅供参考',
                   style: TextStyle(color: Colors.orange, fontSize: 12)),
             ),
           const SizedBox(height: 12),

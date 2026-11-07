@@ -147,9 +147,7 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               const Text(
-                '把手机水平放在支架或桌面上、保持静止，点“开始校零”后静置 2 秒，'
-                'App 取加速度计均值记为零偏。零偏只记录、不改变现有 G 值计算；'
-                '长期漂移或换手机/换支架后请重校。',
+                '把手机水平放在支架或桌面上、保持静止，点“开始校零”后静置 2 秒。' '长期漂移或换手机 / 换支架后请重校。',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -157,7 +155,7 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
                 Text(
                   '已校零：ax ${rec.zeroBiasAx!.toStringAsFixed(3)} · '
                   'ay ${rec.zeroBiasAy!.toStringAsFixed(3)} · '
-                  'az ${rec.zeroBiasAz!.toStringAsFixed(3)}（m/s² 均值）',
+                  'az ${rec.zeroBiasAz!.toStringAsFixed(3)} m/s²',
                   style: const TextStyle(color: Colors.greenAccent, fontSize: 13),
                 ),
               if (_zeroError != null) ...[
@@ -175,9 +173,7 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               const Text(
-                '复用开始前标定：把手机固定在支架上，点“开始标定”后直线行驶至 '
-                '18 km/h 以上，App 自动锁定车头方向。状态与记录页标定大方块'
-                '同一来源，标定成功后两处同步显示“已标定”。',
+                '把手机固定在支架上，点“开始标定”后直线行驶至 18 km/h 以上，App 自动锁定车头方向。',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -201,9 +197,7 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               const Text(
-                '拿起手机，在空中画“8”字摆动几次，帮助系统罗盘消除磁干扰。'
-                '这一步只是提示与状态记录：罗盘校准由系统完成，本 App 不编造'
-                '校准结果、不显示假的罗盘精度。完成后勾选即可。',
+                '拿起手机，在空中画“8”字摆动几次，帮助系统罗盘消除磁干扰。完成后勾选即可。',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -216,7 +210,7 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
                 },
               ),
               if (rec.compassHintDone)
-                const Text('状态：8 字提示已完成（仅状态记录，非罗盘精度鉴定）。',
+                const Text('8 字提示已完成。',
                     style: TextStyle(color: Colors.white54, fontSize: 12)),
             ],
             const SizedBox(height: 24),

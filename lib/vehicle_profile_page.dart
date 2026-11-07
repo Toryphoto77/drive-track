@@ -121,10 +121,8 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
       builder: (ctx) => AlertDialog(
         title: const Text('删除车辆？'),
         content: Text(
-          '将删除“${v.name}”的档案，及其全部加油记录（里程表 / 满油区间'
-          '只属于该车，无法转给别的车）。\n\n'
-          '行程本身不会被删除：已绑定该车的行程会回退为全局油耗 / 油价'
-          '设置（收口后表现为行程的车辆绑定置空）。'
+          '将删除“${v.name}”的档案及其全部加油记录。\n\n'
+          '行程本身不会被删除：已绑定该车的行程会回退为全局油耗 / 油价设置。'
           '${_library.defaultVehicleId == v.id ? '\n\n该车是当前默认车辆，删除后默认随之取消。' : ''}',
         ),
         actions: [
@@ -145,7 +143,7 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
     if (mounted) {
       showAppNotice(
         context,
-        '已删除“${v.name}”，其加油记录一并删除；相关行程回退全局值。',
+        '已删除“${v.name}”，其加油记录一并删除。',
         AppNoticeKind.success,
       );
     }
@@ -199,21 +197,18 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
           const Text(
-            '每辆车可单独填百公里油耗；收口后行程油耗优先用所绑车辆的油耗，'
-            '未绑定或该车未填时回退全局油耗 / 油价，全局值也没有时显示'
-            '“未填写油耗/油价”。',
+            '行程油耗优先用所绑车辆的油耗，未绑定或未填时回退全局值。',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
           const Text(
-            '空字段不显示、不参与计算。品牌 / 型号为自填文本，不是官方车型库；'
-            '排量与车重只作档案记录，不用于推算油耗。',
+            '空字段不显示、不参与计算。排量与车重只作档案记录，不用于推算油耗。',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
           const Text(
-            '默认车辆用于新行程的油耗估算（收口后生效）；未设默认时用全局值。'
-            '删除车辆时其加油记录一并删除，相关行程回退全局值，行程本身不删除。',
+            '默认车辆用于新行程的油耗估算；未设默认时用全局值。'
+            '删除车辆时其加油记录一并删除，行程本身不删除。',
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 16),
@@ -222,8 +217,7 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  '还没有车辆档案。点右上角 + 新增一辆车；只填名称也能保存，'
-                  '其余字段留空即可，留空的字段不显示、不参与计算。',
+                  '还没有车辆档案。点右上角 + 新增一辆车，只填名称也能保存。',
                   style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ),
@@ -288,7 +282,7 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 measured == null
-                    ? '实测：暂无实测：需要两次满油记录'
+                    ? '实测：暂无，需要两次满油记录'
                     : '实测：${_fmtNum(measured)} L/100km（${intervals.length} 段满油区间）',
                 style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
@@ -619,7 +613,7 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
           const Text(
-            '除名称外全部可空：留空的字段不显示、不参与计算。',
+            '除名称外全部可空。',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 16),
@@ -687,8 +681,8 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
             const Padding(
               padding: EdgeInsets.only(bottom: 12),
               child: Text(
-                '排量与车重只作档案记录，不用于推算油耗；本页不会由它们算出任何油耗数字。'
-                '排量单位 mL 与档案字段 cc 数值相同（1 mL = 1 cc），仅显示单位不同，不换算。',
+                '排量与车重只作档案记录，不用于推算油耗。'
+                '排量单位 mL 与 cc 数值相同，不换算。',
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ),
@@ -720,7 +714,7 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
             const Padding(
               padding: EdgeInsets.only(bottom: 12),
               child: Text(
-                '未填写时行程油耗回退全局值，全局值也没有时显示“未填写油耗/油价”。',
+                '未填写时行程油耗回退全局值。',
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ),
@@ -786,7 +780,7 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除这条加油记录？'),
-        content: const Text('删除后实测区间会重新计算；不满油记录删除不影响其他区间。'),
+        content: const Text('删除后实测区间会重新计算。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -815,15 +809,14 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
         children: [
           Text(
             measured == null
-                ? '实测：暂无实测：需要两次满油记录'
+                ? '实测：暂无，需要两次满油记录'
                 : '实测：${_fmtNum(measured)} L/100km（${intervals.length} 段满油区间）',
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
           const Text(
-            '只有满油到满油的区间才算实测；不满油记录只记账，不计入实测，'
-            '也不作为区间起止点（夹在两次满油之间的不满油升数计入该区间）。'
-            '满油区间还要求起止两条记录都有里程表且后者大于前者，否则不算。',
+            '只有满油到满油的区间才算实测；不满油记录只记账。'
+            '满油区间要求起止两条记录都有里程表且后者大于前者。',
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 16),
@@ -832,8 +825,7 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  '还没有加油记录。点下方“新增加油记录”记第一笔；'
-                  '实测要等到第二次满油时才算得出。',
+                  '还没有加油记录。点下方“新增加油记录”记第一笔。',
                   style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ),

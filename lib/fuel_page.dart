@@ -296,12 +296,12 @@ class _FuelSettingsPageState extends State<FuelSettingsPage> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
           const Text(
-            '仅汽车 / 摩托可用，骑行不耗油、不显示油耗。',
+            '仅汽车 / 摩托可用。',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
           const Text(
-            '两项默认都为空，不预设数值；两项都填了之后，行程详情与当月汇总才自动计算。只填一项时仍显示“未填写油耗/油价”。',
+            '两项默认都为空；两项都填了才计算，缺一项显示“未填写油耗/油价”。',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 16),
@@ -333,7 +333,7 @@ class _FuelSettingsPageState extends State<FuelSettingsPage> {
           const SizedBox(height: 8),
           if (!bothFilled)
             const Text(
-              '提示：两项都填了才计算，缺一项时所有油耗位置都显示“未填写油耗/油价”，不会按 0 或估算数显示。',
+              '缺一项时不计算，不按 0 或估算数显示。',
               style: TextStyle(color: Colors.orange, fontSize: 12),
             ),
           const SizedBox(height: 16),
@@ -353,7 +353,7 @@ class _FuelSettingsPageState extends State<FuelSettingsPage> {
           ),
           const SizedBox(height: 4),
           const Text(
-            '这是按填写油耗估算，不是加油实测；实际油耗随路况、驾驶方式变化。单组全局设置，多辆车 / 换车场景暂不支持：换车请手动改这里，改后历史行程的估算值会随新值重算。',
+            '按填写油耗估算，不是加油实测。单组全局设置，换车请手动改这里，改后历史估算值会随新值重算。',
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ],

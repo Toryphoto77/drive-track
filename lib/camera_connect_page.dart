@@ -123,7 +123,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
   final List<Map<String, dynamic>> _scanned = [];
   bool _scanning = false;
   String? _permNotice;
-  String _statusLine = '尚未扫描：点下方「扫描相机」开始。';
+  String _statusLine = '尚未扫描，点「扫描相机」开始。';
 
   DeviceLinkStatus _goproStatus = DeviceLinkStatus.disconnected;
   String? _goproAddress;
@@ -202,7 +202,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         showAppNotice(
           context,
           resp.ok
-              ? 'GoPro 已响应 Get Version 查询（GP-0073）：Open GoPro 链路通。'
+              ? 'GoPro 已连接。'
               : 'GoPro 响应解析失败：${resp.error ?? '未知原因'}。',
           resp.ok ? AppNoticeKind.success : AppNoticeKind.error,
         );
@@ -232,10 +232,9 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
 
   String _scanSummary() {
     final cams = _cameras.length;
-    if (_scanned.isEmpty) return '尚未扫描：点下方「扫描相机」开始。';
+    if (_scanned.isEmpty) return '尚未扫描，点「扫描相机」开始。';
     if (cams == 0) {
-      return '已扫描 ${_scanned.length} 台设备，其中没有可识别的运动相机'
-          '（GoPro 按 FEA6 广播识别，Insta360 / DJI 按名称识别）。';
+      return '已扫描 ${_scanned.length} 台设备，未发现运动相机。';
     }
     return '已扫描 ${_scanned.length} 台设备，找到 $cams 台可识别的运动相机。';
   }
@@ -258,8 +257,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       if (!mounted) return false;
       setState(() => _permNotice = (btOk && locOk)
           ? null
-          : '连接运动相机需要蓝牙与定位权限：当前未获授权，扫描与连接不可用。'
-              '请在系统设置里为本 App 打开蓝牙与定位权限后重试。');
+          : '需要蓝牙与定位权限：请在系统设置里为本 App 打开蓝牙与定位权限后重试。');
       return btOk && locOk;
     } catch (_) {
       if (mounted) {
@@ -298,7 +296,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       setState(() {
         _scanning = true;
         _statusLine = '正在扫描周围的运动相机…'
-            '${unfilteredOk ? '' : '（无过滤扫描启动失败：Insta360 / DJI 可能扫不到，请确认蓝牙已打开且权限已授予。）'}';
+            '${unfilteredOk ? '' : '（Insta360 / DJI 可能扫不到，请确认蓝牙已打开且权限已授予。）'}';
       });
     } catch (e) {
       if (!mounted) return;
@@ -365,7 +363,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
     });
     showAppNotice(
       context,
-      '正在连接 GoPro（$address）…连接成功后订阅响应特征并下发查询。',
+      '正在连接 GoPro（$address）…',
       AppNoticeKind.info,
     );
     try {
@@ -385,8 +383,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         });
         showAppNotice(
           context,
-          'GoPro 响应特征订阅失败：${sub['error'] ?? 'unknown'}。'
-          '常见原因：GATT 服务发现未完成，或该设备不是 Open GoPro 兼容设备。',
+          'GoPro 响应订阅失败：${sub['error'] ?? 'unknown'}。请确认相机已开机。',
           AppNoticeKind.error,
         );
         return;
@@ -402,8 +399,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         setState(() => _awaitingVersion = true);
         showAppNotice(
           context,
-          'Get Version 查询已下发：等待 GoPro 经 GP-0073 响应，'
-          '收到响应后状态才变“已连接”；电量仍以响应/电量事件为准，不编造。',
+          '正在等待 GoPro 响应，收到后才算连上。',
           AppNoticeKind.info,
         );
         Future.delayed(const Duration(seconds: 15), () {
@@ -411,8 +407,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           if (_awaitingVersion && _goproAddress == address) {
             showAppNotice(
               context,
-              '仍未收到 GoPro 的 Get Version 响应：请确认相机已开机、蓝牙已打开'
-              '且未被其它 App 占用；连接本身未断开，可点“断开”后重试。',
+              '仍未收到 GoPro 响应：请确认相机已开机、蓝牙已打开'
+              '且未被其它 App 占用；可点“断开”后重试。',
               AppNoticeKind.warning,
             );
           }
@@ -461,9 +457,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
   void _syncRecordingPlaceholder() {
     showAppNotice(
       context,
-      '同步录像尚未接入：本 App 的同步视频目前只录手机后置摄像头；'
-      'GoPro 快门遥控待真机验证，暂不下发录像命令。'
-      'Insta360 / DJI 请在品牌 App 内录像，行程结束后再按向导里的步骤对齐。',
+      '同步录像尚未接入：同步视频目前只录手机后置摄像头。'
+      'Insta360 / DJI 请在品牌 App 内录像。',
       AppNoticeKind.warning,
     );
   }
@@ -494,7 +489,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           DeviceScanCard(
             title: '连接运动相机',
             description: '一个入口扫全部品牌：GoPro 走 BLE 直连，Insta360 / DJI 走'
-                ' Wi-Fi 热点 + 品牌 App 向导（本 App 不直连）；品牌自动识别，'
+                ' Wi-Fi 热点 + 品牌 App 向导；品牌自动识别，'
                 '不用先选品牌，点行即连。',
             icon: Icons.videocam,
             scanning: _scanning,
@@ -519,7 +514,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           if (cameras.isEmpty)
             const Text(
               '尚未找到相机：点上方「扫描相机」开始；GoPro 须开机并打开蓝牙，'
-              'Insta360 / DJI 须开机（名称广播可见即可识别）。',
+              'Insta360 / DJI 须开机。',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           for (final cam in cameras)
@@ -563,7 +558,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
                   const SizedBox(height: 4),
                   Text(
                     _goproBattery == null
-                        ? '电量：—（未收到电量事件，不显示假数值）'
+                        ? '电量：—'
                         : '电量：$_goproBattery%',
                     style: const TextStyle(
                       color: Colors.white54,
@@ -572,7 +567,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    '连接状态：已连接（已收到 Get Version 响应，Open GoPro 链路通）。',
+                    '连接状态：已连接。',
                     style: TextStyle(color: Colors.greenAccent, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
@@ -586,8 +581,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    '同步录像尚未接入：本 App 的同步视频目前只录手机后置摄像头，'
-                    'GoPro 快门遥控待真机验证，暂不下发录像命令。',
+                    '同步录像尚未接入：同步视频目前只录手机后置摄像头。',
                     style: TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                 ],
@@ -596,9 +590,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           ],
           const SizedBox(height: 16),
           const Text(
-            '原生单 GATT：一次只能连一台 BLE 设备，连新设备会断开旧的；'
-            'Insta360 / DJI 的连接是否成功以系统 Wi-Fi 实际连接与品牌 App '
-            '内显示为准，本 App 不显示假的已连接状态。',
+            '一次只能连一台蓝牙设备，连新设备会断开旧的；'
+            'Insta360 / DJI 是否连上以系统 Wi-Fi 与品牌 App 显示为准。',
             style: TextStyle(color: Colors.white54, fontSize: 11),
           ),
         ],
@@ -625,11 +618,10 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       badgeIsWarning: isGuide,
       detail: isGuide
           ? (guide?.connectionSummary ?? '')
-          : 'Open GoPro BLE：点行即连，连接后订阅响应特征 GP-0073 并'
-              '下发 Get Version 只读查询，收到响应后才算连上。',
+          : '点行即连，收到相机响应后才算连上。',
       meta: '${cameraBrandLabel(cam.brand)}'
           '${cam.rssi != null ? ' · 信号 ${cam.rssi}' : ''} · ${cam.address}'
-          '${isGuide ? ' · 电量：—（请在品牌 App 内查看）' : ''}',
+          '${isGuide ? ' · 电量：—' : ''}',
       actionLabel: isGuide ? '点行打开连接向导' : '点行连接',
       isConnecting: isConnecting,
       isConnected: isConnected,

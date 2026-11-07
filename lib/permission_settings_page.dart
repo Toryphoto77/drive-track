@@ -20,7 +20,7 @@ const _rows = [
   _PermRow('notifications', '通知', '前台服务常驻通知', Icons.notifications, 'extras', 'notifications', ['android.permission.POST_NOTIFICATIONS']),
   _PermRow('bluetooth', '蓝牙扫描/连接', '骑行传感器与运动相机连接', Icons.bluetooth, 'extras', 'bluetooth', ['android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT']),
   _PermRow('camera', '相机', '同步视频录制', Icons.camera_alt, 'camera', 'camera', ['android.permission.CAMERA']),
-  _PermRow('microphone', '麦克风', '同步视频录音（无声录制时可不授予）', Icons.mic, 'microphone', 'microphone', ['android.permission.RECORD_AUDIO']),
+  _PermRow('microphone', '麦克风', '同步视频录音（无声录制可不授予）', Icons.mic, 'microphone', 'microphone', ['android.permission.RECORD_AUDIO']),
 ];
 
 class PermissionSettingsPage extends StatefulWidget {
@@ -129,7 +129,7 @@ class _PermissionSettingsPageState extends State<PermissionSettingsPage> with Wi
               if (_error != null) Padding(padding: const EdgeInsets.all(16), child: Text(_error!, style: const TextStyle(color: Colors.orange))),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Text('取消授权说明：App 不能自行吊销权限，点“去系统设置”在系统里关闭；下方 App 内停用开关关闭后，App 自己不再调用该能力。', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                child: Text('App 不能自行吊销权限，点“去系统设置”在系统里关闭；App 内停用开关关闭后，App 不再调用该能力。', style: TextStyle(color: Colors.white54, fontSize: 12)),
               ),
               for (final r in _rows)
                 Card(
@@ -181,7 +181,7 @@ class _PermissionSettingsPageState extends State<PermissionSettingsPage> with Wi
                       ),
                     ]),
                     const SizedBox(height: 2),
-                    const Text('厂商后台管理各家不同，仍需在厂商管家/后台管理里允许后台运行；下方按钮只打开系统电池优化设置页，由你手动选本应用，本 App 不自动申请白名单。',
+                    const Text('还需在厂商管家 / 后台管理里允许后台运行；下方按钮只打开系统电池优化设置页，由你手动选本应用。',
                         style: TextStyle(color: Colors.white54, fontSize: 12)),
                     const SizedBox(height: 8),
                     Row(children: [
@@ -216,7 +216,7 @@ class _PermissionSettingsPageState extends State<PermissionSettingsPage> with Wi
                   SwitchListTile(title: const Text('语音播报'), subtitle: const Text('关闭后不再播报事件与总结'), value: widget.voiceEnabled, onChanged: widget.onVoiceChanged),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: Text('定位与通知没有 App 内停用开关：定位关闭请走系统设置；通知关闭请在系统设置里关通知。', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    child: Text('定位与通知没有 App 内停用开关，请在系统设置里关闭。', style: TextStyle(color: Colors.white54, fontSize: 12)),
                   ),
                 ]),
               ),

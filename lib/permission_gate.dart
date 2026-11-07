@@ -131,7 +131,7 @@ class _PermissionGateState extends State<PermissionGate>
       // check / foreground 异常时不静默放行，也不自动反复弹框：
       // 保持引导页；用户重回前台时会触发 resumed 重新 check。
       if (mounted) {
-        setState(() => _status = '权限检查失败，返回前台后会自动重试。');
+        setState(() => _status = '权限检查失败，返回前台后自动重试。');
       }
     } finally {
       _running = false;
@@ -183,7 +183,7 @@ class _PermissionGateState extends State<PermissionGate>
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  '记录轨迹、G 值与传感器数据需要以下权限，正在自动为你申请：',
+                  '记录轨迹需要以下权限，正在自动申请：',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
                 ),

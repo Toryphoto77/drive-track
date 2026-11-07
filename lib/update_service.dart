@@ -96,8 +96,8 @@ class UpdateCheckResult {
 }
 
 class UpdateService {
-  static const String currentVersionName = '1.4.0';
-  static const int currentVersionCode = 53;
+  static const String currentVersionName = '1.4.1';
+  static const int currentVersionCode = 54;
   static const String packageName = 'com.chixi.drive_track';
   static const String channelLabel = '正式版';
 
@@ -121,7 +121,7 @@ class UpdateService {
       if (resp.statusCode != 200) {
         return UpdateCheckResult(
           status: UpdateCheckStatus.error,
-          message: '更新清单请求失败（HTTP ${resp.statusCode}），未确认是否有新版',
+          message: '更新清单请求失败，未确认是否有新版',
         );
       }
       final json = jsonDecode(body) as Map<String, dynamic>;
@@ -131,7 +131,7 @@ class UpdateService {
         if (remoteName == null || remoteName.isEmpty) {
           return const UpdateCheckResult(
             status: UpdateCheckStatus.error,
-            message: 'GitHub Release 未含 tag_name，未确认是否有新版',
+            message: 'GitHub Release 信息不完整，未确认是否有新版',
           );
         }
         final assets = (json['assets'] as List?) ?? const [];
@@ -148,7 +148,7 @@ class UpdateService {
         if (apkUrl == null) {
           return UpdateCheckResult(
             status: UpdateCheckStatus.error,
-            message: 'GitHub Release 里没有 arm64 APK 附件（Release 待主代理创建或补附件），未确认是否有新版',
+            message: 'GitHub Release 里没有 arm64 APK 附件，未确认是否有新版',
           );
         }
         // Release 不带 versionCode：下载文件名用的合成码仅作文件名，
@@ -180,13 +180,13 @@ class UpdateService {
       if (remoteCode == null || remoteName == null || apkUrl == null) {
         return const UpdateCheckResult(
           status: UpdateCheckStatus.error,
-          message: '更新清单格式不完整（缺 versionName / versionCode / apkUrl），未确认是否有新版',
+          message: '更新清单格式不完整，未确认是否有新版',
         );
       }
       if (remoteCode > currentVersionCode) {
         return UpdateCheckResult(
           status: UpdateCheckStatus.available,
-          message: '发现新版 $remoteName（versionCode $remoteCode）',
+          message: '发现新版 $remoteName',
           remoteVersionName: remoteName,
           remoteVersionCode: remoteCode,
           downloadUrl: apkUrl,
@@ -195,7 +195,7 @@ class UpdateService {
       }
       return UpdateCheckResult(
         status: UpdateCheckStatus.upToDate,
-        message: '已是最新版（正式版 $remoteName，versionCode $remoteCode）',
+        message: '已是最新版（正式版 $remoteName）',
         remoteVersionName: remoteName,
         remoteVersionCode: remoteCode,
       );

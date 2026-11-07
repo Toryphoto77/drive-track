@@ -1,0 +1,58 @@
+# DriveTrack 云端二期（腾讯 CloudBase PG 模式）控制台配置
+
+环境：上海地域、PG 模式（PostgreSQL）。环境 ID 只存在本地
+`.cloudbase-env` 文件里（600 权限，不进仓库），不要写进代码。
+
+## 1. 建 trips 表 + RLS（SQL 编辑器一次跑完）
+
+控制台 → 数据库 → SQL 编辑器，把 `trips-rls.sql` 全文粘贴执行。
+
+它做的事：
+
+- 建 `public.trips` 表（字段见文件头注释；PostgREST 自动把它
+  暴露成 `https://<env>.api.tcloudbasegateway.com/v1/rdb/rest/trips`，
+  App 的数据层就调这个地址）；
+- 开行级安全（RLS），只放行 owner 本人读写（SELECT / INSERT /
+  UPDATE / DELETE 四条策略，条件都是 `owner = auth.uid()`）；
+- 给 `storage.objects` 加四条策略，只放行本人在 `trip-files`
+  桶里以自己 user id 开头路径的对象（上传轨迹文件用）。
+
+注意：App 默认是匿名登录，匿名 JWT 的 role 是 `anon` 但 sub
+是真实 user id，所以 GRANT 与策略同时覆盖 `anon` 与
+`authenticated` 两个角色——不要只开 authenticated，否则匿名
+用户上传/读不到自己的行程。
+
+另注意：RLS 是最终防线。App 查云端行程时固定带
+`owner=eq.<当前 user id>`，与策略条件一致；即使查询不带
+条件，RLS 也只会返回自己的行。
+
+## 2. 建轨迹文件桶
+
+控制台 → 云存储 → Bucket 管理 → 新建 Bucket，名字填
+`trip-files`，权限选私有；MIME 白名单留空（默认不限；
+App 上传的是 `application/json` 轨迹文件）。
+
+桶不存在时上传会失败（App 里显示上传失败，可重试；行程不丢）。
+传统模式的旧桶（文档库版的那个）不能复用——PG 模式的桶是
+另一套 pgstore 桶，必须新建。
+
+## 3. 开登录方式
+
+控制台 → 身份认证 → 登录方式，开启：
+
+- 匿名登录（默认方式，首次启动即匿名账号）；
+- 用户名密码登录（邮箱密码登录用）；
+- 邮箱验证码（注册与绑定邮箱发验证码用；选“开启邮件代发”
+  即可，当前环境每分钟发送不得超过 10 封）。
+
+Google / 微信登录这期不做，不用开。手机号登录是二期，
+到时再在“短信服务”配签名/模板并开启短信验证码登录
+（仅上海地域环境支持）。
+
+## 4. 云存储（App 侧已接好，不用再配）
+
+轨迹 JSON 文件由 App 直接上传到 `trip-files` 桶，路径为
+`<user id>/<trip id>.json`，上传走 PG Storage API
+（POST `/v1/storages/object/trip-files/<路径>`，带
+`x-upsert: true`，同路径重传会覆盖），权限由第 1 步的
+`storage.objects` 策略控制，不公开列举。

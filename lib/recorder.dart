@@ -62,7 +62,7 @@ class Recorder extends ChangeNotifier {
   // v0.1.3 外接 GPS：为 true 时手机定位流只更新显示，不再落点；
   // 轨迹点改由 onExternalFix 注入（provider='external'）。
   bool externalGpsActive = false;
-  String calibrationNote = '未标定：开录前点“标定车头方向”，然后直线行驶至 18 km/h 以上';
+  String calibrationNote = '未标定：点“标定车头方向”，直线行驶至 18 km/h 以上';
   // v0.1.9 传感器校准页：零偏记录与罗盘提示状态位。注意：零偏只记录，
   // 不参与 onSensor 的 G 值计算（G 值计算仍只用标定车头方向），
   // 本页绝不在设置侧发明第二套 G 值计算。
@@ -140,7 +140,7 @@ class Recorder extends ChangeNotifier {
   void beginCalibration() {
     waitingCalibration = true;
     calibrated = false;
-    calibrationNote = '标定中：请直线行驶至 18 km/h 以上，App 会自动锁定车头方向';
+    calibrationNote = '标定中：直线行驶至 18 km/h 以上';
     notifyListeners();
   }
 
@@ -227,7 +227,7 @@ class Recorder extends ChangeNotifier {
       calibrated = true;
       calibratedAtMs = DateTime.now().millisecondsSinceEpoch;
       waitingCalibration = false;
-      calibrationNote = '已标定：车头方向已锁定，G 值与姿态可信';
+      calibrationNote = '已标定：车头方向已锁定';
     }
 
     if (externalGpsActive) {

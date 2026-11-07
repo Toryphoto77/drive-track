@@ -38,7 +38,7 @@ import 'native.dart';
 /// 播报，只有媒体音量为 0 时才不播报。旧的 voiceMutedNote
 /// （“仅在非静音模式播报”）已在 v1.2.1 删除，那是误导文案。
 const String voiceMuteRuleNote =
-    '振动 / 静音模式下照常播报：TTS 走媒体音量，只有媒体音量为 0 时才不播报。';
+    '振动 / 静音模式下照常播报，只有媒体音量为 0 时才不播报。';
 
 /// 语音设置：默认总开关开启（见 [VoiceSettings.defaults]）。
 class VoiceSettings {
@@ -632,18 +632,18 @@ class VoiceService extends ChangeNotifier {
   /// 自定义语音服务开启时试听仍走原生系统 TTS（测的是引擎本身）。
   Future<(bool, String)> speakTest() async {
     if (!settings.enabled) {
-      return (false, '总开关已关闭：请先开启语音播报总开关再试听。');
+      return (false, '总开关已关闭，请先开启语音播报总开关。');
     }
     if (manualMuted) {
-      return (false, '已手动静音：请先取消行程内静音再试听。');
+      return (false, '已手动静音，请先取消行程内静音。');
     }
     final muted = await isMuted();
     final ok = await ensureAvailable();
     if (!ok) {
       return (
         false,
-        '无可用语音引擎（${lastError ?? 'tts_unavailable'}）：请在系统设置中安装中文 '
-            'TTS 语音数据，或在下方引擎选择器里换一个已装引擎。'
+        '无可用语音引擎：请在系统设置中安装中文 '
+            'TTS 语音数据，或换一个已装引擎。'
       );
     }
     final utteranceId = 'dt_test_${++_seq}';
@@ -662,7 +662,7 @@ class VoiceService extends ChangeNotifier {
       _utteranceWaiters.remove(utteranceId);
       return (
         false,
-        '试听超时：8 秒内未收到原生播报完成回调，引擎可能无响应或前方播报未播完，'
+        '试听超时：引擎可能无响应，'
             '请点“重新探测”后再试。'
       );
     }
@@ -670,18 +670,17 @@ class VoiceService extends ChangeNotifier {
       if (muted) {
         return (
           true,
-          '试听完成：已收到原生播报完成回调，但媒体音量为 0，当前听不到声音，'
-              '请调大媒体音量后再试。'
+          '试听完成，但媒体音量为 0，当前听不到声音，'
+              '请调大媒体音量。'
         );
       }
-      return (true, '试听完成：已收到原生播报完成回调。');
+      return (true, '试听完成。');
     }
-    final detail = result.$2 != null
-        ? '（原生错误码：${result.$2}）'
-        : (result.$3 != null ? '（${result.$3}）' : '');
+    final detail =
+        result.$3 != null ? '（${result.$3}）' : '';
     return (
       false,
-      '试听失败：引擎报错$detail，请换一个已装引擎或点“重新探测”后再试。'
+      '试听失败$detail，请换一个已装引擎或点“重新探测”后再试。'
     );
   }
 
@@ -691,8 +690,8 @@ class VoiceService extends ChangeNotifier {
       return (
         false,
         customVoice.isMimo
-            ? '请先填写小米 MiMo 的 API Key（小米 MiMo 开放平台申请，只存本机，不上传）。'
-            : '请先填写接口地址与 Key（Key 只存本机，不上传）。'
+            ? '请先填写小米 MiMo 的 API Key（小米 MiMo 开放平台申请，只存本机）。'
+            : '请先填写接口地址与 Key（Key 只存本机）。'
       );
     }
     final r = await _speakViaCustom('自定义语音服务测试，当前语速正常。');
@@ -799,8 +798,7 @@ class VoiceService extends ChangeNotifier {
           await resp.drain<void>();
           return (
             false,
-            '自定义服务未返回音频（内容类型 $ct）：通用接口约定为 POST JSON '
-                '{"text": "..."} 返回音频流，请确认该端点协议是否相符'
+            '自定义服务未返回音频：请确认该端点协议是否相符'
           );
         }
         final bytes = <int>[];

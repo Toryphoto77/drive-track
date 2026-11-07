@@ -155,7 +155,7 @@ class _DataExportPageState extends State<DataExportPage> {
       }));
       await Native.shareFiles([path], 'application/json', '驰迹设置备份');
       setState(() => _settingsMsg =
-          '已导出 ${files.length} 个设置文件，请存到微信 / 网盘 / 文件里；备份不上传服务器。');
+          '已导出 ${files.length} 个设置文件，请存到微信 / 网盘 / 文件里。');
     } catch (_) {
       setState(() => _settingsMsg = '导出失败，请重试。');
     } finally {
@@ -207,7 +207,7 @@ class _DataExportPageState extends State<DataExportPage> {
         restored++;
       }
       setState(() => _settingsMsg = restored > 0
-          ? '已恢复 $restored 个设置文件，重启 App 后生效。注意：传感器校准零偏未持久化，不在备份里，重装后需重新校零。'
+          ? '已恢复 $restored 个设置文件，重启 App 后生效。传感器校准零偏不在备份里，重装后需重新校零。'
           : '备份里没有可恢复的设置文件，未恢复任何设置。');
     } catch (_) {
       setState(() => _settingsMsg = '恢复失败：文件无法读取或不是有效的备份 JSON，未恢复任何设置。');
@@ -227,14 +227,14 @@ class _DataExportPageState extends State<DataExportPage> {
           const Text('设置备份', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           const Text(
-            '备份本机设置文件（profile / 赛道设置 / 语音设置 / 收藏 / 用户 ID，若存在），经系统分享存到微信 / 网盘 / 文件里，不上传服务器。'
-            '恢复后需重启 App 才生效。注意：传感器校准的零偏只是运行时内存值、没有持久化，备份里没有它，重装后需重新校零。',
+            '备份本机设置文件，经系统分享存到微信 / 网盘 / 文件里，不上传服务器。'
+            '恢复后需重启 App 才生效。传感器校准零偏不在备份里，重装后需重新校零。',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 12),
           ImportFileRow(
             fileName: null,
-            placeholder: '未选择备份文件（恢复时点右侧按钮选之前导出的备份 JSON）',
+            placeholder: '未选择备份文件',
             pickLabel: _settingsBusy ? '处理中…' : '恢复设置备份',
             onPick: _settingsBusy ? null : _restoreSettingsBackup,
           ),
@@ -271,7 +271,7 @@ class _DataExportPageState extends State<DataExportPage> {
                 const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text(
-                    '导出走系统分享，数据仅存本机，不上传。GPX 默认截掉首尾；CSV 为完整数据，请自行注意隐私。',
+                    '导出走系统分享，数据仅存本机，不上传。GPX 默认截掉首尾；CSV 为完整数据，请注意隐私。',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ),

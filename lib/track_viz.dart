@@ -184,7 +184,7 @@ class CurrentAndBestLapCard extends StatelessWidget {
         if (isPaused)
           const Padding(
             padding: EdgeInsets.only(top: 8),
-            child: Text('已自动暂停：停车超 30 秒，暂停时长不计入圈速',
+            child: Text('已自动暂停，暂停时长不计入圈速',
                 style: TextStyle(color: _kRed, fontSize: 12)),
           ),
       ]),

@@ -80,7 +80,7 @@ void main() {
 
   UpdateCheckResult errorCheck() => UpdateCheckResult(
     status: UpdateCheckStatus.error,
-    message: '网络不通：两个更新源都连不上，请检查网络或代理后重试',
+    message: '网络不通，请检查网络或代理后重试',
     updates: const [],
     remoteDataVersion: '',
     skippedUserModified: const [],
@@ -134,7 +134,7 @@ void main() {
 
   testWidgets('检查失败：显示错误原文 + 更新按钮置灰', (tester) async {
     await pumpCard(tester, dataVersion: 'V1.0.1', check: errorCheck());
-    expect(find.text('网络不通：两个更新源都连不上，请检查网络或代理后重试'), findsOneWidget);
+    expect(find.text('网络不通，请检查网络或代理后重试'), findsOneWidget);
     final updateButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, '更新赛道库'),
     );

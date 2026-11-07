@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'app_notice.dart';
 
 import 'card_style.dart';
+import 'cloud_page.dart';
+import 'cloud_service.dart';
 
 /// 全新个人页（v0.1.3 分工：个人页 UI 重做）。
 ///
@@ -238,7 +240,7 @@ class _MyPageState extends State<MyPage> {
 
   Future<void> _pickAvatar() async {
     if (widget.onPickAvatar == null) {
-      if (mounted) showAppNotice(context, '换头像待总协调接线：需传入 Native.pickFile(\'image\') 回调', AppNoticeKind.info);
+      if (mounted) showAppNotice(context, '换头像暂不可用。', AppNoticeKind.info);
       return;
     }
     if (_pickingAvatar) return;
@@ -462,14 +464,14 @@ class _MyPageState extends State<MyPage> {
           ),
           const SizedBox(height: 4),
           const Text(
-            '邮箱仅存本机，不发验证码、不是账号登录绑定，不会发到任何服务器。',
+            '邮箱仅存本机，不会发到服务器。',
             style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
           const SizedBox(height: 8),
           TextButton.icon(
             onPressed: _pickingAvatar ? null : _pickAvatar,
             icon: const Icon(Icons.image, size: 16),
-            label: Text(_pickingAvatar ? '选择头像中…' : '换头像（图片选择 / 文件导入）'),
+            label: Text(_pickingAvatar ? '选择头像中…' : '换头像'),
           ),
           if (_editError != null)
             Text(_editError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
@@ -477,11 +479,6 @@ class _MyPageState extends State<MyPage> {
           SizedBox(
             width: double.infinity,
             child: _pillButton(label: '保存', selected: true, onTap: _saveEditing),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '保存后立即在本页回显；总协调需把结果写回 profile.json（见 ProfileEditResult 注释），否则重启后会回到旧值。',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ],
         if (widget.onShareInvite != null) ...[
@@ -596,6 +593,55 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
+  // 云端一期：个人页云端入口（账号状态 + 同步状态，点进云端页）。
+  // 本卡只读 CloudService 的同步状态、不发任何网络请求；
+  // 未配置时只显示“云端未配置”，点进去看说明。
+  Widget _cloudCard() {
+    final svc = CloudService.instance;
+    return FutureBuilder<void>(
+      future: svc.initialized,
+      builder: (context, snap) {
+        final subtitle = !svc.isConfigured
+            ? '云端未配置'
+            : svc.status == CloudStatus.uninitialized
+                ? '同步中…'
+                : svc.isAnonymous
+                    ? '匿名账号 · 待上传 ${svc.pendingCount} 条 · 失败 ${svc.failedCount} 条'
+                    : '已登录 · 待上传 ${svc.pendingCount} 条 · 失败 ${svc.failedCount} 条';
+        return _card(
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CloudPage()),
+              );
+            },
+            child: Row(children: [
+              const Icon(Icons.cloud_outlined, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('云端',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right,
+                  size: 20, color: Colors.white54),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _sectionBar() {
     return Row(children: [
       for (final s in MyPageSection.values) ...[
@@ -694,6 +740,8 @@ class _MyPageState extends State<MyPage> {
         ],
         const SizedBox(height: 12),
         _socialCard(),
+        const SizedBox(height: 12),
+        _cloudCard(),
         const SizedBox(height: 12),
         _sectionBar(),
         const SizedBox(height: 12),

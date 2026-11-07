@@ -463,10 +463,7 @@ class TripGChartCard extends StatelessWidget {
     final maxCount = counts.isEmpty ? 0 : counts.reduce(math.max);
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _cardTitle('G 值 · 数据分析风格'),
-        const SizedBox(height: 2),
-        const Text('仅行程实测 G 值，非任何车队官方分析页',
-            style: TextStyle(color: Colors.white54, fontSize: 12)),
+        _cardTitle('G 值'),
         const SizedBox(height: 10),
         Wrap(spacing: 16, runSpacing: 8, children: [
           _stat('最大合成 G', '${maxCombined.toStringAsFixed(2)}g'),
@@ -476,7 +473,7 @@ class TripGChartCard extends StatelessWidget {
           _stat('样本点', '${points.length}'),
         ]),
         const SizedBox(height: 12),
-        const Text('G-G 散点图（横轴横向 G · 纵轴纵向 G · 红圈为 1g 参考）',
+        const Text('G-G 散点图（红圈为 1g）',
             style: TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 6),
         if (points.length < 2)
@@ -514,7 +511,7 @@ class TripGChartCard extends StatelessWidget {
                 '${p.combinedG.toStringAsFixed(2)}g',
           ),
         const SizedBox(height: 12),
-        const Text('区段标注（连续区段计数）',
+        const Text('区段标注',
             style: TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 4),
         Wrap(spacing: 16, runSpacing: 8, children: [
@@ -523,7 +520,7 @@ class TripGChartCard extends StatelessWidget {
           _stat('弯道区段', '$cornerSegs 段 · 峰值 ${maxLat.toStringAsFixed(2)}g'),
         ]),
         const SizedBox(height: 12),
-        const Text('G 值直方图（合成 G 区间 · 样本数）',
+        const Text('G 值直方图',
             style: TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 6),
         if (points.isEmpty)
@@ -718,7 +715,7 @@ class TripScoreSummaryCard extends StatelessWidget {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _cardTitle(trip.isTrackMode
-            ? '赛道模式不评分 · 看圈速与稳定性'
+            ? '赛道模式不评分'
             : '驾驶习惯评分 ${trip.score.toStringAsFixed(0)} 分'),
         const SizedBox(height: 8),
         if (!trip.isTrackMode) ...[
@@ -815,7 +812,7 @@ class TripFuelCard extends StatelessWidget {
           const Text('未填写油耗/油价',
               style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text('去设置 > 油耗费用填写百公里油耗与油价后，这里自动计算；两项缺一项时也不计算。',
+          const Text('去设置 > 油耗费用填写百公里油耗与油价。',
               style: TextStyle(color: Colors.white70, fontSize: 13)),
         ] else ...[
           Wrap(spacing: 16, runSpacing: 8, children: [
@@ -828,8 +825,8 @@ class TripFuelCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             vehicleConsumptionLPer100Km != null && vehicleConsumptionLPer100Km! > 0
-                ? '按每车油耗估算，非加油实测。公式：里程 × 百公里油耗 / 100 × 油价。'
-                : '按填写油耗估算，非加油实测。公式：里程 × 百公里油耗 / 100 × 油价。',
+                ? '按每车油耗估算，非加油实测。'
+                : '按填写油耗估算，非加油实测。',
               style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ],
         if (measuredLiters != null) ...[
@@ -842,8 +839,6 @@ class TripFuelCard extends StatelessWidget {
             if (measuredCost != null) _stat('实测油钱', '${measuredCost.toStringAsFixed(2)} 元'),
             _stat('实测油耗', '${measuredConsumptionLPer100Km!.toStringAsFixed(2)} L/100km'),
           ]),
-          const Text('实测油钱按全局油价折算；实测油耗仅由满油→满油区间算出，无有效区间时不显示本行。',
-              style: TextStyle(color: Colors.white54, fontSize: 12)),
         ],
       ]),
     );
@@ -903,13 +898,12 @@ class TripPhotoAlbumCard extends StatelessWidget {
         if (photoPointsTruncated)
           const Padding(
             padding: EdgeInsets.only(bottom: 4),
-            child: Text('提示：一趟最多保留前 50 条标记，超出部分未保存。',
+            child: Text('一趟最多保留前 50 条标记。',
                 style: TextStyle(color: Colors.orange, fontSize: 12)),
           ),
         const SizedBox(height: 8),
         if (photos.isEmpty)
-          const Text('暂无标记：记录中点“标记事件”可先存坐标与时间，'
-              '结束后在这里给标记附照片、写标题与备注。',
+          const Text('暂无标记：记录中点“标记事件”添加。',
               style: TextStyle(color: Colors.white70, fontSize: 13))
         else ...[
           SizedBox(
@@ -925,7 +919,7 @@ class TripPhotoAlbumCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Text('示意地图：白线为轨迹，彩点为事件（颜色与类型一致，序号与时间线一致）',
+          const Text('示意地图：白线为轨迹，彩点为事件',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
           const SizedBox(height: 8),
           SizedBox(
@@ -969,8 +963,7 @@ class TripPhotoAlbumCard extends StatelessWidget {
             onPressed: onAttachToLatestUnphotographed,
           ),
         ],
-        const Text('照片只存本机，不上传；删行程时本 App 副本随行程删除，'
-            '不删用户相册原图。',
+        const Text('照片只存本机，不上传；删行程时副本随之删除，不删相册原图。',
             style: TextStyle(color: Colors.white54, fontSize: 12)),
       ]),
     );
@@ -1010,8 +1003,8 @@ class TripAltitudeCard extends StatelessWidget {
           Text(
             points.isEmpty
                 ? '本行程无轨迹点。'
-                : '有效海拔点不足（有效 ${data.validCount} 点，排除无海拔点 '
-                    '${data.excludedCount} 点）；无海拔点不计入统计。',
+                : '有效海拔点不足（有效 ${data.validCount} 点，已排除 '
+                    '${data.excludedCount} 点）。',
             style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ] else ...[
           Wrap(spacing: 16, runSpacing: 8, children: [
@@ -1023,11 +1016,8 @@ class TripAltitudeCard extends StatelessWidget {
           AltitudeProfileChart(data: data),
           const SizedBox(height: 6),
           Text(
-            '横轴里程，纵轴海拔（5 点平滑后）。累计爬升只累计上升 ≥ 3.0 米'
-            '的段，平路 GPS 抖动不计入；小于 3 米的真实小坡也会被丢弃，'
-            '故为保守下限。'
-            '${data.excludedCount > 0 ? '已排除无海拔点 ${data.excludedCount} 点'
-                '（如旧版外接 GPS 点、网络定位点），其 0 米占位不作海平面数据。' : ''}',
+            '累计爬升只计上升 ≥ 3 米的段，为保守下限。'
+            '${data.excludedCount > 0 ? '已排除无海拔点 ${data.excludedCount} 点。' : ''}',
             style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ],
       ]),
@@ -1098,9 +1088,7 @@ class TripRoadTypeCard extends StatelessWidget {
             ),
         const SizedBox(height: 6),
         const Text(
-          '估算依据仅为速度区间，不是真实道路等级：本 App 未接入结构化'
-          '道路数据（底图为栅格瓦片，无道路等级字段），真实道路等级与路名'
-          '待地图数据接入后才能给出；高速拥堵、低速行驶时分桶会误判。',
+          '仅按速度区间估算，非真实道路等级；高速拥堵、低速行驶时可能误判。',
           style: TextStyle(color: Colors.white54, fontSize: 12)),
       ]),
     );

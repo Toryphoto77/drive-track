@@ -196,7 +196,7 @@ class DrivingScoreCard extends StatelessWidget {
             ),
           const Padding(
             padding: EdgeInsets.only(top: 6),
-            child: Text('注：无可靠限速源时不算超速分；点分项可过滤到对应事件',
+            child: Text('注：无可靠限速源时不算超速分',
                 style: TextStyle(color: Colors.white54, fontSize: 12)),
           ),
         ],

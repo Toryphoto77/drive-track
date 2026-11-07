@@ -259,8 +259,7 @@ class _VehicleMarkerSettingsSectionState
                 onTap: () => _pick(_tab, o.key),
               ),
             const Text(
-              '选择只存本机（profile.json 的 vehicleMarkerCar / '
-              'vehicleMarkerMoto / vehicleMarkerBike 三个键），不上传。',
+              '选择只存本机，不上传。',
               style: TextStyle(fontSize: 12),
             ),
           ],
@@ -337,7 +336,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     final c = parseHexColor(_hexCtrl.text);
     if (c == null) {
       // 非法值只报错、不崩溃、不改当前主题色。
-      setState(() => _hexError = '格式不对：请输入 #RRGGBB，如 #E10600（6 位十六进制）');
+      setState(() => _hexError = '格式不对：请输入 #RRGGBB，如 #E10600');
       return;
     }
     _setAccent(c, 'custom');
@@ -549,24 +548,17 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      '点选即切换桌面图标与 App 内图标（启动页、关于页同步变化）。'
-                      '切换使用 DONT_KILL_APP，不会在切换瞬间杀掉 App 导致数据丢失；'
-                      '桌面图标由启动器刷新后变化，若未立即刷新请稍等或重启启动器。',
+                      '点选即切换桌面图标与 App 内图标。若桌面未立即刷新，稍等或重启启动器。',
                       style: TextStyle(fontSize: 12, color: Colors.white54),
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      '回落说明：部分厂商启动器（如个别定制 ROM）可能不立即刷新、'
-                      '需重启启动器或重新安装才显示新图标；若切换后启动异常，'
-                      '请从系统设置的应用信息里清除启动器缓存或重装本应用，'
-                      '默认图标为红赛车。',
+                      '若切换后启动异常，从系统设置的应用信息里清除启动器缓存或重装本应用。',
                       style: TextStyle(fontSize: 12, color: Colors.white54),
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      '若桌面仍显示旧图标，请长按删除桌面图标后从应用列表重新添加：'
-                      'v1.0.2 的桌面入口指向主 Activity，v1.0.3 起改为 alias，'
-                      '个别启动器需重加才刷新。',
+                      '若桌面仍显示旧图标，长按删除桌面图标后从应用列表重新添加。',
                       style: TextStyle(fontSize: 12, color: Colors.white54),
                     ),
                   ],

@@ -193,9 +193,9 @@ class ExternalGpsProfile {
 
   /// 页面上的支持程度徽标文案。
   String get supportBadge {
-    if (binaryProtocol) return '二进制协议（服务 UUID 已验证，包格式待实测）';
+    if (binaryProtocol) return '二进制协议（包格式待实测）';
     return hasNmeaPath
-        ? '通用 NMEA 兼容（GGA / RMC / VTG / GSA 解析已实现）'
+        ? '通用 NMEA 兼容'
         : '协议未公开 / 未实测验证，仅通用 NMEA 兼容';
   }
 }
@@ -225,43 +225,37 @@ const List<ExternalGpsProfile> externalGpsProfiles = [
     serviceUuid: nordicUartServiceUuid,
     txUuid: nordicUartTxUuid,
     nameHints: ['blediy'],
-    note: 'NMEA 文本经 BLE UART 推送时可订阅解析；服务 / 特征为 '
-        'Nordic UART 通用默认值，非 RaceChrono 官方专属值，实际设备以广播为准。',
+    note: 'NMEA 文本经 BLE UART 推送时可订阅解析；服务 / 特征以设备实际广播为准。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.garminGlo,
     name: 'Garmin GLO',
     nameHints: ['garmin', 'glo'],
-    note: '标准 NMEA 输出为前提、待真机验证：经典蓝牙 SPP 为主连接路径；'
-        '请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”连接。',
+    note: '需输出标准 NMEA；请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”连接。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.dualXgps,
     name: 'Dual XGPS 150 / 160',
     nameHints: ['dual', 'xgps'],
-    note: '标准 NMEA 输出为前提、待真机验证：经典蓝牙 SPP 为主连接路径；'
-        '请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”连接。',
+    note: '需输出标准 NMEA；请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”连接。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.qstarz,
     name: 'Qstarz BL-818GT / BL-1000GT / LT-8000GT',
     nameHints: ['qstarz', 'bl-818', 'bl-1000', 'lt-8000'],
-    note: '标准 NMEA 输出为前提、待真机验证：经典蓝牙 SPP 为主连接路径'
-        '（LT-8000GT 另可试 BLE 名称匹配）；请先在系统蓝牙里配对。',
+    note: '需输出标准 NMEA（LT-8000GT 另可试 BLE 名称匹配）；请先在系统蓝牙里配对。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.columbus,
     name: 'Columbus P-9 Race',
     nameHints: ['columbus', 'p-9'],
-    note: '标准 NMEA 输出为前提、待真机验证：经典蓝牙 SPP 为主连接路径；'
-        '请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”连接。',
+    note: '需输出标准 NMEA；请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”连接。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.vboxSport,
     name: 'VBOX Sport',
     nameHints: ['vbox'],
-    note: '标准 NMEA 输出为前提、待真机验证：经典蓝牙 SPP 为主连接路径；'
-        '请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”连接。',
+    note: '需输出标准 NMEA；请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”连接。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.racebox,
@@ -270,9 +264,7 @@ const List<ExternalGpsProfile> externalGpsProfiles = [
     txUuid: raceboxNmeaTxUuid,
     nameHints: ['racebox'],
     adapterId: 'racebox_ubx',
-    note: '公开 BLE 协议文档值、待真机验证：固件 3.3+ 提供标准 NMEA UART 服务'
-        '（本卡 UUID 即文档值），可按此订阅；主 UART 走 U-Blox UBX 二进制私有协议，'
-        '本 App 暂不实现（适配器口子已留），且不要同时订阅两种协议（官方文档警告会高丢包）。',
+    note: '固件 3.3+ 提供标准 NMEA UART 服务，可按此订阅。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.dexian,
@@ -281,43 +273,32 @@ const List<ExternalGpsProfile> externalGpsProfiles = [
     namePattern: dexianBroadcastNamePattern,
     nameHints: ['dexian'],
     binaryProtocol: true,
-    note: '25Hz（用户确认）；BLE 服务 UUID 已验证：Dexian Timer 官方 App（1.3.2）'
-        '拆包实锤，官方 App 扫描即按服务 00000003-0000-1000-8000-00805f9b34fb 过滤。'
-        'D1 走二进制协议（非 NMEA）：官方 App 里无任何 NMEA 句标识，位置数据是二进制包，'
-        '订阅分 GPS 数据 / GPS 时间 / 电池三路；数据特征候选为 00000004-…与 00001ff8-…'
-        '（哪路对应哪个未确认），包格式待实测抓包，本版只连通、不订阅、不解析定位。'
-        '点「扫描适配设备」按服务 UUID 优先、广播名模式（dexian D1-XXXX）兜底匹配。',
+    note: 'D1 走二进制协议，本版只连接，不出定位。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.digspice,
     name: 'DigSpice IV',
     nameHints: ['digspice'],
-    note: 'RaceChrono v10.3.0 同版新增支持，但公开渠道无详细规格，待真机验证：'
-        '按标准 NMEA over Bluetooth 实现（BLE 名称匹配 + SPP 兜底），不硬编协议细节。',
+    note: '按标准 NMEA 实现（BLE 名称匹配 + SPP 兜底）。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.dragy,
     name: 'Dragy Pro / DRG70 / DRG70-C / Lite',
     nameHints: ['dragy', 'drg'],
     adapterId: 'dragy_proprietary',
-    note: '协议未公开 / 未实测验证：官方只说明蓝牙连接与官方 App，'
-        '未公开 BLE 服务 / 特征 UUID 与数据格式，RaceChrono 支持系其自有集成；'
-        '本 App 不解析 Dragy 私有数据流。通用兜底：SPP 连接尝试 + BLE NUS 订阅尝试，'
-        '若设备输出标准 NMEA 即可工作，否则暂不支持。',
+    note: '本 App 不解析 Dragy 私有数据流；设备输出标准 NMEA 即可工作，否则暂不支持。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.genericBt,
     name: '通用蓝牙 GPS（SPP）',
-    note: '不区分厂商的经典蓝牙 SPP 路径：请先在系统蓝牙里配对，'
-        '再用下方“已配对 SPP 设备”或“经典蓝牙搜索”连接；只解析标准 NMEA 文本。',
+    note: '请先在系统蓝牙里配对，再用下方“已配对 SPP 设备”或“经典蓝牙搜索”连接；只解析标准 NMEA 文本。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.genericNmea,
     name: '通用 NMEA BLE UART',
     serviceUuid: nordicUartServiceUuid,
     txUuid: nordicUartTxUuid,
-    note: '默认 Nordic UART；下方可改填设备实际广播的服务 / 特征 UUID。'
-        '只解析 NMEA 文本（GGA / RMC / VTG / GSA），非 NMEA 二进制流一律丢弃计数。',
+    note: '下方可改填设备实际广播的服务 / 特征 UUID；只解析标准 NMEA 文本。',
   ),
 ];
 
@@ -538,7 +519,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         return;
       }
       if (type == 'bleScanFailed') {
-        setState(() => _notice = '蓝牙 GPS 扫描失败（原生错误码 ${e['errorCode']}）。');
+        setState(() => _notice = '蓝牙 GPS 扫描失败。');
         return;
       }
       setState(() => _mergeScanned(e, type == 'classic' ? 'spp' : 'ble'));
@@ -567,7 +548,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _subscribed = false;
           _pendingSubscribe = null;
           _connectingAddress = null;
-          _notice = '外接 GPS 已断开：解析器已重置，行程定位由 main.dart 回落逻辑切回手机 GPS。';
+          _notice = '外接 GPS 已断开，行程定位已回落手机 GPS。';
         });
         _feed.reset();
       } else if (type == 'sppConnected') {
@@ -578,7 +559,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _connectedChannel = addr.isEmpty ? null : 'spp';
           _connectingAddress = null;
           _subscribed = false;
-          _notice = 'SPP 已连接：NMEA 文本经串口直达解析器，有效定位自动注入 Recorder。';
+          _notice = 'SPP 已连接，行程改用外接 GPS。';
         });
       } else if (type == 'sppDisconnected') {
         if (_connectedChannel != 'spp') return;
@@ -588,7 +569,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _subscribed = false;
           _pendingSubscribe = null;
           _connectingAddress = null;
-          _notice = 'SPP 已断开（${e['reason'] ?? ''}）：解析器已重置，行程定位回落手机 GPS。';
+          _notice = 'SPP 已断开（${e['reason'] ?? ''}），行程定位回落手机 GPS。';
         });
         _feed.reset();
       } else if (type == 'sppNmea') {
@@ -648,8 +629,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       if (!mounted) return false;
       setState(() => _permNotice = (btOk && locOk)
           ? null
-          : '蓝牙 GPS 需要蓝牙与定位权限：当前未获授权，扫描与连接不可用。'
-              '请在系统设置里为本 App 打开蓝牙与定位权限后重试。');
+          : '蓝牙 GPS 需要蓝牙与定位权限，请在系统设置里打开后重试。');
       return btOk && locOk;
     } catch (e) {
       if (mounted) setState(() => _permNotice = '权限检查失败：$e');
@@ -696,8 +676,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         await Native.scanBleWithServices([nordicUartServiceUuid]);
         setState(() {
           _scanning = true;
-          _notice = '正在扫描广播 Nordic UART 服务的设备…注意：原生扫描带服务过滤，'
-              '不广播 NUS 的设备不会出现在这里。';
+          _notice = '正在扫描广播 Nordic UART 服务的设备…（不广播 NUS 的设备不会出现）';
         });
       }
     } catch (e) {
@@ -723,7 +702,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         setState(() {
           _bleGpsScanning = ok;
           _notice = ok
-              ? '正在无过滤扫描蓝牙设备（按名称匹配 GPS 接收器；不广播 NUS 的设备也能出现）…'
+              ? '正在扫描蓝牙设备（按名称匹配）…'
               : '无过滤扫描启动失败：请确认蓝牙已打开且权限已授予。';
         });
       }
@@ -744,7 +723,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         }
         _notice = list.isEmpty
             ? '未找到已配对经典蓝牙设备：请先在系统蓝牙设置里与 GPS 接收器配对。'
-            : '已载入 ${list.length} 台已配对经典蓝牙设备（SPP 连接）。';
+            : '已载入 ${list.length} 台已配对经典蓝牙设备。';
       });
     } catch (e) {
       setState(() => _notice = '读取已配对设备失败：$e');
@@ -766,7 +745,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         setState(() {
           _classicScanning = ok;
           _notice = ok
-              ? '正在搜索经典蓝牙设备（SPP 候选）…'
+              ? '正在搜索经典蓝牙设备…'
               : '经典蓝牙搜索启动失败：请确认蓝牙已打开且权限已授予。';
         });
       }
@@ -859,8 +838,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         // 也不进解析器（见 bleNotification 分支的丢弃守卫）。
         try {
           setState(() {
-            _notice = '正在连接“${dev['name']}”…D1 用二进制协议（非 NMEA）：'
-                '服务 UUID 已验证，包格式待实测抓包；本版只连通、不订阅、不解析定位。';
+            _notice = '正在连接“${dev['name']}”…本版只连接，不出定位。';
             _connectingAddress = addr;
             _pendingSubscribe = null;
           });
@@ -880,7 +858,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       // 若设备不广播 NUS 且支持经典蓝牙，请改用 SPP 连接。
       try {
         setState(() {
-          _notice = '正在连接“${dev['name']}”…连接成功后自动尝试通用 NUS 订阅。';
+          _notice = '正在连接“${dev['name']}”…';
           _connectingAddress = addr;
           _pendingSubscribe = (
             address: addr,
@@ -901,7 +879,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     }
     try {
       setState(() {
-        _notice = '正在连接“${dev['name']}”…连接成功后自动订阅 NMEA 特征。';
+        _notice = '正在连接“${dev['name']}”…';
         _connectingAddress = addr;
         _pendingSubscribe =
             (address: addr, service: uuids.service, tx: uuids.tx);
@@ -928,7 +906,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     try {
       setState(() {
         _connectingAddress = addr;
-        _notice = '正在通过 SPP 连接“${dev['name']}”…（经典蓝牙串口直连）';
+        _notice = '正在通过 SPP 连接“${dev['name']}”…';
       });
       await Native.connectSpp(addr);
       Future.delayed(const Duration(seconds: 10), () {
@@ -959,18 +937,16 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       return;
     }
     if (_connectedChannel == 'spp') {
-      setState(() => _notice = 'SPP 通道无需订阅特征：NMEA 文本经串口直达解析器，'
-          '有效定位已自动注入 Recorder。');
+      setState(() => _notice = 'SPP 通道无需订阅。');
       return;
     }
     if (_profile.binaryProtocol) {
-      setState(() => _notice = '当前设备（${_profile.name}）用二进制协议，'
-          '特征 UUID 与包格式待实测抓包：本版不订阅、不解析定位。');
+      setState(() => _notice = '当前设备（${_profile.name}）用二进制协议，本版不解析定位。');
       return;
     }
     final uuids = _effectiveUuids;
     if (uuids == null) {
-      setState(() => _notice = '当前类别无可确认的 UUID，尝试通用 NUS 订阅…');
+      setState(() => _notice = '正在尝试通用 NUS 订阅…');
       await _doSubscribe(addr, nordicUartServiceUuid, nordicUartTxUuid);
       return;
     }
@@ -987,10 +963,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         _subscribed = ok;
         _subscribeError = ok ? null : (r['error']?.toString() ?? 'unknown');
         _notice = ok
-            ? '已订阅 NMEA 特征：有效定位将经 main.dart 全局监听注入 Recorder，'
-                '行程自动改用外接 GPS；5 秒无新定位自动回落手机 GPS。'
-            : '订阅失败：${_subscribeError}（常见原因：GATT 服务发现未完成，'
-                '或该设备实际广播的不是该服务 / 特征——请以扫描到的 serviceUuids 为准改填）。';
+            ? '已订阅 NMEA 特征，行程改用外接 GPS；5 秒无新定位自动回落手机 GPS。'
+            : '订阅失败：${_subscribeError}（请核对设备实际广播的服务 / 特征 UUID）。';
       });
       if (ok) _pendingSubscribe = null;
     } catch (e) {
@@ -1018,7 +992,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       _subscribed = false;
       _pendingSubscribe = null;
       _connectingAddress = null;
-      _notice = '已断开外接 GPS：解析器已重置，行程定位回落手机 GPS。';
+      _notice = '已断开外接 GPS，行程定位回落手机 GPS。';
     });
   }
 
@@ -1027,15 +1001,14 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     if (_connectedChannel == 'spp') {
       // SPP 不走 GATT、无特征配置可存，模型（SavedDevice 要求 UUID）
       // 也不适用：重连请走已配对列表，不另造一套 SPP 保存。
-      setState(() => _notice = 'SPP 设备不存入 BLE 清单：重连请走“已配对 SPP 设备”'
-          '列表（SPP 不走 GATT，无特征配置可存）。');
+      setState(() => _notice = 'SPP 设备不存入 BLE 清单，重连请走“已配对 SPP 设备”列表。');
       return;
     }
     final uuids = _effectiveUuids;
     if (addr == null || uuids == null) {
       setState(() => _notice = _profile.binaryProtocol
-          ? 'DEXIAN D1 用二进制协议（数据特征 UUID 待确认），无法保存为可重连的特征配置。'
-          : '当前类别无可确认的 UUID，无法保存为可重连的特征配置。');
+          ? 'DEXIAN D1 用二进制协议，无法保存为可重连的配置。'
+          : '当前设备无法保存为可重连的配置。');
       return;
     }
     final saved = await DeviceCenterStore.load();
@@ -1049,7 +1022,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     final ok = await DeviceCenterStore.save(saved);
     if (!mounted) return;
     setState(() => _notice = ok
-        ? '已保存到本机“已连 / 已保存设备”清单，下次可用重连（重连后仍需订阅 NMEA 特征）。'
+        ? '已保存到本机清单，下次可用重连（重连后仍需订阅 NMEA 特征）。'
         : '保存失败：本机文件写入失败。');
   }
 
@@ -1060,25 +1033,24 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         .map((e) => e.toString().toLowerCase())
         .toList();
     if (uuids.contains(dexianServiceUuid.toLowerCase())) {
-      return '广播含 DEXIAN D1 服务（00000003-…，官方 App 拆包已验证）：'
-          '二进制协议（非 NMEA），包格式待实测抓包，暂不解析定位。';
+      return '广播含 DEXIAN D1 服务：二进制协议，暂不解析定位。';
     }
     if (uuids.any((u) => u.contains('6e400001'))) {
       return '广播含 Nordic UART 服务，可尝试订阅 NMEA。';
     }
     if (uuids.contains(raceboxNmeaServiceUuid.toLowerCase())) {
-      return '广播含 RaceBox NMEA UART 服务（公开文档值，固件 3.3+），可尝试订阅。';
+      return '广播含 RaceBox NMEA UART 服务，可尝试订阅。';
     }
     if (uuids.any((u) => u.contains('00001101'))) {
-      return '广播含 00001101 服务（SPP / NMEA UART 可能值），以实际输出为准。';
+      return '广播含 00001101 服务（SPP / NMEA UART 可能值）。';
     }
     final name = (dev['name'] ?? '').toString();
     for (final p in externalGpsProfiles) {
       if (_profileNameMatches(p, name)) {
         if (p.binaryProtocol) {
-          return '名称匹配：${p.name}（二进制协议，服务 UUID 已验证，包格式待实测）。';
+          return '名称匹配：${p.name}（二进制协议，暂不解析定位）。';
         }
-        return '名称匹配：${p.name}（仅名称提示，协议以实际输出为准）。';
+        return '名称匹配：${p.name}（仅名称提示）。';
       }
     }
     final channels =
@@ -1103,7 +1075,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         : _scanned.isEmpty
             ? '尚未扫描：点上方「扫描适配设备」开始。'
             : adaptable.isEmpty
-                ? '已扫描 ${_scanned.length} 台设备，其中没有可适配的 GPS 设备'
+                ? '已扫描 ${_scanned.length} 台设备，没有可适配的 GPS 设备'
                     '（全部结果见下方「高级 / 手动添加」）。'
                 : '已扫描 ${_scanned.length} 台设备，找到 ${adaptable.length} 台'
                     '可适配设备，点行即连。';
@@ -1115,10 +1087,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         // _connectAdaptable）。
         DeviceScanCard(
           title: '外接 GPS',
-          description: '点下方按钮一次扫完周围可适配的 GPS 设备（BLE + 经典蓝牙 + '
-              '已配对），点列表里的设备即自动连接。BLE 优先、只有 SPP 通道时走 SPP；'
-              '12 张档案名录匹配、广播已验证的厂商服务（如 DEXIAN D1 的 00000003）'
-              '或 NMEA UART / SPP 服务的设备才进主列表。',
+          description: '点“扫描适配设备”，一次扫完周围可适配的 GPS 设备，点列表里的设备即自动连接。' 'SPP 设备须先在系统蓝牙里配对。',
           icon: Icons.satellite_alt,
           scanning: _adaptScanning,
           scanLabel: '扫描适配设备',
@@ -1180,19 +1149,13 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         ExpansionTile(
           title: const Text('高级 / 手动添加',
               style: TextStyle(color: Colors.white)),
-          subtitle: const Text('档案卡浏览、自定义 UUID、分别扫描、SPP 说明、全部扫描结果',
+          subtitle: const Text('档案卡浏览、自定义 UUID、分别扫描、全部扫描结果',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
           initiallyExpanded: _advancedExpanded,
           onExpansionChanged: (v) => setState(() => _advancedExpanded = v),
           children: [
             const Text(
-              '本区是唯一的蓝牙 GPS 连接入口：BLE（NUS / RaceBox NMEA UART / '
-              'DEXIAN D1 二进制服务 / 名称匹配）与经典蓝牙 SPP 双通道，扫描列表全渠道合并、'
-              '一设备一行，连接状态单点管理。定位源切换复用现有链路：BLE 订阅或 SPP 直读的 '
-              'NMEA 经 main.dart 全局 bleData 监听注入 Recorder（externalGpsActive = true，'
-              '落点走 Recorder.onExternalFix），外部源 5 秒无新定位或断线时自动回落手机 GPS。'
-              'DEXIAN D1 只连通、不订阅、不解析定位（包格式待实测抓包）。'
-              '原生单 GATT：一次只能连一台 BLE 设备，SPP 不占 GATT 名额。',
+              '外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。' 'DEXIAN D1 本版只连接，不出定位。一次只能连一台 BLE 设备。',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
             const SizedBox(height: 8),
@@ -1271,14 +1234,13 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
             ),
           ),
           const SizedBox(height: 4),
-          const Text('UUID 格式不对时自动回落 Nordic UART 默认值，并在下方提示里说明。',
+          const Text('格式不对时自动用 Nordic UART 默认值。',
               style: TextStyle(color: Colors.white54, fontSize: 11)),
           const SizedBox(height: 8),
         ],
         if (_sppCapable) ...[
           const Text(
-            'SPP 通道：请先在系统蓝牙设置里与设备配对，再用下方“已配对 SPP”连接；'
-            'SPP 不占 GATT 名额、不需订阅特征，NMEA 文本直达解析器。',
+            'SPP 通道：请先在系统蓝牙设置里与设备配对，再用下方“已配对 SPP”连接；无需订阅特征。',
             style: TextStyle(color: Colors.white60, fontSize: 12),
           ),
           const SizedBox(height: 8),
@@ -1408,7 +1370,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
               const SizedBox(height: 4),
               Text(
                 fix == null
-                    ? '暂无定位：尚未收到有效 NMEA 定位。'
+                    ? '暂无定位：尚未收到有效定位。'
                     : '最新定位：${btGpsFixStatusLabel(fix)}，'
                         'lat=${fix.lat.toStringAsFixed(5)}，'
                         'lon=${fix.lon.toStringAsFixed(5)}，'
@@ -1419,11 +1381,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
                         '更新率=${fix.hz?.toStringAsFixed(0) ?? '—'} Hz'
                         '${stale ? '（已超 5 秒无新定位，应已回落手机 GPS）' : ''}',
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-              Text(
-                '解析统计：已接受 ${ _feed.acceptedCount} 条，有效定位外语句已丢弃 '
-                '${_feed.droppedCount} 条（校验和不符 / 无效定位 / 非 A 状态一律不造假点）。',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
               const SizedBox(height: 8),
               Row(children: [
@@ -1439,7 +1396,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
                     _connectedChannel == 'spp'
                         ? 'SPP 设备不存入 BLE 清单，重连请走已配对列表。'
                         : uuids == null
-                            ? '当前类别无可确认的 UUID，无法保存特征配置。'
+                            ? '当前设备无法保存特征配置。'
                             : '保存后重连仍需再订阅 NMEA 特征。',
                     style: const TextStyle(
                         color: Colors.white54, fontSize: 11),
@@ -1489,7 +1446,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   String _formType = customSensorTypes.last;
 
   final BleDiyGpsFeed _gpsFeed = BleDiyGpsFeed();
-  String? _gpsDemoResult;
 
   @override
   void initState() {
@@ -1541,7 +1497,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   Future<void> _persist() async {
     final ok = await DeviceCenterStore.save(_saved);
     if (!mounted) return;
-    setState(() => _notice = ok ? '已保存到本机。' : '保存失败：本机文件写入失败，清单未保存。');
+    setState(() => _notice = ok ? '已保存到本机。' : '保存失败：本机文件写入失败。');
   }
 
   Future<void> _toggleScan() async {
@@ -1556,8 +1512,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         await Native.startBleScan();
         setState(() {
           _scanning = true;
-          _notice = '正在扫描…注意：现有原生扫描只过滤功率/踏频/心率三类服务，'
-              'GoPro 与 UART 类设备可能不会出现在这里。';
+          _notice = '正在扫描…只扫功率 / 踏频 / 心率三类服务，GoPro 与 UART 类设备可能不出现。';
         });
       }
     } catch (e) {
@@ -1568,15 +1523,14 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   Future<void> _connectSaved(SavedDevice device) async {
     final addr = device.address;
     if (addr == null || addr.isEmpty) {
-      setState(() => _notice = '“${device.name}”未保存蓝牙地址，无法重连：请在表单里补填地址后保存。');
+      setState(() => _notice = '“${device.name}”未保存蓝牙地址，无法重连，请在表单里补填地址。');
       return;
     }
     try {
       setState(() => _statusByAddress[addr] = DeviceLinkStatus.connecting);
       await Native.setBleAutoReconnect(true);
       await Native.connectBle(addr);
-      setState(() => _notice = '正在连接“${device.name}”…结果以蓝牙事件为准；'
-          'UART 类设备重连后仍需在外接 GPS 区订阅 NMEA 特征。');
+      setState(() => _notice = '正在连接“${device.name}”…重连后仍需在外接 GPS 区订阅 NMEA 特征。');
     } catch (e) {
       setState(() {
         _statusByAddress[addr] = DeviceLinkStatus.disconnected;
@@ -1590,8 +1544,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     final service = normalizeUuid(_serviceCtrl.text);
     final characteristic = normalizeUuid(_charCtrl.text);
     if (name.isEmpty || service == null || characteristic == null) {
-      setState(() => _notice = '保存失败：名称不能为空，服务 UUID 与特征 UUID 须为完整 '
-          '128-bit 或 4/8 位短 UUID 格式。');
+      setState(() => _notice = '保存失败：名称不能为空，UUID 须为 128-bit 或 4/8 位短格式。');
       return;
     }
     final device = SavedDevice(
@@ -1611,25 +1564,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       _addressCtrl.clear();
     });
     await _persist();
-  }
-
-  /// BleDIY NMEA 解析自测：用校验和已验算的示例语句跑一遍解析器，
-  /// 证明解析逻辑可用；这不是真实设备数据，页面上会明说。
-  void _runGpsDemo() {
-    final feed = BleDiyGpsFeed();
-    feed.feedLine(r'$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47');
-    feed.feedLine(r'$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A');
-    feed.feedLine(r'$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K*48');
-    feed.feedLine(r'$GPGGA,123519,4807.038,N,01131.000,E,0,00,99.9,0.0,M,0.0,M,,*45');
-    final fix = feed.latest;
-    setState(() {
-      _gpsDemoResult = fix == null
-          ? '自测失败：示例语句未产出定位（ dropped=${feed.droppedCount}）。'
-          : '自测（示例语句，非真实设备）：lat=${fix.lat.toStringAsFixed(5)}，'
-              'lon=${fix.lon.toStringAsFixed(5)}，速度=${fix.speedMps?.toStringAsFixed(1)} m/s，'
-              '方向=${fix.bearingDeg?.toStringAsFixed(1)}°，卫星=${fix.satellites}，'
-              '无效定位语句已丢弃 ${feed.droppedCount} 条，未造假点。';
-    });
   }
 
   @override
@@ -1690,9 +1624,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                    '一个入口扫全部品牌：GoPro 走 BLE 直连，Insta360 / DJI 走'
-                    ' Wi-Fi 热点 + 品牌 App 向导（本 App 不直连）；品牌自动识别，'
-                    '不用先选品牌，点行即连。',
+                    'GoPro 走 BLE 直连，Insta360 / DJI 走 Wi-Fi 热点 + 品牌 App 向导；' '不用先选品牌，点行即连。',
                     style: TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 8),
                 FilledButton(
@@ -1708,42 +1640,23 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           const SizedBox(height: 8),
           _sectionTitle('外接 GPS 模块'),
           const Text(
-            '链路：BLE（NUS / RaceBox NMEA UART / DEXIAN D1 二进制服务 / 名称匹配）与经典蓝牙 SPP '
-            '双通道 → 连接 → 订阅 / 直读 NMEA → main.dart 全局监听把有效定位注入 Recorder，'
-            '5 秒无新定位自动回落手机 GPS。档案覆盖 RaceChrono 支持清单；'
-            'Dragy 私有协议未公开 / 未实测验证，仅通用 NMEA 兼容，不解析其私有数据流；'
-            'DEXIAN D1 服务 UUID 已验证（官方 App 拆包），走二进制协议（非 NMEA），'
-            '包格式待实测抓包，本版只连通、不订阅、不解析。',
+            '外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。',
             style: TextStyle(color: Colors.white60, fontSize: 12),
           ),
           const SizedBox(height: 8),
           const ExternalGpsSection(),
           const SizedBox(height: 8),
-          Row(children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _runGpsDemo,
-                icon: const Icon(Icons.bug_report, size: 18),
-                label: const Text('用示例语句自测 NMEA 解析'),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const SatelliteSettingsPage()),
               ),
+              icon: const Icon(Icons.satellite_alt, size: 18),
+              label: const Text('可视化外部 GPS 配置'),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => const SatelliteSettingsPage()),
-                ),
-                icon: const Icon(Icons.satellite_alt, size: 18),
-                label: const Text('可视化外部 GPS 配置'),
-              ),
-            ),
-          ]),
-          if (_gpsDemoResult != null) ...[
-            const SizedBox(height: 8),
-            Text(_gpsDemoResult!,
-                style: const TextStyle(color: Colors.white60, fontSize: 12)),
-          ],
+          ),
           const SizedBox(height: 16),
           _sectionTitle('传感器：自定义 BLE 设备'),
           ExpansionTile(

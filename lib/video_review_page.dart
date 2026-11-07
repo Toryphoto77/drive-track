@@ -71,14 +71,14 @@ _SegmentAlign _segmentAlign(Trip trip, String path, int index) {
       final off = fileMs - trip.startMs;
       if (off >= -10000 && off <= duration) {
         if (off < 0) {
-          return _SegmentAlign(0, '视频启动约比轨迹早 ${(-off)}ms，已按 0 对齐（秒级精度）');
+          return _SegmentAlign(0, '视频比轨迹早 ${(-off)}ms，已按 0 对齐');
         }
-        return _SegmentAlign(off, '按段文件名时间戳对齐（秒级精度）');
+        return _SegmentAlign(off, '按段文件名时间戳对齐');
       }
     }
   }
   return _SegmentAlign(
-      index * 10 * 60 * 1000, '文件名无可用时间戳，段起始按“段序号 × 10 分钟”估算（秒级精度）');
+      index * 10 * 60 * 1000, '段起始按“段序号 × 10 分钟”估算');
 }
 
 class _VideoReviewPageState extends State<VideoReviewPage> {
@@ -194,10 +194,9 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
             if (_durationMs > 0) _positionMs = _durationMs;
           });
         case 'onError':
-          final args = call.arguments as Map?;
           setState(() {
             _playerError =
-                '应用内播放失败（what=${args?['what']} extra=${args?['extra']}），请用系统播放器打开';
+                '应用内播放失败，请用系统播放器打开';
             _playing = false;
           });
       }
@@ -313,12 +312,10 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
     final b = StringBuffer();
     b.writeln('驰迹 DriveTrack · 事件时间戳清单');
     b.writeln('行程：${_trip.mode.label} · ${_dateTime(_trip.startMs)} 开始 · ${_trip.id}');
-    b.writeln('视频段数：${_videos.length}（每段最长 10 分钟自动分段）');
-    b.writeln('对齐方式：视频段起始时间 = 行程开始时间 + 段偏移；段偏移优先取段文件名时间戳，'
-        '否则按段序号 × 10 分钟估算。对齐精度为秒级，不是帧级。');
-    b.writeln('重要：本清单与本页 HUD、地图仪表均为回放时叠加/标注，未做烧录重编码；'
-        '原视频文件本身不含速度、G 值、轨迹地图与事件标注。');
-    b.writeln('事件跳转：点事件跳到该事件前约 3 秒；seek 按关键帧就近定位，落点可能差 <1 秒。');
+    b.writeln('视频段数：${_videos.length}（每段最长 10 分钟）');
+    b.writeln('对齐方式：段偏移优先取段文件名时间戳，否则按段序号 × 10 分钟估算；精度为秒级。');
+    b.writeln('本清单与 HUD、地图仪表仅为回放叠加，未烧录进原视频。');
+    b.writeln('点事件跳到该事件前约 3 秒。');
     if (_trip.events.isEmpty) {
       b.writeln('本行程无事件。');
     } else {
@@ -336,7 +333,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
       final dir = await Native.getCacheDir();
       final file = File('$dir/drivetrack_events_${_trip.id}.txt');
       await file.writeAsString(_exportText());
-      await Native.shareFiles([file.path], 'text/plain', '驰迹事件时间戳清单（未烧录进视频，仅文本清单）');
+      await Native.shareFiles([file.path], 'text/plain', '驰迹事件时间戳清单');
     } catch (_) {
       if (mounted) {
         showAppNotice(context, '导出失败，可改用“复制清单”', AppNoticeKind.error);
@@ -354,7 +351,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
     final maxMs = _durationMs > 0 ? _durationMs : 10 * 60 * 1000;
     final events = _segmentEvents;
     return Scaffold(
-      appBar: AppBar(title: const Text('视频回顾 · 数据叠加')),
+      appBar: AppBar(title: const Text('视频回顾')),
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // ---- 段切换 ----
@@ -534,7 +531,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
           if (events.isNotEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('时间轴红点为本段事件，点红点或下方事件即跳到该事件前约 3 秒',
+              child: Text('红点为本段事件，点即跳到事件前约 3 秒',
                   style: TextStyle(color: Colors.white54, fontSize: 12)),
             ),
           // ---- HUD 数值（视频下方同步一份） ----
@@ -554,24 +551,21 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
           ),
           // ---- 边界情况明示 ----
           if (_videos.isEmpty)
-            const _WarnBanner('本行程未关联视频：可能视频启动失败、未勾选同步视频，或行程太短未保存。'
-                '下方仍可查看事件清单与导出时间戳。'),
+            const _WarnBanner('本行程未关联视频。下方仍可查看事件清单。'),
           if (_videos.isNotEmpty && _segmentMissing)
-            const _WarnBanner('当前段视频文件已缺失（可能被清理），无法应用内播放；可切换其他段，或用下方事件时间轴回顾数据。'),
+            const _WarnBanner('当前段视频文件已缺失，无法应用内播放；可切换其他段。'),
           if (trip.points.length < 10)
             const _WarnBanner('轨迹点过少（少于 10 个），HUD 与事件可能不完整。'),
           if (_playerError != null) _WarnBanner(_playerError!),
           if (_videos.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text('对齐：${_align.note}；HUD 每 250ms 轮询同步，画面与数值有 ≤250ms 级延迟；'
-                  'seek 按关键帧就近定位，落点可能差 <1 秒。',
+              child: Text('对齐：${_align.note}；画面与数值可能有 ≤250ms 延迟；跳转落点可能差 <1 秒。',
                   style: const TextStyle(color: Colors.white54, fontSize: 12)),
             ),
           const Padding(
             padding: EdgeInsets.all(12),
-            child: Text('未做烧录重编码：HUD 与地图仪表只在本页回放时叠加，分享 / 导出的原视频文件不含 HUD 数据与轨迹地图；'
-                '仪表同步精度为秒级，不是帧级。',
+            child: Text('HUD 与地图仪表仅本页回放时叠加，未烧录进原视频；同步精度为秒级。',
                 style: TextStyle(color: Colors.orange, fontSize: 12)),
           ),
           // ---- 本段事件 ----
@@ -612,7 +606,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
               if (_currentPath != null)
                 OutlinedButton.icon(
                   icon: const Icon(Icons.open_in_new),
-                  label: const Text('系统播放器播放（备用）'),
+                  label: const Text('系统播放器播放'),
                   onPressed: () => Native.playVideo(_currentPath!),
                 ),
               if (_currentPath != null)
@@ -623,12 +617,6 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                       Native.shareFiles([_currentPath!], 'video/mp4', '驰迹行程视频'),
                 ),
             ]),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(12, 0, 12, 24),
-            child: Text('已知限制（待真机验证）：各品牌播放器 / 解码表现、seek 精度、横竖屏下的叠加层与控制条、'
-                '多段切换后的对齐；本页未经过真机实测，结论以总协调编包后的真机验证为准。',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
           ),
         ]),
       ),

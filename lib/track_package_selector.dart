@@ -47,7 +47,7 @@ class TrackPackageSelector extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
           child: Text(
-            '点行首 ⓘ 看赛道简介（办赛历史与最快圈速）；点行内其他区域选为本次赛道。卡片为卫星预览（加载失败时回落示意图），仅作示意，不用于导航与计时判定',
+            '点 ⓘ 看赛道简介，点其他区域选中。卫星预览仅作示意，不用于导航与计时',
             style: TextStyle(color: TrackTheme.textDim, fontSize: 11),
           ),
         ),

@@ -303,7 +303,7 @@ Future<String?> pickOrTakePhoto(BuildContext context) async {
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('附照片'),
-      content: const Text('拍照直接存本机；相册选取只拷贝副本，不动原图。'),
+      content: const Text('拍照存本机；相册选取只拷贝副本，不动原图。'),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(ctx, 'camera'),
@@ -603,7 +603,7 @@ class _TripAlbumPageState extends State<TripAlbumPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除这个事件？'),
-        content: const Text('只删本 App 内的打点与副本照片，不删用户相册原图。'),
+        content: const Text('只删本 App 内的打点与副本照片，不删相册原图。'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -654,7 +654,7 @@ class _TripAlbumPageState extends State<TripAlbumPage> {
       appBar: AppBar(title: Text('${widget.title}（${_points.length}）')),
       body: _points.isEmpty
           ? const Center(
-              child: Text('暂无照片点\n记录中点“事件标记”可先存坐标，\n结束后在这里附照片',
+              child: Text('暂无照片点\n记录中点“事件标记”添加，结束后可附照片',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white54)))
           : Column(children: [
@@ -679,7 +679,7 @@ class _TripAlbumPageState extends State<TripAlbumPage> {
                 padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('示意地图：白线为轨迹，彩点为事件（颜色与类型一致，序号与下方时间线一致），不是瓦片地图',
+                  child: Text('示意地图：白线为轨迹，彩点为事件',
                       style: TextStyle(color: Colors.white54, fontSize: 12)),
                 ),
               ),
@@ -942,7 +942,7 @@ class _PhotoViewerPage extends StatelessWidget {
           child: Center(
             child: f != null && f.existsSync()
                 ? Image.file(f, fit: BoxFit.contain)
-                : const Text('照片文件已不在本机（仅存引用时会出现）',
+                : const Text('照片文件已不在本机',
                     style: TextStyle(color: Colors.white54)),
           ),
         ),

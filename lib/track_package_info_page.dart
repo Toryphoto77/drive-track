@@ -49,9 +49,7 @@ class TrackPackageInfoPage extends StatelessWidget {
               OutlineDiagram(
                 outline: info.outline,
                 height: 220,
-                caption: pkg.hasCenterline
-                    ? '轮廓来源：赛道库数据包（经纬度中心线归一化显示）'
-                    : '轮廓来源：赛道库数据包示意',
+                caption: '轮廓来源：赛道库数据包',
               )
             else
               Container(
@@ -177,14 +175,14 @@ class TrackPackageInfoPage extends StatelessWidget {
             _sectionTitle('办赛历史'),
             const SizedBox(height: 8),
             const Text(
-              '办赛历史：待核（用户赛道暂无办赛资料）',
+              '办赛历史：待核',
               style: TextStyle(color: Colors.white54, fontSize: 15),
             ),
             const SizedBox(height: 16),
             _sectionTitle('最快圈速'),
             const SizedBox(height: 8),
             const Text(
-              '最快圈速：待核（用户赛道暂无圈速资料）',
+              '最快圈速：待核',
               style: TextStyle(color: Colors.white54, fontSize: 15),
             ),
             const SizedBox(height: 20),

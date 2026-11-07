@@ -908,7 +908,7 @@ class _VehicleMarkerPickerPageState extends State<VehicleMarkerPickerPage> {
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
               child: Text(
-                '品牌名仅作风格区分，非官方授权模型；车标为自绘矢量轮廓，不使用官方 Logo。',
+                '品牌名仅作风格区分；车标为自绘轮廓，不使用官方 Logo。',
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ),
@@ -937,8 +937,7 @@ class _VehicleMarkerPickerPageState extends State<VehicleMarkerPickerPage> {
                   ),
                 const SizedBox(height: 8),
                 const Text(
-                  '选择只存本机（profile.json 的 vehicleMarkerCar / '
-                  'vehicleMarkerMoto / vehicleMarkerBike 三个键），不上传。',
+                  '选择只存本机，不上传。',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ],

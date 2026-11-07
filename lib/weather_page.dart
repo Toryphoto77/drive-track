@@ -239,7 +239,7 @@ class WeatherPage extends StatelessWidget {
                         return const Padding(
                           padding: EdgeInsets.only(top: 4),
                           child: Text(
-                            '未传入行进方向，仅显示风向，未计算侧风。',
+                            '未提供行进方向，未计算侧风。',
                             style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 12, color: Colors.white54),
                           ),
                         );
@@ -272,7 +272,7 @@ class WeatherPage extends StatelessWidget {
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '结冰风险提示：低温高湿，路面可能结冰，谨慎驾驶。',
+                              '结冰风险：低温高湿，路面可能结冰，谨慎驾驶。',
                               style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white),
                             ),
                           ),
@@ -331,17 +331,17 @@ class WeatherPage extends StatelessWidget {
                   const Padding(
                     padding: EdgeInsets.only(top: 2, bottom: 8),
                     child: Text(
-                      'Open-Meteo 预报接口不提供官方预警文本，本行不编预警。',
+                      '预报接口不提供官方预警文本。',
                       style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 12, color: Colors.white54),
                     ),
                   ),
                   const Text(
-                    '根据当前数据推导的驾驶提示（非官方预警）：',
+                    '驾驶提示（非官方预警）：',
                     style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white70),
                   ),
                   const SizedBox(height: 6),
                   if (w.drivingAlerts.isEmpty)
-                    const Text('当前数据未触发恶劣天气驾驶提示。',
+                    const Text('暂无恶劣天气驾驶提示。',
                         style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white))
                   else
                     for (final a in w.drivingAlerts)

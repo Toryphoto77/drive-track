@@ -267,7 +267,7 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                 ListTile(
                   title: const Text('起终点判定半径'),
                   subtitle: Text(
-                      '${_s.crossingRadiusM.round()} 米（默认 30 米；半径越大，高速通过越不容易漏判，但原地抖动也越容易误触发）'),
+                      '${_s.crossingRadiusM.round()} 米（默认 30 米；越大越不易漏判，也越易误触发）'),
                 ),
                 Slider(
                   value: _s.crossingRadiusM,
@@ -282,7 +282,7 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                 ListTile(
                   title: const Text('停车持续时长'),
                   subtitle: Text(
-                      '${_s.dwellThresholdSec} 秒（默认 30 秒；速度低于阈值满此时长即暂停计时，本圈记“停留不计圈”）'),
+                      '${_s.dwellThresholdSec} 秒（默认 30 秒；低于阈值满此时长暂停计时，本圈不计）'),
                 ),
                 Slider(
                   value: _s.dwellThresholdSec.toDouble(),
@@ -317,13 +317,13 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                       RadioListTile<TrackSectorMode>(
                         title: const Text('前后半圈'),
                         subtitle:
-                            const Text('无分段点时的默认分段：按圈时长中点切两段'),
+                            const Text('按圈时长中点切两段'),
                         value: TrackSectorMode.halves,
                       ),
                       RadioListTile<TrackSectorMode>(
                         title: const Text('三段示意'),
                         subtitle: const Text(
-                            '需在赛道页设置 S1、S2 分段点才有真实三段；未设分段点时仍按前后半圈显示'),
+                            '需在赛道页设 S1、S2 分段点，否则按前后半圈显示'),
                         value: TrackSectorMode.threeSegment,
                       ),
                     ],
@@ -375,12 +375,7 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  '接线说明：赛道开始时，总协调用 TrackSettingsStore.load() '
-                  '读本设置，以 settings.lapTimerArgs 的 crossingRadiusM / '
-                  'dwellThresholdMs / dwellSpeedMs 构造 LapTimer；'
-                  '分段点（S1/S2）仍由赛道页传入 sectorPoints，不存在本设置里。'
-                  'LapTimer 构造后阈值不可改：行程中改设置只影响下一趟，'
-                  '不得在中途重建计时器丢圈速。',
+                  '行程中改设置只影响下一趟。',
                   style: TextStyle(color: Colors.grey),
                 ),
               ],

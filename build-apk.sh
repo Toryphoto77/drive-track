@@ -22,7 +22,14 @@ GUH=$HOME/.gradle
 mkdir -p "$GUH/init.d"
 printf 'gradle.startParameter.offline = true\n' > "$GUH/init.d/offline.gradle"
 trap 'rm -f "$GUH/init.d/offline.gradle"' EXIT
-flutter build apk --debug --target-platform android-arm64 --no-android-gradle-daemon
+# 云端二期：CloudBase 环境 ID（仅本地 .cloudbase-env 文件，600 权限，
+# gitignore，不进仓库、不进推送清单）：有则以 --dart-define 注入，
+# 无则不传，代码侧空值即云端未配置、上传禁用；内容绝不回显到日志。
+CLOUDBASE_DEFINE=()
+if [ -f .cloudbase-env ]; then
+  CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")
+fi
+flutter build apk --debug --target-platform android-arm64 --no-android-gradle-daemon "${CLOUDBASE_DEFINE[@]}"
 cp build/app/outputs/flutter-apk/app-debug.apk ./DriveTrack-v0.1.10-debug-arm64.apk
 ls -la ./DriveTrack-v0.1.10-debug-arm64.apk
 echo BUILD_DONE

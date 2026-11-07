@@ -315,9 +315,6 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       const Text('本节行程总览 · 传感器实测',
           style: TextStyle(
               color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 4),
-      const Text('无圈速时本节同样展示；赛道行程不评分。',
-          style: TextStyle(color: Colors.white54, fontSize: 11)),
       const SizedBox(height: 8),
       _sectionHeader('总览', 'hide-overview', _hideOverview,
           (v) => setState(() => _hideOverview = v)),
@@ -439,10 +436,8 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               const SizedBox(height: 6),
               Text(
                 _replay3d
-                    ? '3D 透视回放：实测轨迹按时间推进，不插值；仅作复盘示意，不用于计时判定'
-                    : _satelliteMap && wholeSlice != null
-                        ? '走线为 GPS 实测轨迹，按速度着色（蓝→绿→黄→红），仅作复盘示意，不用于计时判定'
-                        : '走线为实测轨迹归一化显示，按速度着色（白→红），仅作复盘示意，不用于计时判定',
+                    ? '3D 透视回放：仅作复盘示意，不用于计时判定'
+                    : '走线按速度着色，仅作复盘示意，不用于计时判定',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
               // v1.3.4：参考圈叠加图例（开关关 / 无参照圈 / 点数 < 2
@@ -636,7 +631,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Text(
                       widget.obdConnected
-                          ? 'OBD 已连接（通道预留，暂无数据）'
+                          ? 'OBD 已连接，暂无数据'
                           : '未连接 OBD，暂无此通道',
                       style: const TextStyle(
                           color: Colors.white70, fontSize: 13),
@@ -648,7 +643,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             const SizedBox(height: 12),
             if (selected == null) ...[
               const Text(
-                '暂无圈速数据：本节无计入圈，圈速总览 / 分段对比 / 得失曲线暂不展示；上方传感器总览仍为本节实测数据。',
+                '暂无圈速数据：本节无计入圈。',
                 style: TextStyle(color: Colors.white54, fontSize: 13),
               ),
             ] else ...[
@@ -691,7 +686,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      '理论最佳圈 = 各分段最佳相加；无效圈不进统计；仅真实分段赛道显示，无真实分段点时为占位',
+                      '理论最佳圈 = 各分段最佳相加；无效圈不进统计',
                       style: TextStyle(
                           color: Colors.white54, fontSize: 11),
                     ),
@@ -774,7 +769,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       sectorData == null
                           ? '扇区待核：未查到该赛道扇区数据，分段按计时分段显示'
                           : sectorData.sourceLabel == '扇区待核'
-                              ? '扇区待核：${sectorData.note}分段按计时分段显示，不标官方 S1/S2/S3'
+                              ? '${sectorData.note}分段按计时分段显示，不标官方 S1/S2/S3'
                               : '${sectorData.sourceLabel}：${sectorData.note}',
                       style: const TextStyle(
                           color: Colors.white54, fontSize: 11),
@@ -809,7 +804,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       ],
                     ),
                     const Text(
-                      '捏合缩放 X 轴 · 双击复位整圈 · 横向拖动 scrub 联动所有图表与走线 · 点分段缩放到该分段',
+                      '捏合缩放 · 双击复位整圈 · 横向拖动联动图表与走线 · 点分段缩放到该分段',
                       style: TextStyle(
                           color: Colors.white54, fontSize: 11),
                     ),
@@ -957,7 +952,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     // scrub 联动读数。
                     if (selSlice != null && selSlice.points.isNotEmpty)
                       Text(
-                        'scrub：${(_scrub * 100).toStringAsFixed(0)}% · '
+                        '进度：${(_scrub * 100).toStringAsFixed(0)}% · '
                         '速度 ${(selSlice.points[scrubIndex].speed * 3.6).toStringAsFixed(0)} km/h · '
                         '得失 ${deltaCurve.isEmpty ? '--' : '${deltaCurve[scrubIndex] >= 0 ? '+' : ''}${(deltaCurve[scrubIndex] / 1000).toStringAsFixed(3)}s'} · '
                         '横向 G ${selSlice.points[scrubIndex].latG.toStringAsFixed(2)} · '
@@ -1023,7 +1018,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                         scrubIndex: scrubIndex,
                       ),
                     const Text(
-                      '走线为实测轨迹归一化显示，仅作复盘示意，不用于计时判定',
+                      '仅作复盘示意，不用于计时判定',
                       style: TextStyle(
                           color: Colors.white54, fontSize: 11),
                     ),
@@ -1703,7 +1698,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                           satelliteTileUrl(zoom, x, y),
                           key: ValueKey('analysis-sat-$zoom-$x-$y'),
                           headers: const {
-                            'User-Agent': 'DriveTrack/1.3.7',
+                            'User-Agent': 'DriveTrack/1.4.1',
                           },
                           fit: BoxFit.fill,
                           gaplessPlayback: true,

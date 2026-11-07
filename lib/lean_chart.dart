@@ -302,7 +302,7 @@ class LeanDistributionBar extends StatelessWidget {
           '直立 / 小倾角 $rest 秒 · '
           '右倾 $right 秒（${(right / total * 100).toStringAsFixed(0)}%）',
           style: const TextStyle(color: Colors.white70, fontSize: 12)),
-      const Text('统计口径：|倾角| ≥ 10° 才计入左右倾，1Hz 一点计 1 秒',
+      const Text('仅 |倾角| ≥ 10° 计入左右倾',
           style: TextStyle(color: Colors.white54, fontSize: 11)),
     ]);
   }

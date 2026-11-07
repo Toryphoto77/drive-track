@@ -214,7 +214,7 @@ void main() {
     expect(find.textContaining('排量：'), findsNothing);
     expect(find.textContaining('车重：'), findsNothing);
     expect(find.textContaining('百公里油耗：'), findsNothing);
-    expect(find.textContaining('暂无实测'), findsOneWidget);
+    expect(find.textContaining('暂无，需要两次满油记录'), findsOneWidget);
   });
 
   testWidgets('VehicleProfilePage empty state', (tester) async {

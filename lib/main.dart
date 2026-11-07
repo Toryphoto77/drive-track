@@ -85,6 +85,9 @@ import 'update_service.dart';
 // v1.0.2 新模块（统合）
 import 'track_home_page.dart';
 import 'performance_challenge.dart';
+// 云端二期：腾讯 CloudBase（匿名 + 邮箱登录，手动上传、
+// 个人页云端入口）。环境 ID 只走 --dart-define，不进仓库。
+import 'cloud_service.dart';
 
 void main() => runApp(const DriveTrackApp());
 
@@ -349,6 +352,9 @@ class _DriveTrackAppState extends State<DriveTrackApp> {
   void initState() {
     super.initState();
     appPrefs.load();
+    // 云端一期：fire-and-forget，init 内部全包 try/catch，
+    // 未配置（无 Key）或断网都不拖住启动、不崩。
+    CloudService.instance.init();
   }
 
   @override
@@ -848,7 +854,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.4.0',
+          versionName: '1.4.1',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1853,7 +1859,7 @@ class _HomePageState extends State<HomePage>
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(rec.calibrationNote, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          const Text('标定方法：把手机固定在支架上，点“开始标定”后直线行驶至 18 km/h 以上，App 自动锁定车头方向。未标定时 G 圆灰色，不进评分和事件统计。'),
+          const Text('把手机固定在支架上，点“开始标定”后直线行驶到 18 km/h 以上，自动锁定车头方向。未标定时 G 圆灰色，不进评分。'),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () async {
@@ -3267,7 +3273,7 @@ class _HomePageState extends State<HomePage>
                     Text('赛道专区',
                         style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     SizedBox(height: 2),
-                    Text('我的赛道行程（按赛道分组）· 赛道库 · 赛道分析 · 赛道模式说明',
+                    Text('我的赛道行程 · 赛道库 · 赛道分析 · 赛道模式说明',
                         style: TextStyle(color: Colors.white70, fontSize: 12)),
                   ]),
                 ),
@@ -3283,7 +3289,7 @@ class _HomePageState extends State<HomePage>
             Expanded(
               child: Text(
                 _listSelecting
-                    ? '已选 ${_selectedTripIds.length} 趟（点卡片勾选 / 取消）'
+                    ? '已选 ${_selectedTripIds.length} 趟'
                     : '长按单条卡片可删除单条；删除时视频文件保留。',
                 style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
@@ -3471,6 +3477,8 @@ class _TripDetailPageState extends State<TripDetailPage> {
   String selectedScoreKey = '';
   bool leanMountedConfirmed = false;
   bool previewTrim = true;
+  // 云端一期：手动上传（用户在详情页点按钮才传）。
+  bool cloudUploading = false;
 
   int _vehicleKind(TripMode m) {
     final sel = appPrefs.vehicleSelection;
@@ -3525,6 +3533,11 @@ class _TripDetailPageState extends State<TripDetailPage> {
   void initState() {
     super.initState();
     _load();
+    // 云端一期：init 完成后再刷新一次，上传按钮状态才准
+    // （队列在 init 里加载；未配置时 Future 立即完成）。
+    CloudService.instance.initialized.then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _load() async {
@@ -3538,6 +3551,39 @@ class _TripDetailPageState extends State<TripDetailPage> {
   Future<void> _refreshTrip() async {
     final t = await widget.store.loadTrip(widget.tripId);
     if (mounted && t != null) setState(() => trip = t);
+  }
+
+  /// 云端一期：手动上传本行程（点按钮才传，不自动传）。
+  /// 未配置时只提示、不崩；上传中按钮禁用；结果用通知报。
+  Future<void> _uploadTripToCloud() async {
+    final t = trip;
+    if (t == null || cloudUploading) return;
+    if (!CloudService.instance.isConfigured) {
+      if (mounted) {
+        showAppNotice(context, '云端未配置：构建时未注入 CLOUDBASE_ENV_ID',
+            AppNoticeKind.warning);
+      }
+      return;
+    }
+    setState(() => cloudUploading = true);
+    final r = await CloudService.instance.enqueueUpload(t);
+    if (!mounted) return;
+    setState(() => cloudUploading = false);
+    showAppNotice(context, r.message,
+        r.ok ? AppNoticeKind.success : AppNoticeKind.error);
+  }
+
+  String get _cloudUploadLabel {
+    if (cloudUploading) return '上传中…';
+    final s = trip == null
+        ? null
+        : CloudService.instance.queueStatusFor(trip!.id);
+    return switch (s) {
+      CloudUploadStatus.done => '已上传到云端',
+      CloudUploadStatus.pending || CloudUploadStatus.uploading => '上传中…',
+      CloudUploadStatus.failed => '上传失败 · 点此重试',
+      null => '上传到云端',
+    };
   }
 
   /// 高德第一批：手动纠偏/重纠（仅汽车/摩托街道行程，UI 侧已门控；
@@ -3879,7 +3925,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
               const Text('数据分析 · 遥测',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
-              const Text('仅行程实测数据，非任何车队官方分析页；拖动上方回放滑块或点选曲线时，各图当前点一起联动；速度曲线顶部的三角标记为事件（急加速绿 / 急刹红 / 弯道黄），点事件列表也可跳到该点。',
+              const Text('仅行程实测数据，非官方分析。拖回放滑块或点曲线，各图同步；速度曲线顶部的三角是事件（急加速绿 / 急刹红 / 弯道黄）。',
                   style: TextStyle(color: Colors.white54, fontSize: 12)),
               const SizedBox(height: 12),
               TripSpeedChartCard(points: t.points, events: t.events, onPointSelected: (i) => setState(() => scrub = i), selectedIndex: scrub >= 0 ? scrub : null),
@@ -4051,7 +4097,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
               const Text('G 值复盘', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               GScatter(points: t.points, threshold: ModeThresholds.of(t.mode).harshCorner, size: 220),
-              Text('整趟 G-G 散点图：每个点是一秒轨迹点，橙圈为本趟最大合成 G 包络；下方波形为整趟纵向（青）/横向（品红）G 随时间变化',
+              Text('每个点是一秒轨迹点，橙圈是本趟最大合成 G；下方是纵向（青）/横向（品红）G 随时间变化',
                   style: const TextStyle(color: Colors.white54, fontSize: 12)),
               GWaveform(
                 history: t.points.map((p) => GSample(p.timeMs, p.longG, p.latG)).toList(),
@@ -4115,7 +4161,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                     title: Text(vp.split('/').last),
                     // v0.1.7 追加项 3：首选应用内视频回顾（画面叠加 HUD），
                     // 系统播放器与分享作为备用入口保留；HUD 未烧录进视频文件。
-                    subtitle: const Text('点回顾进应用内播放（画面叠加速度/G 值），系统播放与分享为备用'),
+                    subtitle: const Text('点回顾进应用内播放，画面叠加速度/G 值'),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       Semantics(label: '视频回顾（应用内叠加）', child: IconButton(icon: const Icon(Icons.ondemand_video), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VideoReviewPage(trip: t, initialSegment: t.videoPaths.indexOf(vp)))))),
                       Semantics(label: '系统播放器播放', child: IconButton(icon: const Icon(Icons.play_arrow), onPressed: () => Native.playVideo(vp))),
@@ -4213,6 +4259,8 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       }),
                 _pillButton('分享 GPX', Icons.file_download, sharingFile ? null : () => _shareFile('gpx')),
                 _pillButton('分享 CSV', Icons.file_download, sharingFile ? null : () => _shareFile('csv')),
+                _pillButton(_cloudUploadLabel, Icons.cloud_upload,
+                    cloudUploading ? null : _uploadTripToCloud),
                 _pillButton(
                   t.videoPaths.isEmpty ? '同步视频 · 暂无' : '同步视频',
                   Icons.videocam,
@@ -4222,7 +4270,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 ),
               ]),
               const SizedBox(height: 8),
-              const Text('分享走系统分享，不登录不上传。GPX 默认按隐私开关截掉首尾；CSV 为完整数据，请自行注意隐私。',
+              const Text('分享走系统分享，不登录不上传。GPX 默认按隐私开关截掉首尾；CSV 为完整数据，请自行注意隐私。上传到云端是手动上传完整轨迹（不截首尾），只传你点的这一条。',
                   style: TextStyle(color: Colors.white54, fontSize: 12)),
             ]),
           ),

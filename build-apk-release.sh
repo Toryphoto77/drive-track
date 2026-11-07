@@ -48,7 +48,14 @@ AMAP_DEFINE=()
 if [ -f .amap-key ]; then
   AMAP_DEFINE=(--dart-define="AMAP_KEY=$(cat .amap-key)")
 fi
-flutter build apk --release --target-platform android-arm64 --no-android-gradle-daemon "${AMAP_DEFINE[@]}"
-cp build/app/outputs/flutter-apk/app-release.apk ./DriveTrack-v1.3.0-release-arm64.apk
-ls -la ./DriveTrack-v1.3.0-release-arm64.apk
+# 云端二期：CloudBase 环境 ID（仅本地 .cloudbase-env 文件，600 权限，
+# gitignore，不进仓库、不进推送清单）：有则以 --dart-define 注入，
+# 无则不传，代码侧空值即云端未配置、上传禁用；内容绝不回显到日志。
+CLOUDBASE_DEFINE=()
+if [ -f .cloudbase-env ]; then
+  CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")
+fi
+flutter build apk --release --target-platform android-arm64 --no-android-gradle-daemon "${AMAP_DEFINE[@]}" "${CLOUDBASE_DEFINE[@]}"
+cp build/app/outputs/flutter-apk/app-release.apk ./DriveTrack-v1.4.1-release-arm64.apk
+ls -la ./DriveTrack-v1.4.1-release-arm64.apk
 echo BUILD_DONE

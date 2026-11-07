@@ -163,6 +163,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     private var ttsPitch = 1.0f
     private var ttsVolume = 1.0f
     private val ttsPendingActions = mutableListOf<() -> Unit>()
+    private var nativeChannel: MethodChannel? = null
     // v0.1.9：用户在引擎选择器里选中的 TTS 引擎包名；null = 系统默认引擎。
     private var ttsEngineOverride: String? = null
     private var customAudioPlayer: MediaPlayer? = null
@@ -357,8 +358,8 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         bluetoothAdapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "drivetrack/native")
-            .setMethodCallHandler { call, result ->
+        nativeChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "drivetrack/native")
+        nativeChannel?.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "getFilesDir" -> result.success(filesDir.absolutePath)
                     // v1.0.3：切换桌面启动图标 alias。Manifest 里主 Activity

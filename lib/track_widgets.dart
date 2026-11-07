@@ -443,7 +443,7 @@ class LapTable extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                '已自动暂停：停车超 30 秒，暂停时长不计入圈速',
+                '已自动暂停，暂停时长不计入圈速',
                 style: TextStyle(color: TrackTheme.red, fontSize: 12),
               ),
             ),
@@ -467,7 +467,7 @@ class LapTable extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                '停留不计圈：$dwellLapCount 圈（已排除出最快圈与圈速榜）',
+                '停留不计圈：$dwellLapCount 圈',
                 style: const TextStyle(color: TrackTheme.textSecondary, fontSize: 12),
               ),
             ),

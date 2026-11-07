@@ -100,7 +100,7 @@ class _AboutPageState extends State<AboutPage> {
       }
     } catch (_) {}
     if (mounted) {
-      setState(() => _cacheMsg = count > 0 ? '已清除 $count 个缓存文件，行程数据与设置未动。' : '暂无可清除的缓存文件，行程数据与设置未动。');
+      setState(() => _cacheMsg = count > 0 ? '已清除 $count 个缓存文件。' : '暂无可清除的缓存文件。');
       showAppNotice(context, _cacheMsg!, appNoticeKindFromMessage(_cacheMsg!));
     }
   }
@@ -133,7 +133,7 @@ class _AboutPageState extends State<AboutPage> {
     if (mounted) {
       setState(() {
         _downloading = false;
-        if (!ok) _downloadError = '下载或调起安装失败，请检查网络后重试（未确认是否有新版时不谎称最新）';
+        if (!ok) _downloadError = '下载或调起安装失败，请检查网络后重试';
       });
     }
   }
@@ -323,7 +323,7 @@ class _AboutPageState extends State<AboutPage> {
                 Icon(Icons.chevron_right, color: Colors.white38),
               ]),
               const SizedBox(height: 4),
-              const Text('清天气缓存、路网缓存等缓存文件，不删行程数据、不删设置。',
+              const Text('清除缓存文件，不删行程数据、不删设置。',
                   style: TextStyle(color: Colors.white54, fontSize: 12)),
               if (_cacheMsg != null) ...[
                 const SizedBox(height: 4),
@@ -400,9 +400,6 @@ class DonationPage extends StatelessWidget {
           Text('感谢支持', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           SizedBox(height: 12),
           Text('打赏码由作者后续添加。', style: TextStyle(color: Colors.white70, fontSize: 15)),
-          SizedBox(height: 8),
-          Text('本页不展示任何二维码或收款账号，以免误导。',
-              style: TextStyle(color: Colors.white54, fontSize: 13)),
         ]),
       ),
     );

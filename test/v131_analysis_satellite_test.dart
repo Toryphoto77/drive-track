@@ -233,7 +233,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('analysis-map-schematic')));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('走线为实测轨迹归一化显示，按速度着色（白→红）'),
+        find.textContaining('走线按速度着色，仅作复盘示意，不用于计时判定'),
         findsOneWidget,
       );
       expect(find.text('卫星图未加载，已显示示意图'), findsNothing);

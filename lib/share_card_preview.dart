@@ -414,7 +414,7 @@ class _ShareCardPreviewPageState extends State<ShareCardPreviewPage> {
                   onPressed: widget.onShareVideo),
           ]),
           const SizedBox(height: 8),
-          const Text('分享走系统分享，不登录不上传；CSV 为完整数据，请自行注意隐私。',
+          const Text('分享走系统分享，不上传；CSV 为完整数据，请注意隐私。',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
         ]),
       ),

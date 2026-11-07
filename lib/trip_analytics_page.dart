@@ -258,7 +258,7 @@ class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
     if (!mounted) return;
     setState(() {
       _inputs = inputs;
-      _loadError = failed > 0 ? '$failed 趟行程文件未能加载，已跳过（不计入统计）' : null;
+      _loadError = failed > 0 ? '$failed 趟行程文件未能加载，已跳过' : null;
     });
   }
 
@@ -320,7 +320,7 @@ class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
                   ),
                 ]),
                 const SizedBox(height: 4),
-                const Text('演示行程不计入统计；赛道行程不评分，只统计圈速。',
+                const Text('演示行程不计入；赛道行程只统计圈速。',
                     style: TextStyle(color: Colors.white54, fontSize: 12)),
                 if (_loadError != null) ...[
                   const SizedBox(height: 8),
@@ -339,11 +339,11 @@ class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
                     _row('极速', '${summary.street.maxSpeedKmh.toStringAsFixed(0)} km/h'),
                     _row('最大合成 G', '${summary.street.maxG.toStringAsFixed(2)}g'),
                     const SizedBox(height: 6),
-                    const Text('G 值分布（按行程最大合成 G 分档，单位：趟）',
+                    const Text('G 值分布（单位：趟）',
                         style: TextStyle(color: Colors.white70, fontSize: 12)),
                     for (final e in summary.street.gBuckets.entries) _row(e.key, '${e.value}'),
                     const SizedBox(height: 6),
-                    const Text('评分分布（按行程评分分档，单位：趟）',
+                    const Text('评分分布（单位：趟）',
                         style: TextStyle(color: Colors.white70, fontSize: 12)),
                     for (final e in summary.street.scoreBuckets.entries) _row(e.key, '${e.value}'),
                   ]),
@@ -359,7 +359,7 @@ class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
                     if (summary.track.hasStability)
                       _row('圈速极差', LapTimer.formatLapTime(summary.track.lapRangeMs)),
                     const SizedBox(height: 6),
-                    const Text('赛道行程不评分；无效圈（停留不计圈）不进统计。',
+                    const Text('无效圈不进统计。',
                         style: TextStyle(color: Colors.white54, fontSize: 12)),
                   ]),
                 ],

@@ -40,57 +40,55 @@ const Map<CameraGuideBrand, CameraGuide> cameraGuides = {
     brand: CameraGuideBrand.insta360,
     displayName: 'Insta360',
     brandAppName: 'Insta360 App',
-    connectionSummary: 'Beta / 向导式连接：相机开 Wi-Fi 热点 → 手机连上该热点 → '
-        '在 Insta360 App 内完成连接。本 App 目前不直连相机、不拉取相机文件。',
+    connectionSummary: '向导式连接：相机开 Wi-Fi 热点 → 手机连上该热点 → '
+        '在 Insta360 App 内完成连接。本 App 目前不直连相机。',
     wifiSteps: [
-      '1. 相机开机，在相机设置里打开 Wi-Fi（以相机屏幕显示的开关为准）。',
-      '2. 记下相机屏幕显示的 Wi-Fi 热点名称与密码（以屏幕显示为准，不要猜默认密码）。',
-      '3. 手机打开系统 Wi-Fi 设置，连接该相机热点；连上后手机可能暂时无互联网，这是正常的。',
+      '1. 相机开机，在相机设置里打开 Wi-Fi。',
+      '2. 记下相机屏幕显示的 Wi-Fi 热点名称与密码（不要猜默认密码）。',
+      '3. 手机打开系统 Wi-Fi 设置，连接该相机热点；连上后可能暂时无互联网。',
       '4. 回到 Insta360 App，按 App 内提示添加并连接相机。',
     ],
     appSteps: [
       '1. 打开 Insta360 App，按提示完成相机添加与配对。',
-      '2. 若 App 要求登录或激活账号，按品牌 App 提示完成，本 App 不代办登录。',
+      '2. 若 App 要求登录或激活账号，按品牌 App 提示完成。',
       '3. 在 App 内确认能看到相机画面 / 文件列表，才算品牌侧连接成功。',
     ],
     tripSyncNotes: [
-      '行程同步触发说明：本 App 目前没有自动同步入口。',
       '行程结束后，先在 Insta360 App 内导出需要的视频，再通过系统分享或文件方式与行程对齐。',
-      '时间对齐目前是手动步骤：以相机视频时间戳与行程开始时间为准核对，尚未实现自动时间戳对齐。',
-      '不要在行车记录中途断开相机热点去传文件，传文件请在停车后操作。',
+      '时间对齐需手动核对：以相机视频时间戳与行程开始时间为准。',
+      '行车记录中途不要断开相机热点传文件，请停车后操作。',
     ],
     limitations: [
-      '本 App 未接入 Insta360 SDK，不能在 App 内预览、遥控录像或下载相机文件。',
-      '相机热点名称、密码、固件菜单位置以相机屏幕与品牌 App 为准，各型号可能不同。',
+      '不能在 App 内预览、遥控录像或下载相机文件。',
+      '热点名称、密码、菜单位置以相机屏幕与品牌 App 为准，各型号可能不同。',
     ],
   ),
   CameraGuideBrand.dji: CameraGuide(
     brand: CameraGuideBrand.dji,
     displayName: 'DJI',
     brandAppName: 'DJI Mimo App（运动相机）',
-    connectionSummary: 'Beta / 向导式连接：相机开 Wi-Fi 热点 → 手机连上该热点 → '
-        '在 DJI Mimo App 内完成连接。本 App 目前不直连相机、不拉取相机文件。',
+    connectionSummary: '向导式连接：相机开 Wi-Fi 热点 → 手机连上该热点 → '
+        '在 DJI Mimo App 内完成连接。本 App 目前不直连相机。',
     wifiSteps: [
-      '1. 相机开机，在相机设置里打开 Wi-Fi（以相机屏幕显示的开关为准）。',
-      '2. 记下相机屏幕显示的 Wi-Fi 热点名称与密码（以屏幕显示为准，不要猜默认密码）。',
-      '3. 手机打开系统 Wi-Fi 设置，连接该相机热点；连上后手机可能暂时无互联网，这是正常的。',
+      '1. 相机开机，在相机设置里打开 Wi-Fi。',
+      '2. 记下相机屏幕显示的 Wi-Fi 热点名称与密码（不要猜默认密码）。',
+      '3. 手机打开系统 Wi-Fi 设置，连接该相机热点；连上后可能暂时无互联网。',
       '4. 回到 DJI Mimo App，按 App 内提示添加并连接相机。',
     ],
     appSteps: [
       '1. 打开 DJI Mimo App，按提示完成相机添加与连接。',
-      '2. 若 App 要求登录、激活或固件升级，按品牌 App 提示完成，本 App 不代办登录。',
+      '2. 若 App 要求登录、激活或固件升级，按品牌 App 提示完成。',
       '3. 在 App 内确认能看到相机画面 / 文件列表，才算品牌侧连接成功。',
-      '注意：DJI 无人机用 DJI Fly 等 App，不在本向导范围内；本向导只针对运动相机。',
+      'DJI 无人机用 DJI Fly 等 App，不在本向导范围内。',
     ],
     tripSyncNotes: [
-      '行程同步触发说明：本 App 目前没有自动同步入口。',
       '行程结束后，先在 DJI Mimo App 内导出需要的视频，再通过系统分享或文件方式与行程对齐。',
-      '时间对齐目前是手动步骤：以相机视频时间戳与行程开始时间为准核对，尚未实现自动时间戳对齐。',
-      '不要在行车记录中途断开相机热点去传文件，传文件请在停车后操作。',
+      '时间对齐需手动核对：以相机视频时间戳与行程开始时间为准。',
+      '行车记录中途不要断开相机热点传文件，请停车后操作。',
     ],
     limitations: [
-      '本 App 未接入 DJI SDK，不能在 App 内预览、遥控录像或下载相机文件。',
-      '相机热点名称、密码、固件菜单位置以相机屏幕与品牌 App 为准，各型号可能不同。',
+      '不能在 App 内预览、遥控录像或下载相机文件。',
+      '热点名称、密码、菜单位置以相机屏幕与品牌 App 为准，各型号可能不同。',
     ],
   ),
 };
@@ -118,15 +116,15 @@ class _CameraGuidePageState extends State<CameraGuidePage> {
           .invokeMethod<String>('getConnectedWifiSsid');
       setState(() {
         _detectNote = ssid == null || ssid.isEmpty
-            ? '未检测到相机热点：请先按下方步骤在系统 Wi-Fi 里连接相机热点，再以品牌 App 显示为准。'
-            : '当前 Wi-Fi：$ssid（仅为系统当前连接，不代表本 App 已连接相机，请以品牌 App 显示为准。）';
+            ? '未检测到相机热点：请先按下方步骤在系统 Wi-Fi 里连接相机热点。'
+            : '当前 Wi-Fi：$ssid（仅为系统当前连接，不代表已连接相机。）';
       });
     } on MissingPluginException {
-      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接，仍以品牌 App 显示为准。');
+      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接。');
     } on PlatformException {
-      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接，仍以品牌 App 显示为准。');
+      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接。');
     } catch (_) {
-      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接，仍以品牌 App 显示为准。');
+      setState(() => _detectNote = 'Wi-Fi 检测失败：请按下方步骤在系统 Wi-Fi 里手动确认连接。');
     }
   }
 
@@ -156,8 +154,8 @@ class _CameraGuidePageState extends State<CameraGuidePage> {
               border: Border.all(color: accent.withValues(alpha: 0.5)),
             ),
             child: const Text(
-              'Beta / 向导式连接：本页不显示已连接状态。连接是否成功以系统 Wi-Fi '
-              '实际连接与品牌 App 内显示为准，本 App 目前不直连该品牌相机。',
+              '本页不显示已连接状态。连接是否成功以系统 Wi-Fi '
+              '实际连接与品牌 App 内显示为准。',
               style: TextStyle(color: Colors.white, fontSize: 13),
             ),
           ),
@@ -168,7 +166,7 @@ class _CameraGuidePageState extends State<CameraGuidePage> {
           FilledButton.icon(
             onPressed: _tryDetectWifi,
             icon: const Icon(Icons.wifi_find, size: 18),
-            label: const Text('检测当前 Wi-Fi（实际检测为准）'),
+            label: const Text('检测当前 Wi-Fi'),
           ),
           if (_detectNote != null) ...[
             const SizedBox(height: 8),
@@ -178,7 +176,7 @@ class _CameraGuidePageState extends State<CameraGuidePage> {
           const SizedBox(height: 16),
           _Section(title: '一、连接相机 Wi-Fi 热点', lines: guide.wifiSteps),
           _Section(title: '二、在品牌 App 内连接（${guide.brandAppName}）', lines: guide.appSteps),
-          _Section(title: '三、行程同步触发说明', lines: guide.tripSyncNotes),
+          _Section(title: '三、行程结束后同步', lines: guide.tripSyncNotes),
           _Section(title: '限制', lines: guide.limitations),
         ],
       ),

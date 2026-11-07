@@ -153,7 +153,7 @@ ScoreResult scoreTrip(TripMode mode, List<TrackPoint> pts, List<TripEvent> event
   }
   final total = smooth * 0.4 + corner * 0.35 + stability * 0.25;
   return ScoreResult(total, {'平顺': smooth, '过弯': corner, '速度稳定': stability},
-      reasons.isEmpty ? ['驾驶平稳，无急加速 / 急刹车 / 偏急过弯'] : reasons);
+      reasons.isEmpty ? ['驾驶平稳'] : reasons);
 }
 
 /// 每公里配速（分钟/公里），按累计里程切分。

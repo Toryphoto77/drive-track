@@ -110,7 +110,7 @@ class Store {
       double? startFinishLat, double? startFinishLon, String? vehicleId}) async {
     final events = detectEvents(points, mode);
     final sc = isTrackMode
-        ? ScoreResult(0, {'圈速稳定性': 0.0}, ['赛道模式不评分，看圈速与稳定性'])
+        ? ScoreResult(0, {'圈速稳定性': 0.0}, ['赛道模式不评分'])
         : scoreTrip(mode, points, events);
     final id = '${demo ? 'demo-' : ''}${DateTime.now().millisecondsSinceEpoch}';
     // v1.2.0 store 层 50 条上限：超限保留前 50 条（输入顺序），不静默

@@ -163,16 +163,10 @@ class TrackHomePage extends StatelessWidget {
                           : () => _openTripAnalysis(context, trackTrips.first),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    '赛道详情、图鉴、分析统一走本页；记录页顶部的“赛道”只是筛选，不进详情。',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            // 赛道模式说明（含 OBD 未连接提示与扇区诚实口径）。
             _card(
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,7 +185,7 @@ class TrackHomePage extends StatelessWidget {
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   Text(
-                    '· 赛道行程不评分；结束页永远展示本节传感器实测总览，无圈速时也不为空。',
+                    '· 赛道行程不评分。',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   Text(
@@ -199,7 +193,7 @@ class TrackHomePage extends StatelessWidget {
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   Text(
-                    '· 扇区口径：官方扇区 0 条可核实；估算的标“估算分段”、待核的标“扇区待核”，绝不冒充官方。',
+                    '· 扇区：估算的标“估算分段”，待核的标“扇区待核”。',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
@@ -333,11 +327,6 @@ class TrackHomePage extends StatelessWidget {
                 ),
               ),
             ),
-          const SizedBox(height: 2),
-          const Text(
-            '点某条行程进该行程的赛道分析页。',
-            style: TextStyle(color: Colors.white54, fontSize: 11),
-          ),
         ],
       ),
     );

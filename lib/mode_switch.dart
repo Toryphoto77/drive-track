@@ -240,7 +240,7 @@ class ModeSwitchSection extends StatelessWidget {
             const SizedBox(height: 8),
             trackSelector ??
                 const Text(
-                  '未传入赛道选择器：总协调需把现有赛道选择入口传给 trackSelector。',
+                  '赛道选择暂不可用。',
                   style: TextStyle(color: Colors.white38, fontSize: 12),
                 ),
           ],

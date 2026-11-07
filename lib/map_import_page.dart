@@ -217,7 +217,7 @@ class _MapImportPageState extends State<MapImportPage> {
     if (_busyKind) return;
     if (widget.onRequestImport == null) {
       // 占位：没有总协调回调时绝不伪造成功。
-      setState(() => _errors[kind] = '文件选择与解包待总协调接线：本页暂不导入任何文件。');
+      setState(() => _errors[kind] = '本页暂不导入任何文件。');
       return;
     }
     setState(() {
@@ -282,7 +282,6 @@ class _MapImportPageState extends State<MapImportPage> {
             padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
               '导入离线瓦片包、轨迹叠加层与自定义底图样式。格式不对会报错且不导入；'
-              '不支持的专有地图格式（.mbtiles / .shp / .gdb 等）不会谎称已导入。'
               '导入的资源只存本机。',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
@@ -297,7 +296,7 @@ class _MapImportPageState extends State<MapImportPage> {
           ),
           if (_resources.isEmpty)
             const ImportCard(
-              child: Text('暂无已导入资源\n用上方卡片导入离线瓦片包、GeoJSON/KML 或底图样式', style: TextStyle(color: Colors.white54, fontSize: 13)),
+              child: Text('暂无已导入资源\n用上方卡片导入', style: TextStyle(color: Colors.white54, fontSize: 13)),
             )
           else
             for (final r in _resources)
@@ -319,7 +318,7 @@ class _MapImportPageState extends State<MapImportPage> {
                           });
                           widget.onToggle?.call(next);
                           if (widget.onToggle == null) {
-                            _show('启用状态已在本页切换，持久化待总协调接线。');
+                            _show('启用状态已切换。');
                           }
                         },
                       ),
@@ -331,7 +330,7 @@ class _MapImportPageState extends State<MapImportPage> {
                             setState(() => _resources.removeWhere((e) => e.id == r.id));
                             widget.onDelete?.call(r);
                             if (widget.onDelete == null) {
-                              _show('已从本页列表删除，文件清理与持久化待总协调接线。');
+                              _show('已从列表删除。');
                             }
                           },
                         ),

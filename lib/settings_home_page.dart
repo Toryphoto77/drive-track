@@ -73,7 +73,7 @@ class SettingsHomePage extends StatelessWidget {
           entry(Icons.palette, '主题设置', '全局黑色、F1 车队近似色、自定义颜色', onOpenTheme),
           entry(Icons.record_voice_over, '语音设置', '播报开关、语速、音调、播报项', onOpenVoice),
           entry(Icons.flag, '赛道模式设置', '圈速判定、分段、Delta、最佳圈提醒', onOpenTrack),
-          entry(Icons.satellite_alt, '定位', '直连卫星模式、卫星数与精度说明', onOpenLocation),
+          entry(Icons.satellite_alt, '定位', '直连卫星模式、卫星数', onOpenLocation),
           // v0.1.9 传感器校准：水平静置校零、车头方向标定、罗盘 8 字提示，
           // 复用现有标定逻辑，不另造一套 G 值计算。
           if (onOpenSensorCalibration != null)
@@ -86,7 +86,7 @@ class SettingsHomePage extends StatelessWidget {
           if (onOpenFuel != null)
             entry(Icons.local_gas_station, '油耗费用', '百公里油耗与油价，行程自动估算油耗与油钱', onOpenFuel!),
           if (onOpenVehicle != null)
-            entry(Icons.directions_car, '车辆档案', '车辆档案与加油记录，行程油耗按车计算、实测按满油区间算', onOpenVehicle!),
+            entry(Icons.directions_car, '车辆档案', '车辆档案与加油记录，行程油耗按车计算', onOpenVehicle!),
           const SizedBox(height: 12),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
@@ -121,7 +121,7 @@ class SettingsHomePage extends StatelessWidget {
               ),
               SwitchListTile(
                 title: const Text('记录地图 3D 透视'),
-                subtitle: const Text('关闭为 2D 俯视示意；风格化示意，非真实建筑/路网'),
+                subtitle: const Text('关闭为 2D 俯视，非真实建筑/路网'),
                 value: recordingMap3d,
                 onChanged: onRecordingMap3dChanged,
               ),
