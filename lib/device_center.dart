@@ -11,6 +11,7 @@ import 'camera_connect_page.dart';
 import 'device_scan_card.dart';
 import 'gps_source.dart';
 import 'native.dart';
+import 'obd_service.dart';
 import 'satellite_settings_page.dart';
 
 /// 外接设备中心：运动相机 + 其他传感器 + RaceChrono BleDIY GPS。
@@ -1446,6 +1447,295 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   }
 }
 
+/// OBD（ELM327）模块区，供 DeviceCenterPage 嵌入。
+///
+/// 连接入口只认系统蓝牙已配对设备：点“载入已配对设备”，点行即连
+/// 任意一台（ELM327 须先在系统蓝牙里配对，见下方说明）。连接后
+/// 显示实时车速 / 转速 / 油门 / 水温；未连接时读数一律为“—”，
+/// 绝不拿旧值冒充实时值。录制时每秒存一条实测采样进本趟行程，
+/// 隧道推算用 OBD 车速；断开即清 OBD 速度、回落衰减模型。
+/// 蓝牙权限复用外接 GPS 区的分步流程（requestStep('extras')）。
+class ObdSection extends StatefulWidget {
+  /// 默认用全局 [obdService]；测试可注入带 fake 平台的 service。
+  final ObdService? service;
+
+  const ObdSection({super.key, this.service});
+
+  @override
+  State<ObdSection> createState() => _ObdSectionState();
+}
+
+class _ObdSectionState extends State<ObdSection> {
+  ObdService get _service => widget.service ?? obdService;
+
+  List<Map<String, dynamic>> _paired = [];
+  bool _loadingPaired = false;
+  String? _notice;
+  String? _permNotice;
+  String? _connectingAddress;
+  // 本区已连 OBD 的地址（ObdStatus 只带设备名，不带地址；行内
+  // “已连接”判定以地址为准，设备名为空时也不误判）。
+  String? _connectedAddress;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPaired();
+  }
+
+  Future<bool> _ensureBtPermissions() async {
+    try {
+      final snap = await Native.checkPermissions();
+      var btOk = snap['bluetooth'] == true;
+      if (!btOk) {
+        final r = await Native.requestStep('extras');
+        btOk = r['bluetooth'] == true;
+      }
+      if (!mounted) return false;
+      setState(() => _permNotice = btOk
+          ? null
+          : 'OBD 需要蓝牙权限，请在系统设置里打开后重试。');
+      return btOk;
+    } catch (e) {
+      if (mounted) setState(() => _permNotice = '权限检查失败：$e');
+      return false;
+    }
+  }
+
+  Future<void> _loadPaired() async {
+    if (!await _ensureBtPermissions()) return;
+    if (!mounted) return;
+    setState(() => _loadingPaired = true);
+    try {
+      final list = await _service.platform.listPaired();
+      if (!mounted) return;
+      setState(() {
+        _paired = list;
+        _loadingPaired = false;
+        _notice = list.isEmpty
+            ? '未找到已配对经典蓝牙设备：请先在系统蓝牙设置里与 ELM327 配对。'
+            : '已载入 ${list.length} 台已配对经典蓝牙设备，点行即连。';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingPaired = false;
+        _notice = '读取已配对设备失败：$e';
+      });
+    }
+  }
+
+  Future<void> _connect(Map<String, dynamic> dev) async {
+    final addr = (dev['address'] ?? '').toString();
+    if (addr.isEmpty) return;
+    final name = (dev['name'] ?? '').toString();
+    if (!await _ensureBtPermissions()) return;
+    if (!mounted) return;
+    setState(() {
+      _connectingAddress = addr;
+      _notice = '正在连接“${name.isEmpty ? addr : name}”…';
+    });
+    final ok =
+        await _service.connect(addr, deviceName: name);
+    if (!mounted) return;
+    setState(() {
+      _connectingAddress = null;
+      if (ok) _connectedAddress = addr;
+      _notice = ok
+          ? 'OBD 已连接，行程记录时每秒存一条实测采样。'
+          : (_service.status.error.isEmpty
+              ? '连接失败：请确认 ELM327 已开机且未被其它 App 占用。'
+              : _service.status.error);
+    });
+  }
+
+  Future<void> _disconnect() async {
+    await _service.disconnect();
+    if (!mounted) return;
+    setState(() {
+      _connectedAddress = null;
+      _notice = '已断开 OBD，隧道推算回落衰减模型。';
+    });
+  }
+
+  Widget _reading(String label, String value) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ObdStatus>(
+      valueListenable: _service.statusNotifier,
+      builder: (context, st, _) {
+        final connected = st.connected;
+        final connecting = st.connecting;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_permNotice != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Expanded(
+                    child: Text(_permNotice!,
+                        style: const TextStyle(
+                            color: Colors.orangeAccent, fontSize: 12)),
+                  ),
+                  TextButton(
+                    onPressed: () => Native.openAppSettings(),
+                    child: const Text('去设置'),
+                  ),
+                ]),
+              ),
+            // 状态行：绿点 + 状态 + 断开按钮。
+            Row(children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: connected
+                      ? Colors.green
+                      : (connecting ? Colors.orange : Colors.white38),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  obdStatusLabel(st),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (connected)
+                TextButton(
+                    onPressed: _disconnect, child: const Text('断开')),
+            ]),
+            const SizedBox(height: 4),
+            if (!connected && !connecting)
+              const Text(
+                '未连接 OBD。先在系统蓝牙里配对 ELM327，再来这里连接；'
+                '未连接时不显示任何读数、不存采样。',
+                style: TextStyle(color: Colors.white60, fontSize: 12),
+              )
+            else if (connected) ...[
+              const Text(
+                '实时读数（ELM327 实测，1 秒采样进本趟行程）：',
+                style: TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                _reading('车速',
+                    st.speedKmh == null ? '—' : '${st.speedKmh!.toStringAsFixed(0)} km/h'),
+                _reading('转速',
+                    st.rpm == null ? '—' : '${st.rpm!.toStringAsFixed(0)} rpm'),
+              ]),
+              const SizedBox(height: 8),
+              Row(children: [
+                _reading('油门',
+                    st.throttlePct == null ? '—' : '${st.throttlePct!.toStringAsFixed(0)} %'),
+                _reading('水温',
+                    st.coolantC == null ? '—' : '${st.coolantC!.toStringAsFixed(0)} ℃'),
+              ]),
+            ],
+            if (st.error.isNotEmpty && !connected)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(st.error,
+                    style: const TextStyle(
+                        color: Colors.orangeAccent, fontSize: 12)),
+              ),
+            const SizedBox(height: 12),
+            Row(children: [
+              FilledButton.icon(
+                onPressed: _loadingPaired ? null : _loadPaired,
+                icon: const Icon(Icons.bluetooth_searching, size: 18),
+                label: Text(_loadingPaired ? '载入中…' : '载入已配对设备'),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            if (_paired.isEmpty)
+              const Text('尚未载入已配对设备：点上方按钮载入；ELM327 须开机、'
+                  '且先在系统蓝牙里配对。',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+            for (final dev in _paired)
+              Builder(builder: (context) {
+                final addr = (dev['address'] ?? '').toString();
+                final name = (dev['name'] ?? '').toString();
+                final isConnecting = _connectingAddress == addr;
+                final isThisConnected =
+                    connected && _connectedAddress == addr;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0B0E13),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isThisConnected
+                          ? Colors.green.withValues(alpha: 0.6)
+                          : Colors.white12,
+                    ),
+                  ),
+                  // ListTile 的墨水效果要画在 Material 祖先上：
+                  // 直接放带底色的 Container 里会触发 debug 断言。
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    child: ListTile(
+                    title: Text(
+                      name.isEmpty ? '未命名设备' : name,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    subtitle: Text(addr,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
+                    trailing: isThisConnected
+                        ? const Text('已连接',
+                            style: TextStyle(
+                                color: Colors.greenAccent,
+                                fontWeight: FontWeight.bold))
+                        : isConnecting
+                            ? const Text('连接中…',
+                                style: TextStyle(color: Colors.orangeAccent))
+                            : const Text('点按连接',
+                                style: TextStyle(color: Colors.white70)),
+                    onTap: (isThisConnected || isConnecting)
+                        ? null
+                        : () => _connect(dev),
+                    ),
+                  ),
+                );
+              }),
+            if (_notice != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(_notice!,
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12)),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class DeviceCenterPage extends StatefulWidget {
   const DeviceCenterPage({
     super.key,
@@ -1691,6 +1981,14 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               label: const Text('可视化外部 GPS 配置'),
             ),
           ),
+          const SizedBox(height: 16),
+          _sectionTitle('OBD（ELM327）'),
+          const Text(
+            '行车电脑数据：车速 / 转速 / 油门 / 水温。录制时每秒存一条实测采样，隧道推算用 OBD 车速。',
+            style: TextStyle(color: Colors.white60, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          const ObdSection(),
           const SizedBox(height: 16),
           _sectionTitle('传感器：自定义 BLE 设备'),
           ExpansionTile(

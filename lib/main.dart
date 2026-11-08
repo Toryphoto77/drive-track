@@ -16,6 +16,8 @@ import 'permission_gate.dart';
 import 'recording_3d_map.dart';
 import 'recording_map_page.dart';
 import 'recorder.dart';
+import 'tunnel_gap.dart';
+import 'obd_service.dart';
 import 'store.dart';
 import 'gps_source.dart';
 import 'widgets.dart';
@@ -28,6 +30,7 @@ import 'track_catalog.dart';
 import 'track_encyclopedia.dart';
 import 'track_guide.dart';
 import 'track_library.dart';
+import 'track_knowledge_page.dart';
 import 'track_library_page.dart';
 import 'track_package_info_page.dart';
 import 'track_package_selector.dart';
@@ -642,6 +645,24 @@ class _HomePageState extends State<HomePage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     rec.addListener(() => mounted ? setState(() {}) : null);
+    // 隧道缺口状态 → 语音看门狗：同一份状态，不重复播报。
+    rec.gapStatus.addListener(() {
+      final s = rec.gapStatus.value;
+      VoiceService.instance
+          .setGapLost(s == GapStatus.lost || s == GapStatus.estimating);
+    });
+    // 隧道补段路网：缺口起点周围取 tunnel=yes 优先的折线。
+    rec.gapRoadFetcher = (lat, lon) async {
+      try {
+        final result = await fetchRoadWaysAround(lat, lon);
+        final ways = result.ways
+            .map((w) => (points: w.points, tunnel: w.tunnel))
+            .toList();
+        return chooseGapPolyline(lat, lon, ways);
+      } catch (_) {
+        return null;
+      }
+    };
     _init();
   }
 
@@ -661,6 +682,10 @@ class _HomePageState extends State<HomePage>
     if (appPrefs.directSatellite) SatelliteService.instance.setDirectMode(true);
     await store.init();
     await appPrefs.load();
+    // OBD 服务挂录制器：实时车速写 rec.obdSpeedMs（只供隧道推算用）、
+    // 每秒一条实测采样进 rec.obdSamples；不断开不写，GPS 正常时
+    // 绝不拿 OBD 速度替换实测点里的 GPS 速度（Recorder 已保证）。
+    obdService.attachRecorder(rec);
     // v1.2.0：旧索引无赛道/车辆键时回填（读不到回退全量加载 Trip，
     // 见 Store.migrateIndexTrackFields），不丢旧数据。
     trips = await store.migrateIndexTrackFields();
@@ -954,7 +979,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.5.1',
+          versionName: '1.5.2',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1489,6 +1514,7 @@ class _HomePageState extends State<HomePage>
         trackId: isTrack ? selectedTrack!.id : null, trackName: isTrack ? selectedTrack!.nameCn : '',
         isTrackMode: isTrack, lapsJson: lapsJson,
         photoPoints: livePhotoPoints, vehicleId: _defaultVehicleIdForMode(mode),
+        obdSamples: List<Map<String, dynamic>>.from(rec.obdSamples),
         startFinishLat: isTrack && pts.isNotEmpty ? pts.first.lat : null,
         startFinishLon: isTrack && pts.isNotEmpty ? pts.first.lon : null);
     livePhotoPoints = [];
@@ -1511,7 +1537,7 @@ class _HomePageState extends State<HomePage>
       // 街道行程仍走原详情页。
       if (isTrack) {
         final laps = trip.lapsJson.map((j) => Lap.fromJson(j)).toList();
-        Navigator.push(context, MaterialPageRoute(builder: (_) => TrackAnalysisPage(trip: trip, laps: laps)));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => TrackAnalysisPage(trip: trip, laps: laps, obdConnected: obdStatus.value.connected)));
       } else {
         Navigator.push(context, MaterialPageRoute(builder: (_) => TripDetailPage(store: store, tripId: trip.id)));
       }
@@ -1825,20 +1851,21 @@ class _HomePageState extends State<HomePage>
           ),
           const Divider(color: Colors.white12),
           // v0.1.7 菜单简化去重 + v1.0.3 关于移入菜单 + v1.0.4 性能测试
-          // 移入菜单（红字加粗）：赛道库 / 性能测试 / 设备中心 /
-          // 数据导出/备份 / 免责声明 / 关于六项。首页与记录页入口已删，
-          // 性能测试只剩这一处入口，仍进同一 performance_challenge.dart。
-          // 关闭动画仍为 200ms easeOutCubic 主界面右移（build 里
-          // 的 _menuAnim，不动）。
+          // 移入菜单（红字加粗）：赛道库 / 赛道知识库 / 性能测试 /
+          // 设备中心 / 数据导出/备份 / 免责声明 / 关于七项。首页与
+          // 记录页入口已删，性能测试只剩这一处入口，仍进同一
+          // performance_challenge.dart。关闭动画仍为 200ms easeOutCubic
+          // 主界面右移（build 里的 _menuAnim，不动）。
           Expanded(
             child: ListView(children: [
               ListTile(leading: const Icon(Icons.flag), title: const Text('赛道库'), subtitle: const Text('赛道数据包、版本与更新'), onTap: () => _menuAction(_openTrackLibrary)),
+              ListTile(leading: const Icon(Icons.menu_book), title: const Text('赛道知识库'), subtitle: const Text('旗语 · 规则 · 赛事架构 · 驾驶技术'), onTap: () => _menuAction(_openTrackKnowledge)),
               ListTile(
                   leading: const Icon(Icons.timer_outlined, color: Colors.red),
                   title: const Text('性能测试', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                   subtitle: const Text('0-100 加速 / 100-0 刹停 · 仅封闭场地测试'),
                   onTap: () => _menuAction(_openPerformanceChallenge)),
-              ListTile(leading: const Icon(Icons.devices), title: const Text('设备中心'), subtitle: const Text('运动相机 · 传感器 · 外接 GPS'), onTap: () => _menuAction(_openDeviceCenter)),
+              ListTile(leading: const Icon(Icons.devices), title: const Text('设备中心'), subtitle: const Text('运动相机 · 传感器 · 外接 GPS · OBD'), onTap: () => _menuAction(_openDeviceCenter)),
               ListTile(leading: const Icon(Icons.file_download), title: const Text('数据导出/备份'), subtitle: const Text('按行程分享 GPX / CSV'), onTap: () => _menuAction(_openDataExport)),
               ListTile(leading: const Icon(Icons.warning_amber_rounded), title: const Text('免责声明'), subtitle: const Text('使用前必读：安全须知与责任说明'), onTap: () => _menuAction(_openSafetySection)),
               ListTile(leading: const Icon(Icons.info_outline), title: const Text('关于'), subtitle: const Text('版本号、在线更新、反馈与备份'), onTap: () => _menuAction(_showAbout)),
@@ -1980,6 +2007,7 @@ class _HomePageState extends State<HomePage>
           _buildModeSwitcher(),
           SizedBox(height: 220, child: modePageView),
           _buildSurfaceSwitch(),
+          _buildGpsStatusPill(),
           _homeBottomButtons(),
         ]),
       );
@@ -1990,8 +2018,191 @@ class _HomePageState extends State<HomePage>
       _buildModeSwitcher(),
       Expanded(child: modePageView),
       _buildSurfaceSwitch(),
+      _buildGpsStatusPill(),
       _homeBottomButtons(),
     ]);
+  }
+
+  /// 首页外接 GPS 状态小药丸（v1.5.2）：放在开始记录大方块正上方，
+  /// 硬件接入状态可视化。只读全局 externalGpsStatus（设备中心写入，
+  /// 唯一来源），本身不猜状态、不改连接逻辑。
+  /// - 已连接：绿点 + 卫星图标 + 设备名（无名时只显示“外接 GPS”），
+  ///   BLE 通道另带蓝牙小图标；点按进设备中心；
+  /// - 未连接：灰点 + 卫星图标 + “未连接外接 GPS · 去连接”，
+  ///   点按进设备中心扫描连接。
+  Widget _buildGpsStatusPill() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: ValueListenableBuilder<ExternalGpsStatus>(
+        valueListenable: externalGpsStatus,
+        builder: (context, status, _) {
+          final connected = status.connected;
+          final name = status.deviceName.trim();
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _openDeviceCenter,
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                height: 34,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: CardStyle.cardColor,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: connected
+                        ? Colors.green.withValues(alpha: 0.5)
+                        : CardStyle.borderColor,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: connected ? Colors.green : Colors.white38,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.satellite_alt,
+                      size: 15,
+                      color: connected ? Colors.green : Colors.white54,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        connected
+                            ? (name.isEmpty
+                                ? '外接 GPS · 已连接'
+                                : '外接 GPS · $name')
+                            : '未连接外接 GPS',
+                        style: TextStyle(
+                          color: connected ? Colors.white : Colors.white70,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (connected && status.channel == 'ble') ...[
+                      const SizedBox(width: 6),
+                      const Icon(Icons.bluetooth,
+                          size: 13, color: Colors.white54),
+                    ],
+                    if (!connected) ...[
+                      const SizedBox(width: 6),
+                      const Text('去连接 ›',
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 12)),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// 录制页 OBD + 缺口推算小药丸（v1.5.2 攒版）：放在 GPS 来源徽标
+  /// 下方，与首页 GPS 药丸同一样式（34 高圆角药丸、CardStyle 底色）。
+  /// - OBD 已连接：只读全局 obdStatus，绿点 + 实时车速（无读数时
+  ///   只写“OBD · 已连接”），点按进设备中心；未连接不出现；
+  /// - 缺口状态：只读 rec.gapStatus，estimating 时琥珀色
+  ///   “正在推算位置”，lost 时橙色“GPS 信号丢失”，ok 时不出现。
+  /// 两颗都不出现时返回空占位，不占高度。
+  Widget _buildObdAndGapPills() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ValueListenableBuilder<ObdStatus>(
+            valueListenable: obdStatus,
+            builder: (context, st, _) {
+              if (!st.connected) return const SizedBox.shrink();
+              final speed = st.speedKmh;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _recordingPill(
+                  dotColor: Colors.green,
+                  icon: Icons.speed,
+                  label: speed == null
+                      ? 'OBD · 已连接'
+                      : 'OBD · ${speed.toStringAsFixed(0)} km/h',
+                  onTap: _openDeviceCenter,
+                ),
+              );
+            },
+          ),
+          ValueListenableBuilder<GapStatus>(
+            valueListenable: rec.gapStatus,
+            builder: (context, gs, _) {
+              if (gs == GapStatus.estimating) {
+                return _recordingPill(
+                  dotColor: Colors.amber,
+                  icon: Icons.timeline,
+                  label: '正在推算位置',
+                );
+              }
+              if (gs == GapStatus.lost) {
+                return _recordingPill(
+                  dotColor: Colors.orange,
+                  icon: Icons.gps_off,
+                  label: 'GPS 信号丢失',
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 录制页小药丸共用外形（34 高、圆角 999、CardStyle 底色）。
+  Widget _recordingPill({
+    required Color dotColor,
+    required IconData icon,
+    required String label,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: CardStyle.cardColor,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: dotColor.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration:
+                    BoxDecoration(shape: BoxShape.circle, color: dotColor),
+              ),
+              const SizedBox(width: 6),
+              Icon(icon, size: 15, color: dotColor),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: const TextStyle(color: Colors.white, fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// 首页底部大方块（标定 / 开始记录）。
@@ -2437,6 +2648,17 @@ class _HomePageState extends State<HomePage>
           metas: trips,
           loadTrip: store.loadTrip,
         ),
+      ),
+    );
+  }
+
+  // v1.5.2：左侧菜单“赛道知识库”入口，静态参考页（9 分类 × 25 篇），
+  // 内容见 track_knowledge.dart，规则以当年规则与当日简报为准。
+  void _openTrackKnowledge() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const TrackKnowledgePage(),
       ),
     );
   }
@@ -2950,6 +3172,11 @@ class _HomePageState extends State<HomePage>
           accuracyM: rec.curHAcc >= 999 ? null : rec.curHAcc,
         ),
       ),
+      // OBD + 缺口推算小药丸（照 GPS 药丸模式，别堆）：
+      // - OBD 已连接：绿点 + 实时车速，点按进设备中心；
+      // - 缺口推算中：琥珀色“正在推算位置”；丢星未推算：橙色“GPS 信号丢失”。
+      // 定位正常时两颗都不出现。
+      _buildObdAndGapPills(),
       // v1.0.4：记录页性能测试小入口已删，入口只在左拉菜单（红字加粗）。
       // 职业赛道面板顶部小字：只给赛道名、圈数、本节用时，安静待着。
       // Delta 不再放这里：旧的 currentDeltaMs 是“当前圈已用 - 最佳圈
@@ -4186,7 +4413,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
             .toList()
         : t.points
             .map((p) => RefinedTrackPoint(
-                lat: p.lat, lon: p.lon, speedKmh: p.speed * 3.6))
+                lat: p.lat,
+                lon: p.lon,
+                speedKmh: p.speed * 3.6,
+                estimated: p.estimated))
             .toList();
     final centerPt = scrub >= 0 && scrub < t.points.length ? t.points[scrub] : t.points[t.points.length ~/ 2];
     final trend = metas.where((m) => m.mode == t.mode).take(6).toList().reversed.toList();

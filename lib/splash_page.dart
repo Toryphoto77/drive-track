@@ -19,7 +19,7 @@ import 'app_icon_choice.dart';
 /// - 启动第一帧的 Widget 树只有 MaterialApp → SplashPage（纯黑
 ///   Scaffold + 图标淡入），首页在动画完成前不构建、不渲染；
 /// - v1.0.4：启动页底色由纯黑改为深炭灰 #121212（与主框架同步）；
-///   首帧图标默认红赛车：appIconKey 默认即 red，AppPrefs 加载完成
+///   首帧图标默认方向盘：appIconKey 默认即 steering，AppPrefs 加载完成
 ///   前绝不读旧 app_icon.png，加载完成后再按用户选择刷新。
 /// - 动画跑完才经路由进首页：默认 pushReplacementNamed('/home')，
 ///   '/home' 的 builder 里才首次构造 PermissionGate(child: HomePage())；
@@ -36,7 +36,7 @@ class SplashPage extends StatefulWidget {
   /// 动画完成后的回调；不传时默认走命名路由 '/home'（main.dart 已注册）。
   final VoidCallback? onFinished;
 
-  /// v1.0.3：启动图标选择（'red' 默认，见 AppIconChoice），与桌面 alias 同步；
+  /// v1.0.3：启动图标选择（'steering' 默认，见 AppIconChoice），与桌面 alias 同步；
   /// 由 DriveTrackApp 在 build 时传当前 appPrefs.appIcon，load 完成
   /// 后 AnimatedBuilder 重建会同步刷新（动画 1.5 秒内通常已加载完）。
   final String appIconKey;

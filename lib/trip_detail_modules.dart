@@ -127,6 +127,16 @@ class TripOverviewCard extends StatelessWidget {
           if (trip.isTrackMode && trip.trackName.isNotEmpty)
             _stat('赛道', trip.trackName),
         ]),
+        // 含推算路段时诚实分开列：推算里程不混进实测里程。
+        if (trip.estimatedDistanceM > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            '含推算路段 ${(trip.estimatedDistanceM / 1000).toStringAsFixed(1)} km'
+            '（实测 ${(trip.measuredDistanceM / 1000).toStringAsFixed(2)} km，'
+            '推算段地图为虚线）',
+            style: const TextStyle(color: Color(0xFFFFB300), fontSize: 12),
+          ),
+        ],
         if (trip.weatherSummary.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text('天气：${trip.weatherSummary}',

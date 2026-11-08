@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'models.dart';
 import 'native.dart';
+import 'tunnel_gap.dart';
 
 // ---------- 四元数（w,x,y,z），用于把设备加速度转到车身坐标 ----------
 class Quat {
@@ -62,6 +64,28 @@ class Recorder extends ChangeNotifier {
   // v0.1.3 外接 GPS：为 true 时手机定位流只更新显示，不再落点；
   // 轨迹点改由 onExternalFix 注入（provider='external'）。
   bool externalGpsActive = false;
+
+  // ---- 隧道缺口（第一步 + 第二步）----
+  /// 缺口/推算状态：录制页药丸、地图、语音服务读同一份。
+  final ValueNotifier<GapStatus> gapStatus =
+      ValueNotifier<GapStatus>(GapStatus.ok);
+  /// 测试注入时钟（默认真实时间）；生产代码不设。
+  int Function() nowProvider = () => DateTime.now().millisecondsSinceEpoch;
+  /// 路网获取回调（main 侧注入 fetchRoadWaysAround 的隧道优先
+  /// 折线；未注入 = 无路网，走弦补段）。返回折线点列或 null。
+  Future<List<(double, double)>?> Function(double lat, double lon)?
+      gapRoadFetcher;
+  /// OBD 车速（m/s，OBD 服务写入；null = 未接 OBD）。
+  /// 接入时实时推算用它做速度模型，否则用保持+衰减模型。
+  double? obdSpeedMs;
+  /// OBD 实测采样（每秒一条，随行程存；只存实测）。
+  final List<Map<String, dynamic>> obdSamples = [];
+  int _lastFixMs = 0;
+  TrackPoint? _gapStart;
+  List<(double, double)>? _gapRoad;
+  double _gapDistanceM = 0;
+  Timer? _gapTimer;
+  int _lastObdSampleMs = 0;
   String calibrationNote = '未标定：点“标定车头方向”，直线行驶至 18 km/h 以上';
   // v0.1.9 传感器校准页：零偏记录与罗盘提示状态位。注意：零偏只记录，
   // 不参与 onSensor 的 G 值计算（G 值计算仍只用标定车头方向），
@@ -213,6 +237,7 @@ class Recorder extends ChangeNotifier {
     final speed = (e['speed'] as num?)?.toDouble() ?? 0;
     final bearing = (e['bearing'] as num?)?.toDouble() ?? 0;
     final timeMs = (e['timeMs'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    _lastFixMs = timeMs;
     curLat = lat;
     curLon = lon;
     curSpeed = speed;
@@ -270,7 +295,7 @@ class Recorder extends ChangeNotifier {
       satCount: ((e['satCount'] as num?)?.toInt() ?? -1) < 0 ? null : (e['satCount'] as num?)!.toInt(),
       locSource: (e['provider'] as String?) ?? '',
     );
-    points.add(pt);
+    _noteFix(pt);
     _sumLong = 0;
     _sumLat = 0;
     _sumVert = 0;
@@ -302,12 +327,13 @@ class Recorder extends ChangeNotifier {
     curLon = lon;
     curSpeed = speed;
     curHeading = bearing;
+    _lastFixMs = timeMs;
     if (state != RecState.recording) {
       _throttledNotify();
       return;
     }
     final n = _bucketCount > 0 ? _bucketCount : 1;
-    points.add(TrackPoint(
+    _noteFix(TrackPoint(
       timeMs: timeMs, lat: lat, lon: lon, alt: altM ?? 0, altValid: altM != null, speed: speed, bearing: bearing,
       hAcc: 999, vAcc: 999, speedAcc: 999, provider: 'external',
       longG: _sumLong / n, latG: _sumLat / n, vertG: _sumVert / n,
@@ -365,12 +391,22 @@ class Recorder extends ChangeNotifier {
   Future<void> start() async {
     points.clear();
     gHistory.clear();
+    obdSamples.clear();
     tripPeakLong = 0;
     tripPeakLat = 0;
     startMs = DateTime.now().millisecondsSinceEpoch;
     pausedTotalMs = 0;
     state = RecState.recording;
     _lowSpeedSinceMs = null;
+    _lastFixMs = startMs;
+    _gapStart = null;
+    _gapRoad = null;
+    _gapDistanceM = 0;
+    gapStatus.value = GapStatus.ok;
+    _gapTimer?.cancel();
+    _gapTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _gapTick(nowProvider());
+    });
     await Native.startForeground();
     await Native.startLocation();
     await Native.startSensors();
@@ -379,6 +415,8 @@ class Recorder extends ChangeNotifier {
 
   Future<void> pause({bool auto = false}) async {
     if (state != RecState.recording) return;
+    _gapTimer?.cancel();
+    _gapTimer = null;
     state = RecState.paused;
     _pauseStartMs = DateTime.now().millisecondsSinceEpoch;
     if (auto) calibrationNote = '已自动暂停：停车超过 5 分钟，点恢复可继续';
@@ -390,10 +428,170 @@ class Recorder extends ChangeNotifier {
     pausedTotalMs += DateTime.now().millisecondsSinceEpoch - _pauseStartMs;
     state = RecState.recording;
     _lowSpeedSinceMs = null;
+    _lastFixMs = DateTime.now().millisecondsSinceEpoch;
+    _gapTimer?.cancel();
+    _gapTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _gapTick(nowProvider());
+    });
     notifyListeners();
   }
 
+  // ---- 隧道缺口：检测 / 实时推算 / 出口补段替换 ----
+
+  /// OBD 实测采样入口（OBD 服务每秒调一次；只在录制中存）。
+  void noteObdSample({
+    required double speedKmh,
+    double? rpm,
+    double? throttlePct,
+    double? coolantC,
+  }) {
+    obdSpeedMs = speedKmh / 3.6;
+    if (state != RecState.recording) return;
+    final now = nowProvider();
+    if (now - _lastObdSampleMs < 1000) return;
+    _lastObdSampleMs = now;
+    obdSamples.add({
+      't': now,
+      'vKmh': speedKmh,
+      'rpm': rpm,
+      'thr': throttlePct,
+      'cool': coolantC,
+    });
+  }
+
+  void clearObdSpeed() {
+    obdSpeedMs = null;
+  }
+
+  /// 每次实测定位落点时调：无缺口直接追加；缺口内到达出口时
+  /// 用事后补段替换缺口内的实时推算点（每时间戳只留一套）。
+  void _noteFix(TrackPoint pt) {
+    final gapStart = _gapStart;
+    if (gapStart == null) {
+      points.add(pt);
+      return;
+    }
+    final fill = fillGap(start: gapStart, end: pt, roadPolyline: _gapRoad);
+    final replaced = replaceLiveEstimates(
+      points: points,
+      gapStartMs: gapStart.timeMs,
+      gapEndMs: pt.timeMs,
+      fill: fill,
+    );
+    points
+      ..clear()
+      ..addAll(replaced)
+      ..add(pt);
+    _gapStart = null;
+    _gapRoad = null;
+    _gapDistanceM = 0;
+    gapStatus.value = GapStatus.ok;
+  }
+
+  /// 测试入口：以假时钟驱动缺口心跳（生产代码走 1 秒 Timer）。
+  @visibleForTesting
+  void gapTickForTest(int nowMs) => _gapTick(nowMs);
+
+  /// 1 秒缺口心跳（Timer 调，测试直接调）：检测缺口、发实时
+  /// 推算点、上限停发。只在录制中跑。
+  void _gapTick(int nowMs) {
+    if (state != RecState.recording || points.isEmpty) return;
+    final last = points.last;
+    final elapsedMs = nowMs - _lastFixMs;
+    final gapStart = _gapStart;
+    if (gapStart == null) {
+      if (!shouldStartGap(elapsedMs: elapsedMs, lastSpeedMs: last.speed)) {
+        if (elapsedMs > GapConstants.gapAfterSeconds * 1000) {
+          gapStatus.value = GapStatus.lost;
+        }
+        return;
+      }
+      _gapStart = last;
+      _gapDistanceM = 0;
+      gapStatus.value = GapStatus.estimating;
+      // 有路网时拉隧道折线（失败/无路网 = null，走弦；不阻塞推算）。
+      final fetcher = gapRoadFetcher;
+      if (fetcher != null) {
+        unawaited(fetcher(last.lat, last.lon).then((poly) {
+          if (_gapStart != null) _gapRoad = poly;
+        }));
+      }
+      _emitEstimate(nowMs);
+      return;
+    }
+    final elapsedSec = (nowMs - gapStart.timeMs) / 1000;
+    if (elapsedSec > GapConstants.maxEstimateSeconds ||
+        _gapDistanceM > GapConstants.maxEstimateMeters) {
+      // 上限到：停发实时推算，留给事后补段；缺口起点保留。
+      gapStatus.value = GapStatus.lost;
+      return;
+    }
+    _emitEstimate(nowMs);
+  }
+
+  void _emitEstimate(int nowMs) {
+    final gapStart = _gapStart;
+    if (gapStart == null || points.isEmpty) return;
+    final last = points.last;
+    final elapsedSec = (nowMs - gapStart.timeMs) / 1000;
+    final speed = estimateSpeed(
+      initialMs: gapStart.speed,
+      elapsedSec: elapsedSec,
+      obdSpeedMs: obdSpeedMs,
+    );
+    final heading = _estimateHeading();
+    var pos = destPoint(last.lat, last.lon, heading, speed);
+    if (_gapRoad != null && _gapRoad!.length >= 2) {
+      pos = projectOntoPolyline(pos.lat, pos.lon, _gapRoad!);
+    }
+    _gapDistanceM += haversineM(last.lat, last.lon, pos.lat, pos.lon);
+    points.add(TrackPoint(
+      timeMs: nowMs,
+      lat: pos.lat,
+      lon: pos.lon,
+      alt: gapStart.alt,
+      altValid: false,
+      speed: speed,
+      bearing: heading,
+      hAcc: 999,
+      vAcc: 999,
+      speedAcc: 999,
+      provider: 'estimated',
+      longG: 0,
+      latG: 0,
+      vertG: 0,
+      pitch: 0,
+      roll: 0,
+      heading: heading,
+      pressureHpa: 0,
+      calibrated: false,
+      estimated: true,
+    ));
+    curLat = pos.lat;
+    curLon = pos.lon;
+    curSpeed = speed;
+    curHeading = heading;
+    _throttledNotify();
+  }
+
+  /// 实时推算航向：旋转向量相对标定姿态的偏航（onSensor 已有
+  /// 的数学）。未标定/无四元数时沿用缺口起点航向。
+  double _estimateHeading() {
+    final q = _latestQ;
+    final q0 = _q0;
+    if (q == null || q0 == null || !calibrated) {
+      return _gapStart?.bearing ?? curHeading;
+    }
+    final delta = q * q0.inv;
+    final f = delta.rotate(_forward0);
+    return (math.atan2(f[0], f[1]) * 180 / math.pi + 360) % 360;
+  }
+
   Future<void> stop() async {
+    _gapTimer?.cancel();
+    _gapTimer = null;
+    _gapStart = null;
+    gapStatus.value = GapStatus.ok;
     state = RecState.idle;
     await Native.stopLocation();
     await Native.stopSensors();

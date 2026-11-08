@@ -104,67 +104,73 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                 _avatarFuture ??= CloudService.instance
                     .downloadAvatar(profile);
                 return DriveTrackCard(
-                  child: Row(children: [
-                    _avatar(profile, accent),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            profile.nickname.isEmpty
-                                ? '未设置昵称'
-                                : profile.nickname,
-                            style: const TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // v1.5.2：与我的页资料卡同款个人主页式头行——头像 +
+                      // 名字/ID 居中对齐，简介与扩展字段移到头行下方通栏。
+                      Row(children: [
+                        _avatar(profile, accent),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                profile.nickname.isEmpty
+                                    ? '未设置昵称'
+                                    : profile.nickname,
+                                style: const TextStyle(
+                                    fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text('用户 ID · $_shortUserId',
+                                  style: const TextStyle(
+                                      color: Colors.white54, fontSize: 12)),
+                            ],
                           ),
-                          const SizedBox(height: 2),
-                          Text('用户 ID · $_shortUserId',
-                              style: const TextStyle(
-                                  color: Colors.white54, fontSize: 12)),
-                          const SizedBox(height: 4),
-                          Text(
-                            profile.bio.isEmpty ? '暂无简介' : profile.bio,
-                            style: TextStyle(
-                                color: profile.bio.isEmpty
-                                    ? Colors.white38
-                                    : Colors.white70,
-                                fontSize: 13),
-                          ),
-                          // v1.5.1：公开资料扩展字段（只显示已填的，空的不占位）。
-                          if (profile.gender.isNotEmpty ||
-                              profile.birthday.isNotEmpty ||
-                              profile.industry.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              [
-                                if (profile.gender.isNotEmpty)
-                                  profile.gender,
-                                if (profile.birthday.isNotEmpty)
-                                  profile.birthday,
-                                if (profile.industry.isNotEmpty)
-                                  profile.industry,
-                              ].join(' · '),
-                              style: const TextStyle(
-                                  color: Colors.white54, fontSize: 12),
-                            ),
-                          ],
-                          if (profile.vehicleBrand.isNotEmpty ||
-                              profile.vehicleModel.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              '座驾：${[
-                                profile.vehicleBrand,
-                                profile.vehicleModel
-                              ].where((s) => s.isNotEmpty).join(' ')}',
-                              style: const TextStyle(
-                                  color: Colors.white54, fontSize: 12),
-                            ),
-                          ],
-                        ],
+                        ),
+                      ]),
+                      const SizedBox(height: 12),
+                      Text(
+                        profile.bio.isEmpty ? '暂无简介' : profile.bio,
+                        style: TextStyle(
+                            color: profile.bio.isEmpty
+                                ? Colors.white38
+                                : Colors.white70,
+                            fontSize: 13),
                       ),
-                    ),
-                  ]),
+                      // v1.5.1：公开资料扩展字段（只显示已填的，空的不占位）。
+                      if (profile.gender.isNotEmpty ||
+                          profile.birthday.isNotEmpty ||
+                          profile.industry.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          [
+                            if (profile.gender.isNotEmpty) profile.gender,
+                            if (profile.birthday.isNotEmpty)
+                              profile.birthday,
+                            if (profile.industry.isNotEmpty)
+                              profile.industry,
+                          ].join(' · '),
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 12),
+                        ),
+                      ],
+                      if (profile.vehicleBrand.isNotEmpty ||
+                          profile.vehicleModel.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '座驾：${[
+                            profile.vehicleBrand,
+                            profile.vehicleModel
+                          ].where((s) => s.isNotEmpty).join(' ')}',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
                 );
               },
             ),
@@ -256,8 +262,8 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
   Widget _avatar(PublicProfile profile, Color accent) {
     final fut = _avatarFuture;
     return Container(
-      width: 60,
-      height: 60,
+      width: 64,
+      height: 64,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(color: accent, width: 2),

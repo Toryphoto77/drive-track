@@ -1886,6 +1886,21 @@ class VoiceService extends ChangeNotifier {
         '用时 ${_fmtDuration(durationMs)}，评分 ${score.round()} 分$best');
   }
 
+  /// Recorder 缺口状态同步入口（main.dart 监听 Recorder.gapStatus
+  /// 后调）：缺口状态是唯一来源，语音看门狗只读同一份状态。
+  /// _gpsLost 已为 true 时看门狗直接返回，不重复播报。
+  void setGapLost(bool lost) {
+    if (!_tripActive || _tripIsTrack) return;
+    if (lost && !_gpsLost) {
+      _gpsLost = true;
+      unawaited(announceGpsLost());
+    } else if (!lost && _gpsLost) {
+      _gpsLost = false;
+      unawaited(announceGpsRestored());
+    }
+    notifyListeners();
+  }
+
   /// 行程开始 / 结束时由调用方（main.dart）调：开录即清零街道
   /// 播报状态并启动 GPS 信号看门狗，结束即停看门狗。
   /// 赛道行程只计圈，不跑街道提示（[noteStreetLocation] 内同样门控）。

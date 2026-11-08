@@ -105,7 +105,10 @@ class RefinedTrackPoint {
 
   /// 时速 km/h，用于轨迹按速度渐变色；未知时传 0。
   final double speedKmh;
-  const RefinedTrackPoint({required this.lat, required this.lon, this.speedKmh = 0});
+  /// 推算点（隧道补段）：画虚线 + 灰/琥珀色，不进速度渐变色。
+  final bool estimated;
+  const RefinedTrackPoint(
+      {required this.lat, required this.lon, this.speedKmh = 0, this.estimated = false});
 }
 
 class RefinedMap extends StatefulWidget {
@@ -571,6 +574,20 @@ Color _speedColor(double speed, double maxSpeed) {
   return Color.lerp(mid, fast, (t - 0.5) * 2)!;
 }
 
+/// 推算段虚线：8px 实线 + 6px 间隔。
+void _drawDashedLine(Canvas canvas, Offset a, Offset b, Paint paint) {
+  final total = (b - a).distance;
+  if (total <= 0) return;
+  const dash = 8.0, gap = 6.0;
+  final dir = (b - a) / total;
+  var d = 0.0;
+  while (d < total) {
+    final end = math.min(d + dash, total);
+    canvas.drawLine(a + dir * d, a + dir * end, paint);
+    d = end + gap;
+  }
+}
+
 class _RefinedTrackPainter extends CustomPainter {
   final List<RefinedTrackPoint> points;
   final double centerLat, centerLon, zoom, headingRad, accuracyPx, pulse;
@@ -612,9 +629,23 @@ class _RefinedTrackPainter extends CustomPainter {
             ..style = PaintingStyle.stroke);
     }
     // 按速度渐变色：逐段着色，慢绿 → 中黄 → 快红。
+    // 推算段不进速度渐变色：画琥珀虚线（任一端是推算点即算推算段）。
     final maxSpeed = points.fold(0.0, (a, p) => math.max(a, p.speedKmh));
     if (pts.length > 1) {
       for (var i = 1; i < pts.length; i++) {
+        final isEstimated = points[i].estimated || points[i - 1].estimated;
+        if (isEstimated) {
+          _drawDashedLine(
+            canvas,
+            pts[i - 1],
+            pts[i],
+            Paint()
+              ..color = const Color(0xFFFFB300)
+              ..strokeWidth = 3.5
+              ..strokeCap = StrokeCap.round,
+          );
+          continue;
+        }
         final segSpeed = math.max(points[i - 1].speedKmh, points[i].speedKmh);
         canvas.drawLine(
             pts[i - 1],

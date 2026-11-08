@@ -114,6 +114,19 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         }
         return btGpsManager!!
     }
+    // OBD（ELM327）原生管理（SPP，独立 socket，可与 GPS SPP 共存），
+    // 惰性创建，模式与 btGps() 相同。
+    private var obdSink: EventChannel.EventSink? = null
+    private var obdManager: ObdManager? = null
+    private fun obd(): ObdManager {
+        if (obdManager == null) {
+            obdManager = ObdManager(
+                this,
+                { map -> obdSink?.success(map) },
+            )
+        }
+        return obdManager!!
+    }
     // 分步授权：每个 step 一个 requestCode，结果按 code 存 map 分发，杜绝单一
     // pendingPermResult 被后一次请求覆盖丢结果。旧 1001 保留给 foreground 一步。
     private val pendingPermResults = mutableMapOf<Int, MethodChannel.Result>()
@@ -827,6 +840,25 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     "scanBleUnfiltered" -> {
                         result.success(btGps().startUnfilteredBleScan())
                     }
+                    // OBD（ELM327）：列已配对设备、SPP 连接/断开、发命令。
+                    // 权限复用现有分步流程（Dart 侧 requestStep('extras')），
+                    // 本侧不另起权限流程；连接结果与响应行走 drivetrack/obd 事件流。
+                    "listBondedObdDevices" -> {
+                        result.success(obd().bondedDevices())
+                    }
+                    "connectObd" -> {
+                        val addr = call.argument<String>("address")
+                        if (addr != null) obd().connect(addr)
+                        result.success(null)
+                    }
+                    "disconnectObd" -> {
+                        obd().disconnect()
+                        result.success(null)
+                    }
+                    "sendObdCommand" -> {
+                        val cmd = call.argument<String>("command") ?: ""
+                        result.success(mapOf("ok" to obd().sendCommand(cmd)))
+                    }
                     "setBleAutoReconnect" -> {
                         autoReconnect = call.argument<Boolean>("value") ?: true
                         result.success(null)
@@ -965,6 +997,14 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(args: Any?, events: EventChannel.EventSink) { btGpsDevSink = events }
                 override fun onCancel(args: Any?) { btGpsDevSink = null }
+            })
+        // OBD（ELM327）响应行事件流（obdConnected / obdLine /
+        // obdDisconnected），与 GPS / 传感器流分离，响应行不混进
+        // main.dart 的 GPS 监听。
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "drivetrack/obd")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(args: Any?, events: EventChannel.EventSink) { obdSink = events }
+                override fun onCancel(args: Any?) { obdSink = null }
             })
         // v0.1.4：GNSS 卫星事件流与 TTS 完成事件流。
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "drivetrack/gnss")

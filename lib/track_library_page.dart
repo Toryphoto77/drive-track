@@ -42,6 +42,16 @@ class VersionTapGate {
 }
 
 /// 赛道库页。
+/// 官方包搜索匹配（v1.5.2）：中文名 / 英文名 / 地区子串匹配，不区分
+/// 大小写；空查询返回 true（不过滤）。纯函数，便于测试。
+bool matchesTrackSearch(TrackPackage p, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return true;
+  return p.nameCn.toLowerCase().contains(q) ||
+      p.nameEn.toLowerCase().contains(q) ||
+      p.region.toLowerCase().contains(q);
+}
+
 class TrackLibraryPage extends StatefulWidget {
   /// 全部行程索引（调用方已排除演示行程；导入时再按 demo 过滤一次）。
   final List<TripMeta> metas;
@@ -69,6 +79,18 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   // 策展模式 gate：2 秒内连点数据总版本 7 次解锁，仅本页会话有效。
   bool _curation = false;
   final _versionTapGate = VersionTapGate();
+
+  // v1.5.2：官方赛道包搜索（标题行右侧放大镜展开）：只过滤官方包，
+  // 我的赛道不参与；按中文名 / 英文名 / 地区子串匹配（不区分大小写）。
+  bool _showSearch = false;
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -395,6 +417,15 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     final updatesById = {
       for (final u in check?.updates ?? const <PackageUpdate>[]) u.id: u,
     };
+    // v1.5.2：官方包搜索过滤（snap 为空时给空列表，页面仍显示加载中）。
+    final query = _searchQuery.trim().toLowerCase();
+    final official = snap == null
+        ? const <TrackPackage>[]
+        : query.isEmpty
+            ? snap.official
+            : snap.official
+                .where((p) => matchesTrackSearch(p, query))
+                .toList();
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
@@ -433,16 +464,51 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                   for (final u in check.updates) _updateRow(u),
                 ],
                 const SizedBox(height: 20),
-                const Text(
-                  '官方赛道包',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                // v1.5.2：官方赛道包标题行右侧放放大镜，点按展开搜索框
+                // （与 App 同款深色样式）；输入即按名称/英文名/地区过滤，
+                // 只过滤官方包，我的赛道不参与。
+                Row(children: [
+                  const Text(
+                    '官方赛道包',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(
+                        _showSearch ? Icons.close : Icons.search,
+                        color: Colors.white70),
+                    tooltip: _showSearch ? '关闭搜索' : '搜索赛道',
+                    onPressed: () {
+                      setState(() {
+                        _showSearch = !_showSearch;
+                        if (!_showSearch) {
+                          _searchQuery = '';
+                          _searchCtrl.clear();
+                        }
+                      });
+                    },
+                  ),
+                ]),
+                if (_showSearch) ...[
+                  const SizedBox(height: 8),
+                  _searchField(),
+                ],
                 const SizedBox(height: 8),
-                for (final p in snap.official)
+                if (_showSearch && query.isNotEmpty) ...[
+                  Text(
+                    official.isEmpty
+                        ? '没有匹配“${_searchQuery.trim()}”的赛道'
+                        : '找到 ${official.length} 条（共 ${snap.official.length} 条）',
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                for (final p in official)
                   _packageRow(
                     p,
                     update: updatesById[p.id],
@@ -513,6 +579,52 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                 ],
               ],
             ),
+    );
+  }
+
+  /// 官方包搜索框（v1.5.2）：与 App 同款深色样式——卡片底色 #1E1E1E、
+  /// 圆角 12、白字、灰色提示；前缀放大镜，有输入时后缀清空钮。
+  Widget _searchField() {
+    return TextField(
+      controller: _searchCtrl,
+      autofocus: true,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: InputDecoration(
+        hintText: '搜索赛道名称 / 地区',
+        hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
+        prefixIcon: const Icon(Icons.search, color: Colors.white54, size: 20),
+        suffixIcon: _searchQuery.isEmpty
+            ? null
+            : IconButton(
+                icon:
+                    const Icon(Icons.clear, color: Colors.white54, size: 18),
+                tooltip: '清空',
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _searchQuery = '');
+                },
+              ),
+        filled: true,
+        fillColor: const Color(0xFF1E1E1E),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+              color: Theme.of(context).colorScheme.primary, width: 1.5),
+        ),
+      ),
+      onChanged: (v) => setState(() => _searchQuery = v),
     );
   }
 

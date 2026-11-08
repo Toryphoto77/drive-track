@@ -21,8 +21,8 @@
     <application
         android:label="驰迹"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher_red"
-        android:roundIcon="@mipmap/ic_launcher_red">
+        android:icon="@mipmap/ic_launcher_steering"
+        android:roundIcon="@mipmap/ic_launcher_steering">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -39,14 +39,18 @@
         </activity>
         <!-- v1.0.3 可切换启动图标：主 Activity 不再带 LAUNCHER 过滤器，
              桌面入口由下面的 activity-alias 承担（各带对应图标与
-             “驰迹” label）。红赛车默认启用（与法拉利红主题一致），
-             v1.0.4 起 application 图标本身也改为红赛车（此前为旧转速表
-             ic_launcher，导致应用信息/部分启动器仍显示旧图）；旧转速表
+             “驰迹” label）。v1.5.2 起默认图标改为方向盘（用户定：图标
+             只留方向盘与方格旗，红赛车/RB17/女武神已从可选项移除，
+             见 app_icon_choice.dart）：application 图标与默认 alias
+             （LauncherRed，名字保留——组件身份跨升级粘性，改名会让
+             旧用户无法启动，见 v1.2.2 教训）及 LauncherBlue 垫片均
+             指向 @mipmap/ic_launcher_steering；旧转速表 ic_launcher
              资源文件仅作未引用回落保留，不再被任何启动路径引用。
              其余 alias 默认禁用；切换走 PackageManager.setComponentEnabledSetting
              + DONT_KILL_APP（见 MainActivity 的 setAppIcon），一次只启用一个。
-             v1.2.2：蓝仪表 alias 已删除，旧蓝仪表用户回落到红赛车；
-             新增方向盘 / 方格旗 alias，图标选择共五项。
+             v1.2.2：蓝仪表 alias 已删除，旧蓝仪表用户回落到默认图标；
+             新增方向盘 / 方格旗 alias，图标选择共五项（v1.5.0 起主题页
+             选项只剩方向盘 / 方格旗两项，红车/RB17/女武神已移除）。
              升级注意：旧版桌面入口指向主 Activity，
              换版后入口改为 alias，部分厂商启动器需刷新或重加图标才显示新图。
              v1.2.3 紧急修复：上面“蓝仪表 alias 已删除”导致线上故障——
@@ -54,8 +58,8 @@
              旧蓝仪表用户升级到 v1.2.2 后没有任何 alias 处于启用状态，App
              根本启动不了，启动迁移代码也就永远跑不到，桌面残留图标只能进
              应用详情。因此 LauncherBlue 以启动兼容垫片形式恢复（见下），
-             图标用红赛车、label 仍为“驰迹”，绝不是蓝仪表选项回来了：
-             主题页选项仍只有红车/RB17/女武神/方向盘/方格旗五项，蓝仪表
+             图标用方向盘、label 仍为“驰迹”，绝不是蓝仪表选项回来了：
+             主题页选项现只有方向盘/方格旗两项，蓝仪表
              artwork 不恢复、不在任何可选项里出现。警告：Blue 垫片绝不能
              在用户全部迁移完成前删除；下次删它之前，必须先确认已无用户
              的持久化选择与组件状态还指向它，否则 v1.2.2 的故障会重演。 -->
@@ -63,8 +67,8 @@
             android:name=".LauncherRed"
             android:enabled="true"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_red"
-            android:roundIcon="@mipmap/ic_launcher_red"
+            android:icon="@mipmap/ic_launcher_steering"
+            android:roundIcon="@mipmap/ic_launcher_steering"
             android:label="驰迹"
             android:targetActivity=".MainActivity">
             <intent-filter>
@@ -74,18 +78,18 @@
         </activity-alias>
         <!-- v1.2.3 启动兼容垫片 LauncherBlue：只为接住 v1.2.2 升级后无启用
              alias 的旧蓝仪表用户，让桌面残留图标能再次启动 App；启动后
-             开机迁移（main.dart setAppIcon）会启用红赛车并禁用本垫片，
-             最终只剩红赛车单图标。默认 enabled=true：即使持久化状态丢失，
-             默认也是可启动的。新装用户首次启动前会短暂出现两个红图标
-             （红赛车 + 本垫片，图标与 label 完全相同），首次启动迁移后
-             即恢复为单个红赛车图标——这是垫片方案已知的一次性副作用，
+             开机迁移（main.dart setAppIcon）会启用方向盘并禁用本垫片，
+             最终只剩方向盘单图标。默认 enabled=true：即使持久化状态丢失，
+             默认也是可启动的。新装用户首次启动前会短暂出现两个方向盘图标
+             （方向盘 + 本垫片，图标与 label 完全相同），首次启动迁移后
+             即恢复为单个方向盘图标——这是垫片方案已知的一次性副作用，
              不是蓝仪表选项回归。 -->
         <activity-alias
             android:name=".LauncherBlue"
             android:enabled="true"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_red"
-            android:roundIcon="@mipmap/ic_launcher_red"
+            android:icon="@mipmap/ic_launcher_steering"
+            android:roundIcon="@mipmap/ic_launcher_steering"
             android:label="驰迹"
             android:targetActivity=".MainActivity">
             <intent-filter>

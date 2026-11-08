@@ -3,7 +3,8 @@
 /// 横/纵向 G 极值、海拔变化、轨迹走线图；摩托加压弯数据，骑行加
 /// 配速分段），图表全部复用街道详情页的 trip_detail_modules.dart
 /// 组件，不另造一套；有圈速时再叠加原有圈速总览/分段对比/得失曲线。
-/// OBD 通道无接入时以占位行明确显示“未连接 OBD，暂无此通道”，
+/// OBD 通道有实测采样时画真实 OBD 车速曲线 + 极值（只画实测采样，
+/// 无采样不画曲线、不补点）；无采样时保留“未连接 OBD，暂无此通道”占位，
 /// 绝不反推油门/刹车/转速曲线。赛道行程继续不评分。
 ///
 /// v1.2.0 第 6 项：赛后独立赛道分析页（新增文件，不改动已有文件）。
@@ -23,9 +24,11 @@
 ///   delta 着色的走线图；图表 X 轴捏合缩放 + 双击复位，单指 scrub
 ///   联动所有图表与走线，点分段可缩放到该分段。
 /// - 圈次与参照圈选择器：参照圈默认本节最佳圈。
-/// - OBD：只预留入口，后期再接；未连接时明确显示
-///   “未连接 OBD，暂无油门/刹车通道”，绝不反推假油门/刹车/转速曲线。
-///   TrackPoint 本来就没有油门/刹车字段，本页不造任何此类曲线。
+/// - OBD：已接 ELM327：行程 obdSamples（每秒一条实测采样）有数据时
+///   画真实 OBD 车速曲线 + 极值；无采样时按 obdConnected 显示
+///   “OBD 已连接，暂无数据”或“未连接 OBD，暂无此通道”，绝不反推
+///   假油门/刹车/转速曲线。TrackPoint 本来就没有油门/刹车字段，
+///   本页不造任何此类曲线。
 /// - 赛道模式不评分：本页不显示、不计算任何评分。
 /// - 第一版不做视频联动：本页不读 trip.videoPaths、不做视频同步。
 ///
@@ -82,8 +85,9 @@ class TrackAnalysisPage extends StatefulWidget {
   /// 参照圈；为 null 时默认本节最佳圈（sessionBestLap）。
   final Lap? referenceLap;
 
-  /// OBD 是否已连接；仅作入口预留展示，不影响任何曲线
-  /// （无油门/刹车数据字段，任何情况下都不画油门/刹车曲线）。
+  /// OBD 是否已连接（行程结束时状态）；有实测采样时以采样为准，
+  /// 无采样时按它显示“已连接暂无数据”或“未连接暂无此通道”，
+  /// 不影响任何曲线（只画实测采样）。
   final bool obdConnected;
 
   /// 初始分析圈号；为 null 时默认最佳圈（无计入圈时取第一圈）。
@@ -504,6 +508,90 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     ];
   }
 
+  /// OBD 通道：只读本趟 [Trip.obdSamples]（每秒一条实测采样）。
+  /// 有采样：画真实 OBD 车速曲线 + 极值（最高车速 / 转速 / 油门 /
+  /// 水温，缺值那项不写数、不编数）；无采样：保留占位文案。
+  Widget _obdSection() {
+    final samples = widget.trip.obdSamples;
+    final hasSamples = samples.isNotEmpty;
+    List<double> speeds = const [];
+    List<double> xs = const [];
+    double? maxRpm;
+    double? maxThr;
+    double? maxCool;
+    if (hasSamples) {
+      speeds = samples
+          .map((s) => (s['vKmh'] as num?)?.toDouble() ?? 0)
+          .toList();
+      final times =
+          samples.map((s) => (s['t'] as num?)?.toInt() ?? 0).toList();
+      final span = times.last - times.first;
+      xs = span > 0
+          ? times.map((t) => (t - times.first) / span).toList()
+          : List<double>.filled(times.length, 0);
+      for (final s in samples) {
+        final rpm = (s['rpm'] as num?)?.toDouble();
+        if (rpm != null) maxRpm = maxRpm == null ? rpm : math.max(maxRpm, rpm);
+        final thr = (s['thr'] as num?)?.toDouble();
+        if (thr != null) maxThr = maxThr == null ? thr : math.max(maxThr, thr);
+        final cool = (s['cool'] as num?)?.toDouble();
+        if (cool != null) {
+          maxCool = maxCool == null ? cool : math.max(maxCool, cool);
+        }
+      }
+    }
+    final maxSpeed = speeds.isEmpty ? 0.0 : speeds.reduce(math.max);
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('OBD 通道',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          const Text('通道：车速 / 转速 / 油门 / 水温（ELM327 实测采样）',
+              style: TextStyle(color: Colors.white70, fontSize: 13)),
+          if (!hasSamples)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                widget.obdConnected ? 'OBD 已连接，暂无数据' : '未连接 OBD，暂无此通道',
+                style:
+                    const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            )
+          else ...[
+            const SizedBox(height: 8),
+            Wrap(spacing: 16, runSpacing: 8, children: [
+              _stat('实测采样', '${samples.length} 条'),
+              _stat('最高车速', '${maxSpeed.toStringAsFixed(0)} km/h'),
+              _stat('最高转速',
+                  maxRpm == null ? '—' : '${maxRpm.toStringAsFixed(0)} rpm'),
+              _stat('最大油门',
+                  maxThr == null ? '—' : '${maxThr.toStringAsFixed(0)} %'),
+              _stat('最高水温',
+                  maxCool == null ? '—' : '${maxCool.toStringAsFixed(0)} ℃'),
+            ]),
+            const SizedBox(height: 8),
+            _chartTitle('OBD 车速（实测采样，未连接时段无曲线）'),
+            _SeriesChart(
+              xs: xs,
+              series: [
+                _Series(values: speeds, color: const Color(0xFF38BDF8)),
+              ],
+              viewStart: 0,
+              viewEnd: 1,
+              scrub: 0,
+              unit: 'km/h',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   String _fmtDur(int ms) {
     final s = ms ~/ 1000;
     if (s < 60) return '$s 秒';
@@ -608,39 +696,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             // / TripAltitudeCard，不另造一套；走线复用本页 _TrackLineDiagram。
             ..._tripOverviewSection(),
             const SizedBox(height: 12),
-            // OBD 入口（预留，不画假曲线）：通道列明油门/刹车/转速，
-            // 未连接时以“未连接 OBD，暂无此通道”占位。
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _kCard,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _kBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('OBD 通道',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  const Text('通道：油门 / 刹车 / 转速',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text(
-                      widget.obdConnected
-                          ? 'OBD 已连接，暂无数据'
-                          : '未连接 OBD，暂无此通道',
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // OBD 通道（实测采样才画曲线）：有 obdSamples 时画真实
+            // OBD 车速曲线 + 极值；无采样时按 obdConnected 保留占位，
+            // 绝不反推油门/刹车/转速曲线。
+            _obdSection(),
             const SizedBox(height: 12),
             if (selected == null) ...[
               const Text(
@@ -1699,7 +1758,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                           satelliteTileUrl(zoom, x, y),
                           key: ValueKey('analysis-sat-$zoom-$x-$y'),
                           headers: const {
-                            'User-Agent': 'DriveTrack/1.5.1',
+                            'User-Agent': 'DriveTrack/1.5.2',
                           },
                           fit: BoxFit.fill,
                           gaplessPlayback: true,

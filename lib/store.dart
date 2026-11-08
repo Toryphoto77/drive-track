@@ -107,11 +107,15 @@ class Store {
       {bool demo = false, double riderKg = 85, bool trim = true, String weatherSummary = '', List<String> videoPaths = const [],
       String? trackId, String trackName = '', bool isTrackMode = false, List<Map<String, dynamic>> lapsJson = const [],
       List<PhotoPoint> photoPoints = const [],
+      List<Map<String, dynamic>> obdSamples = const [],
       double? startFinishLat, double? startFinishLon, String? vehicleId}) async {
-    final events = detectEvents(points, mode);
+    // 评分与事件检测只看实测点：推算点绝不参与（速度/G/压弯角
+    // 都是补出来的，拿来评分等于给假数据打分）。
+    final measured = points.where((p) => !p.estimated).toList();
+    final events = detectEvents(measured, mode);
     final sc = isTrackMode
         ? ScoreResult(0, {'圈速稳定性': 0.0}, ['赛道模式不评分'])
-        : scoreTrip(mode, points, events);
+        : scoreTrip(mode, measured, events);
     final id = '${demo ? 'demo-' : ''}${DateTime.now().millisecondsSinceEpoch}';
     // v1.2.0 store 层 50 条上限：超限保留前 50 条（输入顺序），不静默
     // 丢弃之外的部分——调用方以返回 Trip.photoPoints.length 与输入
@@ -127,6 +131,7 @@ class Store {
       videoPaths: videoPaths, trackId: trackId, trackName: trackName,
       isTrackMode: isTrackMode, lapsJson: lapsJson,
       photoPoints: cappedPhotoPoints, vehicleId: vehicleId,
+      obdSamples: obdSamples,
       startFinishLat: startFinishLat, startFinishLon: startFinishLon,
     );
     await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
@@ -449,14 +454,33 @@ class Store {
       final p = sectorPoints[i];
       b.writeln('<wpt lat="${p.lat}" lon="${p.lon}"><name>S${i + 1}</name></wpt>');
     }
-    b.writeln('<trk><name>${trip.mode.label} ${DateTime.fromMillisecondsSinceEpoch(trip.startMs)}</name><trkseg>');
+    // 无推算点时输出与改前逐字节一致（<trkseg> 紧跟 </name> 同行）；
+    // 有推算点时推算段单独成段 <trkseg name="推算">，绝不混进实测段。
+    b.write('<trk><name>${trip.mode.label} ${DateTime.fromMillisecondsSinceEpoch(trip.startMs)}</name>');
+    // 推算点单独成段 <trkseg name="推算">，绝不混进实测段。
+    // 段间分隔与末尾严格按旧格式：段间 '</trkseg>\n<trkseg>'，
+    // 末尾 '</trkseg></trk></gpx>\n'（v1218 逐字节测试依赖）。
+    var segEstimated = false;
+    var segOpen = false;
     for (final p in pts) {
+      if (!segOpen || p.estimated != segEstimated) {
+        if (segOpen) b.writeln('</trkseg>');
+        segEstimated = p.estimated;
+        b.writeln(segEstimated ? '<trkseg name="推算">' : '<trkseg>');
+        segOpen = true;
+      }
       // v0.1.7：无海拔点不写 <ele>，不把占位 0 导出成海平面数据。
       final ele = p.altValid ? '<ele>${p.alt.toStringAsFixed(1)}</ele>' : '';
       b.writeln('<trkpt lat="${p.lat}" lon="${p.lon}">$ele'
           '<time>${DateTime.fromMillisecondsSinceEpoch(p.timeMs).toUtc().toIso8601String()}</time></trkpt>');
     }
-    b.writeln('</trkseg></trk></gpx>');
+    if (segOpen) {
+      b.write('</trkseg>');
+    } else {
+      // 无点：与改前一致，仍输出一个空 <trkseg>。
+      b.write('<trkseg>\n</trkseg>');
+    }
+    b.writeln('</trk></gpx>');
     return b.toString();
   }
 

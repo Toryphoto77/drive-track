@@ -9,7 +9,7 @@
 ///   （组内各行程最佳圈的最小值；无计入圈时写“暂无圈速”，不编数）。
 /// - 赛道库入口、赛道分析入口（最新赛道行程分析；点组内
 ///   某条行程进该行程的赛道分析页，即赛道结束页）。
-/// - 赛道模式说明（含 OBD 未连接提示与扇区诚实口径）。
+/// - 赛道模式说明（含 OBD 通道说明与扇区诚实口径）。
 ///
 /// 数据口径：
 /// - 演示行程不进本页：调用方传入的 metas 应已排除 demo，
@@ -191,7 +191,7 @@ class TrackHomePage extends StatelessWidget {
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   Text(
-                    '· 未连接 OBD，暂无此通道：油门 / 刹车 / 转速均无数据，不反推曲线。',
+                    '· OBD 通道：连接 ELM327 后记录实测车速 / 转速 / 油门 / 水温，赛道分析页可见；未连接时暂无此通道，不反推曲线。',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   Text(

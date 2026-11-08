@@ -249,8 +249,8 @@ class _MyPageState extends State<MyPage> {
     final file = path != null && path.isNotEmpty ? File(path) : null;
     final hasFile = file != null && file.existsSync();
     return Container(
-      width: 60,
-      height: 60,
+      width: 64,
+      height: 64,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(color: widget.accentColor, width: 2),
@@ -266,6 +266,10 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
+  /// 个人主页式资料卡（v1.5.2）：头行只放头像 + 名字/ID（头像 64，
+  /// 名字块只有两行，Row 居中后头像中心与名字块中心齐平）；简介与
+  /// 邮箱移到头行下方通栏，不再挤进名字列把头像顶偏。分享钮改小、
+  /// 放旁边：36 圆角图标钮，与“编辑”并排在头行右侧。
   Widget _profileCard() {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -277,19 +281,13 @@ class _MyPageState extends State<MyPage> {
               Text(widget.username, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
               Text('ID · ${widget.userId}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              const SizedBox(height: 4),
-              Text(
-                widget.bio.isEmpty ? '暂无简介，点“编辑”添加' : widget.bio,
-                style: TextStyle(color: widget.bio.isEmpty ? Colors.white38 : Colors.white70, fontSize: 13),
-              ),
-              if (widget.email.isNotEmpty)
-                Text(
-                  widget.email,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
             ]),
           ),
           const SizedBox(width: 8),
+          if (widget.onShareInvite != null) ...[
+            _iconButton(icon: Icons.share, onTap: widget.onShareInvite, tooltip: '分享'),
+            const SizedBox(width: 8),
+          ],
           // v1.5.1：点“编辑”推全页编辑页，不再在卡片内展开编辑器。
           _pillButton(
             label: '编辑',
@@ -297,6 +295,18 @@ class _MyPageState extends State<MyPage> {
             onTap: widget.onEditProfile,
           ),
         ]),
+        const SizedBox(height: 12),
+        Text(
+          widget.bio.isEmpty ? '暂无简介，点“编辑”添加' : widget.bio,
+          style: TextStyle(color: widget.bio.isEmpty ? Colors.white38 : Colors.white70, fontSize: 13),
+        ),
+        if (widget.email.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            widget.email,
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        ],
         // v1.5.1：关注/粉丝/获赞并进资料卡（原独立社交卡已删）；
         // 数字为调用方传入的真实本机数字，为 0 时显示“暂无”，不编数。
         const SizedBox(height: 14),
@@ -310,15 +320,33 @@ class _MyPageState extends State<MyPage> {
           _socialCell('粉丝', widget.followers),
           _socialCell('获赞', widget.likes),
         ]),
-        if (widget.onShareInvite != null) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: _pillButton(label: '通过分享邀请', selected: false, onTap: widget.onShareInvite),
-          ),
-        ],
       ]),
     );
+  }
+
+  /// 小圆形图标钮（分享等）：36 高、黑底 + 细亮边框，与药丸按钮同风格。
+  Widget _iconButton(
+      {required IconData icon, required VoidCallback? onTap, String? tooltip}) {
+    final btn = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: CardStyle.borderColor),
+          ),
+          child: Icon(icon, size: 18, color: Colors.white),
+        ),
+      ),
+    );
+    if (tooltip == null) return btn;
+    return Tooltip(message: tooltip, child: btn);
   }
 
   /// 资料卡内的社交数字格：数字在上、标签在下，居中。

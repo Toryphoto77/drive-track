@@ -54,6 +54,10 @@ class TrackPoint {
   /// （如 NETWORK 定位无海拔、旧版 BleDIY 外接点恒写 0），alt 字段
   /// 此时存的 0 只是占位，绝不是海平面 0 米，画剖面/算爬升时必须排除。
   final bool altValid;
+  /// 推算点（隧道补段 / 实时推算）：JSON 键 'est'，缺省 false。
+  /// 老行程无此键仍能加载。推算点绝不冒充实测：统计、评分、
+  /// GPX 导出与爬升一律排除，见 Trip 的 measured* getter。
+  final bool estimated;
   const TrackPoint({
     required this.timeMs,
     required this.lat,
@@ -81,6 +85,7 @@ class TrackPoint {
     this.satCount,
     this.locSource = '',
     this.altValid = true,
+    this.estimated = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -91,6 +96,7 @@ class TrackPoint {
         'cal': calibrated, 'pw': powerW, 'pwEst': powerEstimated,
         'cad': cadenceRpm, 'hr': heartRate, 'sen': sensorStatus,
         'sat': satCount, 'locSrc': locSource, 'altOk': altValid,
+        'est': estimated,
       };
 
   static TrackPoint fromJson(Map<String, dynamic> j) => TrackPoint(
@@ -127,6 +133,7 @@ class TrackPoint {
                 ((j['prov'] as String?) == 'network' ||
                     (j['prov'] as String?) == 'external' ||
                     (j['locSrc'] as String?) == 'external')),
+        estimated: (j['est'] as bool?) ?? false,
       );
 
   double get combinedG => math.sqrt(longG * longG + latG * latG);
@@ -214,6 +221,10 @@ class Trip {
   // v0.1.7 沿途照片打点：默认空列表；旧行程 JSON 缺 'photos' 键时
   // fromJson 读空，不破坏旧数据；照片只存本机路径，见 photo_points.dart。
   final List<PhotoPoint> photoPoints;
+  /// OBD 实测采样（JSON 键 'obd'）：每秒一条
+  /// {t, vKmh, rpm, thr, cool}，只存实测、绝不推算。
+  /// 老行程缺键读空列表。复盘页 OBD 通道读它。
+  final List<Map<String, dynamic>> obdSamples;
   // v1.2.0：绑定车辆 id（JSON 键 'vehicleId'）；缺键 = null =
   // 回退全局油耗/油价。排量/车重绝不参与油耗计算（见 vehicle_profile）。
   final String? vehicleId;
@@ -251,6 +262,7 @@ class Trip {
     this.isTrackMode = false,
     this.lapsJson = const [],
     this.photoPoints = const [],
+    this.obdSamples = const [],
     this.vehicleId,
     this.startFinishLat,
     this.startFinishLon,
@@ -268,14 +280,47 @@ class Trip {
     return d;
   }
 
-  double get maxSpeed => points.isEmpty ? 0 : points.map((p) => p.speed).reduce(math.max);
-  double get maxG => points.isEmpty ? 0 : points.map((p) => p.combinedG).reduce(math.max);
+  double get maxSpeed => measuredPoints.isEmpty
+      ? 0
+      : measuredPoints.map((p) => p.speed).reduce(math.max);
+  double get maxG => measuredPoints.isEmpty
+      ? 0
+      : measuredPoints.map((p) => p.combinedG).reduce(math.max);
   double get maxLean {
     var m = 0.0;
-    for (final p in points) {
+    for (final p in measuredPoints) {
       m = math.max(m, p.roll.abs());
     }
     return m;
+  }
+
+  /// 实测点（estimated=false）。maxSpeed / maxG / maxLean /
+  /// climbM 与驾驶评分一律只看实测，推算点绝不参与。
+  List<TrackPoint> get measuredPoints =>
+      points.where((p) => !p.estimated).toList();
+
+  /// 实测里程：只计两端都是实测点的段。
+  double get measuredDistanceM {
+    var d = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      if (!points[i].estimated && !points[i - 1].estimated) {
+        d += haversineM(points[i - 1].lat, points[i - 1].lon, points[i].lat,
+            points[i].lon);
+      }
+    }
+    return d;
+  }
+
+  /// 推算里程：任一端是推算点的段。详情页与实测里程分开列。
+  double get estimatedDistanceM {
+    var d = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      if (points[i].estimated || points[i - 1].estimated) {
+        d += haversineM(points[i - 1].lat, points[i - 1].lon, points[i].lat,
+            points[i].lon);
+      }
+    }
+    return d;
   }
 
   /// 累计爬升（去噪口径，v0.1.7 起取代原始逐点正差求和）：
@@ -283,7 +328,10 @@ class Trip {
   /// （见 thresholdClimbM）。旧口径会把 GPS 垂直抖动与“手机 GPS
   /// 有海拔 → 旧外接点占位 0 → 手机 GPS”的人为跳变全算成爬升。
   double get climbM {
-    final valid = points.where((p) => p.altValid).map((p) => p.alt).toList();
+    final valid = points
+        .where((p) => p.altValid && !p.estimated)
+        .map((p) => p.alt)
+        .toList();
     return thresholdClimbM(smoothAltitudes(valid));
   }
 
@@ -294,6 +342,7 @@ class Trip {
         'videos': videoPaths, 'pub': isPublic, 'likes': likes, 'liked': liked,
         'trackId': trackId, 'trackName': trackName, 'trackMode': isTrackMode,
         'laps': lapsJson, 'photos': photoPoints.map((p) => p.toJson()).toList(),
+        'obd': obdSamples,
         'vehicleId': vehicleId,
         'sfLat': startFinishLat, 'sfLon': startFinishLon,
         'corrPts': correctedPoints.map((p) => [p.$1, p.$2]).toList(),
@@ -319,6 +368,7 @@ class Trip {
         isTrackMode: (j['trackMode'] as bool?) ?? false,
         lapsJson: ((j['laps'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
         photoPoints: ((j['photos'] as List?) ?? []).map((e) => PhotoPoint.fromJson(e as Map<String, dynamic>)).toList(),
+        obdSamples: ((j['obd'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
         vehicleId: j['vehicleId'] as String?,
         startFinishLat: (j['sfLat'] as num?)?.toDouble(),
         startFinishLon: (j['sfLon'] as num?)?.toDouble(),

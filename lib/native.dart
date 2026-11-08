@@ -14,6 +14,7 @@ class Native {
       EventChannel('drivetrack/btGpsDevices');
   static const EventChannel _gnss = EventChannel('drivetrack/gnss');
   static const EventChannel _tts = EventChannel('drivetrack/tts');
+  static const EventChannel _obd = EventChannel('drivetrack/obd');
 
   static Stream<Map<String, dynamic>> get locationStream => _loc
       .receiveBroadcastStream()
@@ -48,6 +49,36 @@ class Native {
   static Stream<Map<String, dynamic>> get ttsStream => _tts
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
+
+  /// OBD（ELM327）事件流：原生 ObdManager 发出
+  /// {type: 'obdConnected'|'obdLine'|'obdDisconnected',
+  ///  address, line?, reason?}，obd_service.dart 的
+  /// MethodChannelObdPlatform 分发到响应行 / 连通 / 断开三路。
+  static Stream<Map<String, dynamic>> get obdStream => _obd
+      .receiveBroadcastStream()
+      .map((e) => Map<String, dynamic>.from(e as Map));
+
+  /// OBD：已配对经典蓝牙设备（ELM327 须先在系统蓝牙里配对），
+  /// 连接 / 断开 / 发命令。连接结果与响应行走 obdStream，
+  /// 不阻塞 UI 线程；sendObdCommand 返回 false = 未连接。
+  static Future<List<Map<String, dynamic>>> listBondedObdDevices() async {
+    final r = await _m.invokeMethod('listBondedObdDevices');
+    return (r as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  static Future<void> connectObd(String address) =>
+      _m.invokeMethod('connectObd', {'address': address});
+  static Future<void> disconnectObd() => _m.invokeMethod('disconnectObd');
+  static Future<bool> sendObdCommand(String command) async {
+    try {
+      final r = await _m.invokeMethod('sendObdCommand', {'command': command});
+      return (Map<String, dynamic>.from(r as Map))['ok'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// 分步授权状态快照。
   /// 返回键：location（前台定位，FINE 或 COARSE 任一已授予）、foreground（同

@@ -330,7 +330,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                               satelliteTileUrl(zoom, x, y),
                               key: ValueKey('recmap-sat-$zoom-$x-$y'),
                               headers: const {
-                                'User-Agent': 'DriveTrack/1.5.1',
+                                'User-Agent': 'DriveTrack/1.5.2',
                               },
                               fit: BoxFit.fill,
                               gaplessPlayback: true,

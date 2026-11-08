@@ -8,7 +8,7 @@ import 'package:drive_track/my_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Widget _page({List<MyTripItem> trips = const []}) {
+Widget _page({List<MyTripItem> trips = const [], VoidCallback? onShareInvite}) {
   return MaterialApp(
     home: Scaffold(
       body: MyPage(
@@ -23,6 +23,7 @@ Widget _page({List<MyTripItem> trips = const []}) {
         posts: const [],
         favorites: const [],
         achievements: const [],
+        onShareInvite: onShareInvite,
       ),
     ),
   );
@@ -54,6 +55,19 @@ void main() {
       await tester.tap(find.text('动态'));
       await tester.pump();
       expect(find.textContaining('暂无动态'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('v1.5.2 资料卡：分享改小图标钮放旁边，通栏分享按钮已删', (tester) async {
+      await tester.pumpWidget(_page(onShareInvite: () {}));
+      await tester.pump();
+      // 分享是头行右侧的小图标钮，不再是通栏大按钮。
+      expect(find.byIcon(Icons.share), findsOneWidget);
+      expect(find.text('通过分享邀请'), findsNothing);
+      expect(find.text('编辑'), findsOneWidget);
+      // 头行：头像 + 名字/ID；简介移到头行下方通栏。
+      expect(find.text('柴西'), findsOneWidget);
+      expect(find.text('hello'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

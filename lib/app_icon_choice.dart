@@ -5,8 +5,8 @@
 /// 被删键（'red'/'rb17'/'valkyrie'/'blue'/'gray'）与任何非法键加载时
 /// 一律由 normalize 折到 'steering'，运行时不会再出现被删图标。
 ///
-/// 桌面启动图标本身仍是红赛车（AndroidManifest 的 application 图标与
-/// LauncherRed / LauncherBlue 垫片都用 @mipmap/ic_launcher_red），
+/// 桌面启动图标已是方向盘（AndroidManifest 的 application 图标与
+/// LauncherRed / LauncherBlue 垫片都用 @mipmap/ic_launcher_steering），
 /// 因此 assets/app_icon_red.png 等三个 PNG 文件留在磁盘、不删除，
 /// 只从选项与 pubspec assets 里移除；activity-alias 定义一个不删，
 /// 组件启用状态跨升级保留，删 alias 会导致 App 无法启动（v1.2.2 教训）。

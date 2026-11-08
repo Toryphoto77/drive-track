@@ -86,7 +86,9 @@ class Recording3dPoint {
 class RoadWay {
   final List<(double, double)> points; // (lat, lon)
   final String highway;
-  const RoadWay(this.points, {this.highway = ''});
+  /// OSM tags.tunnel == 'yes'。隧道补段优先用 tunnel 的 way。
+  final bool tunnel;
+  const RoadWay(this.points, {this.highway = '', this.tunnel = false});
 }
 
 /// v1.2.0：按 highway 分级的道路绘制样式（纯函数，可单测）。
@@ -213,7 +215,8 @@ List<RoadWay> parseOverpassWays(Map<String, dynamic> data) {
     final highway = tags is Map && tags['highway'] is String
         ? tags['highway'] as String
         : '';
-    ways.add(RoadWay(pts, highway: highway));
+    final tunnel = tags is Map && tags['tunnel'] == 'yes';
+    ways.add(RoadWay(pts, highway: highway, tunnel: tunnel));
   }
   // 不在此处截断：旧 200 条硬截断按回包顺序取，在稠密城区会随机
   // 丢掉车脚下的路（“乱编”感的来源之一）；取舍统一交给
@@ -227,6 +230,7 @@ List<RoadWay> parseOverpassWays(Map<String, dynamic> data) {
 List<Map<String, Object>> roadWaysToCacheJson(List<RoadWay> ways) => ways
     .map((w) => <String, Object>{
           'highway': w.highway,
+          'tunnel': w.tunnel,
           'points': w.points.map((p) => [p.$1, p.$2]).toList(),
         })
     .toList();
@@ -247,7 +251,8 @@ List<RoadWay> roadWaysFromCacheJson(dynamic decoded) {
       }
       if (pts.length < 2) continue;
       final highway = w['highway'] is String ? w['highway'] as String : '';
-      ways.add(RoadWay(pts, highway: highway));
+      final tunnel = w['tunnel'] == true;
+      ways.add(RoadWay(pts, highway: highway, tunnel: tunnel));
     } else if (w is List) {
       // 旧格式：纯点列，无 highway。
       final pts = <(double, double)>[];
