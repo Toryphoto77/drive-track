@@ -9,8 +9,8 @@ import 'blediy_gps.dart';
 /// 经典蓝牙 SPP 服务 UUID（串口协议，全部 SPP 设备共用）。
 const String sppServiceUuid = '00001101-0000-1000-8000-00805F1A34B';
 
-/// RaceBox 公开文档里的标准 NMEA UART 服务 / 特征（固件 3.3+ 才提供）。
-/// 注意：这是 RaceBox 文档公开值，不是其它厂商的实测值；其它厂商
+/// 标准 NMEA UART 服务 / 特征（固件 3.3+ 才提供，见公开文档）。
+/// 注意：这是公开文档值，不是其它厂商的实测值；其它厂商
 /// 绝不能套用。主 UART（U-Blox UBX 二进制）是私有协议，不在此列。
 const String raceboxNmeaServiceUuid =
     '00001101-0000-1000-8000-00805F9B34FB';
@@ -82,23 +82,23 @@ class StubProtocolAdapter extends BtGpsProtocolAdapter {
 }
 
 /// 适配器注册表（按 id 查）。通用 NMEA 真实可用；其余两项是 stub：
-/// - racebox_ubx：RaceBox 主 UART 走 U-Blox UBX 二进制，私有协议，
-///   本 App 不实现；RaceBox 请走公开的 NMEA UART 服务（固件 3.3+）。
-/// - dragy_proprietary：Dragy 私有数据流未公开，本 App 不解析；
+/// - racebox_ubx：主 UART 走 U-Blox UBX 二进制，私有协议，
+///   本 App 不实现；请走公开的 NMEA UART 服务（固件 3.3+）。
+/// - dragy_proprietary：厂商私有数据流未公开，本 App 不解析；
 ///   兜底是 SPP 连接尝试 + BLE NUS 订阅尝试，若设备输出标准 NMEA
 ///   即可工作，否则暂不支持。
 const Map<String, BtGpsProtocolAdapter> btGpsAdapters = {
   'generic_nmea': GenericNmeaAdapter(),
   'racebox_ubx': StubProtocolAdapter(
     id: 'racebox_ubx',
-    label: 'RaceBox UBX（二进制）',
+    label: 'UBX（二进制）',
     note: 'U-Blox UBX 二进制私有协议暂不实现；请走公开 NMEA UART 服务（固件 3.3+），'
         '且不要同时订阅两种协议（官方文档警告会高丢包）。',
   ),
   'dragy_proprietary': StubProtocolAdapter(
     id: 'dragy_proprietary',
-    label: 'Dragy 私有数据流',
-    note: 'Dragy 私有数据流协议未公开，本 App 不解析；通用兜底为 SPP 连接尝试 + '
+    label: '厂商私有数据流',
+    note: '厂商私有数据流协议未公开，本 App 不解析；通用兜底为 SPP 连接尝试 + '
         'BLE NUS 订阅尝试，若设备输出标准 NMEA 即可工作。',
   ),
 };

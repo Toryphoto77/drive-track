@@ -210,7 +210,7 @@ class _SatelliteMapBody extends StatelessWidget {
                       satelliteTileUrl(zoom, x, y),
                       key: ValueKey('track-preview-sat-$zoom-$x-$y'),
                       headers: const {
-                        'User-Agent': 'DriveTrack/1.5.2',
+                        'User-Agent': 'DriveTrack/1.5.3',
                       },
                       fit: BoxFit.fill,
                       gaplessPlayback: true,

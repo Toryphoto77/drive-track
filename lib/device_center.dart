@@ -14,7 +14,7 @@ import 'native.dart';
 import 'obd_service.dart';
 import 'satellite_settings_page.dart';
 
-/// 外接设备中心：运动相机 + 其他传感器 + RaceChrono BleDIY GPS。
+/// 外接设备中心：运动相机 + 其他传感器 + BleDIY GPS。
 ///
 /// 本页是独立 widget，构造函数只用回调参数，绝不引用 main.dart 的类，
 /// 总协调集成时只需在导航里 push 本页即可。
@@ -36,7 +36,7 @@ const List<String> customSensorTypes = [
   '功率计',
   '踏频/速度传感器',
   '心率带',
-  '外部 GPS（RaceChrono BleDIY）',
+  '外部 GPS（BleDIY）',
   '其他',
 ];
 
@@ -128,8 +128,8 @@ class DeviceCenterStore {
   }
 }
 
-/// 外接 GPS 模块的设备类别（v1.0.2，第 6 项；后扩至 RaceChrono
-/// 支持清单，每设备只出现一次，绝不平行建第二张表）。
+/// 外接 GPS 模块的设备类别（v1.0.2，第 6 项；后扩至兼容清单，
+/// 每设备只出现一次，绝不平行建第二张表）。
 ///
 /// 支持程度必须如实标注，绝不冒充，分三档：
 /// - 已实现通用 NMEA 解析（blediy_gps.dart 的 GGA / RMC / VTG / GSA），
@@ -205,11 +205,10 @@ class ExternalGpsProfile {
 
 /// 四类外接 GPS 档案。调研结论（2026-11-03 公开搜索，见回执）：
 /// - BleDIY：已有 blediy_gps.dart 解析；NUS UUID 是 Nordic 通用
-///   默认值，非 RaceChrono 官方专属值（blediy_gps.dart 已注明）。
+///   默认值，非 BleDIY 专属值（blediy_gps.dart 已注明）。
 /// - Dragy（DRG70 / DRG70-C / Pro DRG71）：公开资料只确认蓝牙
 ///   连接、10Hz（Pro 25Hz）与 u-blox 芯片，未找到官方 BLE 服务 /
-///   特征 UUID 与数据格式文档；RaceChrono 支持 Dragy 是其自有
-///   集成，不是公开协议。本 App 不解析 Dragy 私有数据流。
+///   特征 UUID 与数据格式文档；本 App 不解析该设备私有数据流。
 /// - DEXIAN D1：Dexian Timer 官方 App（1.3.2）拆包实锤（2026-11-06）：
 ///   BLE 服务 UUID 为 00000003-0000-1000-8000-00805f9b34fb，官方 App
 ///   扫描即按此服务过滤；设备广播名匹配 ^dexian\s+(\w+)-(\w+)$（如
@@ -217,14 +216,14 @@ class ExternalGpsProfile {
 ///   （非 NMEA），官方 App 里无任何 NMEA 句标识，位置数据是二进制包经
 ///   ByteData 解析，订阅分 GPS 数据 / GPS 时间 / 电池三路；数据特征候选
 ///   为 00000004-…与 00001ff8-…（哪路对应哪个未确认），包格式待实测抓包，
-///   本档案不硬编特征 UUID 与解析逻辑。RaceChrono BLE DIY 服务 UUID
+///   本档案不硬编特征 UUID 与解析逻辑。BleDIY 服务 UUID
 ///   （00001ff8-…）是 DIY 设备的公开规范，不是 D1 的实测值，绝不能硬说成
 ///   D1 的值。
 /// - 通用 NMEA BLE UART：默认 Nordic UART，可改填设备实际广播值。
 const List<ExternalGpsProfile> externalGpsProfiles = [
   ExternalGpsProfile(
     kind: ExternalGpsKind.blediy,
-    name: 'BleDIY（RaceChrono DIY 兼容）',
+    name: 'BleDIY',
     serviceUuid: nordicUartServiceUuid,
     txUuid: nordicUartTxUuid,
     nameHints: ['blediy'],
@@ -289,7 +288,7 @@ const List<ExternalGpsProfile> externalGpsProfiles = [
     name: 'Dragy Pro / DRG70 / DRG70-C / Lite',
     nameHints: ['dragy', 'drg'],
     adapterId: 'dragy_proprietary',
-    note: '本 App 不解析 Dragy 私有数据流；设备输出标准 NMEA 即可工作，否则暂不支持。',
+    note: '本 App 不解析厂商私有数据流；设备输出标准 NMEA 即可工作，否则暂不支持。',
   ),
   ExternalGpsProfile(
     kind: ExternalGpsKind.genericBt,
@@ -318,7 +317,7 @@ bool _profileNameMatches(ExternalGpsProfile p, String name) {
 
 /// 单入口“可适配设备”过滤（纯函数，可单测）：服务 UUID 证据优先——
 /// 档案里有已确认服务 UUID 的设备（如 DEXIAN D1 的 00000003-…、
-/// RaceBox NMEA 的 00001101），广播到即进主列表；其次是档案名录的
+/// NMEA UART 的 00001101），广播到即进主列表；其次是档案名录的
 /// 名称证据（官方广播名模式 / 提示词）；最后是通用 NUS / SPP 服务
 /// 广播。名称与服务证据都没有的设备（如耳机）不进主列表，只在高级区
 /// 全部结果里出现；过滤不丢数据。
@@ -341,8 +340,8 @@ bool gpsDeviceIsAdaptable(Map<String, dynamic> dev) {
 
 /// 单入口自动连接的档案推导（纯函数，可单测）：D1 服务 UUID 证据优先
 ///（00000003-…只可能是 DEXIAN D1）；其次名称证据（官方广播名模式 /
-/// 提示词）；RaceBox NMEA 服务广播排在名称之后——00001101 也是通用
-/// SPP 服务 UUID，先按名称会误把 SPP 设备认成 RaceBox；其余一律走
+/// 提示词）；NMEA UART 服务广播排在名称之后——00001101 也是通用
+/// SPP 服务 UUID，先按名称会误把 SPP 设备认成 NMEA 设备；其余一律走
 /// 通用 NMEA（NUS 默认值），由连接逻辑按广播事实订阅。
 ExternalGpsKind gpsProfileKindForDevice(Map<String, dynamic> dev) {
   final name = (dev['name'] ?? '').toString();
@@ -835,7 +834,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   }
 
   /// 单入口自动连接：通道自动选（BLE 优先；只有 SPP 通道时走 SPP），
-  /// 档案由设备推导（名称匹配优先，否则 RaceBox 服务、否则通用 NMEA），
+  /// 档案由设备推导（名称匹配优先，否则 NMEA UART 服务、否则通用 NMEA），
   /// 不再要求用户先选档案卡。已连接的设备点按不重复连接。
   Future<void> _connectAdaptable(Map<String, dynamic> dev) async {
     final addr = (dev['address'] ?? '').toString();
@@ -1074,7 +1073,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       return '广播含 Nordic UART 服务，可尝试订阅 NMEA。';
     }
     if (uuids.contains(raceboxNmeaServiceUuid.toLowerCase())) {
-      return '广播含 RaceBox NMEA UART 服务，可尝试订阅。';
+      return '广播含 NMEA UART 服务，可尝试订阅。';
     }
     if (uuids.any((u) => u.contains('00001101'))) {
       return '广播含 00001101 服务（SPP / NMEA UART 可能值）。';

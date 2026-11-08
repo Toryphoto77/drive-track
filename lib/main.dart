@@ -25,6 +25,7 @@ import 'widgets.dart';
 import 'countdown_page.dart';
 import 'big_action_buttons.dart';
 import 'device_center.dart';
+import 'camera_connect_page.dart';
 import 'blediy_gps.dart';
 import 'track_catalog.dart';
 import 'track_encyclopedia.dart';
@@ -54,6 +55,7 @@ import 'trip_detail_modules.dart';
 import 'photo_points.dart';
 import 'score_module.dart';
 import 'lean_chart.dart';
+import 'lean_gauge.dart';
 import 'accel_module.dart';
 import 'amap_service.dart';
 import 'share_card_preview.dart';
@@ -663,6 +665,16 @@ class _HomePageState extends State<HomePage>
         return null;
       }
     };
+    // 街道贴路路网：当前位置周围的全部 ways（贴路按行进方向
+    // 挑同向路段，取数失败返回 null，贴路自动跳过）。
+    rec.roadWaysFetcher = (lat, lon) async {
+      try {
+        final result = await fetchRoadWaysAround(lat, lon);
+        return result.ways.map((w) => w.points).toList();
+      } catch (_) {
+        return null;
+      }
+    };
     _init();
   }
 
@@ -755,7 +767,7 @@ class _HomePageState extends State<HomePage>
     }, onError: (_) {});
     _bleDataSub = Native.bleDataStream.listen((e) {
       // v0.1.3 BleDIY 外接 GPS：通用通知按特征 UUID 分发，NMEA 特征
-      //（NUS TX …0003、RaceBox NMEA TX …1103）的字节喂给 NMEA 解析器；
+      //（NUS TX …0003、NMEA UART TX …1103）的字节喂给 NMEA 解析器；
       // 有效定位注入 Recorder（provider='external'），超时/断线立即
       // 回落手机 GPS（Recorder.externalGpsActive=false）。
       // SPP 文本（sppNmea）走同一解析器与同一接管/回落规则。
@@ -979,7 +991,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.5.2',
+          versionName: '1.5.3',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1941,6 +1953,7 @@ class _HomePageState extends State<HomePage>
       enabled: !rec.isRecording,
       onSurfaceChanged: (s) => setState(() {
         trackMode = s == DriveSurface.track;
+        rec.roadSnapEnabled = !trackMode;
         if (!trackMode) {
           selectedTrack = null;
           selectedPackage = null;
@@ -2006,8 +2019,8 @@ class _HomePageState extends State<HomePage>
           retryEntry,
           _buildModeSwitcher(),
           SizedBox(height: 220, child: modePageView),
+          _buildDevicePills(),
           _buildSurfaceSwitch(),
-          _buildGpsStatusPill(),
           _homeBottomButtons(),
         ]),
       );
@@ -2017,13 +2030,13 @@ class _HomePageState extends State<HomePage>
       retryEntry,
       _buildModeSwitcher(),
       Expanded(child: modePageView),
+      _buildDevicePills(),
       _buildSurfaceSwitch(),
-      _buildGpsStatusPill(),
       _homeBottomButtons(),
     ]);
   }
 
-  /// 首页外接 GPS 状态小药丸（v1.5.2）：放在开始记录大方块正上方，
+  /// 首页外接 GPS 状态小药丸（v1.5.2，v1.5.3 起并入设备药丸行）：
   /// 硬件接入状态可视化。只读全局 externalGpsStatus（设备中心写入，
   /// 唯一来源），本身不猜状态、不改连接逻辑。
   /// - 已连接：绿点 + 卫星图标 + 设备名（无名时只显示“外接 GPS”），
@@ -2031,79 +2044,173 @@ class _HomePageState extends State<HomePage>
   /// - 未连接：灰点 + 卫星图标 + “未连接外接 GPS · 去连接”，
   ///   点按进设备中心扫描连接。
   Widget _buildGpsStatusPill() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: ValueListenableBuilder<ExternalGpsStatus>(
-        valueListenable: externalGpsStatus,
-        builder: (context, status, _) {
-          final connected = status.connected;
-          final name = status.deviceName.trim();
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _openDeviceCenter,
-              borderRadius: BorderRadius.circular(999),
-              child: Container(
-                height: 34,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: CardStyle.cardColor,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: connected
-                        ? Colors.green.withValues(alpha: 0.5)
-                        : CardStyle.borderColor,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: connected ? Colors.green : Colors.white38,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.satellite_alt,
-                      size: 15,
-                      color: connected ? Colors.green : Colors.white54,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        connected
-                            ? (name.isEmpty
-                                ? '外接 GPS · 已连接'
-                                : '外接 GPS · $name')
-                            : '未连接外接 GPS',
-                        style: TextStyle(
-                          color: connected ? Colors.white : Colors.white70,
-                          fontSize: 12,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (connected && status.channel == 'ble') ...[
-                      const SizedBox(width: 6),
-                      const Icon(Icons.bluetooth,
-                          size: 13, color: Colors.white54),
-                    ],
-                    if (!connected) ...[
-                      const SizedBox(width: 6),
-                      const Text('去连接 ›',
-                          style:
-                              TextStyle(color: Colors.white54, fontSize: 12)),
-                    ],
-                  ],
+    return ValueListenableBuilder<ExternalGpsStatus>(
+      valueListenable: externalGpsStatus,
+      builder: (context, status, _) {
+        final connected = status.connected;
+        final name = status.deviceName.trim();
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _openDeviceCenter,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: CardStyle.cardColor,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: connected
+                      ? Colors.green.withValues(alpha: 0.5)
+                      : CardStyle.borderColor,
                 ),
               ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: connected ? Colors.green : Colors.white38,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.satellite_alt,
+                    size: 15,
+                    color: connected ? Colors.green : Colors.white54,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      connected
+                          ? (name.isEmpty
+                              ? '外接 GPS · 已连接'
+                              : '外接 GPS · $name')
+                          : '未连接外接 GPS',
+                      style: TextStyle(
+                        color: connected ? Colors.white : Colors.white70,
+                        fontSize: 12,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (connected && status.channel == 'ble') ...[
+                    const SizedBox(width: 6),
+                    const Icon(Icons.bluetooth,
+                        size: 13, color: Colors.white54),
+                  ],
+                  if (!connected) ...[
+                    const SizedBox(width: 6),
+                    const Text('去连接 ›',
+                        style:
+                            TextStyle(color: Colors.white54, fontSize: 12)),
+                  ],
+                ],
+              ),
             ),
-          );
-        },
+          ),
+        );
+      },
+    );
+  }
+
+  /// 首页运动相机状态小药丸（v1.5.3 攒版）：与 GPS 药丸同一样式
+  /// （34 高圆角药丸、CardStyle 底色）。只读全局 cameraLinkStatus
+  /// （相机页唯一写入），本身不猜状态、不改连接流程。
+  /// - 已连接：绿点 + 相机图标 + “运动相机 · 已连接”，点按进设备中心；
+  /// - 连接中：琥珀点 + “运动相机 · 连接中…”；
+  /// - 暂不可用：灰点 + “运动相机 · 暂不可用”；
+  /// - 未连接：灰点 + “未连接运动相机 · 去连接”，点按进设备中心。
+  Widget _buildCameraStatusPill() {
+    return ValueListenableBuilder<DeviceLinkStatus>(
+      valueListenable: cameraLinkStatus,
+      builder: (context, status, _) {
+        final connected = status == DeviceLinkStatus.connected;
+        final connecting = status == DeviceLinkStatus.connecting;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _openDeviceCenter,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: CardStyle.cardColor,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: connected
+                      ? Colors.green.withValues(alpha: 0.5)
+                      : CardStyle.borderColor,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: connected
+                          ? Colors.green
+                          : connecting
+                              ? Colors.amber
+                              : Colors.white38,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.videocam,
+                    size: 15,
+                    color: connected ? Colors.green : Colors.white54,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      switch (status) {
+                        DeviceLinkStatus.connected => '运动相机 · 已连接',
+                        DeviceLinkStatus.connecting => '运动相机 · 连接中…',
+                        DeviceLinkStatus.unavailable => '运动相机 · 暂不可用',
+                        DeviceLinkStatus.disconnected => '未连接运动相机',
+                      },
+                      style: TextStyle(
+                        color: connected ? Colors.white : Colors.white70,
+                        fontSize: 12,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (!connected) ...[
+                    const SizedBox(width: 6),
+                    const Text('去连接 ›',
+                        style:
+                            TextStyle(color: Colors.white54, fontSize: 12)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 首页设备状态药丸行（v1.5.3 攒版）：外接 GPS 药丸 + 运动相机药丸
+  /// 并排，放在街道/赛道模式选择上方。两颗同一样式，各自只读全局状态。
+  Widget _buildDevicePills() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          Flexible(child: _buildGpsStatusPill()),
+          const SizedBox(width: 8),
+          Flexible(child: _buildCameraStatusPill()),
+        ],
       ),
     );
   }
@@ -2786,6 +2893,7 @@ class _HomePageState extends State<HomePage>
               onSelected: (pkg) {
                 setState(() {
                   trackMode = true;
+                  rec.roadSnapEnabled = false;
                   selectedTrack = trackInfoForPackage(pkg);
                   selectedPackage = pkg;
                 });
@@ -2808,6 +2916,7 @@ class _HomePageState extends State<HomePage>
                   if (picked != null && ctx.mounted) {
                     setState(() {
                       trackMode = true;
+                      rec.roadSnapEnabled = false;
                       selectedTrack = trackInfoForPackage(pkg);
                       selectedPackage = pkg;
                     });
@@ -2823,6 +2932,7 @@ class _HomePageState extends State<HomePage>
                   if (picked != null && ctx.mounted) {
                     setState(() {
                       trackMode = true;
+                      rec.roadSnapEnabled = false;
                       selectedTrack = trackInfoForPackage(picked);
                       selectedPackage = picked;
                     });
@@ -3468,6 +3578,13 @@ class _HomePageState extends State<HomePage>
               ),
             ),
             ]),
+            // v1.5.3 压弯倾角实时读数（融合估计器）：与 G 值显示并排，
+            // 街道面板内、G 圆下方；不改现有 G 值与姿态显示。
+            LeanAngleReadout(
+              leanDeg: rec.leanDeg,
+              quality: rec.leanQuality,
+              calibrated: rec.calibrated,
+            ),
             const SizedBox(height: 10),
           ],
           // v1.2.0 标记事件：醒目全宽按钮，位于暂停/长按结束上方；

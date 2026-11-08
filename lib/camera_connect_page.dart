@@ -12,7 +12,7 @@ import 'native.dart';
 
 /// 运动相机统一扫描页（v1.2.12）：一个入口、一张大卡片、扫描动画。
 ///
-/// 照 RaceChrono 连接 GPS 页的样子：点“扫描相机”一次扫完，
+/// 像外接 GPS 连接页一样：点“扫描相机”一次扫完，
 /// 搜到的相机按卡片列出，品牌自动识别、不用先选品牌，点行即连。
 ///
 /// 品牌识别（纯函数，可单测）：
@@ -42,6 +42,20 @@ import 'native.dart';
 /// 本页是独立 widget，不引用 main.dart 的类；设备中心只 push 本页。
 
 enum CameraBrand { gopro, insta360, dji, unknown }
+
+/// 运动相机连接状态的唯一共享源（首页药丸只读）。
+///
+/// 只有一个写入方：本页在 _goproStatus 变化时同步调
+/// [updateCameraLinkStatus]；其余页面只通过 [cameraLinkStatus]
+/// 监听显示，不自己猜状态。App 启动时默认未连接；状态只在内存里，
+/// 不持久化；连接流程本身不改，只暴露状态。
+final ValueNotifier<DeviceLinkStatus> cameraLinkStatus =
+    ValueNotifier<DeviceLinkStatus>(DeviceLinkStatus.disconnected);
+
+/// 相机页在连接状态变化时调用（唯一写入入口）。
+void updateCameraLinkStatus(DeviceLinkStatus status) {
+  cameraLinkStatus.value = status;
+}
 
 /// 品牌自动识别（纯函数）：广播事实优先，名称其次。
 CameraBrand identifyCameraBrand(Map<String, dynamic> dev) {
@@ -132,6 +146,12 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
   String? _connectingAddress;
   bool _awaitingVersion = false;
 
+  /// 本页状态与全局共享状态同步写（首页药丸实时显示）。
+  void _setGoproStatus(DeviceLinkStatus s) {
+    _goproStatus = s;
+    updateCameraLinkStatus(s);
+  }
+
   StreamSubscription<Map<String, dynamic>>? _devSub;
   StreamSubscription<Map<String, dynamic>>? _dataSub;
 
@@ -157,13 +177,13 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         if (addr.isNotEmpty) {
           setState(() {
             _goproAddress = addr;
-            _goproStatus = DeviceLinkStatus.connecting;
+            _setGoproStatus(DeviceLinkStatus.connecting);
           });
         }
       } else if (type == 'disconnected') {
         if (_goproAddress == null) return;
         setState(() {
-          _goproStatus = DeviceLinkStatus.disconnected;
+          _setGoproStatus(DeviceLinkStatus.disconnected);
           _goproAddress = null;
           _goproBattery = null;
           _connectingAddress = null;
@@ -191,11 +211,11 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         if (!mounted) return;
         setState(() {
           if (resp.ok) {
-            _goproStatus = DeviceLinkStatus.connected;
+            _setGoproStatus(DeviceLinkStatus.connected);
             _awaitingVersion = false;
             _connectingAddress = null;
           } else {
-            _goproStatus = DeviceLinkStatus.unavailable;
+            _setGoproStatus(DeviceLinkStatus.unavailable);
             _awaitingVersion = false;
             _connectingAddress = null;
           }
@@ -350,7 +370,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       } catch (_) {}
       if (!mounted) return;
       setState(() {
-        _goproStatus = DeviceLinkStatus.disconnected;
+        _setGoproStatus(DeviceLinkStatus.disconnected);
         _goproAddress = null;
         _goproBattery = null;
         _connectingAddress = null;
@@ -358,7 +378,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       });
     }
     setState(() {
-      _goproStatus = DeviceLinkStatus.connecting;
+      _setGoproStatus(DeviceLinkStatus.connecting);
       _connectingAddress = address;
       _goproAddress = address;
     });
@@ -378,7 +398,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       if ((sub['ok'] as bool?) != true) {
         if (!mounted) return;
         setState(() {
-          _goproStatus = DeviceLinkStatus.unavailable;
+          _setGoproStatus(DeviceLinkStatus.unavailable);
           _connectingAddress = null;
           _awaitingVersion = false;
         });
@@ -416,7 +436,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         });
       } else {
         setState(() {
-          _goproStatus = DeviceLinkStatus.unavailable;
+          _setGoproStatus(DeviceLinkStatus.unavailable);
           _connectingAddress = null;
           _awaitingVersion = false;
         });
@@ -429,7 +449,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _goproStatus = DeviceLinkStatus.unavailable;
+        _setGoproStatus(DeviceLinkStatus.unavailable);
         _connectingAddress = null;
         _awaitingVersion = false;
       });
@@ -443,7 +463,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
     } catch (_) {}
     if (!mounted) return;
     setState(() {
-      _goproStatus = DeviceLinkStatus.disconnected;
+      _setGoproStatus(DeviceLinkStatus.disconnected);
       _goproAddress = null;
       _goproBattery = null;
       _connectingAddress = null;

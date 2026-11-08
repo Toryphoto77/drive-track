@@ -76,7 +76,7 @@ void main() {
           isNull);
     });
 
-    test('13 字段变体（RaceChrono v10.3.0 曾修的场景）能解析', () {
+    test('13 字段变体能解析', () {
       final rmc = parseRmc(
           r'$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W,A*07');
       expect(rmc, isNotNull);
@@ -275,7 +275,7 @@ void main() {
   });
 
   group('协议适配器注册表', () {
-    test('通用 NMEA 可用；RaceBox UBX 与 Dragy 私有协议为 stub', () {
+    test('通用 NMEA 可用；UBX 与厂商私有协议为 stub', () {
       expect(btGpsAdapters['generic_nmea']!.supported, isTrue);
       final ubx = btGpsAdapters['racebox_ubx']!;
       expect(ubx.supported, isFalse);

@@ -13,7 +13,7 @@
 
 ## 下载
 
-最新版见 [Releases](https://github.com/Toryphoto77/drive-track/releases/latest)（当前 v1.5.2）。三个安装包按手机架构选一个即可，大多数手机用 arm64-v8a：
+最新版见 [Releases](https://github.com/Toryphoto77/drive-track/releases/latest)（当前 v1.5.3）。三个安装包按手机架构选一个即可，大多数手机用 arm64-v8a：
 
 | 安装包 | 适用机型 |
 | --- | --- |
@@ -59,7 +59,7 @@
 
 ## 版本
 
-当前：1.5.2（versionCode 57），包名 `com.chixi.drive_track`，三 ABI 同发。
+当前：1.5.3（versionCode 58），包名 `com.chixi.drive_track`，三 ABI 同发。
 
 ## 在线更新
 

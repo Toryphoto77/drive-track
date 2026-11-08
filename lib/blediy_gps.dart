@@ -1,4 +1,4 @@
-/// RaceChrono BleDIY 协议 GPS 的纯 Dart 逻辑：NMEA 语句解析与合并。
+/// BleDIY 协议 GPS 的纯 Dart 逻辑：NMEA 语句解析与合并。
 ///
 /// 不依赖 Flutter widget，可直接单元测试。传输层不在本文件：
 /// BleDIY 类设备走 BLE 串口（Nordic UART 风格），订阅后把字节流按行
@@ -7,8 +7,8 @@
 ///
 /// UUID 说明（须如实标注）：
 /// - 下面三个 UUID 是标准的 Nordic UART Service（NUS）值，是“Nordic
-///   UART 风格串口”的默认值，不是 RaceChrono 官方为 BleDIY 公布的专属
-///   UUID。本文件未找到 RaceChrono 公开的 BleDIY 专属 UUID 文档，
+///   UART 风格串口”的默认值，不是 BleDIY 官方公布的专属
+///   UUID。本文件未找到 BleDIY 专属 UUID 的公开文档，
 ///   因此实际设备若广播了别的服务 UUID，调用方必须以设备实际广播
 ///   为准（可用 device_center.dart 的通用 BLE 表单登记），不得硬说
 ///   NUS 就是 BleDIY 的官方值。

@@ -5,6 +5,8 @@
 /// 状态源为全局 externalGpsStatus（设备中心唯一写入入口），
 /// 测试用例结束时复位，避免污染其它测试。
 
+import 'package:drive_track/camera_connect_page.dart';
+import 'package:drive_track/device_center.dart';
 import 'package:drive_track/gps_source.dart';
 import 'package:drive_track/main.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,7 +31,8 @@ void main() {
     testWidgets('未连接时显示未连接态', (tester) async {
       await pumpHome(tester);
       expect(find.text('未连接外接 GPS'), findsOneWidget);
-      expect(find.text('去连接 ›'), findsOneWidget);
+      // GPS 药丸与相机药丸各带一个“去连接 ›”。
+      expect(find.text('去连接 ›'), findsWidgets);
       expect(find.text('开始记录'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
@@ -47,6 +50,53 @@ void main() {
       updateExternalGpsStatus(ExternalGpsStatus.disconnected);
       await tester.pump();
       expect(find.text('未连接外接 GPS'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('首页运动相机状态小药丸', () {
+    setUp(() {
+      cameraLinkStatus.value = DeviceLinkStatus.disconnected;
+    });
+
+    tearDown(() {
+      cameraLinkStatus.value = DeviceLinkStatus.disconnected;
+    });
+
+    Future<void> pumpHome(WidgetTester tester) async {
+      await tester.pumpWidget(const DriveTrackApp());
+      await tester.pump(const Duration(milliseconds: 1600));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('未连接时显示未连接态', (tester) async {
+      await pumpHome(tester);
+      expect(find.text('未连接运动相机'), findsOneWidget);
+      expect(find.text('未连接外接 GPS'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('已连接时显示已连接，断开后恢复', (tester) async {
+      await pumpHome(tester);
+      updateCameraLinkStatus(DeviceLinkStatus.connected);
+      await tester.pump();
+      expect(find.text('运动相机 · 已连接'), findsOneWidget);
+      expect(find.text('未连接运动相机'), findsNothing);
+      updateCameraLinkStatus(DeviceLinkStatus.disconnected);
+      await tester.pump();
+      expect(find.text('未连接运动相机'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('连接中与暂不可用各有文案', (tester) async {
+      await pumpHome(tester);
+      updateCameraLinkStatus(DeviceLinkStatus.connecting);
+      await tester.pump();
+      expect(find.text('运动相机 · 连接中…'), findsOneWidget);
+      updateCameraLinkStatus(DeviceLinkStatus.unavailable);
+      await tester.pump();
+      expect(find.text('运动相机 · 暂不可用'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

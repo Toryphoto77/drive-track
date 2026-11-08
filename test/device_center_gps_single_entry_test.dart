@@ -190,7 +190,7 @@ void main() {
       // 初始：主按钮可见，高级区收起、档案卡不在树里。
       expect(find.text('扫描适配设备'), findsOneWidget);
       expect(find.text('高级 / 手动添加'), findsOneWidget);
-      expect(find.text('BleDIY（RaceChrono DIY 兼容）'), findsNothing);
+      expect(find.text('BleDIY'), findsNothing);
       expect(find.text('尚未扫描：点上方「扫描适配设备」开始。'),
           findsOneWidget);
 
@@ -247,7 +247,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('My Headphones'), findsOneWidget);
-      expect(find.text('BleDIY（RaceChrono DIY 兼容）'), findsOneWidget);
+      expect(find.text('BleDIY'), findsOneWidget);
       // 合并扫描进行中时，旧分别扫描按钮的文案本来就是“停止扫描”
       //（与合并扫描共享底层 BLE 扫描状态），故断言静态文案的按钮。
       expect(find.text('已配对 SPP'), findsOneWidget);

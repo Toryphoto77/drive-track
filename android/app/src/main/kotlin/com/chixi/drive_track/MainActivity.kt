@@ -146,6 +146,9 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     // （供 Recorder.curGyroX/Y/Z 诊断与后续融合精修；姿态仍走
     // rotation vector，不改现有 G 值计算）。
     private var latestGyro: FloatArray? = null
+    // v1.5.3 原始加速度计（含重力，设备系）：供 Dart 侧 LeanEstimator
+    // 做重力参考；线加速度已扣重力，不适用。随加速度事件一起发给 Dart。
+    private var latestAccel: FloatArray? = null
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var gatt: BluetoothGatt? = null
@@ -1407,6 +1410,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     private fun startSensors() {
         val types = listOf(
             Sensor.TYPE_LINEAR_ACCELERATION,
+            Sensor.TYPE_ACCELEROMETER,
             Sensor.TYPE_GYROSCOPE,
             Sensor.TYPE_ROTATION_VECTOR,
             Sensor.TYPE_PRESSURE
@@ -1423,13 +1427,20 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             Sensor.TYPE_ROTATION_VECTOR -> latestRv = event.values.copyOf()
             Sensor.TYPE_PRESSURE -> latestPressure = event.values[0]
             Sensor.TYPE_GYROSCOPE -> latestGyro = event.values.copyOf()
+            // v1.5.3 压弯倾角融合：原始加速度计（含重力）供 Dart 侧
+            // LeanEstimator 做重力参考；线加速度（已扣重力）不适用。
+            Sensor.TYPE_ACCELEROMETER -> latestAccel = event.values.copyOf()
             Sensor.TYPE_LINEAR_ACCELERATION -> {
                 val rv = latestRv
                 val gyro = latestGyro
+                val accel = latestAccel
                 val map = mapOf<String, Any>(
                     "ax" to event.values[0].toDouble(),
                     "ay" to event.values[1].toDouble(),
                     "az" to event.values[2].toDouble(),
+                    "rax" to (accel?.getOrNull(0)?.toDouble() ?: 0.0),
+                    "ray" to (accel?.getOrNull(1)?.toDouble() ?: 0.0),
+                    "raz" to (accel?.getOrNull(2)?.toDouble() ?: 0.0),
                     "rv" to (rv?.map { it.toDouble() } ?: emptyList<Double>()),
                     "pressure" to latestPressure.toDouble(),
                     "gx" to (gyro?.getOrNull(0)?.toDouble() ?: 0.0),

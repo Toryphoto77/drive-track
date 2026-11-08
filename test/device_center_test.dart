@@ -23,8 +23,8 @@ void main() {
     // 三组标题（不再有重复的 BleDIY 说明区）。
     expect(find.text('运动相机'), findsOneWidget);
     expect(find.text('外接 GPS 模块'), findsOneWidget);
-    expect(find.text('RaceChrono BleDIY 外部 GPS'), findsNothing);
-    // 档案卡扩至 RaceChrono 清单后页面变长，传感器区需滚动才进入
+    expect(find.text('BleDIY 外部 GPS'), findsNothing);
+    // 档案卡扩至兼容清单后页面变长，传感器区需滚动才进入
     // 懒加载 ListView 的视口；功能仍在，只是测试要按页顺序滚动断言。
     await tester.scrollUntilVisible(
       find.text('传感器：自定义 BLE 设备'),
@@ -42,7 +42,7 @@ void main() {
     // 单入口主按钮在顶部；档案卡收进「高级 / 手动添加」，
     // 默认收起时不在树里，先展开再断言。
     expect(find.text('扫描适配设备'), findsOneWidget);
-    expect(find.text('BleDIY（RaceChrono DIY 兼容）'), findsNothing);
+    expect(find.text('BleDIY'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('高级 / 手动添加'),
       300,
@@ -50,7 +50,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('高级 / 手动添加'));
     await tester.pumpAndSettle();
-    expect(find.text('BleDIY（RaceChrono DIY 兼容）'), findsOneWidget);
+    expect(find.text('BleDIY'), findsOneWidget);
     // 自定义表单收进展开区：未展开时字段不在树里。
     expect(find.text('名称，如：我的功率计'), findsNothing);
     await tester.scrollUntilVisible(
