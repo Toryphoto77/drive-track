@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app_locale.dart';
 import 'models.dart';
 import 'recorder.dart';
+import 'sport_moto_paths.dart';
 
 // ---------- Web Mercator ----------
 double _mercY(double lat) {
@@ -598,7 +599,7 @@ class _GScatterPainter extends CustomPainter {
 }
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
-// 汽车：低趴跑车，车头朝右。摩托：同向侧视仿赛（尖鼻、低车架、前后轮分开）。
+// 汽车：低趴跑车，车头朝右。摩托：同向侧视仿赛，轮廓描自确认稿。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
   final bool selected;
@@ -663,68 +664,17 @@ class _SportCarPainter extends CustomPainter {
 class _SportMotoPainter extends CustomPainter {
   final Color c;
   _SportMotoPainter(this.c);
+
+  static final Path _body = sportMotoBodyPath();
+  static final Path _tires = sportMotoTirePath();
+
   @override
   void paint(Canvas canvas, Size s) {
-    final w = s.width, h = s.height;
-    final fill = Paint()..color = c..style = PaintingStyle.fill;
-    final rear = Offset(w * 0.18, h * 0.72);
-    final front = Offset(w * 0.80, h * 0.72);
-    // 高尾和后轮之间留空。车头朝右：油箱隆起，风挡陡，鼻尖下压。
-    final body = Path()
-      ..moveTo(w * 0.02, h * 0.34)
-      ..lineTo(w * 0.16, h * 0.36)
-      ..lineTo(w * 0.26, h * 0.46)
-      ..lineTo(w * 0.40, h * 0.50)
-      ..lineTo(w * 0.50, h * 0.40)
-      ..lineTo(w * 0.60, h * 0.36)
-      ..lineTo(w * 0.68, h * 0.42)
-      ..lineTo(w * 0.76, h * 0.30)
-      ..lineTo(w * 0.90, h * 0.46)
-      ..lineTo(w * 0.96, h * 0.58)
-      ..lineTo(w * 0.88, h * 0.66)
-      ..lineTo(w * 0.74, h * 0.58)
-      ..lineTo(w * 0.58, h * 0.66)
-      ..lineTo(w * 0.46, h * 0.70)
-      ..lineTo(w * 0.32, h * 0.66)
-      ..lineTo(w * 0.22, h * 0.56)
-      ..lineTo(w * 0.12, h * 0.48)
-      ..close();
-    canvas.drawPath(body, fill);
-    // 低位排气，画在轮子下面，胎面会盖住伸进轮圈的那一截。
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(w * 0.30, h * 0.76),
-          width: w * 0.18,
-          height: h * 0.07,
-        ),
-        Radius.circular(w * 0.03),
-      ),
-      fill,
-    );
-    final wheel = Paint()..color = Colors.black;
-    final hub = Paint()..color = c;
-    final radius = w * 0.125;
-    canvas.drawCircle(rear, radius, wheel);
-    canvas.drawCircle(front, radius, wheel);
-    final link = Paint()
-      ..color = c
-      ..strokeWidth = (w * 0.04).clamp(1.2, 3.4).toDouble()
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(w * 0.34, h * 0.64), rear, link);
-    canvas.drawLine(Offset(w * 0.70, h * 0.48), front, link);
-    canvas.drawLine(Offset(w * 0.78, h * 0.42), front, link);
-    canvas.drawCircle(rear, w * 0.042, hub);
-    canvas.drawCircle(front, w * 0.042, hub);
-    canvas.drawPath(
-      Path()
-        ..moveTo(w * 0.74, h * 0.36)
-        ..lineTo(w * 0.80, h * 0.32)
-        ..lineTo(w * 0.88, h * 0.48)
-        ..lineTo(w * 0.78, h * 0.46)
-        ..close(),
-      Paint()..color = Colors.black.withValues(alpha: 0.55),
-    );
+    canvas.save();
+    canvas.scale(s.width / kSportMotoViewBox, s.height / kSportMotoViewBox);
+    canvas.drawPath(_tires, Paint()..color = const Color(0xFF111111));
+    canvas.drawPath(_body, Paint()..color = c);
+    canvas.restore();
   }
 
   @override
