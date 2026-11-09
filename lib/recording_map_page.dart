@@ -357,7 +357,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                               amapTileUrl(zoom, x, y),
                               key: ValueKey('recmap-amap-$zoom-$x-$y'),
                               headers: const {
-                                'User-Agent': 'DriveTrack/1.5.4',
+                                'User-Agent': 'DriveTrack/1.5.5',
                               },
                               fit: BoxFit.fill,
                               gaplessPlayback: true,

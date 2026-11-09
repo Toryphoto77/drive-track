@@ -1,22 +1,22 @@
 {
-  "_comment": "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：当前指向 GitHub Release 附件；后续可换成 CloudBase 存储公共 URL，实现全程国内下载，无需改 App。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要，本文件当前未带 sha256（手里没有对应 APK，不编造）。",
-  "versionName": "1.5.4",
-  "versionCode": 59,
-  "apkUrl": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.4/DriveTrack-v1.5.4-release-arm64-v8a.apk",
-  "sha256": "259a89e85d1ae686016205eb19ac965cb44b6a81ac24dea374d2f091e082a189",
+  "_comment": "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：当前指向 GitHub Release 附件；后续可换成 CloudBase 存储公共 URL，实现全程国内下载，无需改 App。v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。v1.5.5 结构已写好三 ABI 的 url，sha256 与顶层 sha256 暂为 null：本环境没有正式签名 APK，不编造摘要。正式包到达后用 tools/gen_update_manifest.py 按实际 APK 写入 64 位十六进制 sha256，再推 main 并刷新 jsDelivr。在摘要与 Release 附件齐之前不要刷新缓存。",
+  "versionName": "1.5.5",
+  "versionCode": 60,
+  "apkUrl": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.5/DriveTrack-v1.5.5-release-arm64-v8a.apk",
+  "sha256": null,
   "apks": {
     "arm64-v8a": {
-      "url": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.4/DriveTrack-v1.5.4-release-arm64-v8a.apk",
-      "sha256": "259a89e85d1ae686016205eb19ac965cb44b6a81ac24dea374d2f091e082a189"
+      "url": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.5/DriveTrack-v1.5.5-release-arm64-v8a.apk",
+      "sha256": null
     },
     "armeabi-v7a": {
-      "url": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.4/DriveTrack-v1.5.4-release-armeabi-v7a.apk",
-      "sha256": "16329529adeb8deca52b32ed0c4e35c7fb4ae609cdc4a2c9b9a3a657d25ef2ce"
+      "url": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.5/DriveTrack-v1.5.5-release-armeabi-v7a.apk",
+      "sha256": null
     },
     "x86_64": {
-      "url": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.4/DriveTrack-v1.5.4-release-x86_64.apk",
-      "sha256": "fe256308c4ed99e85f5cc7c2f465066da6ea16ac027afa1e02453493d7272ef7"
+      "url": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.5/DriveTrack-v1.5.5-release-x86_64.apk",
+      "sha256": null
     }
   },
-  "notes": "1.5.4：修复蓝牙主线程/UUID、行程原子写入与字段丢失、公开轨迹隐私裁剪、在线更新按架构选包与 SHA-256；增强后台录制草稿与分块存储、GPS 数据源提示、本机/云端条数对照；清理废案图标；冷启动闪图标修复；设备中心并入底栏并统一页面/动画；发版流水线与签名路径可配置。"
+  "notes": "1.5.5：中英双语界面（默认中文；我的与设置里切换，即时生效、无需重启）。赛道知识库 34 篇与行程详情遥测标签随语言切换。HUD：子页淡入上滑、按住结束行程、更新下载进度、空状态卡片、底栏选中指示滑动、通知进出动画、行程详情卡片与列表密度、缩短辅助文案。English: bilingual HUD (Chinese by default, English toggle on My and Settings), track-guide and trip-detail labels follow the language, fade-slide transitions, hold-to-end, download progress, empty-state cards, sliding nav indicator, notice motion, trip cards."
 }
