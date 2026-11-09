@@ -1,5 +1,5 @@
 /// v1.5.3 版本同步测试：pubspec、UpdateService、打包脚本三处
-/// 版本号必须一致为 1.5.5+60（版本升级时同步更新本文件钉死的版本号）。
+/// 版本号必须一致为 1.5.6+61（版本升级时同步更新本文件钉死的版本号）。
 ///
 /// 本文件不依赖跨路契约（不碰 Lap / LapTimer 新 API），
 /// 可独立编译运行.
@@ -10,14 +10,14 @@ import 'package:drive_track/update_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('UpdateService 当前版本为 1.5.5+60', () {
-    expect(UpdateService.currentVersionName, '1.5.5');
-    expect(UpdateService.currentVersionCode, 60);
+  test('UpdateService 当前版本为 1.5.6+61', () {
+    expect(UpdateService.currentVersionName, '1.5.6');
+    expect(UpdateService.currentVersionCode, 61);
   });
 
-  test('pubspec.yaml 版本为 1.5.5+60', () {
+  test('pubspec.yaml 版本为 1.5.6+61', () {
     final content = File('pubspec.yaml').readAsStringSync();
-    expect(content, contains('version: 1.5.5+60'));
+    expect(content, contains('version: 1.5.6+61'));
     expect(content, isNot(contains('1.3.7')));
   });
 
@@ -30,6 +30,6 @@ void main() {
 
   test('关于页版本号与 UpdateService 一致（main.dart）', () {
     final content = File('lib/main.dart').readAsStringSync();
-    expect(content, contains("versionName: '1.5.5'"));
+    expect(content, contains("versionName: '1.5.6'"));
   });
 }

@@ -2,7 +2,7 @@
 """生成 / 刷新在线更新清单 update-manifest.json（只写本地文件，不联网、不推送）。
 
 用法（在工程根目录、三个正式包编好之后）：
-    python3 tools/gen_update_manifest.py --notes "1.5.5：……"
+    python3 tools/gen_update_manifest.py --notes "1.5.6：……"
 
 做什么：
 - 版本号从 pubspec.yaml 读（version: x.y.z+code），不在这里改版本；
