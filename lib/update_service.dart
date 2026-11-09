@@ -405,6 +405,7 @@ class UpdateService {
     HttpClient? httpClient,
     Future<String> Function()? cacheDir,
     Future<bool> Function(String path)? install,
+    void Function(int received, int? total)? onProgress,
   }) async {
     final expected = normalizeSha256(expectedSha256);
     if (expectedSha256 != null && expectedSha256.trim().isNotEmpty && expected == null) {
@@ -427,10 +428,12 @@ class UpdateService {
       var received = 0;
       final sink = part.openWrite();
       try {
+        final total = resp.contentLength >= 0 ? resp.contentLength : null;
         await for (final chunk in resp.timeout(downloadIdleTimeout)) {
           hasher.add(chunk);
           received += chunk.length;
           sink.add(chunk);
+          onProgress?.call(received, total);
         }
       } finally {
         await sink.close();

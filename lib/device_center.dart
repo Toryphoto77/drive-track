@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
+import 'dt_page_route.dart';
+
 import 'app_bar_style.dart';
 import 'home_layout.dart';
 import 'blediy_gps.dart';
@@ -717,7 +720,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         for (final d in bonded) {
           _mergeScanned(d, 'spp', bonded: true);
         }
-        _notice = '正在扫描周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对）…';
+        _notice = S.current.t(
+          '正在扫描附近 GPS（BLE、经典蓝牙、已配对）…',
+          'Scanning nearby GPS (BLE, classic, paired)…',
+        );
       });
     } catch (e) {
       if (!mounted) return;
@@ -875,52 +881,62 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   /// 扫描行的提示：先看广播事实，再看名称字样；名称含厂商字样
   /// 不等于身份断言，绝不把名称当作协议证据。
   String _guessHint(Map<String, dynamic> dev) {
+    final s = S.of(context);
     final uuids = ((dev['serviceUuids'] as List?) ?? [])
         .map((e) => e.toString().toLowerCase())
         .toList();
     if (uuids.contains(dexianServiceUuid.toLowerCase())) {
-      return '广播含 DEXIAN D1 服务：二进制协议，暂不解析定位。';
+      return s.t('DEXIAN D1 服务：二进制，暂不解析定位。', 'DEXIAN D1 service: binary, no fix yet.');
     }
     if (uuids.any((u) => u.contains('6e400001'))) {
-      return '广播含 Nordic UART 服务，可尝试订阅 NMEA。';
+      return s.t('Nordic UART，可试 NMEA。', 'Nordic UART. NMEA may work.');
     }
     if (uuids.contains(raceboxNmeaServiceUuid.toLowerCase())) {
-      return '广播含 NMEA UART 服务，可尝试订阅。';
+      return s.t('NMEA UART，可试订阅。', 'NMEA UART. Try subscribe.');
     }
     if (uuids.any((u) => u.contains('00001101'))) {
-      return '广播含 00001101 服务（SPP / NMEA UART 可能值）。';
+      return s.t('含 00001101（可能是 SPP）。', 'Has 00001101 (maybe SPP).');
     }
     final name = (dev['name'] ?? '').toString();
     for (final p in externalGpsProfiles) {
       if (_profileNameMatches(p, name)) {
         if (p.binaryProtocol) {
-          return '名称匹配：${p.name}（二进制协议，暂不解析定位）。';
+          return s.t('名称匹配：${p.name}（二进制，暂不解析）。', 'Name match: ${p.name} (binary, no fix).');
         }
-        return '名称匹配：${p.name}（仅名称提示）。';
+        return s.t('名称匹配：${p.name}（仅名称）。', 'Name match: ${p.name} (name only).');
       }
     }
     final channels =
         (dev['channels'] as List? ?? []).map((e) => e.toString()).toList();
     if (channels.contains('spp')) {
-      return '经典蓝牙设备，可尝试 SPP 连接。';
+      return s.t('经典蓝牙，可试 SPP。', 'Classic Bluetooth. Try SPP.');
     }
-    return '未见 NMEA UART 服务广播。';
+    return s.t('未见 NMEA 服务。', 'No NMEA service advertised.');
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final fix = _feed.latest;
     // 扫描卡片状态行（三种状态共用一处文案来源）：
     // 空态 / 扫描中 / 有结果（无可适配时也在这里说清，不另起文案）。
     final adaptable = _scanned.where(gpsDeviceIsAdaptable).toList();
     final scanStatusLine = _adaptScanning
-        ? '正在扫描周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对）…'
+        ? s.t(
+            '正在扫描附近 GPS（BLE、经典蓝牙、已配对）…',
+            'Scanning nearby GPS (BLE, classic, paired)…',
+          )
         : _scanned.isEmpty
-            ? '尚未扫描：点上方「扫描适配设备」开始。'
+            ? s.t('尚未扫描，点「扫描适配设备」。', 'Not scanned. Tap Scan devices.')
             : adaptable.isEmpty
-                ? '已扫描 ${_scanned.length} 台设备，没有可适配的 GPS 设备。'
-                : '已扫描 ${_scanned.length} 台设备，找到 ${adaptable.length} 台'
-                    '可适配设备，点行即连。';
+                ? s.t(
+                    '已扫 ${_scanned.length} 台，没有可适配 GPS。',
+                    'Scanned ${_scanned.length}. No compatible GPS.',
+                  )
+                : s.t(
+                    '已扫 ${_scanned.length} 台，${adaptable.length} 台可连，点行即连。',
+                    'Scanned ${_scanned.length}. ${adaptable.length} ready. Tap a row.',
+                  );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -928,12 +944,15 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         // 只换外衣——扫描 / 去重 / 连接逻辑一律不动（见 _toggleAdaptScan /
         // _connectAdaptable）。
         DeviceScanCard(
-          title: '外接 GPS',
-          description: '点“扫描适配设备”，一次扫完周围可适配的 GPS 设备，点列表里的设备即自动连接。' 'SPP 设备须先在系统蓝牙里配对。',
+          title: s.t('外接 GPS', 'External GPS'),
+          description: s.t(
+            '点扫描后点设备即连。SPP 须先在系统蓝牙配对。',
+            'Scan, then tap a device. Pair SPP in system Bluetooth first.',
+          ),
           icon: Icons.satellite_alt,
           scanning: _adaptScanning,
-          scanLabel: '扫描适配设备',
-          stopLabel: '停止扫描',
+          scanLabel: s.t('扫描适配设备', 'Scan devices'),
+          stopLabel: s.t('停止扫描', 'Stop'),
           onScanToggle: _toggleAdaptScan,
           statusLine: scanStatusLine,
           scanButtonIcon: Icons.bluetooth_searching,
@@ -959,7 +978,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '已连接：${_connectedName ?? _connectedAddress}',
+                  s.t('已连接：${_connectedName ?? _connectedAddress}', 'Connected: ${_connectedName ?? _connectedAddress}'),
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -968,20 +987,21 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
               ),
               TextButton(
                   onPressed: _disconnectGps,
-                  child: const Text('断开连接')),
+                  child: Text(s.t('断开连接', 'Disconnect'))),
             ]),
           ),
         const SizedBox(height: 16),
-        const Text('可适配设备',
-            style: TextStyle(
+        Text(s.t('可适配设备', 'Compatible'),
+            style: const TextStyle(
                 color: Colors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         if (_scanned.isEmpty)
-          const Text('尚未找到设备：点上方「扫描适配设备」开始；设备须开机、蓝牙打开，'
-              'SPP 设备须先在系统蓝牙里配对。',
-              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          Text(
+              s.t('还没有设备。点扫描；打开设备与蓝牙。SPP 须先配对。',
+                  'No devices yet. Tap Scan. Device and Bluetooth on. Pair SPP first.'),
+              style: const TextStyle(color: Colors.white54, fontSize: 12)),
         for (final dev in adaptable)
           Builder(builder: (context) {
             final channels = (dev['channels'] as List? ?? <dynamic>[])
@@ -1010,9 +1030,9 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
                       '更新率 ${fix.hz?.toStringAsFixed(0) ?? '—'} Hz'
                       '${signal.isEmpty ? '' : ' · $signal'} · $addr'
                   : (signal.isEmpty ? addr : '$signal · $addr'),
-              actionLabel: '点按连接',
+              actionLabel: s.t('点按连接', 'Tap to connect'),
               // GPS 页沿用旧文案“连接中”（无省略号），与单入口测试一致。
-              connectingLabel: '连接中',
+              connectingLabel: s.t('连接中', 'Connecting'),
               isConnecting: isConnecting,
               isConnected: isConnected,
               onTap: () => _connectAdaptable(dev),
@@ -1440,7 +1460,10 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         await Native.startBleScan();
         setState(() {
           _scanning = true;
-          _notice = '正在扫描…只扫功率 / 踏频 / 心率三类服务，GoPro 与 UART 类设备可能不出现。';
+          _notice = S.current.t(
+            '正在扫描功率、踏频、心率。',
+            'Scanning power, cadence, and heart rate.',
+          );
         });
       }
     } catch (e) {
@@ -1497,6 +1520,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
+    final s = S.of(context);
     final bottomPad = widget.embedded
         ? (kPillNavHeight + 12 + MediaQuery.of(context).padding.bottom + 16)
         : 16.0;
@@ -1506,8 +1530,8 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           : withAppBarTopInset(context, EdgeInsets.fromLTRB(16, 16, 16, bottomPad)),
       children: [
         if (widget.embedded) ...[
-          const Text('设备中心',
-              style: TextStyle(
+          Text(s.t('设备中心', 'Devices'),
+              style: const TextStyle(
                   color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
         ],
@@ -1522,7 +1546,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               child: Text(_notice!,
                   style: const TextStyle(color: Colors.white, fontSize: 13)),
             ),
-          _sectionTitle('运动相机'),
+          _sectionTitle(s.t('运动相机', 'Action cam')),
           // v1.2.12：统一入口是「连接运动相机」新页（一个入口扫全部品牌，
           // 品牌自动识别、点行即连）。旧的按品牌三张卡已删，只留一个入口。
           // v1.5.4：本卡与外接 GPS 卡、OBD 卡同一套样式（#0B0E13 底、
@@ -1539,13 +1563,13 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.videocam, color: Colors.white, size: 20),
-                    SizedBox(width: 8),
+                    const Icon(Icons.videocam, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: Text('连接运动相机',
-                          style: TextStyle(
+                      child: Text(s.t('连接运动相机', 'Connect camera'),
+                          style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.bold)),
@@ -1553,27 +1577,27 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text('支持的运动相机：GoPro、Insta360、DJI。',
-                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(s.t('支持的运动相机：GoPro、Insta360、DJI。', 'Supported: GoPro, Insta360, DJI.'),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
+                      DtPageRoute(
                           builder: (_) => const CameraConnectPage()),
                     ),
-                    child: const Text('打开连接运动相机'),
+                    child: Text(s.t('打开连接运动相机', 'Open camera connect')),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 8),
-          _sectionTitle('外接 GPS 模块'),
-          const Text(
-            '外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
+          _sectionTitle(s.t('外接 GPS 模块', 'External GPS')),
+          Text(
+            s.t('外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。', 'If external GPS drops or is silent for 5s, phone GPS takes over.'),
+            style: const TextStyle(color: Colors.white60, fontSize: 12),
           ),
           const SizedBox(height: 8),
           const ExternalGpsSection(),
@@ -1589,27 +1613,27 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
+                DtPageRoute(
                     builder: (_) => const SatelliteSettingsPage()),
               ),
               icon: const Icon(Icons.satellite_alt, size: 18),
-              label: const Text('可视化外部 GPS 配置'),
+              label: Text(s.t('可视化外部 GPS 配置', 'External GPS setup')),
             ),
           ),
           const SizedBox(height: 16),
-          _sectionTitle('传感器：自定义 BLE 设备'),
+          _sectionTitle(s.t('传感器：自定义 BLE 设备', 'Sensors: custom BLE')),
           ExpansionTile(
-            title: const Text('添加自定义传感器',
-                style: TextStyle(color: Colors.white, fontSize: 14)),
-            subtitle: const Text('名称 / 类型 / 服务 / 特征 / 地址（必填前四项）',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            title: Text(s.t('添加自定义传感器', 'Add custom sensor'),
+                style: const TextStyle(color: Colors.white, fontSize: 14)),
+            subtitle: Text(s.t('名称 / 类型 / 服务 / 特征 / 地址（必填前四项）', 'Name, type, service, characteristic, address'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
             iconColor: Colors.white70,
             collapsedIconColor: Colors.white70,
             children: [
-              _textField(_nameCtrl, '名称，如：我的功率计'),
-              _textField(_serviceCtrl, '服务 UUID（完整或 4/8 位短 UUID）'),
-              _textField(_charCtrl, '特征 UUID（完整或 4/8 位短 UUID）'),
-              _textField(_addressCtrl, '蓝牙地址（可选，用于下次重连，如 AA:BB:CC:DD:EE:FF）'),
+              _textField(_nameCtrl, s.t('名称，如：我的功率计', 'Name, e.g. my power meter')),
+              _textField(_serviceCtrl, s.t('服务 UUID（完整或 4/8 位短 UUID）', 'Service UUID (full or 4/8-digit short)')),
+              _textField(_charCtrl, s.t('特征 UUID（完整或 4/8 位短 UUID）', 'Characteristic UUID (full or short)')),
+              _textField(_addressCtrl, s.t('蓝牙地址（可选，用于下次重连，如 AA:BB:CC:DD:EE:FF）', 'Bluetooth address (optional, for reconnect)')),
               DropdownButton<String>(
                 value: _formType,
                 dropdownColor: const Color(0xFF1A1A1A),
@@ -1624,29 +1648,29 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               FilledButton.icon(
                 onPressed: _saveForm,
                 icon: const Icon(Icons.save, size: 18),
-                label: const Text('保存到本机'),
+                label: Text(s.t('保存到本机', 'Save on device')),
               ),
               const SizedBox(height: 8),
             ],
           ),
-          _sectionTitle('传感器：已保存设备（点重连）'),
+          _sectionTitle(s.t('传感器：已保存设备（点重连）', 'Saved sensors (tap to reconnect)')),
           if (_saved.isEmpty)
-            const Text('还没有保存的设备：用上方表单添加，地址填了才能重连。',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            Text(s.t('还没有保存的设备。填地址才能重连。', 'No saved devices. An address is required to reconnect.'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
           for (final device in _saved)
             _savedRow(accent, device),
           const SizedBox(height: 16),
-          _sectionTitle('传感器：附近扫描结果'),
+          _sectionTitle(s.t('传感器：附近扫描结果', 'Nearby scan')),
           FilledButton.icon(
             onPressed: _toggleScan,
             icon: Icon(_scanning ? Icons.stop : Icons.bluetooth_searching,
                 size: 18),
-            label: Text(_scanning ? '停止扫描' : '开始扫描'),
+            label: Text(_scanning ? s.t('停止扫描', 'Stop') : s.t('开始扫描', 'Scan')),
           ),
           const SizedBox(height: 8),
           if (_scanned.isEmpty)
-            const Text('暂无扫描结果。',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            Text(s.t('暂无扫描结果。', 'No scan results.'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
           for (final dev in _scanned)
             ListTile(
               title: Text((dev['name'] ?? '').toString(),
@@ -1666,7 +1690,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                     setState(() => _notice = '连接失败：$e');
                   }
                 },
-                child: const Text('连接'),
+                child: Text(s.t('连接', 'Connect')),
               ),
             ),
       ],
@@ -1686,7 +1710,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
         ),
-        title: const Text('设备中心', style: TextStyle(color: Colors.white)),
+        title: Text(s.t('设备中心', 'Devices'), style: const TextStyle(color: Colors.white)),
       ),
       body: list,
     );
@@ -1697,6 +1721,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   /// 流程（ObdSection / obd_service / 原生 ObdManager）原样保留，
   /// 硬件就绪后把本卡换回 ObdSection 即可。
   Widget _obdComingSoonCard() {
+    final s = S.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1719,9 +1744,9 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                   children: [
                     const Icon(Icons.speed, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text('OBD（ELM327）',
-                          style: TextStyle(
+                    Expanded(
+                      child: Text(s.t('OBD（ELM327）', 'OBD (ELM327)'),
+                          style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.bold)),
@@ -1733,22 +1758,22 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                         color: Colors.amber.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text('敬请期待',
-                          style: TextStyle(
+                      child: Text(s.t('敬请期待', 'Soon'),
+                          style: const TextStyle(
                               color: Colors.white, fontSize: 12)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text('行车电脑数据：车速 / 转速 / 油门 / 水温。',
-                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(s.t('行车电脑数据：车速 / 转速 / 油门 / 水温。', 'ECU: speed / rpm / throttle / coolant.'),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed: _showObdComingSoon,
                     icon: const Icon(Icons.hourglass_top, size: 18),
-                    label: const Text('敬请期待'),
+                    label: Text(s.t('敬请期待', 'Soon')),
                   ),
                 ),
               ],
@@ -1764,17 +1789,21 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   Future<void> _showObdComingSoon() async {
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('OBD · 敬请期待'),
-        content: const Text(
-            '行车电脑数据（车速 / 转速 / 油门 / 水温）正在路上，等硬件就绪就和大家见面，敬请期待。'),
+      builder: (ctx) {
+        final s = S.of(ctx);
+        return AlertDialog(
+        title: Text(s.t('OBD · 敬请期待', 'OBD · Coming soon')),
+        content: Text(s.t(
+            '行车电脑数据（车速 / 转速 / 油门 / 水温）正在路上，等硬件就绪就和大家见面，敬请期待。',
+            'Speed, rpm, throttle, and coolant are on the way.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('知道了'),
+            child: Text(s.t('知道了', 'OK')),
           ),
         ],
-      ),
+      );
+      },
     );
   }
 

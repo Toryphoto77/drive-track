@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
 import 'checkered_flag.dart';
 
 /// 街道 / 赛道分段控件（v0.1.5 重做：药丸开关 + 方格旗动画）。
@@ -98,20 +99,24 @@ class _ModeSwitchState extends State<ModeSwitch>
 
   @override
   Widget build(BuildContext context) {
+    final strings = S.of(context);
     final accent = widget.accentColor ?? Theme.of(context).colorScheme.primary;
     final isTrack = widget.surface == DriveSurface.track;
-    Widget segment(DriveSurface s) {
-      final selected = widget.surface == s;
+    Widget segment(DriveSurface surface) {
+      final selected = widget.surface == surface;
+      final label = surface == DriveSurface.street
+          ? strings.t('街道', 'Street')
+          : strings.t('赛道', 'Track');
       return Expanded(
         child: InkWell(
           borderRadius: BorderRadius.circular(999),
-          onTap: widget.enabled ? () => widget.onSurfaceChanged?.call(s) : null,
+          onTap: widget.enabled ? () => widget.onSurfaceChanged?.call(surface) : null,
           child: Center(
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  s.label,
+                  label,
                   style: TextStyle(
                     color: widget.enabled
                         ? (selected ? Colors.white : Colors.white70)
@@ -120,7 +125,7 @@ class _ModeSwitchState extends State<ModeSwitch>
                     fontSize: 14,
                   ),
                 ),
-                if (s == DriveSurface.track && _flagVisible) ...[
+                if (surface == DriveSurface.track && _flagVisible) ...[
                   const SizedBox(width: 6),
                   // 旗面：赛道态淡入/弹入，街道态 200ms 淡出。
                   AnimatedOpacity(

@@ -10,14 +10,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'card_style.dart';
 import 'fuel_page.dart';
 import 'altitude_profile.dart';
 import 'models.dart';
 import 'photo_points.dart';
 
 const Color _kRed = Color(0xFFE10600);
-const Color _kCard = Color(0xFF141414);
-const Color _kBorder = Color(0xFF2A2A2A);
 
 String _fmtDur(int ms) {
   final s = ms ~/ 1000;
@@ -43,9 +42,9 @@ Widget _card({required Widget child, EdgeInsets padding = const EdgeInsets.all(1
   return Container(
     padding: padding,
     decoration: BoxDecoration(
-      color: _kCard,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: _kBorder),
+      color: CardStyle.cardColor,
+      borderRadius: CardStyle.cardBorderRadius,
+      border: Border.all(color: CardStyle.borderColor),
     ),
     child: child,
   );
@@ -77,12 +76,13 @@ class TelemetryKpiStrip extends StatelessWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
           ]),
         );
+    final accent = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF141414),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE10600).withValues(alpha: 0.5)),
+        color: CardStyle.cardColor,
+        borderRadius: CardStyle.cardBorderRadius,
+        border: Border.all(color: accent.withValues(alpha: 0.55)),
       ),
       child: Column(children: [
         Row(children: [

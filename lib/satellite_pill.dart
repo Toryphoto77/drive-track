@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
+
 /// v1.0.0 两颗药丸同长常量：直连卫星与同步视频记录共用同一
 /// [CompactTogglePill]，外层与内层同宽，不再随文字长度伸缩。
 ///
@@ -136,10 +138,13 @@ class CompactSatellitePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final countText = satelliteCount == null ? '—' : '$satelliteCount 颗';
+    final s = S.of(context);
+    final countText = satelliteCount == null
+        ? '—'
+        : (s.zh ? '$satelliteCount 颗' : '$satelliteCount');
     return CompactTogglePill(
       icon: Icons.satellite_alt,
-      label: '直连卫星 · $countText',
+      label: s.zh ? '直连卫星 · $countText' : 'Direct sats · $countText',
       value: value,
       onChanged: onChanged,
       accentColor: accentColor,

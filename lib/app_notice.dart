@@ -69,18 +69,131 @@ AppNoticeKind appNoticeKindFromMessage(String message) {
 
 OverlayEntry? _currentEntry;
 Timer? _currentTimer;
+Timer? _currentExitTimer;
+VoidCallback? _requestExit;
 
-/// 移除当前提示（若有），并取消其自动消失定时器。手动点提示
-/// 关闭与新提示替换旧提示都走这里。
-void dismissAppNotice() {
+void _cancelNoticeTimers() {
   _currentTimer?.cancel();
   _currentTimer = null;
+  _currentExitTimer?.cancel();
+  _currentExitTimer = null;
+}
+
+void _hardRemoveNotice() {
+  _requestExit = null;
+  _cancelNoticeTimers();
   final entry = _currentEntry;
   _currentEntry = null;
   try {
     entry?.remove();
   } catch (_) {
     // Overlay 已随页面销毁时 remove 会抛，忽略即可。
+  }
+}
+
+/// 移除当前提示（若有），并取消其自动消失定时器。
+/// 点按与到时先播退场，再摘掉；新提示替换旧提示时立刻摘掉，保持单例。
+void dismissAppNotice({bool animate = true}) {
+  if (animate && _requestExit != null) {
+    // 只停“开始退场”的定时器，保留到时强制摘掉，避免退场动画
+    // 没跑完时提示停在树上。
+    _currentExitTimer?.cancel();
+    _currentExitTimer = null;
+    final exit = _requestExit;
+    _requestExit = null;
+    exit!();
+    return;
+  }
+  _hardRemoveNotice();
+}
+
+class _NoticeView extends StatefulWidget {
+  const _NoticeView({
+    required this.message,
+    required this.kind,
+    required this.onRemove,
+    required this.bindExit,
+  });
+
+  final String message;
+  final AppNoticeKind kind;
+  final VoidCallback onRemove;
+  final void Function(VoidCallback requestExit) bindExit;
+
+  @override
+  State<_NoticeView> createState() => _NoticeViewState();
+}
+
+class _NoticeViewState extends State<_NoticeView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _motion = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    reverseDuration: const Duration(milliseconds: 100),
+  );
+  bool _closing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.bindExit(_close);
+    _motion.forward();
+  }
+
+  void _close() {
+    if (_closing) return;
+    _closing = true;
+    _motion.reverse().whenComplete(() {
+      if (mounted) widget.onRemove();
+    });
+  }
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = appNoticeColor(widget.kind);
+    final anim = CurvedAnimation(parent: _motion, curve: Curves.easeOutCubic);
+    return FadeTransition(
+      opacity: anim,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, -0.35),
+          end: Offset.zero,
+        ).animate(anim),
+        child: Material(
+          color: Colors.transparent,
+          child: GestureDetector(
+            onTap: dismissAppNotice,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xE61E1E1E),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: color.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(appNoticeIcon(widget.kind), size: 18, color: color),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.message,
+                      style: TextStyle(color: color, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -94,8 +207,8 @@ void showAppNotice(
   Duration duration = const Duration(milliseconds: 2800),
 ]) {
   if (message.isEmpty) return;
-  // 先替换旧提示：单例，不排队。
-  dismissAppNotice();
+  // 先替换旧提示：单例，不排队。替换时立刻摘掉，不播退场。
+  dismissAppNotice(animate: false);
   OverlayState? overlay;
   try {
     overlay = Overlay.of(context, rootOverlay: true);
@@ -103,38 +216,19 @@ void showAppNotice(
     return;
   }
   final topPadding = MediaQuery.viewPaddingOf(context).top;
-  final color = appNoticeColor(kind);
-  final entry = OverlayEntry(
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
     builder: (ctx) => Positioned(
       top: topPadding + 12,
       left: 16,
       right: 16,
-      child: Material(
-        color: Colors.transparent,
-        child: GestureDetector(
-          onTap: dismissAppNotice,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xE61E1E1E),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withValues(alpha: 0.5)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(appNoticeIcon(kind), size: 18, color: color),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    message,
-                    style: TextStyle(color: color, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      child: _NoticeView(
+        message: message,
+        kind: kind,
+        bindExit: (fn) => _requestExit = fn,
+        onRemove: () {
+          if (identical(_currentEntry, entry)) _hardRemoveNotice();
+        },
       ),
     ),
   );
@@ -145,5 +239,11 @@ void showAppNotice(
     _currentEntry = null;
     return;
   }
-  _currentTimer = Timer(duration, dismissAppNotice);
+  // 退场先于到时开始，到时再强制摘掉。这样自动消失仍落在默认
+  // 时长内（测试在 2s 仍在、3s 已走），真机上能看到淡出。
+  const exitLead = Duration(milliseconds: 120);
+  if (duration > exitLead) {
+    _currentExitTimer = Timer(duration - exitLead, () => dismissAppNotice());
+  }
+  _currentTimer = Timer(duration, () => dismissAppNotice(animate: false));
 }

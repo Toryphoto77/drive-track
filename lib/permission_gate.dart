@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_locale.dart';
 import 'native.dart';
 
 /// 首屏权限引导门。
@@ -162,7 +163,19 @@ class _PermissionGateState extends State<PermissionGate>
     await _runGate();
   }
 
+  String _localizedStatus(S s) => switch (_status) {
+        '正在自动申请权限…' => s.t('正在自动申请权限…', 'Requesting permissions…'),
+        '定位权限被拒绝，驰迹无法记录轨迹。' => s.t(
+            '定位权限被拒绝，驰迹无法记录轨迹。',
+            'Location permission denied. DriveTrack cannot record a track.'),
+        '权限检查失败，返回前台后自动重试。' => s.t(
+            '权限检查失败，返回前台后自动重试。',
+            'Permission check failed. It retries when you come back.'),
+        _ => _status,
+      };
+
   Widget _buildGuide() {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF0B0E13),
       body: SafeArea(
@@ -173,34 +186,40 @@ class _PermissionGateState extends State<PermissionGate>
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Text(
-                  '驰迹',
-                  style: TextStyle(
+                Text(
+                  s.t('权限', 'Permissions'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 44,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  '记录轨迹需要以下权限，正在自动申请：',
+                Text(
+                  s.t('记录轨迹需要以下权限，正在自动申请：', 'Recording needs these permissions. Requesting them now:'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
+                  style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  '· 前台定位：记录轨迹与车速\n'
-                  '· 后台定位：切后台后继续记录\n'
-                  '· 通知：后台记录时显示常驻通知\n'
-                  '· 蓝牙：连接骑行功率计 / 踏频 / 心率带',
-                  style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.8),
+                Text(
+                  s.t(
+                    '· 前台定位：记录轨迹与车速\n'
+                    '· 后台定位：切后台后继续记录\n'
+                    '· 通知：后台记录时显示常驻通知\n'
+                    '· 蓝牙：连接骑行功率计 / 踏频 / 心率带',
+                    '· Foreground location: track and speed\n'
+                    '· Background location: keep recording\n'
+                    '· Notifications: ongoing recording notice\n'
+                    '· Bluetooth: power, cadence, heart rate',
+                  ),
+                  style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.8),
                 ),
                 const SizedBox(height: 32),
                 // 唯一按钮：仅在 foreground 永久拒绝（或自动重拉耗尽仍拒绝）
                 // 时出现，且为去系统设置的次要入口，不是“点按钮才请求权限”。
                 if (_showSettings) ...[
                   Text(
-                    _status,
+                    _localizedStatus(s),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                         color: Colors.white70, fontSize: 14, height: 1.6),
@@ -208,13 +227,13 @@ class _PermissionGateState extends State<PermissionGate>
                   const SizedBox(height: 16),
                   TextButton(
                     onPressed: Native.openAppSettings,
-                    child: const Text('去系统设置开启定位权限'),
+                    child: Text(s.t('去系统设置开启定位权限', 'Open system settings for location')),
                   ),
                 ] else ...[
                   const CircularProgressIndicator(color: Colors.white70),
                   const SizedBox(height: 16),
                   Text(
-                    _status,
+                    _localizedStatus(s),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white54, fontSize: 13),
                   ),

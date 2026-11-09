@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_locale.dart';
 import 'native.dart';
 import 'voice_service.dart';
 
@@ -179,6 +180,7 @@ class _CountdownPageState extends State<CountdownPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final accent = Theme.of(context).colorScheme.primary;
     final isGo = _remaining == 0;
     return PopScope(
@@ -219,15 +221,15 @@ class _CountdownPageState extends State<CountdownPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                isGo ? '出发！' : '即将开始记录',
+                isGo ? s.t('出发！', 'Go') : s.t('即将开始记录', 'Recording starts'),
                 style: const TextStyle(color: Colors.white70, fontSize: 16),
               ),
               if (!widget.vibrationEnabled)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    '震动提醒已关闭',
-                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                    s.t('震动提醒已关闭', 'Vibration off'),
+                    style: const TextStyle(color: Colors.white38, fontSize: 12),
                   ),
                 ),
               const Spacer(),
@@ -235,7 +237,7 @@ class _CountdownPageState extends State<CountdownPage> {
                 padding: const EdgeInsets.only(bottom: 24),
                 child: TextButton.icon(
                   icon: const Icon(Icons.close),
-                  label: const Text('取消'),
+                  label: Text(s.t('取消', 'Cancel')),
                   onPressed: _cancel,
                 ),
               ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'app_notice.dart';
 import 'camera_guide.dart';
 import 'device_center.dart';
@@ -138,7 +139,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
   final List<Map<String, dynamic>> _scanned = [];
   bool _scanning = false;
   String? _permNotice;
-  String _statusLine = '尚未扫描，点「扫描相机」开始。';
+  bool _unfilteredLimited = false;
 
   DeviceLinkStatus _goproStatus = DeviceLinkStatus.disconnected;
   String? _goproAddress;
@@ -164,7 +165,6 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       setState(() {
         _scanned.removeWhere((d) => d['address'] == addr);
         _scanned.insert(0, e);
-        _statusLine = _scanSummary();
       });
     }, onError: (_) {});
     _dataSub = Native.bleDataStream.listen((e) {
@@ -253,7 +253,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
 
   String _scanSummary() {
     final cams = _cameras.length;
-    if (_scanned.isEmpty) return '尚未扫描，点「扫描相机」开始。';
+    if (_scanned.isEmpty) return S.current.t('尚未扫描，点「扫描相机」。', 'Not scanned. Tap Scan cameras.');
     if (cams == 0) {
       return '已扫描 ${_scanned.length} 台设备，未发现运动相机。';
     }
@@ -297,10 +297,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         await Native.stopBleScan();
       } catch (_) {}
       if (!mounted) return;
-      setState(() {
-        _scanning = false;
-        _statusLine = _scanSummary();
-      });
+      setState(() => _scanning = false);
       showAppNotice(context, '已停止扫描。', AppNoticeKind.info);
       return;
     }
@@ -316,8 +313,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       if (!mounted) return;
       setState(() {
         _scanning = true;
-        _statusLine = '正在扫描周围的运动相机…'
-            '${unfilteredOk ? '' : '（Insta360 / DJI 可能扫不到，请确认蓝牙已打开且权限已授予。）'}';
+        _unfilteredLimited = !unfilteredOk;
       });
     } catch (e) {
       if (!mounted) return;
@@ -492,6 +488,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
             c.brand == CameraBrand.gopro && c.address == _goproAddress)
         : const Iterable<ScannedCamera>.empty();
     final connectedCam = connected.isEmpty ? null : connected.first;
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
@@ -500,7 +497,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
         ),
-        title: const Text('连接运动相机', style: TextStyle(color: Colors.white)),
+        title: Text(s.t('连接运动相机', 'Connect camera'), style: const TextStyle(color: Colors.white)),
       ),
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
@@ -508,24 +505,29 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           // 大卡片：扫描入口 + 扫描动画（转圈 + 波纹），共用组件，
           // 与外接 GPS 页同一套样式。
           DeviceScanCard(
-            title: '连接运动相机',
-            description: '一个入口扫全部品牌：GoPro 走 BLE 直连，Insta360 / DJI 走'
-                ' Wi-Fi 热点 + 品牌 App 向导；品牌自动识别，'
-                '不用先选品牌，点行即连。',
+            title: s.t('连接运动相机', 'Connect camera'),
+            description: s.t(
+              'GoPro 走 BLE 直连，Insta360 / DJI 走向导。不用先选品牌，点行即连。',
+              'GoPro uses BLE. Insta360 / DJI use a guide. Tap a row.',
+            ),
             icon: Icons.videocam,
             scanning: _scanning,
-            scanLabel: '扫描相机',
-            stopLabel: '停止扫描',
+            scanLabel: s.t('扫描相机', 'Scan cameras'),
+            stopLabel: s.t('停止扫描', 'Stop'),
             onScanToggle: _toggleScan,
-            statusLine:
-                _scanning ? '正在扫描周围的运动相机…' : _statusLine,
+            statusLine: _scanning
+                ? s.t('正在扫描附近相机…', 'Scanning nearby cameras…') +
+                    (_unfilteredLimited
+                        ? s.t(' 部分相机可能看不到，请打开蓝牙权限。', ' Some cameras may be missing. Check Bluetooth permission.')
+                        : '')
+                : _scanSummary(),
             permNotice: _permNotice,
             onOpenSettings: () => Native.openAppSettings(),
           ),
           const SizedBox(height: 16),
-          const Text(
-            '搜到的相机',
-            style: TextStyle(
+          Text(
+            s.t('搜到的相机', 'Cameras'),
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -533,10 +535,9 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           ),
           const SizedBox(height: 8),
           if (cameras.isEmpty)
-            const Text(
-              '尚未找到相机：点上方「扫描相机」开始；GoPro 须开机并打开蓝牙，'
-              'Insta360 / DJI 须开机。',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+            Text(
+              s.t('还没有相机。点「扫描相机」，并打开设备。', 'No cameras yet. Tap Scan cameras and power the device on.'),
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
           for (final cam in cameras)
             _cameraRow(cam, connectedCam),

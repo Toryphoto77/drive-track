@@ -15,9 +15,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'card_style.dart';
+
 const Color _kRed = Color(0xFFE10600);
-const Color _kCard = Color(0xFF141414);
-const Color _kBorder = Color(0xFF2A2A2A);
 
 /// 分项 key → 可过滤的事件 kind。
 /// '平顺' 由急加速 / 急刹车构成；'过弯' 对应 corner；
@@ -163,9 +163,9 @@ class DrivingScoreCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _kCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _kBorder),
+        color: CardStyle.cardColor,
+        borderRadius: CardStyle.cardBorderRadius,
+        border: Border.all(color: CardStyle.borderColor),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('驾驶习惯评分',
