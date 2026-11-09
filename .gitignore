@@ -49,3 +49,23 @@ app.*.map.json
 .amap-key
 .supabase-key
 .cloudbase-env
+
+# Secrets & local machine paths (never commit)
+*.keystore
+*.jks
+*.password
+ZZ-签名密钥-务必保密/
+android/local.properties
+.amap-key
+.cloudbase-env
+.supabase-key
+
+# Built APKs at repo root (release assets go to GitHub Releases, not git)
+/DriveTrack-*.apk
+*.apk
+!android/app/src/**/*.apk
+
+# Local Gradle plugin build caches
+flutter-tools-gradle/.gradle/
+flutter-tools-gradle/build/
+icon-concepts/

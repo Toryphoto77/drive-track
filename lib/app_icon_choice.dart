@@ -6,11 +6,11 @@
 /// 一律由 normalize 折到 'steering'，运行时不会再出现被删图标。
 ///
 /// 桌面启动图标已是方向盘（AndroidManifest 的 application 图标与
-/// LauncherRed / LauncherBlue 垫片都用 @mipmap/ic_launcher_steering），
-/// 因此 assets/app_icon_red.png 等三个 PNG 文件留在磁盘、不删除，
-/// 只从选项与 pubspec assets 里移除；activity-alias 定义一个不删，
-/// 组件启用状态跨升级保留，删 alias 会导致 App 无法启动（v1.2.2 教训）。
-/// App 内图标图（启动页 / 关于页）与桌面选择同步，只走下面两个资源：
+/// LauncherRed / LauncherBlue 垫片都用 @mipmap/ic_launcher_steering）。
+/// 废弃的 Flutter assets（app_icon.png / red / rb17 / valkyrie）已删除；
+/// activity-alias（含 rb17/valkyrie 组件名）保留——组件启用状态跨升级
+/// 粘性，删 alias 会导致 App 无法启动（v1.2.2 教训），对应 mipmap 仍留。
+/// App 内图标图（启动页 / 关于页）只走：
 /// assets/app_icon_steering.png / assets/app_icon_checkered.png。
 /// 持久化键：profile.json 的 'appIcon'，'steering'（默认）或 'checkered'。
 class AppIconChoice {

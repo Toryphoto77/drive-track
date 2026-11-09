@@ -8,10 +8,12 @@
 # 文件名用完整 ABI 名 armeabi-v7a，与 arm64 旧简称区分。
 # 注意：本脚本只准备、不构建——跑构建是协调人的事。
 set -e
-export JAVA_HOME=$HOME/sdk/jdk17
-export ANDROID_HOME=$HOME/sdk/android-sdk
+# 路径可用环境变量覆盖（装在别处时不必改脚本）。
+export JAVA_HOME=${DRIVETRACK_JAVA_HOME:-$HOME/sdk/jdk17}
+FLUTTER_HOME=${DRIVETRACK_FLUTTER_HOME:-$HOME/sdk/flutter}
+export ANDROID_HOME=${DRIVETRACK_ANDROID_HOME:-$HOME/sdk/android-sdk}
 export ANDROID_SDK_ROOT=$ANDROID_HOME
-export PATH=$HOME/sdk/flutter/bin:$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+export PATH=$FLUTTER_HOME/bin:$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
 export JAVA_OPTS="-Djava.net.preferIPv4Stack=true"
 export GRADLE_OPTS="$JAVA_OPTS"
 # 关键：本机以 root 运行，Java user.home 默认是 /root（VM 替换后会被清空），
@@ -22,11 +24,19 @@ cd "$(dirname "$0")"
 for d in "$ANDROID_HOME/platforms/android-36" "$ANDROID_HOME/build-tools/36.0.0" "$ANDROID_HOME/ndk/28.2.13676358"; do
   if [ ! -d "$d" ]; then echo "缺 SDK 组件：$d"; exit 1; fi
 done
-if [ ! -d "$HOME/gradle-offline-mirror" ]; then echo "缺本地镜像仓库"; exit 1; fi
+# 离线镜像（仅本机沙箱用）：有镜像走离线构建，无镜像走在线构建（需联网）。
+if [ -d "$HOME/gradle-offline-mirror" ]; then
+  OFFLINE_BUILD=1
+else
+  OFFLINE_BUILD=0
+  echo "未找到本地离线镜像，走在线构建（需联网下载 Gradle 依赖）"
+fi
 (cd android && ./gradlew --stop >/dev/null 2>&1) || true
 GUH=$HOME/.gradle
-mkdir -p "$GUH/init.d"
-printf 'gradle.startParameter.offline = true\n' > "$GUH/init.d/offline.gradle"
+if [ "$OFFLINE_BUILD" = 1 ]; then
+  mkdir -p "$GUH/init.d"
+  printf 'gradle.startParameter.offline = true\n' > "$GUH/init.d/offline.gradle"
+fi
 trap 'rm -f "$GUH/init.d/offline.gradle"' EXIT
 # 版本号从 pubspec.yaml 读（形如 version: 1.4.1+54，取 + 前的部分）；
 # 读不到即停，不编出文件名带空版本号的包。

@@ -67,7 +67,68 @@ class Recorder extends ChangeNotifier {
   // 轨迹点改由 onExternalFix 注入（provider='external'）。
   bool externalGpsActive = false;
 
-  // ---- 隧道缺口（第一步 + 第二步）----
+  // ---- 赛道自动暂停（v1.5.4 攒版，赛道模式专用；街道模式不用）----
+  /// main 在赛道模式下置 true、街道置 false（见 _buildRecording）。
+  bool trackAutoPauseEnabled = false;
+  /// main 在 LapTimer 第一次过起终点线后置 true（见 _drainLapTimer）：
+  /// 自动暂停只在计时真正开始后才允许，起跑线前等待不暂停。
+  bool trackTimingStarted = false;
+  /// 当前暂停是否由赛道自动暂停触发（手动暂停 / 5 分钟自动暂停为 false）。
+  bool _autoPaused = false;
+  /// 自动暂停前那条标定提示，恢复时还回去（不编“已标定”）。
+  String? _noteBeforeAutoPause;
+  bool get isAutoPaused => state == RecState.paused && _autoPaused;
+  /// 自开始后是否至少动过一次（车速 > 5 km/h）：未动过不自动暂停。
+  bool _trackHasMoved = false;
+  int? _trackStoppedSinceMs;
+  /// 自动暂停门槛：停车低于 2 km/h 满 3 秒暂停，车速回升到 5 km/h
+  /// 以上恢复（与 LapTimer 的自动暂停参数同口径，见 _buildLapTimer）。
+  static const double _autoPauseStopMs = 2 / 3.6;
+  static const double _autoResumeMs = 5 / 3.6;
+  static const int _autoPauseDelayMs = 3000;
+
+  /// 赛道自动暂停 / 恢复节拍：onLocation / onExternalFix 每次定位
+  /// 后调。只在 [trackAutoPauseEnabled] 且 [trackTimingStarted] 时
+  /// 生效；须先动过一次才允许暂停。暂停 = 计时暂停（elapsedMs
+  /// 冻结、LapTimer 靠喂点自行暂停扣时），定位 / 传感器数据继续
+  /// 落点不断流，恢复靠车速回升自动触发，全程无需手动。
+  void trackAutoPauseTick({required double speedMs, required int nowMs}) {
+    if (!trackAutoPauseEnabled || !trackTimingStarted) return;
+    if (speedMs >= _autoResumeMs) _trackHasMoved = true;
+    if (state == RecState.recording) {
+      if (!_trackHasMoved) return;
+      if (speedMs < _autoPauseStopMs) {
+        _trackStoppedSinceMs ??= nowMs;
+        if (nowMs - _trackStoppedSinceMs! >= _autoPauseDelayMs) {
+          state = RecState.paused;
+          _autoPaused = true;
+          _pauseStartMs = nowMs;
+          _trackStoppedSinceMs = null;
+          _noteBeforeAutoPause = calibrationNote;
+          calibrationNote = '已自动暂停 · 等待起步';
+          notifyListeners();
+        }
+      } else {
+        _trackStoppedSinceMs = null;
+      }
+    } else if (isAutoPaused) {
+      // 自动暂停中：车速回升到恢复门槛以上即自动恢复计时；
+      // 低于门槛继续停着，不抖动。
+      if (speedMs >= _autoResumeMs) {
+        pausedTotalMs += nowMs - _pauseStartMs;
+        state = RecState.recording;
+        _autoPaused = false;
+        _trackStoppedSinceMs = null;
+        _lowSpeedSinceMs = null;
+        _lastFixMs = nowMs;
+        if (_noteBeforeAutoPause != null) {
+          calibrationNote = _noteBeforeAutoPause!;
+          _noteBeforeAutoPause = null;
+        }
+        notifyListeners();
+      }
+    }
+  }
   /// 缺口/推算状态：录制页药丸、地图、语音服务读同一份。
   final ValueNotifier<GapStatus> gapStatus =
       ValueNotifier<GapStatus>(GapStatus.ok);
@@ -466,10 +527,14 @@ class Recorder extends ChangeNotifier {
 
     if (externalGpsActive) {
       // 外接 GPS 接管期间：手机定位只更新当前显示，不落点，避免双份轨迹。
+      // 赛道自动暂停节拍仍要走（恢复靠手机定位速度也能触发）。
+      trackAutoPauseTick(speedMs: speed, nowMs: timeMs);
       _throttledNotify();
       return;
     }
-    if (state != RecState.recording) {
+    // 赛道自动暂停节拍（赛道模式专用；街道模式开关关着，不跑）。
+    trackAutoPauseTick(speedMs: speed, nowMs: timeMs);
+    if (state != RecState.recording && !isAutoPaused) {
       _throttledNotify();
       return;
     }
@@ -510,15 +575,18 @@ class Recorder extends ChangeNotifier {
     _sumVert = 0;
     _bucketCount = 0;
 
-    // 停车超 5 分钟自动暂停（只暂停，不结束；恢复需手动点恢复）
+    // 停车超 5 分钟自动暂停（只暂停，不结束；恢复需手动点恢复）。
+    // 赛道自动暂停中不跑这里（已是暂停态，pause() 也会直接返回）。
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (speed < 0.5) {
-      _lowSpeedSinceMs ??= now;
-      if (now - _lowSpeedSinceMs! > 5 * 60 * 1000) {
-        pause(auto: true);
+    if (state == RecState.recording) {
+      if (speed < 0.5) {
+        _lowSpeedSinceMs ??= now;
+        if (now - _lowSpeedSinceMs! > 5 * 60 * 1000) {
+          pause(auto: true);
+        }
+      } else {
+        _lowSpeedSinceMs = null;
       }
-    } else {
-      _lowSpeedSinceMs = null;
     }
     _throttledNotify();
   }
@@ -547,7 +615,9 @@ class Recorder extends ChangeNotifier {
     curSpeed = speed;
     curHeading = fix.bearing;
     _lastFixMs = timeMs;
-    if (state != RecState.recording) {
+    // 赛道自动暂停节拍（赛道模式专用；街道模式开关关着，不跑）。
+    trackAutoPauseTick(speedMs: speed, nowMs: timeMs);
+    if (state != RecState.recording && !isAutoPaused) {
       _throttledNotify();
       return;
     }
@@ -617,6 +687,11 @@ class Recorder extends ChangeNotifier {
     pausedTotalMs = 0;
     state = RecState.recording;
     _lowSpeedSinceMs = null;
+    _autoPaused = false;
+    _noteBeforeAutoPause = null;
+    _trackHasMoved = false;
+    _trackStoppedSinceMs = null;
+    trackTimingStarted = false;
     _lastFixMs = startMs;
     _gapStart = null;
     _gapRoad = null;
@@ -638,6 +713,8 @@ class Recorder extends ChangeNotifier {
     _gapTimer?.cancel();
     _gapTimer = null;
     state = RecState.paused;
+    _autoPaused = false;
+    _trackStoppedSinceMs = null;
     _pauseStartMs = DateTime.now().millisecondsSinceEpoch;
     if (auto) calibrationNote = '已自动暂停：停车超过 5 分钟，点恢复可继续';
     notifyListeners();
@@ -647,6 +724,9 @@ class Recorder extends ChangeNotifier {
     if (state != RecState.paused) return;
     pausedTotalMs += DateTime.now().millisecondsSinceEpoch - _pauseStartMs;
     state = RecState.recording;
+    _autoPaused = false;
+    _noteBeforeAutoPause = null;
+    _trackStoppedSinceMs = null;
     _lowSpeedSinceMs = null;
     _lastFixMs = DateTime.now().millisecondsSinceEpoch;
     _resetLiveFixState();
@@ -814,6 +894,11 @@ class Recorder extends ChangeNotifier {
     _gapStart = null;
     gapStatus.value = GapStatus.ok;
     state = RecState.idle;
+    _autoPaused = false;
+    _noteBeforeAutoPause = null;
+    _trackHasMoved = false;
+    _trackStoppedSinceMs = null;
+    trackTimingStarted = false;
     await Native.stopLocation();
     await Native.stopSensors();
     await Native.stopForeground();

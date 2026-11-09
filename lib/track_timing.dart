@@ -331,6 +331,16 @@ class LapTimer {
   /// 停车判定持续时长（ms），默认 30 秒。
   final int dwellThresholdMs;
 
+  /// 赛道自动暂停（v1.5.4 攒版）：三者全传才启用。停车低于
+  /// [autoPauseSpeedMs] 满 [autoPauseThresholdMs] 即自动暂停计时，
+  /// 速度回升到 [autoResumeSpeedMs] 以上才恢复（迟滞防抖动）。
+  /// 未传时走旧 dwell 规则（停车满 dwellThresholdMs 暂停、本圈
+  /// 不计）。自动暂停的短暂停不停留不计圈：只有停车总时长达到
+  /// [dwellThresholdMs] 才标 dwell（见 [_updateDwell]）。
+  final int? autoPauseThresholdMs;
+  final double? autoPauseSpeedMs;
+  final double? autoResumeSpeedMs;
+
   /// 分段点：空 = 无分段点（退化两段）；1 个 = S1/S2 两段；
   /// 2 个 = S1/S2/S3 三段。多于 2 个只取前 2 个。
   final List<GeoPoint> sectorPoints;
@@ -363,6 +373,9 @@ class LapTimer {
     this.minLapMs = 30000,
     this.dwellSpeedMs = 0.5,
     this.dwellThresholdMs = 30000,
+    this.autoPauseThresholdMs,
+    this.autoPauseSpeedMs,
+    this.autoResumeSpeedMs,
     List<GeoPoint> sectorPoints = const [],
     List<GeoPoint>? centerline,
     TrackDirection? startFinishTangent,
@@ -974,23 +987,43 @@ class LapTimer {
       _lowSpeedSinceMs = null;
       return;
     }
-    if (p.speed < dwellSpeedMs) {
+    // 自动暂停模式：停车门槛 / 暂停延迟 / 恢复门槛各取自动值，
+    // 未启用时三者回落旧 dwell 值（旧行为不动）。
+    final autoPause = autoPauseThresholdMs != null &&
+        autoPauseSpeedMs != null &&
+        autoResumeSpeedMs != null;
+    final stopSpeedMs = autoPause ? autoPauseSpeedMs! : dwellSpeedMs;
+    final pauseAfterMs =
+        autoPause ? autoPauseThresholdMs! : dwellThresholdMs;
+    final resumeSpeedMs = autoPause ? autoResumeSpeedMs! : dwellSpeedMs;
+    if (p.speed < stopSpeedMs) {
       _lowSpeedSinceMs ??= p.timeMs;
       if (!_paused &&
-          p.timeMs - _lowSpeedSinceMs! >= dwellThresholdMs) {
-        // 停车超阈值：自动暂停计时，本圈标注停留不计圈。
+          p.timeMs - _lowSpeedSinceMs! >= pauseAfterMs) {
+        // 停车超阈值：自动暂停计时。旧 dwell 模式本圈标注停留不计圈；
+        // 自动暂停模式短暂停不标，只有停车总时长达到 dwellThresholdMs
+        // 才标（长停仍不计圈，短暂停圈速只扣暂停时长）。
         _paused = true;
         _pauseStartMs = p.timeMs;
+        if (!autoPause) _dwellInCurrentLap = true;
+      } else if (_paused &&
+          autoPause &&
+          p.timeMs - _lowSpeedSinceMs! >= dwellThresholdMs) {
         _dwellInCurrentLap = true;
       }
     } else {
-      // 速度恢复：结束暂停，暂停时长计入扣除。
-      if (_paused && _pauseStartMs != null) {
-        _pausedMsCurrentLap += p.timeMs - _pauseStartMs!;
+      // 速度恢复：须达到恢复门槛才结束暂停（迟滞：停车门槛与
+      // 恢复门槛之间的低速不恢复、也不重计停车，避免来回抖动）。
+      if (_paused) {
+        if (p.speed >= resumeSpeedMs && _pauseStartMs != null) {
+          _pausedMsCurrentLap += p.timeMs - _pauseStartMs!;
+          _paused = false;
+          _pauseStartMs = null;
+          _lowSpeedSinceMs = null;
+        }
+      } else {
+        _lowSpeedSinceMs = null;
       }
-      _paused = false;
-      _pauseStartMs = null;
-      _lowSpeedSinceMs = null;
     }
   }
 

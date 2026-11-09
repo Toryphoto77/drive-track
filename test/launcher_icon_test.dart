@@ -43,6 +43,43 @@ void main() {
     expect(styles, isNot(contains('ic_launcher_red')));
     expect(styles,
         contains('<item name="android:windowSplashScreenBackground">@android:color/black</item>'));
+    expect(styles,
+        contains('<item name="android:windowSplashScreenIconBackgroundColor">@android:color/black</item>'));
+  });
+
+  test('废弃的 Flutter assets 与旧 adaptive 启动图标已清理', () {
+    for (final f in [
+      'assets/app_icon.png',
+      'assets/app_icon_red.png',
+      'assets/app_icon_rb17.png',
+      'assets/app_icon_valkyrie.png',
+      'android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml',
+      'android/app/src/main/res/drawable/ic_launcher_background.xml',
+    ]) {
+      expect(File(f).existsSync(), isFalse, reason: f);
+    }
+    expect(File('assets/app_icon_steering.png').existsSync(), isTrue);
+    expect(File('assets/app_icon_checkered.png').existsSync(), isTrue);
+    for (final density in ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
+      expect(
+          File('android/app/src/main/res/mipmap-$density/ic_launcher_steering.png')
+              .existsSync(),
+          isTrue);
+      expect(
+          File('android/app/src/main/res/mipmap-$density/ic_launcher_checkered.png')
+              .existsSync(),
+          isTrue);
+      // alias 粘性：rb17/valkyrie mipmap 仍保留
+      expect(
+          File('android/app/src/main/res/mipmap-$density/ic_launcher_rb17.png')
+              .existsSync(),
+          isTrue);
+      expect(
+          File('android/app/src/main/res/mipmap-$density/ic_launcher.png')
+              .existsSync(),
+          isFalse,
+          reason: 'legacy ic_launcher.png should be gone');
+    }
   });
 
   test('红赛车启动图标 PNG 已从各密度 mipmap 目录删除', () {

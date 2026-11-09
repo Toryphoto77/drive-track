@@ -547,7 +547,7 @@ void main() {
       'id': 'shanghai',
       'nameCn': '上海国际赛车场',
       'version': version,
-      'url': 'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json',
+      'url': 'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/shanghai.json',
       'source': 'osm',
     };
 
@@ -557,31 +557,31 @@ void main() {
       'id': 'test_new_track',
       'nameCn': '测试新赛道',
       'version': version,
-      'url': 'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/test_new_track.json',
+      'url': 'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/test_new_track.json',
       'source': 'osm',
     };
 
     test('包地址重写：raw 前缀 → cdn 前缀，非 raw 地址不动', () {
       expect(
         rewriteTrackPackageUrl(
-          'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json',
+          'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/shanghai.json',
           useCdn: true,
         ),
-        'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/shanghai.json',
+        'https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/data/packages/shanghai.json',
       );
       expect(
         rewriteTrackPackageUrl(
-          'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/shanghai.json',
+          'https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/data/packages/shanghai.json',
           useCdn: true,
         ),
-        'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/shanghai.json',
+        'https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/data/packages/shanghai.json',
       );
       expect(
         rewriteTrackPackageUrl(
-          'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json',
+          'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/shanghai.json',
           useCdn: false,
         ),
-        'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json',
+        'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/shanghai.json',
       );
     });
 
@@ -601,7 +601,7 @@ void main() {
       expect(r.updates.first.isNew, isTrue);
       expect(
         r.updates.first.url,
-        'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/test_new_track.json',
+        'https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/data/packages/test_new_track.json',
       );
       expect(r.remoteDataVersion, 'V1.0.1');
     });
@@ -626,7 +626,7 @@ void main() {
       expect(r.status, UpdateCheckStatus.available);
       expect(
         r.updates.first.url,
-        'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/test_new_track.json',
+        'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/test_new_track.json',
       );
     });
 

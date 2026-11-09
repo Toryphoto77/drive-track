@@ -8,6 +8,7 @@ void main() {
   test('v1.0.9 home big-action bottom clearance base is 80 (56 pill + 12 bottom + 12 gap)', () {
     expect(kPillNavHeight, 56.0);
     expect(kPillNavHeight + 12 + 12, 80.0);
-    expect(kPillNavWidth, 216.0);
+    // v1.5.4：4 项导航栏加宽到 288（每项仍 72 节距）。
+    expect(kPillNavWidth, 288.0);
   });
 }

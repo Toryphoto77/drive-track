@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'atomic_file.dart';
 import 'gps_source.dart';
 import 'models.dart';
 import 'logic.dart';
 import 'native.dart';
 import 'photo_points.dart';
+import 'public_trip.dart';
+import 'trip_storage.dart';
 import 'track_timing.dart';
 import 'vehicle_profile.dart';
 
@@ -38,6 +41,47 @@ class TripMeta {
         'trackMode': isTrackMode, 'trackId': trackId, 'trackName': trackName, 'vehicleId': vehicleId,
         'startPlace': startPlace, 'endPlace': endPlace, 'gps': gpsSource.name,
       };
+  /// 复制并替换部分字段（改写索引条目一律走这里，不丢字段）。
+  TripMeta copyWith({
+    TripMode? mode,
+    int? startMs,
+    int? endMs,
+    double? distanceM,
+    double? score,
+    bool? demo,
+    bool? isPublic,
+    int? likes,
+    bool? isTrackMode,
+    String? trackId,
+    bool clearTrackId = false,
+    String? trackName,
+    String? vehicleId,
+    bool clearVehicleId = false,
+    String? startPlace,
+    String? endPlace,
+    GpsSource? gpsSource,
+  }) =>
+      TripMeta(id, mode ?? this.mode, startMs ?? this.startMs, endMs ?? this.endMs,
+          distanceM ?? this.distanceM, score ?? this.score, demo ?? this.demo,
+          isPublic: isPublic ?? this.isPublic,
+          likes: likes ?? this.likes,
+          isTrackMode: isTrackMode ?? this.isTrackMode,
+          trackId: clearTrackId ? null : (trackId ?? this.trackId),
+          trackName: trackName ?? this.trackName,
+          vehicleId: clearVehicleId ? null : (vehicleId ?? this.vehicleId),
+          startPlace: startPlace ?? this.startPlace,
+          endPlace: endPlace ?? this.endPlace,
+          gpsSource: gpsSource ?? this.gpsSource);
+
+  /// 由完整行程重建索引条目（索引损坏 / 丢失时的恢复用）。
+  static TripMeta fromTrip(Trip t) => TripMeta(
+        t.id, t.mode, t.startMs, t.endMs, t.distanceM, t.score, t.id.startsWith('demo-'),
+        isPublic: t.isPublic, likes: t.likes,
+        isTrackMode: t.isTrackMode, trackId: t.trackId, trackName: t.trackName,
+        vehicleId: t.vehicleId, startPlace: t.startPlace, endPlace: t.endPlace,
+        gpsSource: classifyGpsSource(t.points.map((p) => p.provider)),
+      );
+
   static TripMeta fromJson(Map<String, dynamic> j) => TripMeta(
         j['id'] as String,
         TripModeLabel.fromKey(j['mode'] as String),
@@ -77,31 +121,64 @@ class Store {
   String get dir => _dir;
   Future<String> cacheDir() => Native.getCacheDir();
 
+  /// 索引 / 行程文件的改写全部串行执行（见 [AsyncMutex]），避免
+  /// 后台纠偏与用户操作交错时互相覆盖。
+  final AsyncMutex _mutex = AsyncMutex();
+
+  String get _indexPath => '$_dir/trips_index.json';
+
+  /// 读行程索引。索引缺失但磁盘上有行程文件、或索引 JSON 损坏时，
+  /// 从 trip_*.json 重建索引（损坏的旧索引改名留底，不删任何行程文件），
+  /// 而不是返回空列表——否则下一次保存会把只剩一条的索引写回去，
+  /// 之前的行程在列表里全部“消失”。
   Future<List<TripMeta>> loadIndex() async {
-    try {
-      final f = File('$_dir/trips_index.json');
-      if (!await f.exists()) return [];
-      final list = jsonDecode(await f.readAsString()) as List;
-      return list.map((e) => TripMeta.fromJson(e as Map<String, dynamic>)).toList();
-    } catch (_) {
-      return [];
+    final f = File(_indexPath);
+    if (await f.exists()) {
+      try {
+        final list = jsonDecode(await f.readAsString()) as List;
+        return list.map((e) => TripMeta.fromJson(e as Map<String, dynamic>)).toList();
+      } catch (_) {
+        try {
+          await f.rename('$_dir/trips_index.corrupt-${DateTime.now().millisecondsSinceEpoch}.json');
+        } catch (_) {}
+        return _rebuildIndexFromTripFiles();
+      }
     }
+    return _rebuildIndexFromTripFiles();
+  }
+
+  Future<List<TripMeta>> _rebuildIndexFromTripFiles() async {
+    final metas = <TripMeta>[];
+    try {
+      final dir = Directory(_dir);
+      if (!await dir.exists()) return metas;
+      final re = RegExp(r'^trip_(.+)\.json$');
+      await for (final e in dir.list(followLinks: false)) {
+        if (e is! File) continue;
+        final name = e.uri.pathSegments.last;
+        final m = re.firstMatch(name);
+        if (m == null) continue;
+        final t = await loadTrip(m.group(1)!);
+        if (t != null) metas.add(TripMeta.fromTrip(t));
+      }
+    } catch (_) {
+      return metas;
+    }
+    if (metas.isEmpty) return metas;
+    metas.sort((x, y) => y.startMs.compareTo(x.startMs));
+    try {
+      await _saveIndex(metas);
+    } catch (_) {}
+    return metas;
   }
 
   Future<void> _saveIndex(List<TripMeta> metas) async {
-    await File('$_dir/trips_index.json')
-        .writeAsString(jsonEncode(metas.map((m) => m.toJson()).toList()));
+    await writeStringAtomic(_indexPath, jsonEncode(metas.map((m) => m.toJson()).toList()));
   }
 
-  Future<Trip?> loadTrip(String id) async {
-    try {
-      final f = File('$_dir/trip_$id.json');
-      if (!await f.exists()) return null;
-      return Trip.fromJson(jsonDecode(await f.readAsString()) as Map<String, dynamic>);
-    } catch (_) {
-      return null;
-    }
-  }
+  Future<void> _writeTrip(Trip trip) => encodeTripForDisk(_dir, trip);
+
+  Future<Trip?> loadTrip(String id) => decodeTripFromDisk(_dir, id);
 
   Future<Trip> saveTrip(TripMode mode, int startMs, int endMs, List<TrackPoint> points,
       {bool demo = false, double riderKg = 85, bool trim = true, String weatherSummary = '', List<String> videoPaths = const [],
@@ -134,15 +211,18 @@ class Store {
       obdSamples: obdSamples,
       startFinishLat: startFinishLat, startFinishLon: startFinishLon,
     );
-    await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
     // v1.2.16：GPS 来源由本次轨迹点的 provider 统计后存入索引；
     // 老行程不回填（索引缺 'gps' 键时读作 unknown）。
     final gpsSource = classifyGpsSource(points.map((p) => p.provider));
-    final metas = await loadIndex();
-    metas.insert(0, TripMeta(id, mode, startMs, endMs, trip.distanceM, sc.total, demo,
-        isTrackMode: isTrackMode, trackId: trackId, trackName: trackName, vehicleId: vehicleId, gpsSource: gpsSource));
-    await _saveIndex(metas);
-    return trip;
+    return _mutex.run(() async {
+      await _writeTrip(trip);
+      final metas = await loadIndex();
+      metas.removeWhere((m) => m.id == id); // 索引刚从行程文件重建时可能已含本条
+      metas.insert(0, TripMeta(id, mode, startMs, endMs, trip.distanceM, sc.total, demo,
+          isTrackMode: isTrackMode, trackId: trackId, trackName: trackName, vehicleId: vehicleId, gpsSource: gpsSource));
+      await _saveIndex(metas);
+      return trip;
+    });
   }
 
   /// 旧索引迁移：只对索引 JSON 里既无 'trackMode' 又无 'trackId' 键
@@ -150,10 +230,12 @@ class Store {
   /// isTrackMode/trackId/trackName/vehicleId；其余条目原样保留，
   /// 不丢旧数据。回填后把索引写回（一次性），返回回填后的列表。
   /// 任一步失败时回退到普通 loadIndex，不抛错、不丢索引。
-  Future<List<TripMeta>> migrateIndexTrackFields() async {
+  Future<List<TripMeta>> migrateIndexTrackFields() => _mutex.run(_migrateIndexTrackFields);
+
+  Future<List<TripMeta>> _migrateIndexTrackFields() async {
     try {
-      final f = File('$_dir/trips_index.json');
-      if (!await f.exists()) return [];
+      final f = File(_indexPath);
+      if (!await f.exists()) return await loadIndex(); // 索引丢失时从行程文件重建
       final raw = jsonDecode(await f.readAsString()) as List;
       var changed = false;
       final metas = <TripMeta>[];
@@ -183,7 +265,7 @@ class Store {
   }
 
   /// 改写行程的公开/点赞字段（本机 JSON，不走服务器）。
-  Future<Trip?> updateTripSocial(String id, {bool? isPublic, bool? toggleLike}) async {
+  Future<Trip?> updateTripSocial(String id, {bool? isPublic, bool? toggleLike}) => _mutex.run(() async {
     final old = await loadTrip(id);
     if (old == null) return null;
     var likes = old.likes;
@@ -192,32 +274,16 @@ class Store {
       liked = !liked;
       likes = (likes + (liked ? 1 : -1)).clamp(0, 1000000);
     }
-    final trip = Trip(
-      id: old.id, mode: old.mode, startMs: old.startMs, endMs: old.endMs,
-      points: old.points, events: old.events, score: old.score,
-      subScores: old.subScores, scoreReasons: old.scoreReasons,
-      trimPrivacy: old.trimPrivacy, riderBikeKg: old.riderBikeKg,
-      weatherSummary: old.weatherSummary, videoPaths: old.videoPaths,
-      trackId: old.trackId, trackName: old.trackName, isTrackMode: old.isTrackMode,
-      lapsJson: old.lapsJson, startFinishLat: old.startFinishLat, startFinishLon: old.startFinishLon,
-      photoPoints: old.photoPoints, vehicleId: old.vehicleId,
-      isPublic: isPublic ?? old.isPublic, likes: likes, liked: liked,
-      correctedPoints: old.correctedPoints,
-      correctionStatus: old.correctionStatus,
-      startPlace: old.startPlace, endPlace: old.endPlace,
-    );
-    await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
+    final trip = old.copyWith(isPublic: isPublic ?? old.isPublic, likes: likes, liked: liked);
+    await _writeTrip(trip);
     final metas = await loadIndex();
     final idx = metas.indexWhere((m) => m.id == id);
     if (idx >= 0) {
-      metas[idx] = TripMeta(id, trip.mode, trip.startMs, trip.endMs, trip.distanceM, trip.score, metas[idx].demo,
-          isPublic: trip.isPublic, likes: trip.likes,
-          isTrackMode: trip.isTrackMode, trackId: trip.trackId, trackName: trip.trackName, vehicleId: trip.vehicleId,
-          gpsSource: metas[idx].gpsSource);
+      metas[idx] = metas[idx].copyWith(isPublic: trip.isPublic, likes: trip.likes);
       await _saveIndex(metas);
     }
     return trip;
-  }
+  });
 
   /// 高德第一批：改写行程的高德派生层（纠偏轨迹、纠偏状态、起终点
   /// 地名），其余字段原样保留。纠偏轨迹只写 'corrPts'，绝不碰
@@ -227,41 +293,24 @@ class Store {
       {List<(double lat, double lon)>? correctedPoints,
       String? correctionStatus,
       String? startPlace,
-      String? endPlace}) async {
+      String? endPlace}) => _mutex.run(() async {
     final old = await loadTrip(id);
     if (old == null) return null;
-    final trip = Trip(
-      id: old.id, mode: old.mode, startMs: old.startMs, endMs: old.endMs,
-      points: old.points, events: old.events, score: old.score,
-      subScores: old.subScores, scoreReasons: old.scoreReasons,
-      trimPrivacy: old.trimPrivacy, riderBikeKg: old.riderBikeKg,
-      weatherSummary: old.weatherSummary, videoPaths: old.videoPaths,
-      trackId: old.trackId, trackName: old.trackName, isTrackMode: old.isTrackMode,
-      lapsJson: old.lapsJson, startFinishLat: old.startFinishLat, startFinishLon: old.startFinishLon,
-      photoPoints: old.photoPoints, vehicleId: old.vehicleId,
-      isPublic: old.isPublic, likes: old.likes, liked: old.liked,
-      correctedPoints: correctedPoints ?? old.correctedPoints,
-      correctionStatus: correctionStatus ?? old.correctionStatus,
-      startPlace: startPlace ?? old.startPlace,
-      endPlace: endPlace ?? old.endPlace,
+    final trip = old.copyWith(
+      correctedPoints: correctedPoints,
+      correctionStatus: correctionStatus,
+      startPlace: startPlace,
+      endPlace: endPlace,
     );
-    await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
+    await _writeTrip(trip);
     final metas = await loadIndex();
     final idx = metas.indexWhere((m) => m.id == id);
     if (idx >= 0) {
-      final m = metas[idx];
-      metas[idx] = TripMeta(m.id, m.mode, m.startMs, m.endMs, m.distanceM,
-          m.score, m.demo,
-          isPublic: m.isPublic, likes: m.likes,
-          isTrackMode: m.isTrackMode, trackId: m.trackId,
-          trackName: m.trackName, vehicleId: m.vehicleId,
-          startPlace: startPlace ?? m.startPlace,
-          endPlace: endPlace ?? m.endPlace,
-          gpsSource: m.gpsSource);
+      metas[idx] = metas[idx].copyWith(startPlace: startPlace, endPlace: endPlace);
       await _saveIndex(metas);
     }
     return trip;
-  }
+  });
 
   /// v0.1.7 照片打点：改写行程的 photoPoints（相册附照片 / 改备注 /
   /// 删点后调用方经此落盘）。只换 photoPoints，其余字段原样保留；
@@ -269,29 +318,16 @@ class Store {
   /// v1.2.0 store 层 50 条上限（显式报告版）：超限保留前 50 条
   /// （输入顺序），[truncated] 为 true 时调用方必须向用户说明
   /// “只保留了前 50 条”，不得当作全部保存成功。
-  Future<PhotoPointsUpdate> updateTripPhotoPointsChecked(String id, List<PhotoPoint> photoPoints) async {
+  Future<PhotoPointsUpdate> updateTripPhotoPointsChecked(String id, List<PhotoPoint> photoPoints) => _mutex.run(() async {
     final old = await loadTrip(id);
     if (old == null) return PhotoPointsUpdate(trip: null, inputCount: photoPoints.length, savedCount: 0);
     final capped = photoPoints.length > kMaxPhotoPointsPerTrip
         ? photoPoints.sublist(0, kMaxPhotoPointsPerTrip)
         : photoPoints;
-    final trip = Trip(
-      id: old.id, mode: old.mode, startMs: old.startMs, endMs: old.endMs,
-      points: old.points, events: old.events, score: old.score,
-      subScores: old.subScores, scoreReasons: old.scoreReasons,
-      trimPrivacy: old.trimPrivacy, riderBikeKg: old.riderBikeKg,
-      weatherSummary: old.weatherSummary, videoPaths: old.videoPaths,
-      trackId: old.trackId, trackName: old.trackName, isTrackMode: old.isTrackMode,
-      lapsJson: old.lapsJson, startFinishLat: old.startFinishLat, startFinishLon: old.startFinishLon,
-      photoPoints: capped, vehicleId: old.vehicleId,
-      isPublic: old.isPublic, likes: old.likes, liked: old.liked,
-      correctedPoints: old.correctedPoints,
-      correctionStatus: old.correctionStatus,
-      startPlace: old.startPlace, endPlace: old.endPlace,
-    );
-    await File('$_dir/trip_$id.json').writeAsString(jsonEncode(trip.toJson()));
+    final trip = old.copyWith(photoPoints: capped);
+    await _writeTrip(trip);
     return PhotoPointsUpdate(trip: trip, inputCount: photoPoints.length, savedCount: capped.length);
-  }
+  });
 
   Future<Trip?> updateTripPhotoPoints(String id, List<PhotoPoint> photoPoints) async {
     final r = await updateTripPhotoPointsChecked(id, photoPoints);
@@ -303,12 +339,11 @@ class Store {
   /// photo_points.dart），用户相册原图、头像、视频一律不动。
   /// 注意：此前 App 内没有删除行程入口，本方法为删行程行为预留的
   /// 唯一钩子，调用方接删除 UI 时必须走它，不得只删 JSON。
-  Future<void> deleteTrip(String id) async {
+  Future<void> deleteTrip(String id) => _mutex.run(() => _deleteTrip(id));
+
+  Future<void> _deleteTrip(String id) async {
     final old = await loadTrip(id);
-    try {
-      final f = File('$_dir/trip_$id.json');
-      if (await f.exists()) await f.delete();
-    } catch (_) {}
+    await deleteTripFiles(_dir, id);
     final metas = await loadIndex();
     metas.removeWhere((m) => m.id == id);
     await _saveIndex(metas);
@@ -345,13 +380,16 @@ class Store {
   }
 
   Future<void> saveVehicleLibrary(VehicleLibrary library) async {
-    await File('$_dir/vehicles.json').writeAsString(jsonEncode(library.toJson()));
+    await writeStringAtomic('$_dir/vehicles.json', jsonEncode(library.toJson()));
   }
 
   /// 删除车辆后批量回退绑定行程：vehicleId 等于被删车辆的行程
   /// 改为 null（回退全局油耗/油价），行程本身不删除、不转给别的车；
   /// 索引同步改写。返回回退的行程数。
-  Future<int> rebindTripsAfterVehicleDeleted(String deletedVehicleId) async {
+  Future<int> rebindTripsAfterVehicleDeleted(String deletedVehicleId) =>
+      _mutex.run(() => _rebindTripsAfterVehicleDeleted(deletedVehicleId));
+
+  Future<int> _rebindTripsAfterVehicleDeleted(String deletedVehicleId) async {
     final metas = await loadIndex();
     var changed = 0;
     for (var i = 0; i < metas.length; i++) {
@@ -360,27 +398,9 @@ class Store {
       if (next != m.vehicleId) {
         final t = await loadTrip(m.id);
         if (t != null && t.vehicleId == deletedVehicleId) {
-          final nt = Trip(
-            id: t.id, mode: t.mode, startMs: t.startMs, endMs: t.endMs,
-            points: t.points, events: t.events, score: t.score,
-            subScores: t.subScores, scoreReasons: t.scoreReasons,
-            trimPrivacy: t.trimPrivacy, riderBikeKg: t.riderBikeKg,
-            weatherSummary: t.weatherSummary, videoPaths: t.videoPaths,
-            trackId: t.trackId, trackName: t.trackName, isTrackMode: t.isTrackMode,
-            lapsJson: t.lapsJson, startFinishLat: t.startFinishLat, startFinishLon: t.startFinishLon,
-            photoPoints: t.photoPoints, vehicleId: null,
-            isPublic: t.isPublic, likes: t.likes, liked: t.liked,
-            correctedPoints: t.correctedPoints,
-            correctionStatus: t.correctionStatus,
-            startPlace: t.startPlace, endPlace: t.endPlace,
-          );
-          await File('$_dir/trip_${m.id}.json').writeAsString(jsonEncode(nt.toJson()));
+          await _writeTrip(t.copyWith(clearVehicleId: true));
         }
-        metas[i] = TripMeta(m.id, m.mode, m.startMs, m.endMs, m.distanceM, m.score, m.demo,
-            isPublic: m.isPublic, likes: m.likes,
-            isTrackMode: m.isTrackMode, trackId: m.trackId, trackName: m.trackName, vehicleId: next,
-            startPlace: m.startPlace, endPlace: m.endPlace,
-            gpsSource: m.gpsSource);
+        metas[i] = next == null ? m.copyWith(clearVehicleId: true) : m.copyWith(vehicleId: next);
         changed++;
       }
     }
@@ -400,10 +420,10 @@ class Store {
   }
 
   Future<void> _saveFavorites(Set<String> fav) async {
-    await File('$_dir/favorites.json').writeAsString(jsonEncode(fav.toList()));
+    await writeStringAtomic('$_dir/favorites.json', jsonEncode(fav.toList()));
   }
 
-  Future<Set<String>> toggleFavorite(String id) async {
+  Future<Set<String>> toggleFavorite(String id) => _mutex.run(() async {
     final fav = await loadFavorites();
     if (fav.contains(id)) {
       fav.remove(id);
@@ -412,26 +432,14 @@ class Store {
     }
     await _saveFavorites(fav);
     return fav;
-  }
+  });
 
   /// 分享时默认截掉首尾各约 400 米（按累计里程切），不显示具体家庭地址。
   List<TrackPoint> trimmedPoints(Trip trip) {
-    if (!trip.trimPrivacy || trip.points.length < 10) return trip.points;
-    var total = 0.0;
-    final dists = <double>[0];
-    for (var i = 1; i < trip.points.length; i++) {
-      total += haversineM(trip.points[i - 1].lat, trip.points[i - 1].lon, trip.points[i].lat, trip.points[i].lon);
-      dists.add(total);
-    }
-    var s = 0, e = trip.points.length - 1;
-    while (s < dists.length && dists[s] < 400) {
-      s++;
-    }
-    while (e > 0 && total - dists[e] < 400) {
-      e--;
-    }
-    if (e - s < 10) return trip.points;
-    return trip.points.sublist(s, e + 1);
+    if (!trip.trimPrivacy) return trip.points;
+    final r = privacyTrimRange(trip.points);
+    if (!r.ok) return trip.points;
+    return trip.points.sublist(r.start, r.end + 1);
   }
 
   /// v1.2.18：赛道分段航点。调用方仅在查到赛道包且包有起终点 /

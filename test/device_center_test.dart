@@ -19,7 +19,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('外接设备中心'), findsOneWidget);
+    expect(find.text('设备中心'), findsOneWidget);
     // 三组标题（不再有重复的 BleDIY 说明区）。
     expect(find.text('运动相机'), findsOneWidget);
     expect(find.text('外接 GPS 模块'), findsOneWidget);
@@ -33,24 +33,25 @@ void main() {
     await tester.pump();
     expect(find.text('传感器：自定义 BLE 设备'), findsOneWidget);
     // 旧的按品牌三张卡已删：设备中心里「高级 / 按品牌」整个区不在，
-    // 相机唯一入口是「打开连接运动相机」（统一页覆盖 GoPro 直连与
-    // Insta360 / DJI 向导）。先断言主入口，再断言旧区与旧操作全不在树里。
+    // 相机唯一入口是「打开连接运动相机」。先断言主入口，再断言旧区与旧操作全不在树里。
     expect(find.text('打开连接运动相机'), findsOneWidget);
     expect(find.text('高级 / 按品牌'), findsNothing);
     expect(find.text('扫描 GoPro 设备'), findsNothing);
     expect(find.text('连接（需原生支持）'), findsNothing);
-    // 单入口主按钮在顶部；档案卡收进「高级 / 手动添加」，
-    // 默认收起时不在树里，先展开再断言。
+    // v1.5.4：相机卡只列支持品牌，不讲各品牌连接方式。
+    expect(find.text('支持的运动相机：GoPro、Insta360、DJI。'), findsOneWidget);
+    expect(find.textContaining('走 BLE 直连'), findsNothing);
+    expect(find.textContaining('走 Wi-Fi 热点'), findsNothing);
+    // v1.5.4：「高级 / 手动添加」区与「外接 GPS：未连接」状态卡均已删。
+    expect(find.text('高级 / 手动添加'), findsNothing);
+    expect(find.text('外接 GPS：未连接'), findsNothing);
+    expect(find.text('保存到本机清单'), findsNothing);
+    expect(find.text('暂无定位：尚未收到有效定位。'), findsNothing);
+    // v1.5.4：OBD 入口与相机 / GPS 并列在顶部，点卡弹「敬请期待」。
+    expect(find.text('OBD（ELM327）'), findsOneWidget);
+    // 单入口主按钮在顶部；档案卡已随高级区删除，不在树里。
     expect(find.text('扫描适配设备'), findsOneWidget);
     expect(find.text('BleDIY'), findsNothing);
-    await tester.scrollUntilVisible(
-      find.text('高级 / 手动添加'),
-      300,
-    );
-    await tester.pump();
-    await tester.tap(find.text('高级 / 手动添加'));
-    await tester.pumpAndSettle();
-    expect(find.text('BleDIY'), findsOneWidget);
     // 自定义表单收进展开区：未展开时字段不在树里。
     expect(find.text('名称，如：我的功率计'), findsNothing);
     await tester.scrollUntilVisible(
@@ -64,6 +65,35 @@ void main() {
     expect(find.text('服务 UUID（完整或 4/8 位短 UUID）'), findsOneWidget);
     expect(find.text('特征 UUID（完整或 4/8 位短 UUID）'), findsOneWidget);
     expect(find.text('保存到本机'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('v1.5.4 OBD 占位卡：点按弹「敬请期待」，不走真实连接',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          colorScheme: const ColorScheme.dark(primary: Color(0xFFE10600)),
+        ),
+        home: const DeviceCenterPage(),
+      ),
+    );
+    await tester.pump();
+    // OBD 卡在顶部三区之内：标题 + 敬请期待徽标 + 按钮都在。
+    expect(find.text('OBD（ELM327）'), findsOneWidget);
+    expect(find.text('行车电脑数据：车速 / 转速 / 油门 / 水温。'),
+        findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '敬请期待'));
+    await tester.pump();
+    expect(find.text('OBD · 敬请期待'), findsOneWidget);
+    expect(find.textContaining('正在路上'), findsOneWidget);
+    await tester.tap(find.text('知道了'));
+    await tester.pump();
+    expect(find.text('OBD · 敬请期待'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -90,5 +120,29 @@ void main() {
           .hasNmeaPath,
       isTrue,
     );
+  });
+
+  testWidgets('embedded tab chrome: no back AppBar, in-page title, matches list page pattern',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          colorScheme: const ColorScheme.dark(primary: Color(0xFFE10600)),
+        ),
+        home: const Scaffold(
+          backgroundColor: Color(0xFF121212),
+          body: DeviceCenterPage(embedded: true),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('设备中心'), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+    expect(find.text('运动相机'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

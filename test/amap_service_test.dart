@@ -280,6 +280,43 @@ void main() {
     });
   });
 
+  group('wgsToGcjLocal forward and amap tiles', () {
+    test('round trip wgs->gcj->wgs is identity within meters', () {
+      const lat = 39.9042, lon = 116.4074; // 北京
+      final (glat, glon) = wgsToGcjLocal(lat, lon);
+      final (blat, blon) = gcjToWgsLocal(glat, glon);
+      expect((blat - lat).abs(), lessThan(0.00005));
+      expect((blon - lon).abs(), lessThan(0.00005));
+      // 上海点同样往返。
+      const slat = 31.3380, slon = 121.2180;
+      final (gslat, gslon) = wgsToGcjLocal(slat, slon);
+      final (bslat, bslon) = gcjToWgsLocal(gslat, gslon);
+      expect((bslat - slat).abs(), lessThan(0.00005));
+      expect((bslon - slon).abs(), lessThan(0.00005));
+    });
+
+    test('known China point shifts by a plausible GCJ offset', () {
+      final (glat, glon) = wgsToGcjLocal(39.9042, 116.4074);
+      // 偏移约数百米：纬度 / 经度各移动 0.0005~0.01 度，既非 0 也非离谱值。
+      expect((glat - 39.9042).abs(), greaterThan(0.0005));
+      expect((glat - 39.9042).abs(), lessThan(0.01));
+      expect((glon - 116.4074).abs(), greaterThan(0.0005));
+      expect((glon - 116.4074).abs(), lessThan(0.01));
+    });
+
+    test('outside China returns input unchanged', () {
+      expect(wgsToGcjLocal(51.5, -0.1), (51.5, -0.1));
+      expect(wgsToGcjLocal(0, 0), (0, 0));
+    });
+
+    test('amap tile url is keyless style=7 road map', () {
+      expect(
+          amapTileUrl(14, 1234, 5678),
+          'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1234&y=5678&z=14');
+      expect(amapTileAttribution, '© 高德地图');
+    });
+  });
+
   group('gcj inverse round trip', () {
     test('inverse of forward lands within meters', () {
       const lat = 39.9042, lon = 116.4074;

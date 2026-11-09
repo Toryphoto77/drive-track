@@ -16,6 +16,7 @@
 /// 不测计时判定本身（越线检测 / 半径法已由 track_timing_crossing_test
 /// 覆盖）、不测幽灵车门控（v134 已覆盖，本版不动）。
 
+import 'package:drive_track/amap_service.dart';
 import 'package:drive_track/recording_map_page.dart';
 import 'package:drive_track/track_timing.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,12 @@ import 'package:flutter_test/flutter_test.dart';
 const _p1 = GeoPoint(31.3380, 121.2180);
 const _p2 = GeoPoint(31.3420, 121.2280);
 const _p3 = GeoPoint(31.3400, 121.2230);
+
+/// 记录页叠加层以 GCJ-02 交给 painter：期望值同样经 wgsToGcjLocal 算。
+GeoPoint _gcj(GeoPoint p) {
+  final (la, lo) = wgsToGcjLocal(p.lat, p.lon);
+  return GeoPoint(la, lo);
+}
 
 /// 半径法回落用点：lat 为南北向米数（赤道附近 1 度纬度 = 110540 m）。
 TimedPoint _pt(int timeMs, double northM, [double speed = 30]) =>
@@ -195,8 +202,10 @@ void main() {
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      expect(painter.start, _p1);
-      expect(painter.finish, _p2);
+      expect(painter.start!.lat, closeTo(_gcj(_p1).lat, 1e-9));
+      expect(painter.start!.lon, closeTo(_gcj(_p1).lon, 1e-9));
+      expect(painter.finish!.lat, closeTo(_gcj(_p2).lat, 1e-9));
+      expect(painter.finish!.lon, closeTo(_gcj(_p2).lon, 1e-9));
       expect(painter.sectorPoints.length, 1);
       expect(painter.trail.length, 2);
       expect(find.textContaining('第 1 圈 · 当前圈 00:05'), findsOneWidget);
@@ -224,8 +233,10 @@ void main() {
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      expect(painter.start, _p1);
-      expect(painter.finish, _p2);
+      expect(painter.start!.lat, closeTo(_gcj(_p1).lat, 1e-9));
+      expect(painter.start!.lon, closeTo(_gcj(_p1).lon, 1e-9));
+      expect(painter.finish!.lat, closeTo(_gcj(_p2).lat, 1e-9));
+      expect(painter.finish!.lon, closeTo(_gcj(_p2).lon, 1e-9));
       expect(painter.sectorPoints.length, 1);
       expect(find.textContaining('第 3 圈 · 当前圈 01:10'), findsOneWidget);
       expect(find.textContaining('等待通过起终点线'), findsNothing);

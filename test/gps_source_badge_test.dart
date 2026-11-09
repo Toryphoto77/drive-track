@@ -20,7 +20,7 @@ void main() {
         accuracyM: 3,
       )));
       await tester.pump();
-      expect(find.text('外接 GPS · DEXIAN D1 · 25Hz · 12 颗星'),
+      expect(find.text('外接 GPS · DEXIAN D1 · 25Hz · 12 颗星 · 3 m'),
           findsOneWidget);
       expect(find.text('手机 GPS · 1Hz'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -34,7 +34,7 @@ void main() {
         accuracyM: 2,
       )));
       await tester.pump();
-      expect(find.text('外接 GPS · 25Hz · 9 颗星'), findsOneWidget);
+      expect(find.text('外接 GPS · 25Hz · 9 颗星 · 2 m'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -45,7 +45,7 @@ void main() {
         accuracyM: 5,
       )));
       await tester.pump();
-      expect(find.text('手机 GPS · 1Hz'), findsOneWidget);
+      expect(find.text('手机 GPS · 1Hz · 5 m'), findsOneWidget);
       expect(find.textContaining('外接 GPS'), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -90,7 +90,7 @@ void main() {
         accuracyM: 3,
       )));
       await tester.pump();
-      await tester.tap(find.text('手机 GPS · 1Hz'));
+      await tester.tap(find.text('手机 GPS · 1Hz · 3 m'));
       await tester.pumpAndSettle();
       expect(find.text('GPS 来源'), findsOneWidget);
       expect(find.text('DEXIAN D1'), findsOneWidget);

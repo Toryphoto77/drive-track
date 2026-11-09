@@ -11,7 +11,16 @@ pluginManagement {
     includeBuild("../flutter-tools-gradle")
 
     repositories {
-        maven { url = uri("file:///home/hatch/gradle-offline-mirror") }
+        // 离线镜像（仅本机沙箱用：Gradle 直连被拦才需要）。
+        // 目录不存在时跳过，走下面的在线仓库；用户自己电脑上
+        // 一般没有这个目录，直接联网下载即可。
+        val offlineMirrorPath = providers.gradleProperty("offlineMirror").orNull
+            ?: System.getenv("GRADLE_OFFLINE_MIRROR")
+            ?: "/home/hatch/gradle-offline-mirror"
+        val offlineMirror = File(offlineMirrorPath)
+        if (offlineMirror.isDirectory) {
+            maven { url = uri(offlineMirror.toURI()) }
+        }
         google()
         mavenCentral()
         gradlePluginPortal()
@@ -29,7 +38,13 @@ include(":app")
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
-        maven { url = uri("file:///home/hatch/gradle-offline-mirror") }
+        val offlineMirrorPath = providers.gradleProperty("offlineMirror").orNull
+            ?: System.getenv("GRADLE_OFFLINE_MIRROR")
+            ?: "/home/hatch/gradle-offline-mirror"
+        val offlineMirror = File(offlineMirrorPath)
+        if (offlineMirror.isDirectory) {
+            maven { url = uri(offlineMirror.toURI()) }
+        }
         google()
         mavenCentral()
         maven { url = uri("https://storage.googleapis.com/download.flutter.io") }

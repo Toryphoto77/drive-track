@@ -9,6 +9,7 @@
 /// 本版不测手势跟随（首版固定视口）、不测离线瓦片下载（不做）、
 /// 不测 3D 回放（不做）。
 
+import 'package:drive_track/amap_service.dart';
 import 'package:drive_track/recording_map_page.dart';
 import 'package:drive_track/track_analysis_geo.dart';
 import 'package:drive_track/track_timing.dart';
@@ -18,6 +19,12 @@ import 'package:flutter_test/flutter_test.dart';
 const _p1 = GeoPoint(31.3380, 121.2180);
 const _p2 = GeoPoint(31.3420, 121.2280);
 const _p3 = GeoPoint(31.3400, 121.2230);
+
+/// 记录页叠加层以 GCJ-02 交给 painter：期望值同样经 wgsToGcjLocal 算。
+GeoPoint _gcj(GeoPoint p) {
+  final (la, lo) = wgsToGcjLocal(p.lat, p.lon);
+  return GeoPoint(la, lo);
+}
 
 Future<void> _pumpPage(
   WidgetTester tester,
@@ -157,10 +164,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('卫星图未加载，已显示示意图'), findsOneWidget);
+      expect(find.textContaining('地图未加载，已显示示意图'), findsOneWidget);
       expect(find.text('用时 00:10 · 里程 1.20 km'), findsNothing);
-      // 回落时不显示卫星署名。
-      expect(find.text('影像 © Esri World Imagery'), findsNothing);
+      // 回落时不显示高德署名。
+      expect(find.text('© 高德地图'), findsNothing);
       final painter = _overlayPainter(tester);
       expect(painter.satelliteOn, isFalse);
       expect(painter.hasValidPosition, isTrue);
@@ -186,8 +193,11 @@ void main() {
       expect(find.textContaining('第 2 圈 · 当前圈 01:23'), findsOneWidget);
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      expect(painter.start, _p1);
-      expect(painter.finish, _p2);
+      // 叠加层以 GCJ-02 交给 painter：与 WGS-84 入参比应有偏移。
+      expect(painter.start!.lat, closeTo(_gcj(_p1).lat, 1e-9));
+      expect(painter.start!.lon, closeTo(_gcj(_p1).lon, 1e-9));
+      expect(painter.finish!.lat, closeTo(_gcj(_p2).lat, 1e-9));
+      expect(painter.finish!.lon, closeTo(_gcj(_p2).lon, 1e-9));
       expect(painter.startFinishCoincident, isFalse);
       expect(painter.sectorPoints.length, 2);
       expect(painter.trail.length, 2);

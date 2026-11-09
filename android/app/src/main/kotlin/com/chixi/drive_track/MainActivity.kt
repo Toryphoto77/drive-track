@@ -69,10 +69,28 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import org.json.JSONObject
 import java.util.UUID
 
-class TrackService : Service() {
+// 记录中的前台服务：
+// - 用户主动结束记录时由 Dart 调 stopForeground → stopSelf，通知消失。
+// - Activity 被划掉 / 配置外销毁时：不要停本服务；本服务自己持有
+//   LocationListener，把 GPS 追加写入 filesDir/recording_native_points.ndjson，
+//   下次启动由 Dart 草稿逻辑与 Flutter 草稿合并恢复。
+// - START_STICKY：系统因内存杀掉进程后会重建本服务并继续采点
+//  （没有 Dart 引擎时只能采手机 GPS，G/OBD/外接蓝牙点无法延续——
+//   真机仍须验证；强制停止 App 时系统不会重建，只能靠已落盘草稿）。
+// - 强制停止 / 用户从系统设置强停：服务与草稿都停，下次启动提示恢复。
+class TrackService : Service(), LocationListener {
+    companion object {
+        @Volatile var recordingActive: Boolean = false
+        const val NATIVE_POINTS_FILE = "recording_native_points.ndjson"
+    }
+
+    private var locationManager: LocationManager? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -85,14 +103,70 @@ class TrackService : Service() {
         )
         val n: Notification = NotificationCompat.Builder(this, "drivetrack")
             .setContentTitle("驰迹记录中")
-            .setContentText("正在记录轨迹、G 值与传感器数据")
+            .setContentText("Recording active. Force-stop may interrupt; unfinished trips can be recovered on next open.")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pi)
             .setOngoing(true)
             .build()
         startForeground(1, n)
+        recordingActive = true
+        startServiceLocation()
         return START_STICKY
     }
+
+    override fun onDestroy() {
+        recordingActive = false
+        stopServiceLocation()
+        super.onDestroy()
+    }
+
+    private fun startServiceLocation() {
+        if (locationManager != null) return
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        locationManager = lm
+        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (fine != PackageManager.PERMISSION_GRANTED) return
+        try {
+            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
+        } catch (_: Exception) {}
+        try {
+            lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 0f, this, Looper.getMainLooper())
+        } catch (_: Exception) {}
+    }
+
+    private fun stopServiceLocation() {
+        try { locationManager?.removeUpdates(this) } catch (_: Exception) {}
+        locationManager = null
+    }
+
+    override fun onLocationChanged(location: Location) {
+        // 精简 NDJSON：够恢复轨迹即可；G/姿态仍依赖 Flutter 草稿。
+        // 用 JSONObject 拼行，避免手写转义在脚本改写时被吃掉。
+        try {
+            val o = JSONObject()
+            o.put("t", location.time)
+            o.put("lat", location.latitude)
+            o.put("lon", location.longitude)
+            o.put("alt", if (location.hasAltitude()) location.altitude else 0.0)
+            o.put("v", if (location.hasSpeed()) location.speed.toDouble() else 0.0)
+            o.put("brg", if (location.hasBearing()) location.bearing.toDouble() else 0.0)
+            o.put("hAcc", if (location.hasAccuracy()) location.accuracy.toDouble() else 999.0)
+            o.put("vAcc", 0)
+            o.put("sAcc", 0)
+            o.put("prov", location.provider ?: "gps")
+            o.put("lg", 0); o.put("tg", 0); o.put("vg", 0)
+            o.put("pitch", 0); o.put("roll", 0); o.put("hdg", 0); o.put("hpa", 0)
+            o.put("cal", false)
+            o.put("altOk", location.hasAltitude())
+            o.put("locSrc", "native_service")
+            File(filesDir, NATIVE_POINTS_FILE).appendText(o.toString() + "\n")
+        } catch (_: Exception) {}
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+    override fun onProviderEnabled(provider: String) {}
+    override fun onProviderDisabled(provider: String) {}
 }
 
 class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
@@ -104,12 +178,19 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     // 外置蓝牙 GPS 原生管理（SPP + 经典发现 + 无过滤 BLE 扫描），
     // 惰性创建：stopBleScan 里只停已有实例，绝不因此新建。
     private var btGpsManager: BtGpsManager? = null
+    // Flutter 的 EventSink / MethodChannel.Result 只能在主线程调用
+    // （FlutterJNI.ensureRunningOnMainThread 会抛 RuntimeException）。
+    // SPP / OBD 读线程与 GATT binder 回调都不在主线程，统一经此转发。
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private fun emitOnMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
+    }
     private fun btGps(): BtGpsManager {
         if (btGpsManager == null) {
             btGpsManager = BtGpsManager(
                 this,
-                { map -> bleDataSink?.success(map) },
-                { map -> btGpsDevSink?.success(map) },
+                { map -> emitOnMain { bleDataSink?.success(map) } },
+                { map -> emitOnMain { btGpsDevSink?.success(map) } },
             )
         }
         return btGpsManager!!
@@ -122,7 +203,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         if (obdManager == null) {
             obdManager = ObdManager(
                 this,
-                { map -> obdSink?.success(map) },
+                { map -> emitOnMain { obdSink?.success(map) } },
             )
         }
         return obdManager!!
@@ -217,10 +298,11 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 reconnectAttempts = 0
-                bleDataSink?.success(mapOf("type" to "connected", "address" to gatt.device.address))
+                val addr = gatt.device.address
+                emitOnMain { bleDataSink?.success(mapOf("type" to "connected", "address" to addr)) }
                 gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                bleDataSink?.success(mapOf("type" to "disconnected"))
+                emitOnMain { bleDataSink?.success(mapOf("type" to "disconnected")) }
                 if (autoReconnect && lastBleAddress != null && reconnectAttempts < 6) {
                     reconnectAttempts++
                     handler.postDelayed({
@@ -249,44 +331,53 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
-            parseBle(ch.uuid.toString(), value)
+            val uuid = ch.uuid.toString()
+            val bytes = value.copyOf()
+            emitOnMain { parseBle(uuid, bytes) }
         }
 
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicChanged(gatt: BluetoothGatt, ch: BluetoothGattCharacteristic) {
-            parseBle(ch.uuid.toString(), ch.value ?: return)
+            val uuid = ch.uuid.toString()
+            val bytes = (ch.value ?: return).copyOf()
+            emitOnMain { parseBle(uuid, bytes) }
         }
 
         override fun onCharacteristicRead(gatt: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-            if (ch.uuid.toString().contains("2a19") && value.isNotEmpty()) {
-                bleDataSink?.success(mapOf("type" to "battery", "value" to (value[0].toInt() and 0xFF)))
-            }
-            val pr = pendingReadResult
-            if (pr != null && pendingReadUuid == ch.uuid.toString()) {
-                pendingReadResult = null
-                pendingReadUuid = null
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    pr.success(value.map { it.toInt() and 0xFF })
-                } else {
-                    pr.error("READ_FAILED", "status=$status", null)
-                }
-            }
+            val bytes = value.copyOf()
+            emitOnMain { handleCharacteristicRead(ch.uuid.toString(), bytes, status) }
         }
 
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicRead(gatt: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
-            if (ch.uuid.toString().contains("2a19")) {
-                val v = ch.value
-                if (v != null && v.isNotEmpty()) {
-                    bleDataSink?.success(mapOf("type" to "battery", "value" to (v[0].toInt() and 0xFF)))
-                }
+            // API < 33 走本回调；值在回调线程里取快照，再到主线程处理。
+            val bytes = (ch.value ?: ByteArray(0)).copyOf()
+            emitOnMain { handleCharacteristicRead(ch.uuid.toString(), bytes, status) }
+        }
+    }
+
+    // 主线程上统一处理特征读结果（新旧两个回调共用）：电量上报 +
+    // readBleCharacteristic 的挂起 result。旧版 API < 33 回调此前不回
+    // pending result，读请求会一直挂起，这里一并修正。
+    private fun handleCharacteristicRead(uuid: String, value: ByteArray, status: Int) {
+        if (uuid.contains("2a19") && value.isNotEmpty() && status == BluetoothGatt.GATT_SUCCESS) {
+            bleDataSink?.success(mapOf("type" to "battery", "value" to (value[0].toInt() and 0xFF)))
+        }
+        val pr = pendingReadResult
+        if (pr != null && pendingReadUuid == uuid) {
+            pendingReadResult = null
+            pendingReadUuid = null
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                pr.success(value.map { it.toInt() and 0xFF })
+            } else {
+                pr.error("READ_FAILED", "status=$status", null)
             }
         }
     }
 
     private fun enableNotify(gatt: BluetoothGatt, ch: BluetoothGattCharacteristic) {
         gatt.setCharacteristicNotification(ch, true)
-        val desc = ch.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34b0"))
+        val desc = ch.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
         if (desc != null) {
             desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
             gatt.writeDescriptor(desc)
@@ -422,6 +513,8 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                         }
                     }
                     "getCacheDir" -> result.success(cacheDir.absolutePath)
+                    // 在线更新按设备架构挑安装包（不再一律下 arm64 包）。
+                    "getSupportedAbis" -> result.success(Build.SUPPORTED_ABIS.toList())
                     "startForeground" -> {
                         val intent = Intent(this, TrackService::class.java)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -706,6 +799,9 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     // 打包是 v0.1.0 的 bug 根因（见 requestStep 注释），切勿恢复打包逻辑。
                     "requestPermissions" -> requestStep("foreground", result)
                     "startBleScan" -> {
+                        // 默认骑行三类扫描：清掉上一次 scanBleWithServices 留下的过滤，
+                        // 否则会一直沿用旧过滤（如 GoPro FEA6）扫不到心率/功率/踏频。
+                        scanServiceFilter = null
                         startBleScan()
                         result.success(null)
                     }
@@ -1457,20 +1553,23 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
 
     private fun startBleScan() {
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
+        // 同一回调重复 startScan 会以 SCAN_FAILED_ALREADY_STARTED 静默失败，
+        // 新过滤不生效；先停掉上一轮。
+        try { scanner.stopScan(bleScanCallback) } catch (_: Exception) {}
         // v0.1.3：scanBleWithServices 传入过滤列表时优先用它，否则用骑行三类默认过滤。
         val filters = scanServiceFilter?.mapNotNull { s ->
             try {
                 val full = when {
-                    s.length == 4 -> "0000$s-0000-1000-8000-00805f9b34b0"
-                    s.length == 8 -> "$s-0000-1000-8000-00805f9b34b0"
+                    s.length == 4 -> "0000$s-0000-1000-8000-00805f9b34fb"
+                    s.length == 8 -> "$s-0000-1000-8000-00805f9b34fb"
                     else -> s
                 }
                 ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(UUID.fromString(full))).build()
             } catch (_: Exception) { null }
         }?.takeIf { it.isNotEmpty() } ?: listOf(
-            ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(UUID.fromString("00001818-0000-1000-8000-00805f9b34b0"))).build(),
-            ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(UUID.fromString("00001816-0000-1000-8000-00805f9b34b0"))).build(),
-            ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(UUID.fromString("0000180d-0000-1000-8000-00805f9b34b0"))).build()
+            ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(UUID.fromString("00001818-0000-1000-8000-00805f9b34fb"))).build(),
+            ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(UUID.fromString("00001816-0000-1000-8000-00805f9b34fb"))).build(),
+            ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb"))).build()
         )
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         try {
@@ -1683,6 +1782,11 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     }
 
     private fun stopVideoRecording(result: MethodChannel.Result) {
+        result.success(releaseVideoRecording())
+    }
+
+    /** 停止并释放录像资源，返回保留的非空分段路径（不经 MethodChannel）。 */
+    private fun releaseVideoRecording(): List<String> {
         videoRecording = false
         try { captureSession?.close() } catch (_: Exception) {}
         captureSession = null
@@ -1693,7 +1797,41 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         cameraDevice = null
         val kept = videoSegments.filter { File(it).exists() && File(it).length() > 0 }
         videoSegments.clear()
-        result.success(kept)
+        return kept
+    }
+
+    // Activity 真正销毁时 Flutter 引擎随之销毁，Dart Recorder 不再跑。
+    // - 记录中（TrackService.recordingActive）：不要停前台服务，让它继续
+    //   用自己的 LocationListener 往 native 侧车写点；下次启动合并恢复。
+    // - 未在记录：停掉服务（若还在）并释放全部资源。
+    // 无论是否在记录，Activity 持有的定位/传感器/相机/BLE/TTS 都要释放，
+    // 否则会指向已死的 EventSink。旋转等配置变化不清理。
+    override fun onDestroy() {
+        if (!isChangingConfigurations) {
+            locationActive = false
+            try { unregisterGnssCallback() } catch (_: Exception) {}
+            try { locationManager.removeUpdates(this) } catch (_: Exception) {}
+            try { sensorManager.unregisterListener(this) } catch (_: Exception) {}
+            try { releaseVideoRecording() } catch (_: Exception) {}
+            try { bluetoothAdapter?.bluetoothLeScanner?.stopScan(bleScanCallback) } catch (_: Exception) {}
+            lastBleAddress = null
+            try { gatt?.close() } catch (_: Exception) {}
+            gatt = null
+            try { btGpsManager?.stopUnfilteredScan() } catch (_: Exception) {}
+            try { btGpsManager?.stopClassicDiscovery() } catch (_: Exception) {}
+            try { btGpsManager?.disconnectSpp() } catch (_: Exception) {}
+            try { obdManager?.disconnect() } catch (_: Exception) {}
+            try { tts?.shutdown() } catch (_: Exception) {}
+            tts = null
+            try { customAudioPlayer?.release() } catch (_: Exception) {}
+            customAudioPlayer = null
+            if (!TrackService.recordingActive) {
+                try { stopService(Intent(this, TrackService::class.java)) } catch (_: Exception) {}
+            }
+            mainHandler.removeCallbacksAndMessages(null)
+            handler.removeCallbacksAndMessages(null)
+        }
+        super.onDestroy()
     }
 
     private fun shareFiles(paths: List<String>, mime: String, text: String) {

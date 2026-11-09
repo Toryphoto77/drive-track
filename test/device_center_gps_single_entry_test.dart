@@ -187,9 +187,9 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // 初始：主按钮可见，高级区收起、档案卡不在树里。
+      // 初始：主按钮可见，高级区已删、档案卡不在树里。
       expect(find.text('扫描适配设备'), findsOneWidget);
-      expect(find.text('高级 / 手动添加'), findsOneWidget);
+      expect(find.text('高级 / 手动添加'), findsNothing);
       expect(find.text('BleDIY'), findsNothing);
       expect(find.text('尚未扫描：点上方「扫描适配设备」开始。'),
           findsOneWidget);
@@ -203,7 +203,8 @@ void main() {
           find.text('正在扫描周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对）…'),
           findsOneWidget);
 
-      // 注入发现事件：D1（名称匹配）进主列表，耳机只进高级区。
+      // 注入发现事件：D1（名称匹配）进主列表，耳机不进主列表，
+      // v1.5.4 高级区已删，耳机也不再于本页另行列出。
       await pushEvent('drivetrack/btGpsDevices', {
         'name': 'DEXIAN D1',
         'address': 'AA:BB:CC:DD:EE:01',
@@ -239,19 +240,13 @@ void main() {
       expect(find.text('已连接'), findsOneWidget);
       expect(find.text('连接中'), findsNothing);
 
-      // 展开高级区：全部结果里耳机也在，数据没丢。
-      // 注意：此时合并扫描仍在进行，共用扫描卡片的波纹动画（1800ms 循环）
-      // 在持续调度帧，pumpAndSettle 永远等不到静止；展开动画只需 pump
-      // 几帧即可断言，不用 pumpAndSettle。
-      await tester.tap(find.text('高级 / 手动添加'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('My Headphones'), findsOneWidget);
-      expect(find.text('BleDIY'), findsOneWidget);
-      // 合并扫描进行中时，旧分别扫描按钮的文案本来就是“停止扫描”
-      //（与合并扫描共享底层 BLE 扫描状态），故断言静态文案的按钮。
-      expect(find.text('已配对 SPP'), findsOneWidget);
-      expect(find.text('订阅 NMEA'), findsOneWidget);
+      // v1.5.4 高级区已删：不可适配的耳机不在本页任何位置出现，
+      // 分别扫描 / 已配对 SPP / 订阅 NMEA 入口随高级区一并删除。
+      expect(find.text('My Headphones'), findsNothing);
+      expect(find.text('高级 / 手动添加'), findsNothing);
+      expect(find.text('BleDIY'), findsNothing);
+      expect(find.text('已配对 SPP'), findsNothing);
+      expect(find.text('订阅 NMEA'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });

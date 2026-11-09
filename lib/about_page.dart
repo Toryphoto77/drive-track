@@ -12,9 +12,9 @@ import 'native.dart';
 import 'update_service.dart';
 
 /// v1.0.7 关于页链接（公开仓库，点按用系统浏览器打开）。
-const String kDriveTrackRepoUrl = 'https://github.com/wangtao969/drive-track';
-const String kDriveTrackAuthorUrl = 'https://github.com/wangtao969';
-const String kDriveTrackIssuesUrl = 'https://github.com/wangtao969/drive-track/issues';
+const String kDriveTrackRepoUrl = 'https://github.com/Toryphoto77/drive-track';
+const String kDriveTrackAuthorUrl = 'https://github.com/Toryphoto77';
+const String kDriveTrackIssuesUrl = 'https://github.com/Toryphoto77/drive-track/issues';
 
 /// 关于页（v1.0.3：顶部信息合并 + 强调色回主题色 + 图标跟随选择）。
 ///
@@ -127,15 +127,20 @@ class _AboutPageState extends State<AboutPage> {
       _downloading = true;
       _downloadError = null;
     });
-    final ok = await UpdateService.downloadAndInstall(
+    final res = await UpdateService.downloadAndInstallChecked(
       url: r.downloadUrl!,
       remoteVersionCode: r.remoteVersionCode!,
+      expectedSha256: r.sha256,
     );
     if (mounted) {
       setState(() {
         _downloading = false;
-        if (!ok) _downloadError = '下载或调起安装失败，请检查网络后重试';
+        if (!res.ok) _downloadError = res.message;
       });
+      // 成功但无摘要时如实提示“未校验”，不显示成校验通过。
+      if (res.ok && !res.verified) {
+        showAppNotice(context, res.message, AppNoticeKind.warning);
+      }
     }
   }
 
@@ -286,7 +291,7 @@ class _AboutPageState extends State<AboutPage> {
           _linkCard(
             icon: Icons.person,
             title: '作者 ID',
-            subtitle: 'wangtao969',
+            subtitle: 'Toryphoto77',
             onTap: () => Native.openUrl(kDriveTrackAuthorUrl),
           ),
           const SizedBox(height: 12),

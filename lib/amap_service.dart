@@ -222,6 +222,61 @@ Future<List<(double lat, double lon)>?> convertWgsToGcj(
   return (gcjLat - dLatDeg, gcjLon - dLonDeg);
 }
 
+/// WGS-84 → GCJ-02 本地正向公式（与 [gcjToWgsLocal] 同一套标准
+/// 偏移算法、方向镜像；变换函数逐字一致，保证往返一致）。
+/// 记录页高德栅格瓦片是 GCJ-02，叠加层（中心线 / 轨迹 / 当前位置 /
+/// 幽灵车 / 起终点 / 分段点）为 WGS-84，画之前必须经此转换，
+/// 否则叠加层与道路错位可达约 500 米。
+/// 框外坐标返回原值（与逆推守卫一致）。
+(double, double) wgsToGcjLocal(double wgsLat, double wgsLon) {
+  if (wgsLon < 72.004 ||
+      wgsLon > 137.8347 ||
+      wgsLat < 0.8293 ||
+      wgsLat > 55.8271) {
+    return (wgsLat, wgsLon);
+  }
+  double transformLat(double x, double y) {
+    var ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * math.sqrt(x.abs());
+    ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0;
+    ret += (20.0 * math.sin(y * math.pi) + 40.0 * math.sin(y / 3.0 * math.pi)) * 2.0 / 3.0;
+    ret += (150.0 * math.sin(y / 12.0 * math.pi) + 300.0 * math.sin(y / 30.0 * math.pi)) * 2.0 / 3.0;
+    return ret;
+  }
+
+  double transformLon(double x, double y) {
+    var ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.sqrt(x.abs());
+    ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0;
+    ret += (20.0 * math.sin(x * math.pi) + 40.0 * math.sin(x / 3.0 * math.pi)) * 2.0 / 3.0;
+    ret += (150.0 * math.sin(x * math.pi / 12.0 * math.pi) + 300.0 * math.sin(x / 30.0 * math.pi)) * 2.0 / 3.0;
+    return ret;
+  }
+
+  const a = 6378245.0, ee = 0.00669342162296594323;
+  final dLat = transformLat(wgsLon - 105.0, wgsLat - 35.0);
+  final dLon = transformLon(wgsLon - 105.0, wgsLat - 35.0);
+  final radLat = wgsLat / 180.0 * math.pi;
+  var magic = math.sin(radLat);
+  magic = 1 - ee * magic * magic;
+  final sqrtMagic = math.sqrt(magic);
+  final dLatDeg = dLat * 180.0 / ((a * (1 - ee)) / (magic * sqrtMagic) * math.pi);
+  final dLonDeg = dLon * 180.0 / (a / sqrtMagic * math.cos(radLat) * math.pi);
+  return (wgsLat + dLatDeg, wgsLon + dLonDeg);
+}
+
+// ---------------------------------------------------------------------------
+// 记录页高德栅格瓦片（免 Key 标准路网，style=7）。
+// ---------------------------------------------------------------------------
+
+/// 高德栅格瓦片署名（记录页右下角显示）。
+const String amapTileAttribution = '© 高德地图';
+
+/// 高德标准路网栅格瓦片 URL（免 Key 端点 webrd01，style=7；
+/// 换算与 Esri 瓦片同一套 Web Mercator slippy-map 公式）。
+/// 只供记录页（lib/recording_map_page.dart）使用；编辑页与分析页
+/// 仍用 Esri 卫星瓦片，不动。
+String amapTileUrl(int z, int x, int y) =>
+    'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=$x&y=$y&z=$z';
+
 // ---------------------------------------------------------------------------
 // 轨迹纠偏（v4/grasproad/driving，POST JSON 数组）。
 // ---------------------------------------------------------------------------

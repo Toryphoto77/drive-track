@@ -6,6 +6,8 @@ import 'app_notice.dart';
 import 'card_style.dart';
 import 'cloud_auth_page.dart';
 import 'cloud_service.dart';
+import 'cloud_compare.dart';
+import 'store.dart';
 import 'models.dart';
 import 'public_profile_page.dart';
 
@@ -30,6 +32,8 @@ class _CloudPageState extends State<CloudPage> {
   late Future<PublicProfile?> _ownProfileFuture;
   final TextEditingController _otherUserIdCtrl = TextEditingController();
   bool _retryingAll = false;
+  bool _comparing = false;
+  CloudLocalCompare? _lastCompare;
 
   @override
   void initState() {
@@ -220,7 +224,30 @@ class _CloudPageState extends State<CloudPage> {
     _refresh();
   }
 
+  Future<void> _compareLocalCloud() async {
+    if (_comparing) return;
+    setState(() => _comparing = true);
+    try {
+      final store = Store();
+      await store.init();
+      final local = await store.loadIndex();
+      final cmp = await CloudService.instance
+          .compareLocalAndCloud(local.map((m) => m.id));
+      if (!mounted) return;
+      setState(() {
+        _lastCompare = cmp;
+        _comparing = false;
+      });
+      showAppNotice(context, cmp.summary, AppNoticeKind.info);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _comparing = false);
+      showAppNotice(context, 'Compare failed: $e', AppNoticeKind.error);
+    }
+  }
+
   Widget _syncCard(CloudService svc) {
+    final cmp = _lastCompare;
     return DriveTrackCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -234,13 +261,32 @@ class _CloudPageState extends State<CloudPage> {
           const SizedBox(height: 4),
           const Text('只传你点过“上传到云端”的行程，不自动传。',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
-          if (svc.failedCount > 0) ...[
-            const SizedBox(height: 10),
-            FilledButton(
-              onPressed: _retryingAll ? null : _retryAll,
-              child: Text(_retryingAll ? '重试中…' : '重试全部失败'),
-            ),
+          const SizedBox(height: 8),
+          const Text(
+            'Compare is read-only: no upload, overwrite, or delete. Conflict resolution stays a manual choice.',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          if (cmp != null) ...[
+            const SizedBox(height: 8),
+            Text(cmp.summary,
+                style: const TextStyle(color: Colors.white, fontSize: 13)),
           ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton(
+                onPressed: _comparing ? null : _compareLocalCloud,
+                child: Text(_comparing ? 'Comparing…' : 'Compare local vs cloud'),
+              ),
+              if (svc.failedCount > 0)
+                FilledButton(
+                  onPressed: _retryingAll ? null : _retryAll,
+                  child: Text(_retryingAll ? '重试中…' : '重试全部失败'),
+                ),
+            ],
+          ),
         ],
       ),
     );

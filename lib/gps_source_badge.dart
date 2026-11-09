@@ -48,12 +48,20 @@ class GpsSourceBadge extends StatelessWidget {
 
   /// 徽标文案（纯函数，便于测试与详情复用同一口径）。
   String get label {
-    if (!externalActive) return '手机 GPS · 1Hz';
+    final acc = (accuracyM != null && accuracyM! > 0 && accuracyM! < 999)
+        ? '${accuracyM!.toStringAsFixed(0)} m'
+        : null;
+    if (!externalActive) {
+      final parts = <String>['手机 GPS', '1Hz'];
+      if (acc != null) parts.add(acc);
+      return parts.join(' · ');
+    }
     final parts = <String>['外接 GPS'];
     final name = deviceName?.trim();
     if (name != null && name.isNotEmpty) parts.add(name);
     if (hz != null && hz! > 0) parts.add('${hz!.toStringAsFixed(0)}Hz');
     if (satelliteCount != null) parts.add('$satelliteCount 颗星');
+    if (acc != null) parts.add(acc);
     return parts.join(' · ');
   }
 

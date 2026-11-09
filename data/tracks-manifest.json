@@ -7,7 +7,7 @@
       "id": "shanghai",
       "nameCn": "上海国际赛车场",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/shanghai.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/shanghai.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -15,7 +15,7 @@
       "id": "zhuhai",
       "nameCn": "珠海国际赛车场",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zhuhai.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/zhuhai.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -23,7 +23,7 @@
       "id": "ningbo",
       "nameCn": "宁波国际赛车场",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/ningbo.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/ningbo.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -31,7 +31,7 @@
       "id": "zhejiang",
       "nameCn": "浙江国际赛车场",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zhejiang.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/zhejiang.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -39,7 +39,7 @@
       "id": "tianma",
       "nameCn": "上海天马山赛车场",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/tianma.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/tianma.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -47,7 +47,7 @@
       "id": "ordos",
       "nameCn": "鄂尔多斯国际赛车场",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/ordos.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/ordos.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -55,7 +55,7 @@
       "id": "nordschleife",
       "nameCn": "纽博格林北环",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/nordschleife.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/nordschleife.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -63,7 +63,7 @@
       "id": "spa",
       "nameCn": "斯帕",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/spa.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/spa.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -71,7 +71,7 @@
       "id": "monza",
       "nameCn": "蒙扎",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/monza.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/monza.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -79,7 +79,7 @@
       "id": "suzuka",
       "nameCn": "铃鹿",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/suzuka.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/suzuka.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -87,7 +87,7 @@
       "id": "laguna_seca",
       "nameCn": "拉古纳塞卡",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/laguna_seca.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/laguna_seca.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -95,7 +95,7 @@
       "id": "cota",
       "nameCn": "美洲赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/cota.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/cota.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -103,7 +103,7 @@
       "id": "fuji",
       "nameCn": "富士",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/fuji.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/fuji.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -111,7 +111,7 @@
       "id": "goldenport",
       "nameCn": "北京金港国际赛车场",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/goldenport.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/goldenport.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -119,7 +119,7 @@
       "id": "guangdong_gic",
       "nameCn": "广东国际赛车场",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/guangdong_gic.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/guangdong_gic.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -127,7 +127,7 @@
       "id": "monaco",
       "nameCn": "摩纳哥赛道",
       "version": 3,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/monaco.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/monaco.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -135,7 +135,7 @@
       "id": "le_mans",
       "nameCn": "勒芒萨尔特赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/le_mans.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/le_mans.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -143,7 +143,7 @@
       "id": "sepang",
       "nameCn": "雪邦国际赛车场",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/sepang.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/sepang.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -151,7 +151,7 @@
       "id": "bathurst",
       "nameCn": "巴瑟斯特全景山赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/bathurst.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/bathurst.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -159,7 +159,7 @@
       "id": "albert_park",
       "nameCn": "阿尔伯特公园赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/albert_park.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/albert_park.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -167,7 +167,7 @@
       "id": "catalunya",
       "nameCn": "巴塞罗那-加泰罗尼亚赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/catalunya.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/catalunya.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -175,7 +175,7 @@
       "id": "gilles_villeneuve",
       "nameCn": "吉尔·维伦纽夫赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/gilles_villeneuve.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/gilles_villeneuve.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -183,7 +183,7 @@
       "id": "hungaroring",
       "nameCn": "亨格罗宁赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/hungaroring.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/hungaroring.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -191,7 +191,7 @@
       "id": "miami",
       "nameCn": "迈阿密国际赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/miami.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/miami.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -199,7 +199,7 @@
       "id": "red_bull_ring",
       "nameCn": "红牛环",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/red_bull_ring.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/red_bull_ring.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -207,7 +207,7 @@
       "id": "silverstone",
       "nameCn": "银石赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/silverstone.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/silverstone.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -215,7 +215,7 @@
       "id": "zandvoort",
       "nameCn": "赞德福特赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zandvoort.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/zandvoort.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -223,7 +223,7 @@
       "id": "baku",
       "nameCn": "巴库城市赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/baku.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/baku.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -231,7 +231,7 @@
       "id": "interlagos",
       "nameCn": "英特拉格斯赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/interlagos.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/interlagos.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -239,7 +239,7 @@
       "id": "las_vegas",
       "nameCn": "拉斯维加斯街道赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/las_vegas.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/las_vegas.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -247,7 +247,7 @@
       "id": "lusail",
       "nameCn": "卢赛尔国际赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/lusail.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/lusail.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -255,7 +255,7 @@
       "id": "madring",
       "nameCn": "马德里赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/madring.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/madring.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -263,7 +263,7 @@
       "id": "marina_bay",
       "nameCn": "滨海湾街道赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/marina_bay.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/marina_bay.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -271,7 +271,7 @@
       "id": "mexico_city",
       "nameCn": "埃尔马诺斯·罗德里格斯赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/mexico_city.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/mexico_city.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -279,7 +279,7 @@
       "id": "yas_marina",
       "nameCn": "亚斯码头赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/yas_marina.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/yas_marina.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -287,7 +287,7 @@
       "id": "adelaide",
       "nameCn": "阿德莱德街道赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/adelaide.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/adelaide.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -295,7 +295,7 @@
       "id": "algarve",
       "nameCn": "阿尔加维国际赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/algarve.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/algarve.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -303,7 +303,7 @@
       "id": "bahrain",
       "nameCn": "巴林国际赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/bahrain.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/bahrain.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -311,7 +311,7 @@
       "id": "brands_hatch",
       "nameCn": "布兰兹哈奇赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/brands_hatch.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/brands_hatch.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -319,7 +319,7 @@
       "id": "buddh",
       "nameCn": "佛陀国际赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/buddh.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/buddh.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -327,7 +327,7 @@
       "id": "bugatti",
       "nameCn": "布加迪赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/bugatti.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/bugatti.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -335,7 +335,7 @@
       "id": "estoril",
       "nameCn": "埃斯托里尔赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/estoril.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/estoril.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -343,7 +343,7 @@
       "id": "imola",
       "nameCn": "伊莫拉赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/imola.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/imola.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -351,7 +351,7 @@
       "id": "mugello",
       "nameCn": "穆杰洛赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/mugello.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/mugello.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -359,7 +359,7 @@
       "id": "dijon",
       "nameCn": "第戎-普雷努瓦赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/dijon.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/dijon.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -367,7 +367,7 @@
       "id": "jarama",
       "nameCn": "哈拉马赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/jarama.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/jarama.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -375,7 +375,7 @@
       "id": "jerez",
       "nameCn": "赫雷斯赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/jerez.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/jerez.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -383,7 +383,7 @@
       "id": "magny_cours",
       "nameCn": "马尼库尔赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/magny_cours.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/magny_cours.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -391,7 +391,7 @@
       "id": "mont_tremblant",
       "nameCn": "蒙特朗布朗赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/mont_tremblant.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/mont_tremblant.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -399,7 +399,7 @@
       "id": "paul_ricard",
       "nameCn": "保罗·里卡德赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/paul_ricard.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/paul_ricard.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -407,7 +407,7 @@
       "id": "zolder",
       "nameCn": "佐尔德赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zolder.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/zolder.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -415,7 +415,7 @@
       "id": "donington",
       "nameCn": "多宁顿公园",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/donington.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/donington.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -423,7 +423,7 @@
       "id": "hockenheim",
       "nameCn": "霍肯海姆赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/hockenheim.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/hockenheim.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -431,7 +431,7 @@
       "id": "indianapolis",
       "nameCn": "印第安纳波利斯赛车场",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/indianapolis.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/indianapolis.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -439,7 +439,7 @@
       "id": "istanbul",
       "nameCn": "伊斯坦布尔公园",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/istanbul.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/istanbul.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -447,7 +447,7 @@
       "id": "jeddah",
       "nameCn": "吉达滨海赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/jeddah.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/jeddah.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -455,7 +455,7 @@
       "id": "korea",
       "nameCn": "韩国国际赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/korea.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/korea.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -463,7 +463,7 @@
       "id": "kyalami",
       "nameCn": "凯亚拉米赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/kyalami.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kyalami.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -471,7 +471,7 @@
       "id": "long_beach",
       "nameCn": "长滩街道赛道",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/long_beach.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/long_beach.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -479,7 +479,7 @@
       "id": "montjuic",
       "nameCn": "蒙特惠奇赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/montjuic.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/montjuic.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -487,7 +487,7 @@
       "id": "mosport",
       "nameCn": "莫斯波特公园",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/mosport.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/mosport.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -495,7 +495,7 @@
       "id": "nurburgring",
       "nameCn": "纽博格林 GP 赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/nurburgring.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/nurburgring.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -503,7 +503,7 @@
       "id": "aida",
       "nameCn": "TI 赛道 Aida",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/aida.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/aida.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -511,7 +511,7 @@
       "id": "anderstorp",
       "nameCn": "安德斯托普赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/anderstorp.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/anderstorp.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -519,7 +519,7 @@
       "id": "prince_george",
       "nameCn": "乔治王子赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/prince_george.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/prince_george.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -527,7 +527,7 @@
       "id": "valencia",
       "nameCn": "瓦伦西亚街道赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/valencia.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/valencia.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -535,7 +535,7 @@
       "id": "watkins_glen",
       "nameCn": "沃特金斯格伦",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/watkins_glen.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/watkins_glen.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -543,7 +543,7 @@
       "id": "daqing",
       "nameCn": "大庆赛车小镇",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/daqing.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/daqing.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -551,7 +551,7 @@
       "id": "guia",
       "nameCn": "东望洋赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/guia.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/guia.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -559,7 +559,7 @@
       "id": "guizhou",
       "nameCn": "贵州骏驰国际赛车场",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/guizhou.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/guizhou.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -567,7 +567,7 @@
       "id": "hunan",
       "nameCn": "湖南国际赛车场",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/hunan.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/hunan.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -575,7 +575,7 @@
       "id": "pingtan_2022",
       "nameCn": "平潭如意湖国际城市赛道（2022 年布局）",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/pingtan_2022.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/pingtan_2022.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -583,7 +583,7 @@
       "id": "pingtan_2023",
       "nameCn": "平潭如意湖国际城市赛道（2023 年布局）",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/pingtan_2023.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/pingtan_2023.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -591,7 +591,7 @@
       "id": "qinhuangdao",
       "nameCn": "秦皇岛首钢赛车谷",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/qinhuangdao.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/qinhuangdao.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -599,7 +599,7 @@
       "id": "wanchi",
       "nameCn": "江苏万驰国际赛车场",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/wanchi.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/wanchi.json",
       "source": "osm",
       "verification": "verified"
     },
@@ -607,7 +607,7 @@
       "id": "xiamen",
       "nameCn": "厦门国际赛车场",
       "version": 2,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/xiamen.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/xiamen.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -615,7 +615,7 @@
       "id": "yancheng",
       "nameCn": "盐城街道赛道",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/yancheng.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/yancheng.json",
       "source": "osm",
       "verification": "pending"
     },
@@ -623,7 +623,7 @@
       "id": "zhengzhou",
       "nameCn": "郑州国际赛车场",
       "version": 1,
-      "url": "https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/zhengzhou.json",
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/zhengzhou.json",
       "source": "osm",
       "verification": "verified"
     }

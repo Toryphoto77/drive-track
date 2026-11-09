@@ -5,9 +5,12 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'atomic_file.dart';
 import 'gps_source.dart';
 import 'models.dart';
 import 'native.dart';
+import 'public_trip.dart';
+import 'cloud_compare.dart';
 
 /// 云端二期（腾讯 CloudBase，上海区，PG 模式）。
 ///
@@ -68,6 +71,12 @@ const String cloudProfilesTable = 'profiles';
 /// 只放公开文件：公开行程的轨迹文件与公开头像；本人可写、他人只读。
 /// 私有行程仍走 [cloudTripsBucket]，绝不放进这个桶。
 const String cloudPublicBucket = 'public-files';
+
+/// 上传到云端的行程 JSON：公开行程（公开读桶）一律经 [publicTripCopy]
+/// 脱敏（去本机路径 + 隐私截首尾），私有行程原样。所有上传轨迹文件
+/// 的路径（首次上传、重试用的暂存文件、切公开后的重新发布）都走这里。
+Uint8List cloudTripBytes(Trip trip) => utf8.encode(
+    jsonEncode((trip.isPublic ? publicTripCopy(trip) : trip).toJson()));
 
 /// 公开资料昵称 / 简介长度上限（与 profiles 表的 varchar 一致；
 /// 保存时超长直接拒绝，不静默截断）。
@@ -1794,8 +1803,8 @@ class CloudService {
 
   Future<void> _saveQueue() async {
     try {
-      await File(_queueFile)
-          .writeAsString(jsonEncode(_queue.map((e) => e.toJson()).toList()));
+      await writeStringAtomic(
+          _queueFile, jsonEncode(_queue.map((e) => e.toJson()).toList()));
     } catch (_) {}
   }
 
@@ -1825,7 +1834,9 @@ class CloudService {
     final source = cloudSourceFor(classifyGpsSource(
       trip.points.map((p) => p.provider),
     ));
-    final bytes = utf8.encode(jsonEncode(trip.toJson()));
+    // 公开行程进公开读桶：先经 publicTripCopy 去掉本机路径并截首尾；
+    // 私有行程（仅本人可读）保留完整数据作为备份。
+    final bytes = cloudTripBytes(trip);
     try {
       final staging = File(_stagingFile(trip.id));
       await staging.parent.create(recursive: true);
@@ -1960,6 +1971,19 @@ class CloudService {
     } catch (_) {
       return [];
     }
+  }
+
+  /// 本机 vs 云端只读对比。不上传、不覆盖、不删。
+  /// [localIds] 一般来自 Store.loadIndex() 的 id 列表。
+  /// 云端拉取失败时 cloudCount=0、onlyCloud 为空，并在 summary 可看出差异。
+  Future<CloudLocalCompare> compareLocalAndCloud(Iterable<String> localIds) async {
+    final cloud = await listCloudTrips();
+    final cloudLocalIds = <String>[];
+    for (final r in cloud) {
+      final id = CloudLocalCompare.localIdFromStoragePath(r.storagePath);
+      if (id != null) cloudLocalIds.add(id);
+    }
+    return CloudLocalCompare.fromIds(localIds, cloudLocalIds);
   }
 
   /// 读某用户的公开资料（profiles 表一行）。未配置 / 未就绪 /
@@ -2195,7 +2219,7 @@ class CloudService {
         ? '$cloudPublicBucket/$userId/${trip.id}.json'
         : '$userId/${trip.id}.json';
     final newBucket = cloudBucketForStoragePath(newStoragePath);
-    final bytes = utf8.encode(jsonEncode(trip.toJson()));
+    final bytes = cloudTripBytes(trip);
     try {
       await backend.uploadBytesToBucket(newBucket,
           cloudObjectPathForStoragePath(newStoragePath), bytes, 'application/json');

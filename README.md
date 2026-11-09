@@ -13,7 +13,7 @@
 
 ## 下载
 
-最新版见 [Releases](https://github.com/Toryphoto77/drive-track/releases/latest)（当前 v1.5.3）。三个安装包按手机架构选一个即可，大多数手机用 arm64-v8a：
+最新版见 [Releases](https://github.com/Toryphoto77/drive-track/releases/latest)（当前 v1.5.4）。三个安装包按手机架构选一个即可，大多数手机用 arm64-v8a：
 
 | 安装包 | 适用机型 |
 | --- | --- |
@@ -59,17 +59,16 @@
 
 ## 版本
 
-当前：1.5.3（versionCode 58），包名 `com.chixi.drive_track`，三 ABI 同发。
+当前：1.5.4（versionCode 59），包名 `com.chixi.drive_track`，三 ABI 同发。
 
 ## 在线更新
 
-关于页 → 检查更新，走本仓库的 GitHub Releases 最新版接口：
+关于页 → 检查更新：先拉 jsDelivr 上的 `update-manifest.json`（国内优先），失败再回落
+`https://api.github.com/repos/Toryphoto77/drive-track/releases/latest`。
+按手机架构选对应安装包；清单 / Release 提供 SHA-256 时下载后校验，不一致不安装；
+没有摘要时会明确提示“未校验”。清单用 `tools/gen_update_manifest.py` 生成。
 
-`https://api.github.com/repos/Toryphoto77/drive-track/releases/latest`
-
-解析 tag 与对应架构的 APK 附件。有新版时下载并调起系统安装器。
-Release 本身与 APK 附件需另行创建；Release 建好之前，检查会如实报失败，
-不谎称“已是最新版”。
+发版本地流水线：`bash tools/release_pipeline.sh`（可选 `--build`）会生成并核对三架构摘要，打印 push / Release / jsDelivr 步骤但不代推。真机清单见 `RELEASE_CHECKLIST.md`。
 
 ## 构建
 
@@ -79,9 +78,10 @@ Debug（不需要签名）：
 flutter build apk --debug --target-platform android-arm64
 ```
 
-Release 签名配置在本机构建脚本与密钥库里，不进仓库。
-自行发正式版时，请用自己的密钥库替换 `android/app/build.gradle.kts`
-里的 release signing 配置，不要把密钥库或密码提交到仓库。
+Release 签名读环境变量：`DRIVETRACK_KEYSTORE`（密钥库路径，默认
+`~/release-keystore/drive-track-release.keystore`）、`DRIVETRACK_STORE_PASSWORD` /
+`DRIVETRACK_KEY_PASSWORD`（构建脚本从密码文件读出后传入）、可选 `DRIVETRACK_KEY_ALIAS`。
+不要把密钥库或密码提交到仓库。
 
 ## 说明与限制
 

@@ -220,6 +220,13 @@ class Native {
     }
   }
 
+  /// 设备支持的 ABI 列表（Build.SUPPORTED_ABIS，系统偏好顺序），
+  /// 在线更新按它挑对应架构的安装包。
+  static Future<List<String>> supportedAbis() async {
+    final r = await _m.invokeMethod('getSupportedAbis');
+    return (r as List?)?.map((e) => e.toString()).toList() ?? const [];
+  }
+
   static Future<bool> installApk(String path) async {
     try {
       await _m.invokeMethod('installApk', {'path': path});

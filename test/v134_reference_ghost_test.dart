@@ -11,6 +11,7 @@
 ///
 /// 不测计时判定、圈速统计口径、预测圈 / Delta / 最优圈（本版不动）。
 
+import 'package:drive_track/amap_service.dart';
 import 'package:drive_track/models.dart';
 import 'package:drive_track/recording_map_page.dart';
 import 'package:drive_track/track_analysis_page.dart';
@@ -288,7 +289,9 @@ void main() {
       expect(find.text('◇ 幽灵车 · 参考圈'), findsOneWidget);
       final painter = _overlayPainter(tester);
       expect(painter.hasGhost, isTrue);
-      expect(painter.ghostLat, 31.3390);
+      // 幽灵车以 GCJ-02 交给 painter（WGS-84 入参 31.3390, 121.2210）。
+      expect(painter.ghostLat,
+          closeTo(wgsToGcjLocal(31.3390, 121.2210).$1, 1e-9));
       expect(painter.ghostHeading, 45);
     });
 

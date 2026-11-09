@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('v1.0.9 frosted nav: 216x56, tap switches, icons only, no scale animation widgets, no SafeArea inside pill', (tester) async {
-    expect(kPillNavWidth, 216.0);
+  testWidgets('v1.0.9 frosted nav: 288x56, tap switches, icons only, no scale animation widgets, no SafeArea inside pill', (tester) async {
+    // v1.5.4：4 项（首页 / 设备 / 记录 / 我的），288x56，每项 72 节距。
+    expect(kPillNavWidth, 288.0);
     expect(kPillNavHeight, 56.0);
     var selected = 0;
     await tester.pumpWidget(
@@ -23,7 +24,7 @@ void main() {
         ),
       ),
     );
-    // 216 宽药丸存在、三个图标都在、只留图标无文字。
+    // 288 宽药丸存在、四个图标都在、只留图标无文字。
     expect(find.byType(FrostedGlassNavBar), findsOneWidget);
     // v1.0.5：药丸内不再用 SafeArea垫空底色区，底部位置由调用方 Positioned 直接算。
     expect(find.byType(SafeArea), findsNothing);
@@ -31,13 +32,19 @@ void main() {
     expect(find.byIcon(Icons.home), findsOneWidget);
     expect(find.byIcon(Icons.list_alt), findsOneWidget);
     expect(find.byIcon(Icons.person), findsOneWidget);
+    expect(find.byIcon(Icons.devices), findsOneWidget);
     expect(find.text('首页'), findsNothing);
+    expect(find.text('设备'), findsNothing);
     // 无任何放大动画组件：滚动放大 AnimatedScale、切换拉伸 TweenAnimationBuilder、
     // 选中弹簧放大 AnimatedScale 均已删除。
     expect(find.byType(AnimatedScale), findsNothing);
     expect(find.byType(TweenAnimationBuilder), findsNothing);
-    // 点记录图标触发切换回调。
+    // 点记录图标触发切换回调（记录是第 3 项，下标 2）。
     await tester.tap(find.byIcon(Icons.list_alt));
+    await tester.pump();
+    expect(selected, 2);
+    // 点设备图标触发第 2 项回调（下标 1，main 侧打开设备中心）。
+    await tester.tap(find.byIcon(Icons.devices));
     await tester.pump();
     expect(selected, 1);
   });

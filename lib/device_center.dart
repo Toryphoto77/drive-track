@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
+import 'home_layout.dart';
 import 'blediy_gps.dart';
 import 'bt_gps_receiver.dart';
 import 'camera_connect_page.dart';
@@ -319,8 +320,8 @@ bool _profileNameMatches(ExternalGpsProfile p, String name) {
 /// 档案里有已确认服务 UUID 的设备（如 DEXIAN D1 的 00000003-…、
 /// NMEA UART 的 00001101），广播到即进主列表；其次是档案名录的
 /// 名称证据（官方广播名模式 / 提示词）；最后是通用 NUS / SPP 服务
-/// 广播。名称与服务证据都没有的设备（如耳机）不进主列表，只在高级区
-/// 全部结果里出现；过滤不丢数据。
+/// 广播。名称与服务证据都没有的设备（如耳机）不进主列表；
+/// v1.5.4 高级区已删，不可适配的设备不再于本页另行列出。
 bool gpsDeviceIsAdaptable(Map<String, dynamic> dev) {
   final name = (dev['name'] ?? '').toString();
   final uuids = ((dev['serviceUuids'] as List?) ?? [])
@@ -369,8 +370,8 @@ ExternalGpsKind gpsProfileKindForDevice(Map<String, dynamic> dev) {
 /// 广播已验证的厂商服务如 DEXIAN D1 的 00000003，或广播 NMEA UART / SPP 服务），
 /// 点行即自动连接（BLE 优先、只有 SPP 通道时走 SPP，档案由设备推导、
 /// 不再要求先选档案卡）。行内显示连接中 → 已连接 → 定位状态 / 卫星数 / 更新率。
-/// 原有高级 / 手动能力（档案卡浏览、自定义 UUID、分别扫描、SPP 说明、全部扫描结果）收进
-/// 默认收起的「高级 / 手动添加」区，主流程看不到它们。
+/// v1.5.4：原高级 / 手动添加区已删（档案卡浏览、自定义 UUID、分别
+/// 扫描、全部扫描结果均不在此页；扫描只走「扫描适配设备」）。
 ///
 /// 定位源切换复用现有链路，不另造一套：本区做扫描 → 连接 → 订阅 /
 /// 直读 NMEA；BLE 通知（NMEA 特征）与 SPP 文本（sppNmea）都经
@@ -385,8 +386,7 @@ ExternalGpsKind gpsProfileKindForDevice(Map<String, dynamic> dev) {
 ///   不再误翻本区状态（connected 事件只认本区发起的 [_connectingAddress]）。
 /// - 扫描列表 [_scanned] 全渠道合并：BLE NUS 扫描、无过滤 BLE 扫描
 ///   （名称匹配）、经典蓝牙发现、已配对 SPP 列表全部按地址去重，
-///   一设备一行；主列表自动选通道，高级区全部结果里仍保留
-///   “连接 / SPP 连接”两个手动按钮。
+///   一设备一行；主列表自动选通道，点行即连。
 /// - 无过滤扫描与经典发现走 btGpsDeviceStream，不进页级 bleDeviceStream，
 ///   页级“附近扫描结果”不会因此多出重复设备。
 ///
@@ -408,13 +408,9 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       TextEditingController(text: nordicUartServiceUuid);
   final _customTxCtrl = TextEditingController(text: nordicUartTxUuid);
   final List<Map<String, dynamic>> _scanned = [];
-  bool _scanning = false;
-  bool _bleGpsScanning = false;
-  bool _classicScanning = false;
   // 单入口主按钮的合并扫描状态；停任一 BLE 扫描即清零（stopBleScan
   // 同时停过滤与无过滤扫描），经典发现结束不单独清零（BLE 部分仍在扫）。
   bool _adaptScanning = false;
-  bool _advancedExpanded = false;
   String? _notice;
   String? _permNotice;
   String? _connectedAddress;
@@ -425,7 +421,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   // 本区正在发起连接的地址：connected / sppConnected 事件只认它，
   // 页级传感器连接不再误翻本区状态。
   String? _connectingAddress;
-  bool _subscribed = false;
   String? _subscribeError;
   // 已连接后待订阅的 (address, service, tx)；GATT 服务发现是异步的，
   // 连接事件到达时若立即订阅报 characteristic_not_found，会在
@@ -436,26 +431,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   StreamSubscription<Map<String, dynamic>>? _devSub;
   StreamSubscription<Map<String, dynamic>>? _dataSub;
   StreamSubscription<Map<String, dynamic>>? _btGpsSub;
-
-  /// 当前类别是否可用 SPP（SPP 为主或兜底路径）。
-  bool get _sppCapable {
-    switch (_kind) {
-      case ExternalGpsKind.garminGlo:
-      case ExternalGpsKind.dualXgps:
-      case ExternalGpsKind.qstarz:
-      case ExternalGpsKind.columbus:
-      case ExternalGpsKind.vboxSport:
-      case ExternalGpsKind.dexian:
-      case ExternalGpsKind.digspice:
-      case ExternalGpsKind.dragy:
-      case ExternalGpsKind.genericBt:
-        return true;
-      case ExternalGpsKind.blediy:
-      case ExternalGpsKind.racebox:
-      case ExternalGpsKind.genericNmea:
-        return false;
-    }
-  }
 
   /// 全渠道扫描列表按地址合并：一设备一行，通道取并集；已配对标记
   /// 透传保留（主列表用它显示“已配对”，未配对的经典发现不冒充）。
@@ -516,10 +491,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       if (!mounted) return;
       final type = (e['type'] ?? '').toString();
       if (type == 'classicDiscoveryFinished') {
-        setState(() {
-          _classicScanning = false;
-          _notice = '经典蓝牙搜索完成。';
-        });
+        setState(() => _notice = '经典蓝牙搜索完成。');
         return;
       }
       if (type == 'bleScanFailed') {
@@ -550,7 +522,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         setState(() {
           _connectedAddress = null;
           _connectedChannel = null;
-          _subscribed = false;
           _pendingSubscribe = null;
           _connectingAddress = null;
           _notice = '外接 GPS 已断开，行程定位已回落手机 GPS。';
@@ -565,7 +536,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _connectedAddress = addr.isEmpty ? null : addr;
           _connectedChannel = addr.isEmpty ? null : 'spp';
           _connectingAddress = null;
-          _subscribed = false;
           _notice = 'SPP 已连接，行程改用外接 GPS。';
         });
         _publishGpsStatus();
@@ -574,7 +544,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         setState(() {
           _connectedAddress = null;
           _connectedChannel = null;
-          _subscribed = false;
           _pendingSubscribe = null;
           _connectingAddress = null;
           _notice = 'SPP 已断开（${e['reason'] ?? ''}），行程定位回落手机 GPS。';
@@ -605,8 +574,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
             <int>[];
         if (bytes.isEmpty) return;
         _feed.feedBytes(bytes);
-        if (!mounted) return;
-        setState(() => _subscribed = true);
       }
     }, onError: (_) {});
   }
@@ -680,7 +647,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       setState(() {
         _connectedAddress = null;
         _connectedChannel = null;
-        _subscribed = false;
         _pendingSubscribe = null;
         _connectingAddress = null;
       });
@@ -689,99 +655,31 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     }
   }
 
-  Future<void> _toggleScan() async {
-    if (!await _ensureBtPermissions()) return;
+  /// 手动断开当前已连的外接 GPS（v1.5.4：高级区删除后，本方法是
+  /// 页内唯一的 GPS 显式断开入口；不断开则换设备时仍由
+  /// _connectAdaptable 经 _disconnectCurrentQuietlyIfOther 静默
+  /// 断开旧连接）。按当前通道断开（SPP 走 disconnectSpp，其余
+  /// 走 disconnectBle），清状态并回落手机 GPS。
+  Future<void> _disconnectGps() async {
+    if (_connectedAddress == null) return;
     try {
-      if (_scanning) {
-        await Native.stopBleScan();
-        setState(() {
-          _scanning = false;
-          // stopBleScan 同时停过滤与无过滤扫描，合并扫描随之结束。
-          _adaptScanning = false;
-          _notice = '已停止扫描。';
-        });
+      if (_connectedChannel == 'spp') {
+        await Native.disconnectSpp();
       } else {
-        // 只扫广播 NUS 的设备；不广播 NUS 的设备不会出现在这里，
-        // 请改用下方“扫描蓝牙 GPS”（无过滤 + 名称匹配）。
-        await Native.scanBleWithServices([nordicUartServiceUuid]);
-        setState(() {
-          _scanning = true;
-          _notice = '正在扫描广播 Nordic UART 服务的设备…（不广播 NUS 的设备不会出现）';
-        });
+        await Native.disconnectBle();
       }
-    } catch (e) {
-      setState(() => _notice = '扫描失败：$e');
-    }
-  }
-
-  /// 无过滤 BLE 扫描：按设备名发现不广播 NUS 的 GPS 接收器。
-  /// 结果走 btGpsDeviceStream，只进本区列表，不污染页级列表。
-  Future<void> _toggleBleGpsScan() async {
-    if (!await _ensureBtPermissions()) return;
-    try {
-      if (_bleGpsScanning) {
-        await Native.stopBleScan();
-        setState(() {
-          _bleGpsScanning = false;
-          // stopBleScan 同时停过滤与无过滤扫描，合并扫描随之结束。
-          _adaptScanning = false;
-          _notice = '已停止蓝牙 GPS 扫描。';
-        });
-      } else {
-        final ok = await Native.scanBleUnfiltered();
-        setState(() {
-          _bleGpsScanning = ok;
-          _notice = ok
-              ? '正在扫描蓝牙设备（按名称匹配）…'
-              : '无过滤扫描启动失败：请确认蓝牙已打开且权限已授予。';
-        });
-      }
-    } catch (e) {
-      setState(() => _notice = '扫描失败：$e');
-    }
-  }
-
-  /// 已配对经典蓝牙设备（SPP 连接候选），按地址合并进同一列表。
-  Future<void> _loadBondedSpp() async {
-    if (!await _ensureBtPermissions()) return;
-    try {
-      final list = await Native.listBondedSppDevices();
-      if (!mounted) return;
-      setState(() {
-        for (final d in list) {
-          _mergeScanned(d, 'spp', bonded: true);
-        }
-        _notice = list.isEmpty
-            ? '未找到已配对经典蓝牙设备：请先在系统蓝牙设置里与 GPS 接收器配对。'
-            : '已载入 ${list.length} 台已配对经典蓝牙设备。';
-      });
-    } catch (e) {
-      setState(() => _notice = '读取已配对设备失败：$e');
-    }
-  }
-
-  /// 经典蓝牙发现：找未配对的 SPP 候选设备，结果同样进同一列表。
-  Future<void> _toggleClassicDiscovery() async {
-    if (!await _ensureBtPermissions()) return;
-    try {
-      if (_classicScanning) {
-        await Native.stopClassicDiscovery();
-        setState(() {
-          _classicScanning = false;
-          _notice = '已停止经典蓝牙搜索。';
-        });
-      } else {
-        final ok = await Native.startClassicDiscovery();
-        setState(() {
-          _classicScanning = ok;
-          _notice = ok
-              ? '正在搜索经典蓝牙设备…'
-              : '经典蓝牙搜索启动失败：请确认蓝牙已打开且权限已授予。';
-        });
-      }
-    } catch (e) {
-      setState(() => _notice = '搜索失败：$e');
-    }
+    } catch (_) {}
+    _feed.reset();
+    if (!mounted) return;
+    setState(() {
+      _connectedAddress = null;
+      _connectedChannel = null;
+      _pendingSubscribe = null;
+      _connectingAddress = null;
+      _notice = '外接 GPS 已断开，行程定位已回落手机 GPS。';
+    });
+    _connectedName = null;
+    _publishGpsStatus();
   }
 
   /// 单入口主按钮：一次扫完可适配 GPS 全渠道（NUS 过滤扫描、
@@ -800,9 +698,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       if (!mounted) return;
       setState(() {
         _adaptScanning = false;
-        _scanning = false;
-        _bleGpsScanning = false;
-        _classicScanning = false;
         _notice = '已停止扫描。';
       });
       return;
@@ -813,15 +708,12 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       // 拆包已验证）：D1 广播该服务即被过滤扫描直接命中，不靠名称猜。
       await Native.scanBleWithServices(
           [nordicUartServiceUuid, dexianServiceUuid]);
-      final bleOk = await Native.scanBleUnfiltered();
-      final classicOk = await Native.startClassicDiscovery();
+      await Native.scanBleUnfiltered();
+      await Native.startClassicDiscovery();
       final bonded = await Native.listBondedSppDevices();
       if (!mounted) return;
       setState(() {
         _adaptScanning = true;
-        _scanning = true;
-        _bleGpsScanning = bleOk;
-        _classicScanning = classicOk;
         for (final d in bonded) {
           _mergeScanned(d, 'spp', bonded: true);
         }
@@ -865,7 +757,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         // 二进制协议设备（如 DEXIAN D1）：服务 UUID 已验证，但数据特征
         // 未确认、包格式待实测抓包。本版只连通 GATT，不订阅任何特征、
         // 不解析定位；绝不落入通用 NUS 的 NMEA 订阅当 NMEA 设备用。
-        // 订阅按钮同样拒绝（见 _subscribeConnected），通知字节即使到达
+        // 订阅按钮已随高级区删除，通知字节即使到达
         // 也不进解析器（见 bleNotification 分支的丢弃守卫）。
         try {
           setState(() {
@@ -959,32 +851,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     }
   }
 
-  /// 对已连接设备直接尝试订阅 NMEA 特征（不重新连接）。
-  /// SPP 通道无需订阅（串口直读）；无 UUID 的类别尝试通用 NUS 订阅；
-  /// 二进制协议设备（如 DEXIAN D1）不订阅：特征未确认、包格式待实测抓包。
-  Future<void> _subscribeConnected() async {
-    final addr = _connectedAddress;
-    if (addr == null) {
-      setState(() => _notice = '无已连接设备，无法订阅。');
-      return;
-    }
-    if (_connectedChannel == 'spp') {
-      setState(() => _notice = 'SPP 通道无需订阅。');
-      return;
-    }
-    if (_profile.binaryProtocol) {
-      setState(() => _notice = '当前设备（${_profile.name}）用二进制协议，本版不解析定位。');
-      return;
-    }
-    final uuids = _effectiveUuids;
-    if (uuids == null) {
-      setState(() => _notice = '正在尝试通用 NUS 订阅…');
-      await _doSubscribe(addr, nordicUartServiceUuid, nordicUartTxUuid);
-      return;
-    }
-    await _doSubscribe(addr, uuids.service, uuids.tx);
-  }
-
   Future<void> _doSubscribe(String addr, String service, String tx) async {
     try {
       final r =
@@ -992,7 +858,6 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       final ok = (r['ok'] as bool?) == true;
       if (!mounted) return;
       setState(() {
-        _subscribed = ok;
         _subscribeError = ok ? null : (r['error']?.toString() ?? 'unknown');
         _notice = ok
             ? '已订阅 NMEA 特征，行程改用外接 GPS；5 秒无新定位自动回落手机 GPS。'
@@ -1002,62 +867,9 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _subscribed = false;
         _notice = '订阅失败：$e';
       });
     }
-  }
-
-  Future<void> _disconnect() async {
-    try {
-      if (_connectedChannel == 'spp') {
-        await Native.disconnectSpp();
-      } else {
-        await Native.disconnectBle();
-      }
-    } catch (_) {}
-    _feed.reset();
-    if (!mounted) return;
-    setState(() {
-      _connectedAddress = null;
-      _connectedChannel = null;
-      _subscribed = false;
-      _pendingSubscribe = null;
-      _connectingAddress = null;
-      _notice = '已断开外接 GPS，行程定位回落手机 GPS。';
-    });
-    _connectedName = null;
-    _publishGpsStatus();
-  }
-
-  Future<void> _saveConnectedAsSaved() async {
-    final addr = _connectedAddress;
-    if (_connectedChannel == 'spp') {
-      // SPP 不走 GATT、无特征配置可存，模型（SavedDevice 要求 UUID）
-      // 也不适用：重连请走已配对列表，不另造一套 SPP 保存。
-      setState(() => _notice = 'SPP 设备不存入 BLE 清单，重连请走“已配对 SPP 设备”列表。');
-      return;
-    }
-    final uuids = _effectiveUuids;
-    if (addr == null || uuids == null) {
-      setState(() => _notice = _profile.binaryProtocol
-          ? 'DEXIAN D1 用二进制协议，无法保存为可重连的配置。'
-          : '当前设备无法保存为可重连的配置。');
-      return;
-    }
-    final saved = await DeviceCenterStore.load();
-    saved.add(SavedDevice(
-      name: '外接 GPS（${_profile.name}）',
-      serviceUuid: uuids.service,
-      characteristicUuid: uuids.tx,
-      type: '外部 GPS（${_profile.name}）',
-      address: addr,
-    ));
-    final ok = await DeviceCenterStore.save(saved);
-    if (!mounted) return;
-    setState(() => _notice = ok
-        ? '已保存到本机清单，下次可用重连（重连后仍需订阅 NMEA 特征）。'
-        : '保存失败：本机文件写入失败。');
   }
 
   /// 扫描行的提示：先看广播事实，再看名称字样；名称含厂商字样
@@ -1097,10 +909,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
     final fix = _feed.latest;
-    final stale = _feed.shouldFallbackToPhoneGps();
-    final uuids = _effectiveUuids;
     // 扫描卡片状态行（三种状态共用一处文案来源）：
     // 空态 / 扫描中 / 有结果（无可适配时也在这里说清，不另起文案）。
     final adaptable = _scanned.where(gpsDeviceIsAdaptable).toList();
@@ -1109,8 +918,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         : _scanned.isEmpty
             ? '尚未扫描：点上方「扫描适配设备」开始。'
             : adaptable.isEmpty
-                ? '已扫描 ${_scanned.length} 台设备，没有可适配的 GPS 设备'
-                    '（全部结果见下方「高级 / 手动添加」）。'
+                ? '已扫描 ${_scanned.length} 台设备，没有可适配的 GPS 设备。'
                 : '已扫描 ${_scanned.length} 台设备，找到 ${adaptable.length} 台'
                     '可适配设备，点行即连。';
     return Column(
@@ -1132,6 +940,37 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           permNotice: _permNotice,
           onOpenSettings: () => Native.openAppSettings(),
         ),
+        // 已连接状态行（v1.5.4）：绿点 + 已连设备名 + 断开连接按钮，
+        // 只在已连外接 GPS 时出现；样式沿用 OBD 区状态行（绿点 +
+        // 状态 + 断开按钮）。高级区删除后，这是页内唯一的 GPS
+        // 显式断开入口。
+        if (_connectedAddress != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Row(children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '已连接：${_connectedName ?? _connectedAddress}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold),
+                ),
+              ),
+              TextButton(
+                  onPressed: _disconnectGps,
+                  child: const Text('断开连接')),
+            ]),
+          ),
         const SizedBox(height: 16),
         const Text('可适配设备',
             style: TextStyle(
@@ -1180,193 +1019,14 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
             );
           }),
         const SizedBox(height: 8),
-        ExpansionTile(
-          title: const Text('高级 / 手动添加',
-              style: TextStyle(color: Colors.white)),
-          subtitle: const Text('档案卡浏览、自定义 UUID、分别扫描、全部扫描结果',
-              style: TextStyle(color: Colors.white54, fontSize: 12)),
-          initiallyExpanded: _advancedExpanded,
-          onExpansionChanged: (v) => setState(() => _advancedExpanded = v),
-          children: [
-            const Text(
-              '外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。' 'DEXIAN D1 本版只连接，不出定位。一次只能连一台 BLE 设备。',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-        for (final p in externalGpsProfiles)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0B0E13),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: p.kind == _kind ? accent : Colors.white12,
-              ),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => setState(() => _kind = p.kind),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Icon(
-                        p.kind == _kind
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_unchecked,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(p.name,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14)),
-                      ),
-                    ]),
-                    const SizedBox(height: 6),
-                    Text(p.supportBadge,
-                        style: TextStyle(
-                            color: p.hasNmeaPath
-                                ? Colors.greenAccent
-                                : Colors.orangeAccent,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold)),
-                    if (p.kind == _kind) ...[
-                      const SizedBox(height: 4),
-                      Text(p.note,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 12)),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        if (_kind == ExternalGpsKind.genericNmea) ...[
-          TextField(
-            controller: _customServiceCtrl,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            decoration: const InputDecoration(
-              labelText: '服务 UUID（以设备实际广播为准）',
-              labelStyle: TextStyle(color: Colors.white54, fontSize: 12),
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _customTxCtrl,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            decoration: const InputDecoration(
-              labelText: '特征 UUID（NMEA 推送特征）',
-              labelStyle: TextStyle(color: Colors.white54, fontSize: 12),
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text('格式不对时自动用 Nordic UART 默认值。',
-              style: TextStyle(color: Colors.white54, fontSize: 11)),
-          const SizedBox(height: 8),
-        ],
-        if (_sppCapable) ...[
-          const Text(
-            'SPP 通道：请先在系统蓝牙设置里与设备配对，再用下方“已配对 SPP”连接；无需订阅特征。',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-        ],
-        Row(children: [
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: _toggleScan,
-              icon: Icon(_scanning ? Icons.stop : Icons.bluetooth_searching,
-                  size: 18),
-              label: Text(_scanning ? '停止扫描' : '扫描 NMEA UART 设备'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed:
-                  _connectedAddress == null ? null : _subscribeConnected,
-              icon: const Icon(Icons.sensors, size: 18),
-              label: const Text('订阅 NMEA'),
-            ),
-          ),
-        ]),
+        // v1.5.4：高级 / 手动添加区已删（档案卡、自定义 UUID、分别
+        // 扫描、全部扫描结果均不在此页；扫描只走上方「扫描适配设备」）。
         const SizedBox(height: 8),
-        Row(children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _toggleBleGpsScan,
-              icon: Icon(
-                  _bleGpsScanning ? Icons.stop : Icons.bluetooth_searching,
-                  size: 18),
-              label: Text(_bleGpsScanning ? '停止扫描' : '扫描蓝牙 GPS'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _loadBondedSpp,
-              icon: const Icon(Icons.bluetooth_connected, size: 18),
-              label: const Text('已配对 SPP'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _toggleClassicDiscovery,
-              icon: Icon(_classicScanning ? Icons.stop : Icons.bluetooth,
-                  size: 18),
-              label: Text(_classicScanning ? '停止搜索' : '经典蓝牙搜索'),
-            ),
-          ),
-        ]),
+        // （高级区其余内容——自定义 UUID、分别扫描、全部扫描结果——
+        // 随高级区一并删除，见上方注释。）
         const SizedBox(height: 8),
-        if (_scanned.isEmpty)
-          const Text(
-              '暂无扫描结果：点主流程「扫描适配设备」，或用上方分别扫描。',
-              style: TextStyle(color: Colors.white54, fontSize: 12)),
-        for (final dev in _scanned)
-          Builder(builder: (context) {
-            final channels = (dev['channels'] as List? ?? <dynamic>[])
-                .map((e) => e.toString())
-                .toList();
-            final hasBle = channels.isEmpty || channels.contains('ble');
-            final hasSpp = channels.contains('spp');
-            final channelLabel =
-                hasBle && hasSpp ? 'BLE+SPP' : hasSpp ? 'SPP' : 'BLE';
-            return ListTile(
-              title: Text((dev['name'] ?? '').toString(),
-                  style: const TextStyle(color: Colors.white)),
-              subtitle: Text(
-                  '${dev['address']} · ${dev['type']} · RSSI ${dev['rssi'] ?? '—'} · '
-                  '$channelLabel · ${_guessHint(dev)}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (hasBle)
-                    TextButton(
-                      onPressed: () => _connectScanned(dev),
-                      child: const Text('连接'),
-                    ),
-                  if (hasSpp)
-                    TextButton(
-                      onPressed: () => _connectSppDevice(dev),
-                      child: const Text('SPP 连接'),
-                    ),
-                ],
-              ),
-            );
-          }),
-          ],
-        ),
+        // （高级区全部扫描结果列表随高级区一并删除。）
+        const SizedBox(height: 8),
         const SizedBox(height: 8),
         // _notice 与卡片状态行同文时只在卡片里出现一次（扫描中提示），
         // 避免同一文案在页面上出现两处；其余提示（连接 / 断开 / 停止等）
@@ -1375,71 +1035,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           Text(_notice!,
               style: const TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0B0E13),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(
-                  child: Text(
-                    _connectedAddress == null
-                        ? '外接 GPS：未连接'
-                        : '外接 GPS：已连接 $_connectedAddress'
-                            '${_connectedChannel == 'spp' ? ' · SPP' : ' · BLE'}'
-                            '${_connectedChannel == 'spp' ? '' : _subscribed ? ' · 已订阅 NMEA' : ' · 未订阅'}',
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (_connectedAddress != null)
-                  TextButton(
-                      onPressed: _disconnect, child: const Text('断开')),
-              ]),
-              const SizedBox(height: 4),
-              Text(
-                fix == null
-                    ? '暂无定位：尚未收到有效定位。'
-                    : '最新定位：${btGpsFixStatusLabel(fix)}，'
-                        'lat=${fix.lat.toStringAsFixed(5)}，'
-                        'lon=${fix.lon.toStringAsFixed(5)}，'
-                        '速度=${fix.speedMps == null ? '—' : '${(fix.speedMps! * 3.6).toStringAsFixed(1)} km/h'}，'
-                        '卫星=${fix.satellites ?? '—'}'
-                        '${fix.usedSatellites != null ? ' / 解算 ${fix.usedSatellites}' : ''}，'
-                        'HDOP=${fix.hdop ?? '—'}，'
-                        '更新率=${fix.hz?.toStringAsFixed(0) ?? '—'} Hz'
-                        '${stale ? '（已超 5 秒无新定位，应已回落手机 GPS）' : ''}',
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-              const SizedBox(height: 8),
-              Row(children: [
-                FilledButton(
-                  onPressed: _connectedAddress == null
-                      ? null
-                      : _saveConnectedAsSaved,
-                  child: const Text('保存到本机清单'),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _connectedChannel == 'spp'
-                        ? 'SPP 设备不存入 BLE 清单，重连请走已配对列表。'
-                        : uuids == null
-                            ? '当前设备无法保存特征配置。'
-                            : '保存后重连仍需再订阅 NMEA 特征。',
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 11),
-                  ),
-                ),
-              ]),
-            ],
-          ),
-        ),
+        // v1.5.4：「外接 GPS：未连接」状态卡已删（连接状态只看首页
+        // 状态药丸与上方主列表，不在此页另起一块；「保存到本机清单」
+        // 按钮随卡一并删除）。
+        const SizedBox(height: 8),
         const SizedBox(height: 8),
       ],
     );
@@ -1740,10 +1339,16 @@ class DeviceCenterPage extends StatefulWidget {
     super.key,
     this.onBack,
     this.onSavedDeviceConnected,
+    this.embedded = false,
   });
 
   /// 返回上一页的回调；不传则用 Navigator.maybePop。
+  /// [embedded] 为 true 时（底部导航页）不显示返回钮。
   final VoidCallback? onBack;
+
+  /// 作为底部导航页嵌入主壳：无独立 AppBar/返回钮，页内标题与
+  /// 记录页同口径，底部为药丸留白；切换动画走主壳 AnimatedSwitcher。
+  final bool embedded;
 
   /// 已保存设备通过现有 BLE 通道连上时通知调用方（仅通知，不回传轨迹）。
   final void Function(SavedDevice device)? onSavedDeviceConnected;
@@ -1892,19 +1497,20 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      extendBodyBehindAppBar: true,
-      appBar: DtAppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
-        ),
-        title: const Text('外接设备中心', style: TextStyle(color: Colors.white)),
-      ),
-      body: ListView(
-        padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
-        children: [
+    final bottomPad = widget.embedded
+        ? (kPillNavHeight + 12 + MediaQuery.of(context).padding.bottom + 16)
+        : 16.0;
+    final list = ListView(
+      padding: widget.embedded
+          ? EdgeInsets.fromLTRB(16, 12 + appBarTopInset(context), 16, bottomPad)
+          : withAppBarTopInset(context, EdgeInsets.fromLTRB(16, 16, 16, bottomPad)),
+      children: [
+        if (widget.embedded) ...[
+          const Text('设备中心',
+              style: TextStyle(
+                  color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+        ],
           if (_notice != null)
             Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -1918,16 +1524,17 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             ),
           _sectionTitle('运动相机'),
           // v1.2.12：统一入口是「连接运动相机」新页（一个入口扫全部品牌，
-          // 品牌自动识别、点行即连）。旧的按品牌三张卡（GoPro / Insta360 /
-          // DJI）已删：统一页已覆盖 GoPro 直连（含 GP-0073 Get Version 与
-          // 电量显示）与 Insta360 / DJI 向导跳转，只留一个入口，不两套并存。
+          // 品牌自动识别、点行即连）。旧的按品牌三张卡已删，只留一个入口。
+          // v1.5.4：本卡与外接 GPS 卡、OBD 卡同一套样式（#0B0E13 底、
+          // 圆角 16、白 12% 描边、16 内边距、全宽 FilledButton）；文案
+          // 只列支持的品牌，不讲各品牌连接方式（连接方式见连接页）。
           Container(
             margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFF0B0E13),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: accent.withValues(alpha: 0.6)),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white12),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1940,22 +1547,24 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                       child: Text('连接运动相机',
                           style: TextStyle(
                               color: Colors.white,
-                              fontSize: 16,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                    'GoPro 走 BLE 直连，Insta360 / DJI 走 Wi-Fi 热点 + 品牌 App 向导；' '不用先选品牌，点行即连。',
+                const Text('支持的运动相机：GoPro、Insta360、DJI。',
                     style: TextStyle(color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const CameraConnectPage()),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const CameraConnectPage()),
+                    ),
+                    child: const Text('打开连接运动相机'),
                   ),
-                  child: const Text('打开连接运动相机'),
                 ),
               ],
             ),
@@ -1969,6 +1578,13 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           const SizedBox(height: 8),
           const ExternalGpsSection(),
           const SizedBox(height: 8),
+          // v1.5.4：OBD 入口与运动相机 / 外接 GPS 并列在顶部，同一样式
+          // （#0B0E13 底、圆角 16、白 12% 描边、16 内边距、全宽按钮）。
+          // 标题只在卡内出现一次（不再另起 _sectionTitle，避免重名）。
+          // 占位彩蛋：点卡即弹「敬请期待」，不走真实连接；ObdSection
+          // 与 obd_service / 原生 ObdManager 原样保留，硬件就绪后接回。
+          _obdComingSoonCard(),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -1980,14 +1596,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               label: const Text('可视化外部 GPS 配置'),
             ),
           ),
-          const SizedBox(height: 16),
-          _sectionTitle('OBD（ELM327）'),
-          const Text(
-            '行车电脑数据：车速 / 转速 / 油门 / 水温。录制时每秒存一条实测采样，隧道推算用 OBD 车速。',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          const ObdSection(),
           const SizedBox(height: 16),
           _sectionTitle('传感器：自定义 BLE 设备'),
           ExpansionTile(
@@ -2061,6 +1669,110 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                 child: const Text('连接'),
               ),
             ),
+      ],
+    );
+    if (widget.embedded) {
+      // Material 底色：与记录页同为 #121212，避免 ColoredBox 挡住 ListTile 水波纹。
+      return Material(
+        color: const Color(0xFF121212),
+        child: list,
+      );
+    }
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text('设备中心', style: TextStyle(color: Colors.white)),
+      ),
+      body: list,
+    );
+  }
+
+  /// OBD 占位卡（v1.5.4）：与运动相机 / 外接 GPS 卡同一样式。
+  /// 点卡或点按钮只弹「敬请期待」彩蛋，不发起任何连接；真实 OBD
+  /// 流程（ObdSection / obd_service / 原生 ObdManager）原样保留，
+  /// 硬件就绪后把本卡换回 ObdSection 即可。
+  Widget _obdComingSoonCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0E13),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _showObdComingSoon,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.speed, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text('OBD（ELM327）',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('敬请期待',
+                          style: TextStyle(
+                              color: Colors.white, fontSize: 12)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text('行车电脑数据：车速 / 转速 / 油门 / 水温。',
+                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _showObdComingSoon,
+                    icon: const Icon(Icons.hourglass_top, size: 18),
+                    label: const Text('敬请期待'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// OBD「敬请期待」彩蛋弹窗：App 通用 AlertDialog 样式（见
+  /// gps_source_badge.dart 的来源详情弹窗），点「知道了」关闭。
+  Future<void> _showObdComingSoon() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('OBD · 敬请期待'),
+        content: const Text(
+            '行车电脑数据（车速 / 转速 / 油门 / 水温）正在路上，等硬件就绪就和大家见面，敬请期待。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
         ],
       ),
     );

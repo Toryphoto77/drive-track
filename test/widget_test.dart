@@ -30,6 +30,8 @@ void main() {
     expect(find.byIcon(Icons.home), findsWidgets);
     expect(find.byIcon(Icons.list_alt), findsWidgets);
     expect(find.byIcon(Icons.person), findsWidgets);
+    // v1.5.4：设备中心移到第 4 个导航图标（设备），菜单里不再有该项。
+    expect(find.byIcon(Icons.devices), findsWidgets);
     // 首页不再有可见权限按钮
     expect(find.text('请求权限'), findsNothing);
     // v0.1.2：首页天气实体按钮、大标定卡、演示入口全部移走/删除
@@ -49,8 +51,9 @@ void main() {
     // （底部药丸导航仍有这三个图标入口，故图标断言仍成立，
     // 但菜单文本入口已删）；工具箱新结构在树里。
     // v0.1.7：菜单再简化去重——配置类入口全部只留设置页，菜单只留
-    // 内容类快捷（赛道库/设备中心/数据导出/备份/免责声明），
+    // 内容类快捷（赛道库/数据导出/备份/免责声明），
     // 旧“工具”/“设置快捷”分组已删，断言同步更新。
+    // v1.5.4：设备中心已移出菜单（改走底部导航第 4 项），菜单不再有该项。
     // v1.0.3：关于从设置页移入左拉菜单，菜单新增“关于”一项。
     expect(find.text('首页'), findsNothing);
     expect(find.text('记录'), findsNothing);
@@ -58,7 +61,7 @@ void main() {
     expect(find.text('工具'), findsNothing);
     expect(find.text('设置快捷'), findsNothing);
     expect(find.text('赛道库'), findsOneWidget);
-    expect(find.text('设备中心'), findsOneWidget);
+    expect(find.text('设备中心'), findsNothing);
     expect(find.text('数据导出/备份'), findsOneWidget);
     expect(find.text('免责声明'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);

@@ -5,15 +5,20 @@
 /// 不跟随平移 / 缩放手势（后续版本再做跟随）。
 ///
 /// 数据口径（与分析页一致，不编数）：
-/// - 底图：Esri World Imagery 卫星瓦片（lib/satellite_tiles.dart），
-///   落点换算走 lib/track_analysis_geo.dart 的 [AnalysisGeoProjector]。
+/// - 底图：高德标准路网栅格瓦片（lib/amap_service.dart 的
+///   [amapTileUrl]，免 Key，style=7），落点换算走
+///   lib/track_analysis_geo.dart 的 [AnalysisGeoProjector]。
+///   高德瓦片是 GCJ-02，全部叠加点（中心线 / 轨迹 / 当前位置 /
+///   幽灵车 / 起终点 / 分段点）均为 WGS-84，画之前一律经
+///   [wgsToGcjLocal] 转 GCJ-02 再定界 / 投影，否则叠加层与道路
+///   错位可达约 500 米。编辑页与分析页仍用 Esri 卫星瓦片，不动。
 /// - 赛道中心线只用包经纬度实点（[TrackPackage.centerline]），
 ///   起终点 / 分段点只用包与计时器已采用的经纬度实点；
 ///   目录归一化轮廓（[TrackInfo]）不是经纬度，绝不画到地图上。
 /// - 已录轨迹只用 GPS 实测点连线；无有效位置时不画当前位置箭头。
 /// - 回落：瓦片累计失败达到 [satelliteFallbackFailureThreshold]
 ///   （3 张）即自动回落示意图（深色底 + 中心线 / 轨迹 / 箭头），
-///   不弹错、不白屏，状态行写明“卫星图未加载，已显示示意图”。
+///   不弹错、不白屏，状态行写明“地图未加载，已显示示意图”。
 /// - 无点（中心线与轨迹都空）时显示占位文案“暂无位置，等待定位”，
 ///   不画假线。单点 / 全部重合时以该点为中心扩一小框（约 ±220 m），
 ///   保证 bounds 计算不除零、箭头仍有可画的视口。
@@ -26,7 +31,7 @@
 /// v1.3.5：地图过线后才出现——赛道叠加层（中心线 / 起终点 / 分段点）
 /// 只在第一次通过起终点线后显示（[showTrackOverlayFor] 纯函数，
 /// 调用方按 LapTimer.hasCrossedStartLine 算好传入 [RecordingMapPage]；
-/// 门控与幽灵车“有最佳圈”不是同一个状态）。过线前本页只显示卫星底图
+/// 门控与幽灵车“有最佳圈”不是同一个状态）。过线前本页只显示高德底图
 /// + 当前位置箭头 + 已录轨迹，状态行由调用方写“等待通过起终点线”
 /// （[trackMapStatusLine]）；过线后叠加层出现并保持到本节结束。
 
@@ -34,6 +39,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'amap_service.dart';
 import 'models.dart';
 import 'satellite_tiles.dart';
 import 'track_analysis_geo.dart';
@@ -183,7 +189,7 @@ String trackMapStatusLine({
   );
 }
 
-/// 记录页实时地图页（第 1 页）：卫星底图 + 中心线 / 起终点 / 分段点 /
+/// 记录页实时地图页（第 1 页）：高德底图 + 中心线 / 起终点 / 分段点 /
 /// 已录轨迹 / 当前位置箭头 + 底部状态行。只看不操作。
 class RecordingMapPage extends StatefulWidget {
   /// 是否赛道模式（只决定调用方传什么数据，本页不另取状态）。
@@ -216,7 +222,7 @@ class RecordingMapPage extends StatefulWidget {
 
   /// v1.3.5：赛道叠加层是否显示（调用方按 LapTimer.hasCrossedStartLine
   /// 算好传入；默认 true = 不门控，兼容旧调用）。为假时本页不画中心线 /
-  /// 起终点 / 分段点，视口也不再以中心线定界，只显示卫星底图 + 当前
+  /// 起终点 / 分段点，视口也不再以中心线定界，只显示高德底图 + 当前
   /// 位置箭头 + 已录轨迹；幽灵车不受此门控影响（另有自己的门控）。
   /// 街道模式调用方传 true（门控只针对赛道模式）。
   final bool showTrackOverlay;
@@ -273,7 +279,28 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
     final overlayFinish = widget.showTrackOverlay ? widget.finish : null;
     final overlaySectors =
         widget.showTrackOverlay ? widget.sectorPoints : const <GeoPoint>[];
-    final bounds = recordingMapBounds(overlayCenterline, widget.trail);
+    // 高德瓦片是 GCJ-02，入参全部是 WGS-84：先统一转 GCJ-02 再定界 /
+    // 投影，否则叠加层与道路错位。框外点（包括无效的 0,0）原样返回。
+    GeoPoint toGcj(GeoPoint p) {
+      final (la, lo) = wgsToGcjLocal(p.lat, p.lon);
+      return GeoPoint(la, lo);
+    }
+
+    final gcjCenterline = overlayCenterline.map(toGcj).toList();
+    final gcjTrail = widget.trail.map(toGcj).toList();
+    final gcjStart = overlayStart == null ? null : toGcj(overlayStart);
+    final gcjFinish = overlayFinish == null ? null : toGcj(overlayFinish);
+    final gcjSectors = overlaySectors.map(toGcj).toList();
+    final (gcjCurLat, gcjCurLon) =
+        wgsToGcjLocal(widget.curLat, widget.curLon);
+    double? gcjGhostLat;
+    double? gcjGhostLon;
+    if (widget.ghostLat != null && widget.ghostLon != null) {
+      final (la, lo) = wgsToGcjLocal(widget.ghostLat!, widget.ghostLon!);
+      gcjGhostLat = la;
+      gcjGhostLon = lo;
+    }
+    final bounds = recordingMapBounds(gcjCenterline, gcjTrail);
     if (bounds == null) {
       return Container(
         color: const Color(0xFF0A0A0A),
@@ -327,15 +354,15 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                           Positioned.fromRect(
                             rect: projector.tileScreenRect(x, y),
                             child: Image.network(
-                              satelliteTileUrl(zoom, x, y),
-                              key: ValueKey('recmap-sat-$zoom-$x-$y'),
+                              amapTileUrl(zoom, x, y),
+                              key: ValueKey('recmap-amap-$zoom-$x-$y'),
                               headers: const {
-                                'User-Agent': 'DriveTrack/1.5.3',
+                                'User-Agent': 'DriveTrack/1.5.4',
                               },
                               fit: BoxFit.fill,
                               gaplessPlayback: true,
                               errorBuilder: (_, _, _) {
-                                _onTileError(satelliteTileUrl(zoom, x, y));
+                                _onTileError(amapTileUrl(zoom, x, y));
                                 return Container(
                                     color: const Color(0xFF0A0A0A));
                               },
@@ -346,16 +373,16 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                       size: Size(width, height),
                       painter: RecordingMapPainter(
                         projector: projector,
-                        centerline: overlayCenterline,
-                        start: overlayStart,
-                        finish: overlayFinish,
-                        sectorPoints: overlaySectors,
-                        trail: widget.trail,
-                        curLat: widget.curLat,
-                        curLon: widget.curLon,
+                        centerline: gcjCenterline,
+                        start: gcjStart,
+                        finish: gcjFinish,
+                        sectorPoints: gcjSectors,
+                        trail: gcjTrail,
+                        curLat: gcjCurLat,
+                        curLon: gcjCurLon,
                         curHeading: widget.curHeading,
-                        ghostLat: widget.ghostLat,
-                        ghostLon: widget.ghostLon,
+                        ghostLat: gcjGhostLat,
+                        ghostLon: gcjGhostLon,
                         ghostHeading: widget.ghostHeading,
                         satelliteOn: satelliteOn,
                       ),
@@ -394,7 +421,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
-                            satelliteTileAttribution,
+                            amapTileAttribution,
                             style: TextStyle(
                                 color: Colors.white70, fontSize: 11),
                           ),
@@ -411,7 +438,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
               color: const Color(0xFF111111),
               child: Text(
                 _fallback
-                    ? '${widget.statusLine} · 卫星图未加载，已显示示意图'
+                    ? '${widget.statusLine} · 地图未加载，已显示示意图'
                     : widget.statusLine,
                 style:
                     const TextStyle(color: Colors.white70, fontSize: 12),

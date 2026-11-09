@@ -4,7 +4,7 @@
 合法来源（红线）：
 - 仅 OSM（ODbL，署名 © OpenStreetMap contributors）与官方公开事实
   （赛道官网/FIA/维基公布的长度等，仅用于校验，不复制专有库数据）。
-- 绝不复制/抓取 RaceChrono、Harry's、VBOX 等专有赛道库的数据。
+- 绝不复制/抓取第三方专有赛道库的数据。
 
 流程（每条赛道）：
 1. Nominatim 按英文名搜 venue，取 bbox；
@@ -37,7 +37,7 @@ UA = 'DriveTrack-seed-check/1.0 (track library seed verification)'
 PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT, 'data')
 PKG_DIR = os.path.join(DATA_DIR, 'packages')
-RAW_BASE = 'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages'
+RAW_BASE = 'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages'
 
 REGION_COUNTRY = {
     '中国': ['China', '中国'],

@@ -18,7 +18,7 @@ import 'app_icon_choice.dart';
 /// - SplashPage 不再接收 child：它不持有、不构造任何首页 widget；
 /// - 启动第一帧的 Widget 树只有 MaterialApp → SplashPage（纯黑
 ///   Scaffold + 图标淡入），首页在动画完成前不构建、不渲染；
-/// - v1.0.4：启动页底色由纯黑改为深炭灰 #121212（与主框架同步）；
+/// - v1.0.4：启动页底色与原生 LaunchTheme 同为纯黑，避免冷启动色差闪一下；进首页后主壳仍是 #121212；
 ///   首帧图标默认方向盘：appIconKey 默认即 steering，AppPrefs 加载完成
 ///   前绝不读旧 app_icon.png，加载完成后再按用户选择刷新。
 /// - 动画跑完才经路由进首页：默认 pushReplacementNamed('/home')，
@@ -65,14 +65,14 @@ class _SplashPageState extends State<SplashPage>
       }
     });
 
-  late final Animation<double> _iconOpacity = CurvedAnimation(
-    parent: _ctrl,
-    curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
-  );
-  late final Animation<double> _iconScale = Tween<double>(begin: 0.92, end: 1.0)
+  // 图标首帧即满不透明：与系统 SplashScreen 的方向盘衔接，
+  // 避免“系统图标 → 空白炭灰 → 再淡入”的冷启动闪一下。
+  // 标题 / slogan 仍淡入；图标只做轻微缩放。
+  late final Animation<double> _iconOpacity = const AlwaysStoppedAnimation(1.0);
+  late final Animation<double> _iconScale = Tween<double>(begin: 0.98, end: 1.0)
       .animate(CurvedAnimation(
     parent: _ctrl,
-    curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+    curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
   ));
   late final Animation<double> _titleOpacity = CurvedAnimation(
     parent: _ctrl,
@@ -98,7 +98,7 @@ class _SplashPageState extends State<SplashPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF000000),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

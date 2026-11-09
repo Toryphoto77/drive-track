@@ -1,18 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- v1.0.0：只对 API 31+（Android 12+ SplashScreen API）生效。
-         LaunchTheme 用黑色父主题，系统启动画面背景定死黑色，
-         v1.5.2：系统启动动画图标改为方向盘 @mipmap/ic_launcher_steering
-         （此前为默认红赛车，是冷启动闪过一帧红赛车的根因：Android 12+
-         的系统启动画面在 Flutter 首帧之前显示，由系统/厂商 ROM 控制
-         时长与裁剪；图标只能是编译进来的固定资源，拿不到用户在主题页
-         的选择，所以这里固定为默认图标方向盘，Flutter 启动页内再跟随
-         用户选择）；NormalTheme 不在此重定义，沿用 values/ 里已改黑的那份。
-         注意：Android 12+ 的系统启动画面时长/图标裁剪由各厂商
-         ROM 控制，仍需真机看实际表现（见回执已知限制）。 -->
+    <!-- API 31+ SplashScreen API。
+         冷启动无进程时系统先画本主题，再交 Flutter 首帧。
+         根因（闪一下默认/白底图标）：① 系统图标底色未设时部分 ROM
+         用浅色圆底；② Flutter 启动页图标从透明度 0 淡入，首帧空白
+         与系统画面切换像“闪一下”。
+         修法：背景/图标圆底一律纯黑；动画图标固定方向盘；Flutter
+         SplashPage 首帧即满不透明图标（见 splash_page.dart）。 -->
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowSplashScreenBackground">@android:color/black</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_steering</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/black</item>
     </style>
 </resources>

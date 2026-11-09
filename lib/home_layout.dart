@@ -23,7 +23,8 @@ const double kModeRowWidth = 3 * kModeRowItemPitch; // 192.0
 /// v1.0.9 方案 A：底部导航栏加宽到 216×56（与模式行解耦，不再同长；
 /// v1.0.4 的 176×52 已作废）。模式行仍为 192（不动）。
 /// 216 宽 / 3 图标 = 每项 72 节距，图标不再挤在一起。
-const double kPillNavWidth = 216.0;
+/// v1.5.4：4 项（加设备中心）加宽到 288×56，仍是每项 72 节距。
+const double kPillNavWidth = 288.0;
 
 /// 底部导航栏药丸高度 56：图标可点区 48 + 上下 padding 4 × 2。
 const double kPillNavHeight = 56.0;

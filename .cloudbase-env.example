@@ -1,0 +1,2 @@
+# 腾讯 CloudBase 环境 ID：复制为 .cloudbase-env，只留一行真实环境 ID（不要带这行注释）。
+# 构建脚本以 --dart-define=CLOUDBASE_ENV_ID 注入；文件不存在时云端上传禁用。

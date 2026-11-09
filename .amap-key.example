@@ -1,0 +1,2 @@
+# 高德 Web 服务 Key：复制为 .amap-key，只留一行真实 Key（不要带这行注释）。
+# 构建脚本以 --dart-define=AMAP_KEY 注入；文件不存在时高德功能禁用。

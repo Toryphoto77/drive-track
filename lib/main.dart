@@ -52,10 +52,12 @@ import 'vehicle_markers.dart';
 import 'map_import_page.dart';
 import 'map_import_service.dart' as mis;
 import 'trip_detail_modules.dart';
+import 'recording_draft.dart';
 import 'photo_points.dart';
 import 'score_module.dart';
 import 'lean_chart.dart';
 import 'lean_gauge.dart';
+import 'live_lap_timer_text.dart';
 import 'accel_module.dart';
 import 'amap_service.dart';
 import 'share_card_preview.dart';
@@ -582,6 +584,10 @@ class _HomePageState extends State<HomePage>
   bool weatherFromCache = false;
   bool weatherStale = false;
   bool permGranted = false;
+  // 录制草稿：记录中每 30 秒落盘一次，App 被杀后下次启动可恢复。
+  RecordingDraftStore? _drafts;
+  Timer? _draftTimer;
+  bool _draftWriting = false;
   DateTime? _lastPauseTap;
   bool trimPrivacy = true;
   double riderKg = 85;
@@ -703,9 +709,12 @@ class _HomePageState extends State<HomePage>
     trips = await store.migrateIndexTrackFields();
     favorites = await store.loadFavorites();
     vehicleLibrary = await store.loadVehicleLibrary();
+    _drafts = RecordingDraftStore(store.dir);
     _refreshTrackBestLaps();
     await _loadCachedWeather();
     if (mounted) setState(() {});
+    // 上次记录中被系统杀掉 / 划掉：提示把草稿救回成行程。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _offerDraftRecovery());
     // v0.1.9：进首页即触发天气（见 _triggerWeatherOnLaunch 注释的根因）。
     await _triggerWeatherOnLaunch();
     _locSub = Native.locationStream.listen((e) async {
@@ -849,7 +858,10 @@ class _HomePageState extends State<HomePage>
   /// 否则两次排空可能各建一个 LapTimer，后建的会顶掉已喂点的那个，
   /// 造成计时丢失。
   Future<void> _drainLapTimer() async {
-    if (!trackMode || selectedTrack == null || !rec.isRecording || rec.points.isEmpty) return;
+    // 赛道自动暂停中也要排空：定位点在自动暂停时继续落点，LapTimer
+    // 靠这些点自己暂停 / 恢复计时（3 秒停车暂停、5 km/h 以上恢复），
+    // 排空一停，计时器的自动恢复就收不到起步点。
+    if (!trackMode || selectedTrack == null || (!rec.isRecording && !rec.isAutoPaused) || rec.points.isEmpty) return;
     if (_lapDrainRunning) return;
     _lapDrainRunning = true;
     try {
@@ -862,6 +874,9 @@ class _HomePageState extends State<HomePage>
       final prevSectorCount =
           liveLapTimer!.currentCompletedSectorsMs.length;
       _lapFedCount = drainLapTimerPoints(liveLapTimer!, rec.points, _lapFedCount);
+      // 计时真正开始（第一次过起终点线）后，才允许赛道自动暂停：
+      // 起跑线前等待不暂停（见 Recorder.trackAutoPauseTick）。
+      if (liveLapTimer!.hasCrossedStartLine) rec.trackTimingStarted = true;
       final nb = liveLapTimer!.bestLap;
       final lapCompleted = liveLapTimer!.laps.length > prevLapCount;
       if (!prevCrossed && liveLapTimer!.hasCrossedStartLine) {
@@ -935,6 +950,12 @@ class _HomePageState extends State<HomePage>
       crossingRadiusM: args.crossingRadiusM,
       dwellThresholdMs: args.dwellThresholdMs,
       dwellSpeedMs: args.dwellSpeedMs,
+      // v1.5.4 赛道自动暂停：停车低于 2 km/h 满 3 秒暂停计时，
+      // 车速回升到 5 km/h 以上恢复（迟滞防抖动）；与 Recorder 的
+      // 赛道自动暂停同口径，两边一起停、一起恢复（见 track_timing.dart）。
+      autoPauseThresholdMs: 3000,
+      autoPauseSpeedMs: 2 / 3.6,
+      autoResumeSpeedMs: 5 / 3.6,
       sectorPoints: sectors,
       pitIn: pitIn,
       pitOut: pitOut,
@@ -952,7 +973,12 @@ class _HomePageState extends State<HomePage>
     _modeController.animateToPage(m.index, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
   }
 
-  void _goTab(int i) => setState(() => tab = i);
+  /// 底部导航四页同壳：0 首页 / 1 设备 / 2 记录 / 3 我的。
+  /// 设备中心不再 push 独立路由，切 tab 走与其它页相同的 AnimatedSwitcher。
+  void _goTab(int i) {
+    if (i < 0 || i > 3) return;
+    setState(() => tab = i);
+  }
 
   void _toggleMenu() {
     if (_menuAnim.value > 0.5) {
@@ -991,12 +1017,12 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.5.3',
+          versionName: '1.5.4',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
           appIconKey: appPrefs.appIcon,
-          updateConfig: const UpdateConfig.githubReleases(),
+          updateConfig: const UpdateConfig.domestic(),
           onOpenBackup: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => DataExportPage(store: store)),
@@ -1040,6 +1066,7 @@ class _HomePageState extends State<HomePage>
     _senSub?.cancel();
     _bleDevSub?.cancel();
     _bleDataSub?.cancel();
+    _draftTimer?.cancel();
     rec.dispose();
     super.dispose();
   }
@@ -1379,6 +1406,7 @@ class _HomePageState extends State<HomePage>
     _lapFedCount = 0;
     livePhotoPoints = [];
     await rec.start();
+    await _startDraftTimer();
     // v1.4.x 街道语音：开录即启动 GPS 信号看门狗与起步 / 里程计数
     //（赛道模式只计圈，不跑街道提示）。
     VoiceService.instance.setTripActive(true, isTrack: trackMode);
@@ -1490,7 +1518,109 @@ class _HomePageState extends State<HomePage>
     if (mounted) showAppNotice(context, '已标记 ${livePhotoPoints.length} 条 · 结束后在详情时间线查看', AppNoticeKind.success);
   }
 
+  Future<void> _startDraftTimer() async {
+    _draftTimer?.cancel();
+    // 启动时选了“Later”留下的旧草稿：新录制会覆盖草稿文件，先把旧草稿
+    // 存成行程（点数不足的直接丢弃），避免被新录制悄悄顶掉。
+    final drafts = _drafts;
+    if (drafts != null) {
+      try {
+        final old = await drafts.load();
+        if (old != null && old.startMs != rec.startMs) {
+          final saved = await drafts.recoverInto(store, old);
+          if (saved == null) await drafts.clear();
+          trips = await store.loadIndex();
+        }
+      } catch (_) {}
+    }
+    unawaited(_writeDraft());
+    _draftTimer = Timer.periodic(const Duration(seconds: 30), (_) => _writeDraft());
+  }
+
+  /// 把当前录制状态写成草稿（原子写；上一次还没写完就跳过本次）。
+  Future<void> _writeDraft() async {
+    final drafts = _drafts;
+    if (drafts == null || _draftWriting) return;
+    if (rec.state != RecState.recording && rec.state != RecState.paused) return;
+    _draftWriting = true;
+    try {
+      final mode = rec.mode;
+      final isTrack = trackMode && selectedTrack != null && mode != TripMode.bike;
+      await drafts.saveIncremental(RecordingDraft(
+        mode: mode,
+        startMs: rec.startMs,
+        savedAtMs: DateTime.now().millisecondsSinceEpoch,
+        points: List<TrackPoint>.from(rec.points),
+        obdSamples: List<Map<String, dynamic>>.from(rec.obdSamples),
+        photoPoints: List<PhotoPoint>.from(livePhotoPoints),
+        trimPrivacy: trimPrivacy,
+        riderKg: riderKg,
+        weatherSummary: weather?.summary ?? '',
+        isTrackMode: isTrack,
+        trackId: isTrack ? selectedTrack!.id : null,
+        trackName: isTrack ? selectedTrack!.nameCn : '',
+        lapsJson: (isTrack && liveLapTimer != null)
+            ? liveLapTimer!.laps.map((l) => l.toJson()).toList()
+            : const [],
+        vehicleId: _defaultVehicleIdForMode(mode),
+      ));
+    } catch (_) {
+      // 草稿只是兜底，写失败不打扰正在进行的记录。
+    } finally {
+      _draftWriting = false;
+    }
+  }
+
+  /// 启动时发现未结束的录制草稿：询问保存为行程 / 丢弃 / 稍后再说。
+  Future<void> _offerDraftRecovery() async {
+    final drafts = _drafts;
+    if (drafts == null || !mounted) return;
+    if (rec.state == RecState.recording || rec.state == RecState.paused) return;
+    final d = await drafts.load();
+    if (d == null || !mounted) return;
+    if (d.points.length < kMinRecoverablePoints) {
+      await drafts.clear();
+      return;
+    }
+    final started = DateTime.fromMillisecondsSinceEpoch(d.startMs);
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unfinished recording'),
+        content: Text('DriveTrack stopped while recording '
+            '(started ${started.toString().substring(0, 16)}, ${d.points.length} points). '
+            'Save what was recorded as a trip?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, 'later'), child: const Text('Later')),
+          TextButton(onPressed: () => Navigator.pop(ctx, 'discard'), child: const Text('Discard')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, 'save'), child: const Text('Save trip')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'discard') {
+      await drafts.clear();
+      return;
+    }
+    if (choice != 'save') return;
+    try {
+      final trip = await drafts.recoverInto(store, d);
+      trips = await store.loadIndex();
+      if (!mounted) return;
+      setState(() {});
+      if (trip != null) {
+        unawaited(_enrichNewTrip(trip));
+        showAppNotice(context, 'Recovered trip saved', AppNoticeKind.success);
+      }
+    } catch (e) {
+      if (mounted) showAppNotice(context, 'Could not recover the recording: $e', AppNoticeKind.error);
+    }
+  }
+
   Future<void> _endTrip() async {
+    _draftTimer?.cancel();
+    _draftTimer = null;
     final endMs = DateTime.now().millisecondsSinceEpoch;
     final pts = List<TrackPoint>.from(rec.points);
     final mode = rec.mode;
@@ -1510,6 +1640,7 @@ class _HomePageState extends State<HomePage>
     await _setKeepScreenOn(false);
     if (pts.length < 10) {
       livePhotoPoints = [];
+      await _drafts?.clear();
       if (mounted) {
         showAppNotice(context, videoPaths.isEmpty ? '行程太短，未保存（少于 10 个轨迹点）' : '行程太短未保存，但视频文件仍在本机视频目录，未关联行程', AppNoticeKind.warning);
       }
@@ -1529,6 +1660,8 @@ class _HomePageState extends State<HomePage>
         obdSamples: List<Map<String, dynamic>>.from(rec.obdSamples),
         startFinishLat: isTrack && pts.isNotEmpty ? pts.first.lat : null,
         startFinishLon: isTrack && pts.isNotEmpty ? pts.first.lon : null);
+    // 正式行程已落盘，草稿作废（保存抛错时草稿保留，下次启动仍可恢复）。
+    await _drafts?.clear();
     livePhotoPoints = [];
     liveLapTimer = null;
     _lapFedCount = 0;
@@ -1789,8 +1922,12 @@ class _HomePageState extends State<HomePage>
                 : tab == 0
                     ? KeyedSubtree(key: const ValueKey('home'), child: _buildModePages())
                     : tab == 1
-                        ? KeyedSubtree(key: const ValueKey('list'), child: _buildList())
-                        : KeyedSubtree(key: const ValueKey('my'), child: _buildMyPage()),
+                        ? KeyedSubtree(
+                            key: const ValueKey('devices'),
+                            child: const DeviceCenterPage(embedded: true))
+                        : tab == 2
+                            ? KeyedSubtree(key: const ValueKey('list'), child: _buildList())
+                            : KeyedSubtree(key: const ValueKey('my'), child: _buildMyPage()),
           ),
         ),
         if (!recording)
@@ -1800,7 +1937,8 @@ class _HomePageState extends State<HomePage>
             right: 0,
             child: Center(
               child: FrostedGlassNavBar(
-                selectedIndex: tab,
+                // 页 tab 与导航栏一一对应：0 首页 / 1 设备 / 2 记录 / 3 我的。
+                selectedIndex: tab.clamp(0, 3),
                 onTap: _goTab,
               ),
             ),
@@ -1864,8 +2002,9 @@ class _HomePageState extends State<HomePage>
           const Divider(color: Colors.white12),
           // v0.1.7 菜单简化去重 + v1.0.3 关于移入菜单 + v1.0.4 性能测试
           // 移入菜单（红字加粗）：赛道库 / 赛道知识库 / 性能测试 /
-          // 设备中心 / 数据导出/备份 / 免责声明 / 关于七项。首页与
-          // 记录页入口已删，性能测试只剩这一处入口，仍进同一
+          // 数据导出/备份 / 免责声明 / 关于六项。设备中心已移到
+          // 底部导航第 4 项（v1.5.4），不再占菜单一项。
+          // 首页与记录页入口已删，性能测试只剩这一处入口，仍进同一
           // performance_challenge.dart。关闭动画仍为 200ms easeOutCubic
           // 主界面右移（build 里的 _menuAnim，不动）。
           Expanded(
@@ -1877,7 +2016,6 @@ class _HomePageState extends State<HomePage>
                   title: const Text('性能测试', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                   subtitle: const Text('0-100 加速 / 100-0 刹停 · 仅封闭场地测试'),
                   onTap: () => _menuAction(_openPerformanceChallenge)),
-              ListTile(leading: const Icon(Icons.devices), title: const Text('设备中心'), subtitle: const Text('运动相机 · 传感器 · 外接 GPS · OBD'), onTap: () => _menuAction(_openDeviceCenter)),
               ListTile(leading: const Icon(Icons.file_download), title: const Text('数据导出/备份'), subtitle: const Text('按行程分享 GPX / CSV'), onTap: () => _menuAction(_openDataExport)),
               ListTile(leading: const Icon(Icons.warning_amber_rounded), title: const Text('免责声明'), subtitle: const Text('使用前必读：安全须知与责任说明'), onTap: () => _menuAction(_openSafetySection)),
               ListTile(leading: const Icon(Icons.info_outline), title: const Text('关于'), subtitle: const Text('版本号、在线更新、反馈与备份'), onTap: () => _menuAction(_showAbout)),
@@ -2038,80 +2176,70 @@ class _HomePageState extends State<HomePage>
 
   /// 首页外接 GPS 状态小药丸（v1.5.2，v1.5.3 起并入设备药丸行）：
   /// 硬件接入状态可视化。只读全局 externalGpsStatus（设备中心写入，
-  /// 唯一来源），本身不猜状态、不改连接逻辑。
+  /// 唯一来源），本身不猜状态、不改连接逻辑。纯状态显示（v1.5.4）：
+  /// 不可点、不跳转，状态只看圆点颜色（绿 = 已连接，灰 = 未连接）。
   /// - 已连接：绿点 + 卫星图标 + 设备名（无名时只显示“外接 GPS”），
-  ///   BLE 通道另带蓝牙小图标；点按进设备中心；
-  /// - 未连接：灰点 + 卫星图标 + “未连接外接 GPS · 去连接”，
-  ///   点按进设备中心扫描连接。
+  ///   BLE 通道另带蓝牙小图标；
+  /// - 未连接：灰点 + 卫星图标 + “未连接外接 GPS”。
   Widget _buildGpsStatusPill() {
     return ValueListenableBuilder<ExternalGpsStatus>(
       valueListenable: externalGpsStatus,
       builder: (context, status, _) {
         final connected = status.connected;
         final name = status.deviceName.trim();
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: _openDeviceCenter,
+        final channel = status.channel.trim().toUpperCase();
+        final chLabel = channel.isEmpty ? '' : ' · $channel';
+        final activeNote = status.binaryOnly ? ' · 已连接(无定位)' : ' · 定位中';
+        return Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: CardStyle.cardColor,
             borderRadius: BorderRadius.circular(999),
-            child: Container(
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: CardStyle.cardColor,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: connected
-                      ? Colors.green.withValues(alpha: 0.5)
-                      : CardStyle.borderColor,
+            border: Border.all(
+              color: connected
+                  ? Colors.green.withValues(alpha: 0.5)
+                  : CardStyle.borderColor,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: connected ? Colors.green : Colors.white38,
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: connected ? Colors.green : Colors.white38,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    Icons.satellite_alt,
-                    size: 15,
-                    color: connected ? Colors.green : Colors.white54,
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      connected
-                          ? (name.isEmpty
-                              ? '外接 GPS · 已连接'
-                              : '外接 GPS · $name')
-                          : '未连接外接 GPS',
-                      style: TextStyle(
-                        color: connected ? Colors.white : Colors.white70,
-                        fontSize: 12,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (connected && status.channel == 'ble') ...[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.bluetooth,
-                        size: 13, color: Colors.white54),
-                  ],
-                  if (!connected) ...[
-                    const SizedBox(width: 6),
-                    const Text('去连接 ›',
-                        style:
-                            TextStyle(color: Colors.white54, fontSize: 12)),
-                  ],
-                ],
+              const SizedBox(width: 6),
+              Icon(
+                Icons.satellite_alt,
+                size: 15,
+                color: connected ? Colors.green : Colors.white54,
               ),
-            ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  connected
+                      ? (name.isEmpty
+                          ? '外接 GPS$chLabel$activeNote'
+                          : '外接 GPS · $name$chLabel$activeNote')
+                      : '手机 GPS · 外接未连接',
+                  style: TextStyle(
+                    color: connected ? Colors.white : Colors.white70,
+                    fontSize: 12,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (connected && status.channel == 'ble') ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.bluetooth,
+                    size: 13, color: Colors.white54),
+              ],
+            ],
           ),
         );
       },
@@ -2120,80 +2248,69 @@ class _HomePageState extends State<HomePage>
 
   /// 首页运动相机状态小药丸（v1.5.3 攒版）：与 GPS 药丸同一样式
   /// （34 高圆角药丸、CardStyle 底色）。只读全局 cameraLinkStatus
-  /// （相机页唯一写入），本身不猜状态、不改连接流程。
-  /// - 已连接：绿点 + 相机图标 + “运动相机 · 已连接”，点按进设备中心；
+  /// （相机页唯一写入），本身不猜状态、不改连接流程。纯状态显示
+  /// （v1.5.4）：不可点、不跳转，状态只看圆点颜色（绿 = 已连接，
+  /// 琥珀 = 连接中，灰 = 未连接 / 暂不可用）。
+  /// - 已连接：绿点 + 相机图标 + “运动相机 · 已连接”；
   /// - 连接中：琥珀点 + “运动相机 · 连接中…”；
   /// - 暂不可用：灰点 + “运动相机 · 暂不可用”；
-  /// - 未连接：灰点 + “未连接运动相机 · 去连接”，点按进设备中心。
+  /// - 未连接：灰点 + “未连接运动相机”。
   Widget _buildCameraStatusPill() {
     return ValueListenableBuilder<DeviceLinkStatus>(
       valueListenable: cameraLinkStatus,
       builder: (context, status, _) {
         final connected = status == DeviceLinkStatus.connected;
         final connecting = status == DeviceLinkStatus.connecting;
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: _openDeviceCenter,
+        return Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: CardStyle.cardColor,
             borderRadius: BorderRadius.circular(999),
-            child: Container(
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: CardStyle.cardColor,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
+            border: Border.all(
+              color: connected
+                  ? Colors.green.withValues(alpha: 0.5)
+                  : CardStyle.borderColor,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   color: connected
-                      ? Colors.green.withValues(alpha: 0.5)
-                      : CardStyle.borderColor,
+                      ? Colors.green
+                      : connecting
+                          ? Colors.amber
+                          : Colors.white38,
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: connected
-                          ? Colors.green
-                          : connecting
-                              ? Colors.amber
-                              : Colors.white38,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    Icons.videocam,
-                    size: 15,
-                    color: connected ? Colors.green : Colors.white54,
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      switch (status) {
-                        DeviceLinkStatus.connected => '运动相机 · 已连接',
-                        DeviceLinkStatus.connecting => '运动相机 · 连接中…',
-                        DeviceLinkStatus.unavailable => '运动相机 · 暂不可用',
-                        DeviceLinkStatus.disconnected => '未连接运动相机',
-                      },
-                      style: TextStyle(
-                        color: connected ? Colors.white : Colors.white70,
-                        fontSize: 12,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (!connected) ...[
-                    const SizedBox(width: 6),
-                    const Text('去连接 ›',
-                        style:
-                            TextStyle(color: Colors.white54, fontSize: 12)),
-                  ],
-                ],
+              const SizedBox(width: 6),
+              Icon(
+                Icons.videocam,
+                size: 15,
+                color: connected ? Colors.green : Colors.white54,
               ),
-            ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  switch (status) {
+                    DeviceLinkStatus.connected => '运动相机 · 已连接',
+                    DeviceLinkStatus.connecting => '运动相机 · 连接中…',
+                    DeviceLinkStatus.unavailable => '运动相机 · 暂不可用',
+                    DeviceLinkStatus.disconnected => '未连接运动相机',
+                  },
+                  style: TextStyle(
+                    color: connected ? Colors.white : Colors.white70,
+                    fontSize: 12,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -2948,6 +3065,14 @@ class _HomePageState extends State<HomePage>
   }
 
   void _openDeviceCenter() {
+    // 底栏设备页：与记录/我的同壳同切换动画。若当前不在主壳
+    //（例如设置子页），仍 push 独立页（带返回），chrome 保持可用。
+    final route = ModalRoute.of(context);
+    final onRoot = route?.isFirst ?? true;
+    if (onRoot) {
+      setState(() => tab = 1);
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const DeviceCenterPage()),
@@ -3183,6 +3308,9 @@ class _HomePageState extends State<HomePage>
     // 到达后才异步建成，旧条件（timer != null）会让赛道模式开局回落
     // 到街道 3D 地图，这就是“很大概率还是街道界面”的根因。
     final isTrackPage = trackMode && selectedTrack != null;
+    // v1.5.4 赛道自动暂停开关：赛道模式开、街道模式关（街道绝不
+    // 自动暂停，见 Recorder.trackAutoPauseTick）。
+    rec.trackAutoPauseEnabled = isTrackPage;
     // v1.2.17：暂停/恢复切换（500ms 内连点防抖）；赛道紧凑按钮与
     // 街道半宽按钮共用同一份逻辑，只改布局，不改行为。
     Future<void> togglePause() async {
@@ -3272,6 +3400,10 @@ class _HomePageState extends State<HomePage>
               _blediyActive && !_blediyFeed.shouldFallbackToPhoneGps(),
           fallingBack:
               _blediyActive && _blediyFeed.shouldFallbackToPhoneGps(),
+          deviceName: () {
+            final n = externalGpsStatus.value.deviceName.trim();
+            return n.isEmpty ? null : n;
+          }(),
           hz: _blediyFeed.hz,
           satelliteCount: (_blediyActive &&
                   !_blediyFeed.shouldFallbackToPhoneGps())
@@ -3651,71 +3783,287 @@ class _HomePageState extends State<HomePage>
               ),
             ),
           );
-    // v1.5.1 横屏控制列（重做）：横屏只专注计时，右侧只放计时核心
-    // + 两个大按钮——暂停（64 高、主题色）与长按结束（64 高、红色、
-    // 仍只响应长按防误触）。速度/G 圆/标记按钮不在横屏出现，竖屏
-    // 底部面板原样保留。只在计时页（第 0 页）显示，地图页不显示。
+    // v1.5.4 横屏控制列（重做）：赛道模式横屏无任何手动按钮——
+    // 暂停 / 结束按钮已删，停车自动暂停、起步自动恢复，全程无需
+    // 手动；腾出的位置放计时核心数据（大速度、当前圈、圈时、分段、
+    // Delta、G 值、倾角）。街道模式横屏保持原样（大速度 + 暂停 /
+    // 长按结束两个 64 高大按钮）。只在计时页（第 0 页）显示，
+    // 地图页不显示。
     final landscapeControls = Container(
       color: CardStyle.cardColor,
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (isTrackPage) ...[
-            Text(
-              liveLapTimer == null
-                  ? '等待定位'
-                  : '第 ${liveLapTimer!.currentLapNumber <= 0 ? '发车圈' : '${liveLapTimer!.currentLapNumber} 圈'}',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text('本节用时 ${fmtDur(rec.elapsedMs)}',
-                style: const TextStyle(color: Colors.white70, fontSize: 14)),
-          ] else ...[
-            Text('${(rec.curSpeed * 3.6).toStringAsFixed(0)}',
-                style: TextStyle(
-                    fontSize: 56,
-                    fontWeight: FontWeight.bold,
-                    color: _speedColor(rec.curSpeed * 3.6))),
-            const Text('km/h', style: TextStyle(color: Colors.white60)),
-            const SizedBox(height: 4),
-            Text(
-                '里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km · ${fmtDur(rec.elapsedMs)}',
-                style: const TextStyle(color: Colors.white70)),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isTrackPage) ...[
+              // 自动暂停状态条：计时停了为什么，一眼可见。
+              if (rec.isAutoPaused || (liveLapTimer?.isPaused ?? false))
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.5)),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.pause_circle_filled,
+                        size: 18, color: Colors.amber),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text('已自动暂停 · 等待起步',
+                          style: TextStyle(
+                              color: Colors.amber,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ]),
+                ),
+              if (rec.isAutoPaused || (liveLapTimer?.isPaused ?? false))
+                const SizedBox(height: 12),
+              // 大速度 + 当前圈 / 圈时。
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('${(rec.curSpeed * 3.6).toStringAsFixed(0)}',
+                      style: TextStyle(
+                          fontSize: 56,
+                          fontWeight: FontWeight.bold,
+                          color: _speedColor(rec.curSpeed * 3.6))),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 10, left: 4),
+                    child: Text('km/h',
+                        style: TextStyle(color: Colors.white60)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          liveLapTimer == null
+                              ? '等待定位'
+                              : '第 ${liveLapTimer!.currentLapNumber <= 0 ? '发车圈' : '${liveLapTimer!.currentLapNumber} 圈'}',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold),
+                        ),
+                        LiveLapTimeText(
+                          anchorMs: liveLapTimer?.currentLapMs,
+                          lapNumber: liveLapTimer?.currentLapNumber ?? 0,
+                          paused: (liveLapTimer?.isPaused ?? false) ||
+                              rec.state == RecState.paused,
+                          live: true,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // 分段格：已完成段给用时 + Delta，未完成段给 '--'。
+              Builder(builder: (_) {
+                final timer = liveLapTimer;
+                final hasSectorPoints =
+                    timer != null && timer.sectorPoints.isNotEmpty;
+                final labels = hasSectorPoints
+                    ? (timer.sectorPoints.length >= 2
+                        ? const ['S1', 'S2', 'S3']
+                        : const ['S1', 'S2'])
+                    : const <String>[];
+                final times =
+                    timer?.currentCompletedSectorsMs ?? const <int>[];
+                final deltas =
+                    timer?.currentSectorDeltasVsBest ?? const <int?>[];
+                if (labels.isEmpty) return const SizedBox.shrink();
+                return Row(
+                  children: [
+                    for (var i = 0; i < labels.length; i++)
+                      Expanded(
+                        child: Container(
+                          margin: EdgeInsets.only(
+                              right: i == labels.length - 1 ? 0 : 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF141414),
+                            borderRadius: BorderRadius.circular(10),
+                            border:
+                                Border.all(color: const Color(0xFF2A2A2A)),
+                          ),
+                          child: Column(children: [
+                            Text(labels[i],
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 2),
+                            Text(
+                              i < times.length
+                                  ? LapTimer.formatLapTime(times[i])
+                                  : '--:--.---',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              i < deltas.length
+                                  ? LapTimer.formatDelta(deltas[i])
+                                  : '--',
+                              style: TextStyle(
+                                color: i < deltas.length && deltas[i] != null
+                                    ? (deltas[i]! < 0
+                                        ? Colors.greenAccent
+                                        : deltas[i]! > 0
+                                            ? Colors.redAccent
+                                            : Colors.white70)
+                                    : Colors.white38,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ]),
+                        ),
+                      ),
+                  ],
+                );
+              }),
+              const SizedBox(height: 12),
+              // Delta / 最佳圈 / 预测圈一行。
+              Builder(builder: (_) {
+                final timer = liveLapTimer;
+                final hasSectorPoints =
+                    timer != null && timer.sectorPoints.isNotEmpty;
+                final liveDelta = liveDeltaMsFor(
+                  predictedLapMs: timer?.predictedLapMsVsBest,
+                  bestLapMs: timer?.bestLap?.durationMs,
+                  hasSectorPoints: hasSectorPoints,
+                );
+                return Row(children: [
+                  Expanded(
+                    child: Text(
+                      '实时 Delta ${LapTimer.formatDelta(liveDelta)}',
+                      style: TextStyle(
+                        color: liveDelta == null
+                            ? Colors.white54
+                            : (liveDelta < 0
+                                ? Colors.greenAccent
+                                : liveDelta > 0
+                                    ? Colors.redAccent
+                                    : Colors.white),
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '最佳 ${LapTimer.formatLapTime(timer?.bestLap?.durationMs)}',
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 13),
+                  ),
+                ]);
+              }),
+              const SizedBox(height: 12),
+              // G 值行：纵向 / 横向实时值。
+              Row(children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141414),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF2A2A2A)),
+                    ),
+                    child: Text(
+                      '纵向 G ${rec.smoothLong >= 0 ? '+' : ''}${rec.smoothLong.toStringAsFixed(2)}g',
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141414),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF2A2A2A)),
+                    ),
+                    child: Text(
+                      '横向 G ${rec.smoothLat >= 0 ? '+' : ''}${rec.smoothLat.toStringAsFixed(2)}g',
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              // 压弯倾角（融合估计器，与竖屏街道面板同一组件）。
+              LeanAngleReadout(
+                leanDeg: rec.leanDeg,
+                quality: rec.leanQuality,
+                calibrated: rec.calibrated,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                  '本节用时 ${fmtDur(rec.elapsedMs)} · 里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 4),
+              Text(rec.calibrationNote,
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  textAlign: TextAlign.left),
+            ] else ...[
+              Text('${(rec.curSpeed * 3.6).toStringAsFixed(0)}',
+                  style: TextStyle(
+                      fontSize: 56,
+                      fontWeight: FontWeight.bold,
+                      color: _speedColor(rec.curSpeed * 3.6))),
+              const Text('km/h', style: TextStyle(color: Colors.white60)),
+              const SizedBox(height: 4),
+              Text(
+                  '里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km · ${fmtDur(rec.elapsedMs)}',
+                  style: const TextStyle(color: Colors.white70)),
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 64,
+                child: FilledButton(
+                  onPressed: togglePause,
+                  child: Text(rec.isRecording ? '暂停' : '恢复',
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              RippleTap(
+                borderRadius: BorderRadius.circular(16),
+                onLongPress: _endTrip,
+                child: Container(
+                  height: 64,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(16)),
+                  child: const Text('长按结束',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 18)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(rec.calibrationNote,
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  textAlign: TextAlign.center),
+            ],
           ],
-          const Spacer(),
-          SizedBox(
-            height: 64,
-            child: FilledButton(
-              onPressed: togglePause,
-              child: Text(rec.isRecording ? '暂停' : '恢复',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-          ),
-          const SizedBox(height: 12),
-          RippleTap(
-            borderRadius: BorderRadius.circular(16),
-            onLongPress: _endTrip,
-            child: Container(
-              height: 64,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(16)),
-              child: const Text('长按结束',
-                  style:
-                      TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(rec.calibrationNote,
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
-              textAlign: TextAlign.center),
-        ],
+        ),
       ),
     );
     // ---- 按方向组装（竖屏原样 / 横屏左右分栏）----

@@ -44,17 +44,17 @@ import 'track_timing.dart';
 /// 几分钟才在 CDN 上可见，属正常现象（不等就走 raw 回落兜底）。
 /// 单源超时 10 秒，两源串行总等待约 20 秒。
 const String kTrackLibraryManifestUrlCdn =
-    'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/tracks-manifest.json';
+    'https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/data/tracks-manifest.json';
 
 /// GitHub raw 备用源（jsDelivr 失败时回落）。
 const String kTrackLibraryManifestUrl =
-    'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/tracks-manifest.json';
+    'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/tracks-manifest.json';
 
 /// 清单包地址的 raw 前缀（与 cdn 前缀一一对应，仅用于源重写）。
 const String kTrackPackageRawPrefix =
-    'https://raw.githubusercontent.com/wangtao969/drive-track/main/data/packages/';
+    'https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/';
 const String kTrackPackageCdnPrefix =
-    'https://cdn.jsdelivr.net/gh/wangtao969/drive-track@main/data/packages/';
+    'https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/data/packages/';
 
 /// 单个更新源的超时（连接与响应各 10 秒）。
 
