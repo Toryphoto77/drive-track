@@ -80,6 +80,9 @@ class _AboutPageState extends State<AboutPage> {
   int _downloadReceived = 0;
   int? _downloadTotal;
   String? _downloadError;
+  DownloadSourceKind? _downloadKind;
+  double? _downloadBps;
+  bool _downloadRestarted = false;
   String? _cacheMsg;
 
   /// v1.0.7：清除缓存（天气缓存、路网缓存、更新下载包等缓存目录
@@ -132,16 +135,26 @@ class _AboutPageState extends State<AboutPage> {
       _downloadReceived = 0;
       _downloadTotal = null;
       _downloadError = null;
+      _downloadKind = null;
+      _downloadBps = null;
+      _downloadRestarted = false;
     });
+    final sources = r.downloadSources.isNotEmpty
+        ? r.downloadSources
+        : [DownloadSource(r.downloadUrl!, classifyDownloadUrl(r.downloadUrl!))];
     final res = await UpdateService.downloadAndInstallChecked(
       url: r.downloadUrl!,
+      sources: sources,
       remoteVersionCode: r.remoteVersionCode!,
       expectedSha256: r.sha256,
-      onProgress: (received, total) {
+      onProgressDetail: (p) {
         if (!mounted) return;
         setState(() {
-          _downloadReceived = received;
-          _downloadTotal = total;
+          _downloadReceived = p.received;
+          _downloadTotal = p.total;
+          _downloadKind = p.kind;
+          _downloadBps = p.bytesPerSecond;
+          _downloadRestarted = p.restarted;
         });
       },
     );
@@ -155,6 +168,22 @@ class _AboutPageState extends State<AboutPage> {
         showAppNotice(context, res.message, AppNoticeKind.warning);
       }
     }
+  }
+
+  String _downloadStatusLine(S s, int? percent) {
+    final source = switch (_downloadKind) {
+      DownloadSourceKind.cdn => s.t('国内源', 'China mirror'),
+      DownloadSourceKind.github => 'GitHub',
+      DownloadSourceKind.githubProxy => s.t('备用源', 'Backup mirror'),
+      DownloadSourceKind.direct => s.t('下载源', 'Download'),
+      null => s.t('下载中', 'Downloading'),
+    };
+    final speed = _downloadBps == null ? '' : ' · ${formatDownloadSpeed(_downloadBps!)}';
+    final pct = percent == null ? '' : ' · $percent%';
+    if (_downloadRestarted && _downloadReceived == 0) {
+      return s.t('$source · 上一源失败，重新下载', '$source · previous source failed, starting over');
+    }
+    return '$source$speed$pct';
   }
 
   /// 有边框信息卡：标题 + 内容（v1.0.3 仅在线更新区用，顶部信息
@@ -284,9 +313,7 @@ class _AboutPageState extends State<AboutPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    percent == null
-                        ? s.t('下载中…', 'Downloading…')
-                        : s.t('下载中 $percent%', 'Downloading $percent%'),
+                    _downloadStatusLine(s, percent),
                     style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ],

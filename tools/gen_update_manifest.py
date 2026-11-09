@@ -11,6 +11,10 @@
 - 保留旧字段 apkUrl（arm64-v8a 包）并附 sha256，旧版 App 照常能读；
 - 缺任何一个 APK 默认报错退出（--allow-missing 时该架构不写入清单）。
 发布前：把清单与 Release 附件一起推送，再刷新 jsDelivr 缓存（见维护说明）。
+
+国内下载：本脚本不编造 CDN 地址。下一版把 APK 放到腾讯云 CloudBase / COS
+公共读 URL 后，用 --cdn-base 写入 cdnUrl（每个架构文件名拼在 base 后面，
+顶层 cdnUrl 指向 arm64 包）。不传则清单里不出现 cdnUrl。
 """
 import argparse, hashlib, json, os, re, sys
 
@@ -31,6 +35,11 @@ def main():
     ap.add_argument("--root", default=os.path.join(os.path.dirname(__file__), ".."))
     ap.add_argument("--notes", default=None, help="更新说明；不传则沿用现有清单的 notes")
     ap.add_argument("--allow-missing", action="store_true")
+    ap.add_argument(
+        "--cdn-base",
+        default=None,
+        help="CloudBase/COS 公共目录（以 / 结尾与否均可）。写入各架构 cdnUrl，不传则不写。",
+    )
     ap.add_argument("--out", default=None, help="输出路径，默认 <root>/update-manifest.json")
     a = ap.parse_args()
     root = os.path.abspath(a.root)
@@ -57,10 +66,14 @@ def main():
                 print(f"跳过（缺文件）：{fn}")
                 continue
             sys.exit(f"缺正式包：{fn}（先跑对应的 build-apk-*-release.sh）")
-        apks[abi] = {
+        entry = {
             "url": f"https://github.com/{REPO}/releases/download/v{name}/{fn}",
             "sha256": sha256_file(p),
         }
+        if a.cdn_base:
+            base = a.cdn_base.rstrip("/") + "/"
+            entry["cdnUrl"] = base + fn
+        apks[abi] = entry
     if "arm64-v8a" not in apks:
         sys.exit("清单必须包含 arm64-v8a 包（旧版 App 只认 apkUrl = arm64 包）")
     manifest = {
@@ -72,6 +85,8 @@ def main():
         "apks": apks,
         "notes": a.notes if a.notes is not None else old.get("notes", ""),
     }
+    if a.cdn_base and "arm64-v8a" in apks and apks["arm64-v8a"].get("cdnUrl"):
+        manifest["cdnUrl"] = apks["arm64-v8a"]["cdnUrl"]
     with open(out + ".tmp", "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
         f.write("\n")

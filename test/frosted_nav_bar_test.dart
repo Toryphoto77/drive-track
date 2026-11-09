@@ -49,6 +49,37 @@ void main() {
     expect(selected, 1);
   });
 
+  test('navSelectionLeft puts the 48px circle on each slot center', () {
+    const width = 288.0;
+    for (var i = 0; i < 4; i++) {
+      final left = navSelectionLeft(barWidth: width, index: i, count: 4);
+      expect(left + 24, closeTo((i + 0.5) * width / 4, 0.01));
+    }
+  });
+
+  testWidgets('selection circle shares a center with each tab icon', (tester) async {
+    tester.view.physicalSize = const Size(360, 780);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const icons = [Icons.home, Icons.devices, Icons.list_alt, Icons.person];
+    for (var i = 0; i < icons.length; i++) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FrostedGlassNavBar(selectedIndex: i, onTap: (_) {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      final icon = tester.getCenter(find.byIcon(icons[i]));
+      final circle = tester.getCenter(find.byKey(const Key('nav-selection-indicator')));
+      expect((icon.dx - circle.dx).abs(), lessThan(1.0), reason: 'tab $i dx');
+      expect((icon.dy - circle.dy).abs(), lessThan(1.0), reason: 'tab $i dy');
+    }
+  });
+
   test('app icon choice: steering default, legacy keys fall back to steering', () {
     expect(AppIconChoice.normalize(null), AppIconChoice.steering);
     expect(AppIconChoice.normalize('bogus'), AppIconChoice.steering);

@@ -13,7 +13,6 @@ class SettingsHomePage extends StatelessWidget {
   final VoidCallback onOpenLocation;
   // v0.1.9 传感器校准入口：可选回调，未传时不显示该入口。
   final VoidCallback? onOpenSensorCalibration;
-  final VoidCallback onOpenDevices;
   final VoidCallback onOpenMapImport;
   // v0.1.7 油耗费用入口：可选回调，未传时不显示该入口（不破坏旧调用方）。
   final VoidCallback? onOpenFuel;
@@ -40,7 +39,6 @@ class SettingsHomePage extends StatelessWidget {
     required this.onOpenTrack,
     required this.onOpenLocation,
     this.onOpenSensorCalibration,
-    required this.onOpenDevices,
     required this.onOpenMapImport,
     this.onOpenFuel,
     this.onOpenVehicle,
@@ -88,7 +86,6 @@ class SettingsHomePage extends StatelessWidget {
           // 复用现有标定逻辑，不另造一套 G 值计算。
           if (onOpenSensorCalibration != null)
             entry(Icons.sensors, s.t('传感器校准', 'Sensor calibration'), s.t('静置校零、车头标定、罗盘提示', 'Level, heading, compass'), onOpenSensorCalibration!),
-          entry(Icons.devices, s.t('设备中心', 'Devices'), s.t('运动相机 · 传感器 · 外接 GPS', 'Camera, sensors, external GPS'), onOpenDevices),
           entry(Icons.map, s.t('地图资源导入', 'Map import'), s.t('离线瓦片包、GeoJSON/KML 叠加、底图样式', 'Offline tiles and overlays'), onOpenMapImport),
           // v1.0.2：第 8 项——“地图车标”入口已从设置首页删除，
           // 功能移入主题设置页的“地图车标”分区。

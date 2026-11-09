@@ -73,7 +73,7 @@ class S {
   String t(String zhText, String enText) => zh ? zhText : enText;
 }
 
-/// 我的 / 设置里的语言开关。两个标签固定写「中文 / English」，
+/// 设置里的语言开关（个人页不再放第二份）。两个标签固定写「中文 / English」，
 /// 不随当前语言改名，避免找不到切回去的入口。
 class LanguageSwitch extends StatelessWidget {
   const LanguageSwitch({super.key});

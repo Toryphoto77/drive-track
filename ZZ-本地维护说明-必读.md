@@ -87,7 +87,8 @@
 
 ## 底栏设备中心 / 冷启动 / 图标清理（2026-11-09）
 
-- 设备中心是底栏第 2 页（与首页/记录/我的同壳、同 AnimatedSwitcher），`DeviceCenterPage(embedded: true)`：无返回 AppBar，页内标题“设备中心”，底部为药丸留白。设置等子页仍可 push 带返回的独立页。
+- 设备中心是底栏第 2 页（与首页/记录/我的同壳、同 AnimatedSwitcher），`DeviceCenterPage(embedded: true)`：无返回 AppBar，页内标题“设备中心”，底部为药丸留白。设置首页不再放设备中心入口。录制中的 OBD 药丸仍可打开设备页。
+- 在线更新：清单可加 `cdnUrl` / `mirrors`（旧版只读 `url`/`apkUrl`）。下一版把 APK 放到腾讯云 CloudBase / COS 再写入这些字段。GitHub 慢时会再试 ghfast.top、gh-proxy.com、mirror.ghproxy.com，清单 `githubProxyFallback: false` 可关。
 - 冷启动：`values-v31` 系统 Splash 图标圆底纯黑；Flutter `SplashPage` 首帧图标满不透明、底色纯黑，避免无进程冷启动闪一下。
 - 废弃 Flutter assets（`app_icon.png` / red / rb17 / valkyrie）与旧 adaptive `ic_launcher*` 已删；桌面 alias 用的 steering/checkered/rb17/valkyrie mipmap 保留。
 

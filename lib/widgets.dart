@@ -1,7 +1,10 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+
+import 'app_locale.dart';
 import 'models.dart';
 import 'recorder.dart';
+import 'sport_moto_paths.dart';
 
 // ---------- Web Mercator ----------
 double _mercY(double lat) {
@@ -285,10 +288,12 @@ class TrajectoryPainter extends CustomPainter {
 // ---------- G 值圆 ----------
 class GCirlce extends StatelessWidget {
   final double longG, latG;
-  final List<GSample> trail; // 最近 5 秒
+  final List<GSample> trail; // 最近 5 秒，车体坐标
   final double threshold;
   final bool calibrated;
   final double size;
+  final double? peakLong;
+  final double? peakLat;
   const GCirlce({
     super.key,
     required this.longG,
@@ -297,6 +302,8 @@ class GCirlce extends StatelessWidget {
     required this.threshold,
     required this.calibrated,
     this.size = 120,
+    this.peakLong,
+    this.peakLat,
   });
 
   @override
@@ -312,11 +319,25 @@ class GCirlce extends StatelessWidget {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       CustomPaint(
         size: Size(size, size),
-        painter: GCirlcePainter(longG, latG, trail, threshold, calibrated, color),
+        painter: GCirlcePainter(
+          longG,
+          latG,
+          trail,
+          threshold,
+          calibrated,
+          color,
+          peakLong: peakLong,
+          peakLat: peakLat,
+        ),
       ),
       const SizedBox(height: 4),
       Text(
-        calibrated ? '纵向 ${longG.toStringAsFixed(2)}g · 横向 ${latG.toStringAsFixed(2)}g' : '未标定',
+        calibrated
+            ? S.of(context).t(
+                '纵向 ${longG.toStringAsFixed(2)}g · 横向 ${latG.toStringAsFixed(2)}g',
+                'Long ${longG.toStringAsFixed(2)}g · lat ${latG.toStringAsFixed(2)}g',
+              )
+            : S.of(context).t('未标定', 'Not calibrated'),
         style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
       ),
     ]);
@@ -329,7 +350,10 @@ class GCirlcePainter extends CustomPainter {
   final double threshold;
   final bool calibrated;
   final Color color;
-  GCirlcePainter(this.longG, this.latG, this.trail, this.threshold, this.calibrated, this.color);
+  final double? peakLong;
+  final double? peakLat;
+  GCirlcePainter(this.longG, this.latG, this.trail, this.threshold, this.calibrated, this.color,
+      {this.peakLong, this.peakLat});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -357,6 +381,19 @@ class GCirlcePainter extends CustomPainter {
     canvas.drawLine(Offset(c.dx - r, c.dy), Offset(c.dx + r, c.dy), Paint()..color = Colors.white24);
     canvas.drawLine(Offset(c.dx, c.dy - r), Offset(c.dx, c.dy + r), Paint()..color = Colors.white24);
     if (!calibrated) return;
+    // 本节峰值刻度：横向在横轴，纵向在竖轴（上为正）。满圈仍是 1g。
+    final peakPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.7)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    if (peakLong != null) {
+      final y = c.dy - peakLong!.clamp(-1.0, 1.0) * r;
+      canvas.drawLine(Offset(c.dx - 5, y), Offset(c.dx + 5, y), peakPaint);
+    }
+    if (peakLat != null) {
+      final x = c.dx + peakLat!.clamp(-1.0, 1.0) * r;
+      canvas.drawLine(Offset(x, c.dy - 5), Offset(x, c.dy + 5), peakPaint);
+    }
     // 5 秒拖尾
     if (trail.length > 1) {
       for (var i = 1; i < trail.length; i++) {
@@ -562,7 +599,7 @@ class _GScatterPainter extends CustomPainter {
 }
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
-// 汽车：低趴跑车 + 尾翼轮廓；摩托：整流罩仿赛 + 骑手压弯姿态感。
+// 汽车：低趴跑车，车头朝右。摩托：同向侧视仿赛，轮廓描自确认稿。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
   final bool selected;
@@ -627,31 +664,17 @@ class _SportCarPainter extends CustomPainter {
 class _SportMotoPainter extends CustomPainter {
   final Color c;
   _SportMotoPainter(this.c);
+
+  static final Path _body = sportMotoBodyPath();
+  static final Path _tires = sportMotoTirePath();
+
   @override
   void paint(Canvas canvas, Size s) {
-    final p = Paint()..color = c..style = PaintingStyle.fill;
-    final w = s.width, h = s.height;
-    // 整流罩（前倾仿赛轮廓）
-    final fairing = Path()
-      ..moveTo(w * 0.72, h * 0.18)
-      ..lineTo(w * 0.88, h * 0.42)
-      ..lineTo(w * 0.80, h * 0.62)
-      ..lineTo(w * 0.55, h * 0.66)
-      ..lineTo(w * 0.42, h * 0.50)
-      ..lineTo(w * 0.55, h * 0.34)
-      ..close();
-    canvas.drawPath(fairing, p);
-    // 车身下部 + 排气
-    canvas.drawRect(Rect.fromLTWH(w * 0.18, h * 0.62, w * 0.55, h * 0.10), p);
-    // 骑手压弯姿态：头盔 + 俯身躯干（一条斜线体感）
-    canvas.drawCircle(Offset(w * 0.48, h * 0.22), w * 0.09, Paint()..color = c);
-    final lean = Paint()..color = c..strokeWidth = w * 0.09..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(w * 0.48, h * 0.30), Offset(w * 0.30, h * 0.55), lean);
-    // 车轮
-    canvas.drawCircle(Offset(w * 0.22, h * 0.76), w * 0.14, Paint()..color = Colors.black);
-    canvas.drawCircle(Offset(w * 0.78, h * 0.76), w * 0.14, Paint()..color = Colors.black);
-    canvas.drawCircle(Offset(w * 0.22, h * 0.76), w * 0.05, Paint()..color = c);
-    canvas.drawCircle(Offset(w * 0.78, h * 0.76), w * 0.05, Paint()..color = c);
+    canvas.save();
+    canvas.scale(s.width / kSportMotoViewBox, s.height / kSportMotoViewBox);
+    canvas.drawPath(_tires, Paint()..color = const Color(0xFF111111));
+    canvas.drawPath(_body, Paint()..color = c);
+    canvas.restore();
   }
 
   @override

@@ -8,6 +8,7 @@ import 'card_style.dart';
 import 'cloud_page.dart';
 import 'empty_hud.dart';
 import 'cloud_service.dart';
+import 'home_layout.dart';
 
 /// 全新个人页（v0.1.3 分工：个人页 UI 重做）。
 ///
@@ -118,6 +119,10 @@ class MyPage extends StatefulWidget {
   /// 空态主操作：去首页开始记录。
   final VoidCallback? onStartRecording;
 
+  /// 打开底栏「记录」（index 2）。个人页的行程区只做公开开关，
+  /// 完整行程列表在记录页。
+  final VoidCallback? onOpenTripsTab;
+
   /// 统计卡：调用方传入（行程数 / 总里程 / 总时长 / 平均评分等）。
   final List<MyStat> stats;
 
@@ -150,6 +155,7 @@ class MyPage extends StatefulWidget {
     this.onEditProfile,
     this.onShareInvite,
     this.onStartRecording,
+    this.onOpenTripsTab,
     required this.stats,
     this.monthlyStats = const [],
     this.monthlyNote = '',
@@ -594,12 +600,14 @@ class _MyPageState extends State<MyPage> {
   }
 
   Widget _tripRow(MyTripItem item, {bool showPublicToggle = false}) {
+    final s = S.of(context);
     return _card(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(children: [
         Expanded(
           child: InkWell(
-            onTap: item.onTap,
+            // 公开管理列表不是第二套行程浏览器，行本身不进详情。
+            onTap: showPublicToggle ? null : item.onTap,
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -611,23 +619,45 @@ class _MyPageState extends State<MyPage> {
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        Semantics(
-          label: '收藏',
-          child: IconButton(
-            icon: Icon(item.isFavorite ? Icons.star : Icons.star_border,
-                color: item.isFavorite ? widget.accentColor : Colors.white54),
-            onPressed: item.onToggleFavorite,
+        if (!showPublicToggle) ...[
+          const SizedBox(width: 8),
+          Semantics(
+            label: s.t('收藏', 'Save'),
+            child: IconButton(
+              icon: Icon(item.isFavorite ? Icons.star : Icons.star_border,
+                  color: item.isFavorite ? widget.accentColor : Colors.white54),
+              onPressed: item.onToggleFavorite,
+            ),
           ),
-        ),
-        if (showPublicToggle)
+          const Icon(Icons.chevron_right, color: Colors.white38),
+        ] else
           _pillButton(
-            label: item.isPublic ? S.of(context).t('公开', 'Public') : S.of(context).t('仅自己', 'Private'),
+            label: item.isPublic ? s.t('公开', 'Public') : s.t('仅自己', 'Private'),
             selected: item.isPublic,
             onTap: item.onTogglePublic,
-          )
-        else
-          const Icon(Icons.chevron_right, color: Colors.white38),
+          ),
+      ]),
+    );
+  }
+
+  Widget _openTripsCard() {
+    final s = S.of(context);
+    return DriveTrackCard(
+      onTap: widget.onOpenTripsTab,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(children: [
+        Icon(Icons.list_alt, color: CardStyle.accent(context)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(s.t('打开行程记录', 'Open trips'),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 2),
+            Text(s.t('完整行程在「记录」页', 'Full list is on the Trips tab'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ]),
+        ),
+        const Icon(Icons.chevron_right, color: Colors.white38),
       ]),
     );
   }
@@ -671,16 +701,14 @@ class _MyPageState extends State<MyPage> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    // 底栏药丸盖住滚动末尾：留出药丸高 + 距底 12 + 系统底 inset + 间隙。
+    final bottomPad = kPillNavHeight + 12 + MediaQuery.paddingOf(context).bottom + 16;
     return SingleChildScrollView(
-      // v1.0.5：底部 padding 由 48 改回 16，仅作正常内容边距；
-      // 不再与主框架叠加留出空黑条，内容在药丸下方划过、透过毛玻璃可见。
       // v1.4.2：顶栏改半透 + 主框架 extendBodyBehindAppBar，顶部再加
-      // 状态栏 + AppBar 高，首张卡片静止时才不会藏进顶栏后。
-      padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 16)),
+      // 顶栏高度，首张卡片静止时才不会藏进顶栏后。
+      padding: withAppBarTopInset(context, EdgeInsets.fromLTRB(16, 16, 16, bottomPad)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         _profileCard(),
-        const SizedBox(height: 12),
-        const LanguageSwitch(),
         const SizedBox(height: 12),
         _statsCard(),
         if (widget.monthlyStats.isNotEmpty) ...[
@@ -693,6 +721,17 @@ class _MyPageState extends State<MyPage> {
         _sectionBar(),
         const SizedBox(height: 12),
         if (_section == MyPageSection.trips) ...[
+          _openTripsCard(),
+          const SizedBox(height: 8),
+          Text(s.t('公开范围', 'Visibility'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const SizedBox(height: 2),
+          Text(
+            s.t('只切换是否公开。完整行程在「记录」页。',
+                'Publish toggles only. Full trips are on the Trips tab.'),
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
           if (widget.trips.isEmpty)
             _emptyHud(icon: Icons.route, status: s.t('暂无行程', 'No trips yet'))
           else

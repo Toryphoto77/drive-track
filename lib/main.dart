@@ -57,7 +57,6 @@ import 'photo_points.dart';
 import 'score_module.dart';
 import 'lean_chart.dart';
 import 'lean_gauge.dart';
-import 'live_lap_timer_text.dart';
 import 'accel_module.dart';
 import 'amap_service.dart';
 import 'share_card_preview.dart';
@@ -65,6 +64,7 @@ import 'track_viz.dart';
 import 'voice_service.dart';
 import 'satellite_service.dart';
 import 'track_settings_page.dart';
+import 'track_landscape_panel.dart';
 import 'track_session_display.dart';
 import 'track_live_g.dart';
 import 'track_sector_data.dart';
@@ -593,6 +593,8 @@ class _HomePageState extends State<HomePage>
   // v1.3.2：记录页实时 Map 分页（计时页 / 地图页左右滑）。
   late final PageController _recMapPageController = PageController();
   int _recMapPageIndex = 0;
+  /// 赛道横屏：true 时地图铺满，只留角上的圈时 / Delta 胶囊。
+  bool _trackLandscapeFullMap = false;
   List<TripMeta> trips = [];
   WeatherInfo? weather;
   double? weatherLat, weatherLon;
@@ -2720,6 +2722,7 @@ class _HomePageState extends State<HomePage>
       onEditProfile: _editProfile,
       onShareInvite: _shareInvite,
       onStartRecording: () => _goTab(0),
+      onOpenTripsTab: () => _goTab(2),
       stats: [
         MyStat(label: s.t('行程', 'Trips'), value: '${real.length}'),
         // v0.1.9：千分位 + 自适应字号（my_page.dart 内 FittedBox 不换行），
@@ -2775,7 +2778,6 @@ class _HomePageState extends State<HomePage>
           onOpenLocation: _openLocationSettings,
           // v0.1.9：设置页传感器校准入口（复用现有标定逻辑，见 sensor_calibration_page.dart）。
           onOpenSensorCalibration: _openSensorCalibration,
-          onOpenDevices: _openDeviceCenter,
           onOpenMapImport: _openMapImport,
           // v0.1.7 油耗费用入口（设置页“地图车标”之后，见 settings_home_page.dart）。
           onOpenFuel: () => Navigator.push(context, DtPageRoute(builder: (_) => FuelSettingsPage(
@@ -2951,7 +2953,6 @@ class _HomePageState extends State<HomePage>
                       setState(() => _showTrackDelta = ts.showDelta);
                     }
                   },
-                  onOpenDeviceCenter: _openDeviceCenter,
                   onOpenSensorCalibration: _openSensorCalibration,
                 )));
   }
@@ -3388,6 +3389,8 @@ class _HomePageState extends State<HomePage>
       isTrack: isTrackPage,
       hasCrossedStartLine: hasCrossedStartLine,
     );
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     final topWidgets = <Widget>[
       // v1.4.2：顶栏改半透 + 主框架 extendBodyBehindAppBar，首位占位
       // 状态栏 + AppBar 高，天气条 / GPS 徽标静止时才不会藏进顶栏后
@@ -3472,14 +3475,18 @@ class _HomePageState extends State<HomePage>
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                liveLapTimer == null
-                    ? '${selectedTrack!.nameCn} · 等待定位，计时即将开始'
-                    : '${selectedTrack!.nameCn} · ${liveLapTimer!.currentLapNumber <= 0 ? '发车圈' : '第 ${liveLapTimer!.currentLapNumber} 圈'}'
-                        ' · 本节用时 ${fmtDur(rec.elapsedMs)}'
-                        '${liveLapTimer!.isPaused ? ' · 已自动暂停' : ''}'
-                        // v1.2.17：维修区内追加“ · 维修区 · 停站 mm:ss”
-                        // （计时器 inPit / pitStopMs），不在维修区不显示。
-                        '${pitStopSuffix(inPit: liveLapTimer!.inPit, pitStopMs: liveLapTimer!.pitStopMs)}',
+                // 横屏赛道的圈号 / 本节用时只出现在右侧仪表，顶栏只留赛道名，
+                // 避免和仪表列再写一遍。
+                isLandscape
+                    ? '${selectedTrack!.nameCn}'
+                        '${liveLapTimer == null ? ' · ${s.t('等待定位', 'Waiting for GPS')}' : ''}'
+                        '${pitStopSuffix(inPit: liveLapTimer?.inPit ?? false, pitStopMs: liveLapTimer?.pitStopMs ?? 0)}'
+                    : liveLapTimer == null
+                        ? '${selectedTrack!.nameCn} · 等待定位，计时即将开始'
+                        : '${selectedTrack!.nameCn} · ${liveLapTimer!.currentLapNumber <= 0 ? '发车圈' : '第 ${liveLapTimer!.currentLapNumber} 圈'}'
+                            ' · 本节用时 ${fmtDur(rec.elapsedMs)}'
+                            '${liveLapTimer!.isPaused ? ' · 已自动暂停' : ''}'
+                            '${pitStopSuffix(inPit: liveLapTimer!.inPit, pitStopMs: liveLapTimer!.pitStopMs)}',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -3605,6 +3612,14 @@ class _HomePageState extends State<HomePage>
                           calibrated: () => rec.calibrated,
                           peakLong: () => rec.tripPeakLong,
                           peakLat: () => rec.tripPeakLat,
+                          trail: () {
+                            final nowMs = DateTime.now().millisecondsSinceEpoch;
+                            return [
+                              for (final g in rec.gHistory)
+                                if (nowMs - g.timeMs <= 5000)
+                                  (longG: g.longG, latG: g.latG),
+                            ];
+                          },
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -3744,6 +3759,8 @@ class _HomePageState extends State<HomePage>
                 trail: trail,
                 threshold: ModeThresholds.of(rec.mode).harshCorner,
                 calibrated: rec.calibrated,
+                peakLong: rec.tripPeakLong,
+                peakLat: rec.tripPeakLat,
                 size: 110,
               ),
             ),
@@ -3815,12 +3832,8 @@ class _HomePageState extends State<HomePage>
               ),
             ),
           );
-    // v1.5.4 横屏控制列（重做）：赛道模式横屏无任何手动按钮——
-    // 暂停 / 结束按钮已删，停车自动暂停、起步自动恢复，全程无需
-    // 手动；腾出的位置放计时核心数据（大速度、当前圈、圈时、分段、
-    // Delta、G 值、倾角）。街道模式横屏保持原样（大速度 + 暂停 /
-    // 长按结束两个 64 高大按钮）。只在计时页（第 0 页）显示，
-    // 地图页不显示。
+    // 街道横屏控制列：大速度 + 暂停 / 长按结束。赛道横屏不走这里，
+    // 见下方 TrackLandscapeSplit。只在计时页（第 0 页）显示。
     final landscapeControls = Container(
       color: CardStyle.cardColor,
       padding: const EdgeInsets.all(16),
@@ -3828,232 +3841,6 @@ class _HomePageState extends State<HomePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (isTrackPage) ...[
-              // 自动暂停状态条：计时停了为什么，一眼可见。
-              if (rec.isAutoPaused || (liveLapTimer?.isPaused ?? false))
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: Colors.amber.withValues(alpha: 0.5)),
-                  ),
-                  child: Row(children: [
-                    const Icon(Icons.pause_circle_filled,
-                        size: 18, color: Colors.amber),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(s.t('已自动暂停 · 等待起步', 'Auto-paused · waiting to roll'),
-                          style: const TextStyle(
-                              color: Colors.amber,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold)),
-                    ),
-                  ]),
-                ),
-              if (rec.isAutoPaused || (liveLapTimer?.isPaused ?? false))
-                const SizedBox(height: 12),
-              // 大速度 + 当前圈 / 圈时。
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('${(rec.curSpeed * 3.6).toStringAsFixed(0)}',
-                      style: TextStyle(
-                          fontSize: 56,
-                          fontWeight: FontWeight.bold,
-                          color: _speedColor(rec.curSpeed * 3.6))),
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 10, left: 4),
-                    child: Text('km/h',
-                        style: TextStyle(color: Colors.white60)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          liveLapTimer == null
-                              ? '等待定位'
-                              : '第 ${liveLapTimer!.currentLapNumber <= 0 ? '发车圈' : '${liveLapTimer!.currentLapNumber} 圈'}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold),
-                        ),
-                        LiveLapTimeText(
-                          anchorMs: liveLapTimer?.currentLapMs,
-                          lapNumber: liveLapTimer?.currentLapNumber ?? 0,
-                          paused: (liveLapTimer?.isPaused ?? false) ||
-                              rec.state == RecState.paused,
-                          live: true,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // 分段格：已完成段给用时 + Delta，未完成段给 '--'。
-              Builder(builder: (_) {
-                final timer = liveLapTimer;
-                final hasSectorPoints =
-                    timer != null && timer.sectorPoints.isNotEmpty;
-                final labels = hasSectorPoints
-                    ? (timer.sectorPoints.length >= 2
-                        ? const ['S1', 'S2', 'S3']
-                        : const ['S1', 'S2'])
-                    : const <String>[];
-                final times =
-                    timer?.currentCompletedSectorsMs ?? const <int>[];
-                final deltas =
-                    timer?.currentSectorDeltasVsBest ?? const <int?>[];
-                if (labels.isEmpty) return const SizedBox.shrink();
-                return Row(
-                  children: [
-                    for (var i = 0; i < labels.length; i++)
-                      Expanded(
-                        child: Container(
-                          margin: EdgeInsets.only(
-                              right: i == labels.length - 1 ? 0 : 6),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF141414),
-                            borderRadius: BorderRadius.circular(10),
-                            border:
-                                Border.all(color: const Color(0xFF2A2A2A)),
-                          ),
-                          child: Column(children: [
-                            Text(labels[i],
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 12)),
-                            const SizedBox(height: 2),
-                            Text(
-                              i < times.length
-                                  ? LapTimer.formatLapTime(times[i])
-                                  : '--:--.---',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              i < deltas.length
-                                  ? LapTimer.formatDelta(deltas[i])
-                                  : '--',
-                              style: TextStyle(
-                                color: i < deltas.length && deltas[i] != null
-                                    ? (deltas[i]! < 0
-                                        ? Colors.greenAccent
-                                        : deltas[i]! > 0
-                                            ? Colors.redAccent
-                                            : Colors.white70)
-                                    : Colors.white38,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ]),
-                        ),
-                      ),
-                  ],
-                );
-              }),
-              const SizedBox(height: 12),
-              // Delta / 最佳圈 / 预测圈一行。
-              Builder(builder: (_) {
-                final timer = liveLapTimer;
-                final hasSectorPoints =
-                    timer != null && timer.sectorPoints.isNotEmpty;
-                final liveDelta = liveDeltaMsFor(
-                  predictedLapMs: timer?.predictedLapMsVsBest,
-                  bestLapMs: timer?.bestLap?.durationMs,
-                  hasSectorPoints: hasSectorPoints,
-                );
-                return Row(children: [
-                  Expanded(
-                    child: Text(
-                      '实时 Delta ${LapTimer.formatDelta(liveDelta)}',
-                      style: TextStyle(
-                        color: liveDelta == null
-                            ? Colors.white54
-                            : (liveDelta < 0
-                                ? Colors.greenAccent
-                                : liveDelta > 0
-                                    ? Colors.redAccent
-                                    : Colors.white),
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '最佳 ${LapTimer.formatLapTime(timer?.bestLap?.durationMs)}',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 13),
-                  ),
-                ]);
-              }),
-              const SizedBox(height: 12),
-              // G 值行：纵向 / 横向实时值。
-              Row(children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF141414),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF2A2A2A)),
-                    ),
-                    child: Text(
-                      '纵向 G ${rec.smoothLong >= 0 ? '+' : ''}${rec.smoothLong.toStringAsFixed(2)}g',
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF141414),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF2A2A2A)),
-                    ),
-                    child: Text(
-                      '横向 G ${rec.smoothLat >= 0 ? '+' : ''}${rec.smoothLat.toStringAsFixed(2)}g',
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 12),
-              // 压弯倾角（融合估计器，与竖屏街道面板同一组件）。
-              LeanAngleReadout(
-                leanDeg: rec.leanDeg,
-                quality: rec.leanQuality,
-                calibrated: rec.calibrated,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                  '本节用时 ${fmtDur(rec.elapsedMs)} · 里程 ${(rec.distanceM / 1000).toStringAsFixed(2)} km',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              const SizedBox(height: 4),
-              Text(rec.calibrationNote,
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                  textAlign: TextAlign.left),
-            ] else ...[
               Text('${(rec.curSpeed * 3.6).toStringAsFixed(0)}',
                   style: TextStyle(
                       fontSize: 56,
@@ -4086,21 +3873,95 @@ class _HomePageState extends State<HomePage>
               Text(rec.calibrationNote,
                   style: const TextStyle(color: Colors.white54, fontSize: 11),
                   textAlign: TextAlign.center),
-            ],
           ],
         ),
       ),
     );
     // ---- 按方向组装（竖屏原样 / 横屏左右分栏）----
-    // 横屏（800×360 这类）：左右分栏。左侧 = 地图/计时 PageView
-    // + 页指示点；右侧 = 横屏控制列（定宽）；地图页（第 1 页）
-    // 不显示操作区，地图占满宽。竖屏：保持原 Column 结构
-    // （Expanded PageView + 指示点 + 底部面板，不包 Flexible）。
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+    // 赛道横屏：左 58% 只放赛道地图，右 42% 只放一列仪表。
+    // 不再把第 0 页的 TrackSessionDisplay / 段速 / 圈速列表 / 速度卡
+    // 铺在左边（那些和右栏重复）。圈速明细进底部表；全图只留角标。
+    // 街道横屏保持原来的 PageView + 控制列。竖屏保持原 Column。
+    if (isLandscape && isTrackPage) {
+      final timer = liveLapTimer;
+      final hasSectorPoints = timer != null && timer.sectorPoints.isNotEmpty;
+      final labels = !hasSectorPoints
+          ? const <String>[]
+          : (timer.sectorPoints.length >= 2
+              ? const ['S1', 'S2', 'S3']
+              : const ['S1', 'S2']);
+      final liveDelta = liveDeltaMsFor(
+        predictedLapMs: timer?.predictedLapMsVsBest,
+        bestLapMs: timer?.bestLap?.durationMs,
+        hasSectorPoints: hasSectorPoints,
+      );
+      final timerPaused =
+          (timer?.isPaused ?? false) || rec.state == RecState.paused;
+      final map = RecordingMapPage(
+        isTrack: true,
+        centerline: selectedPackage?.centerline ?? const <GeoPoint>[],
+        start: selectedPackage?.start,
+        finish: selectedPackage?.finish,
+        sectorPoints: timer?.sectorPoints ?? const <GeoPoint>[],
+        trail: rec.points.map((p) => GeoPoint(p.lat, p.lon)).toList(),
+        curLat: rec.curLat,
+        curLon: rec.curLon,
+        curHeading: rec.curHeading,
+        ghostLat: ghostPos?.lat,
+        ghostLon: ghostPos?.lon,
+        ghostHeading: ghostPos?.headingDeg,
+        showTrackOverlay: showTrackOverlay,
+        statusLine: '',
+      );
+      return Column(children: [
+        ...topWidgets,
+        Expanded(
+          child: TrackLandscapeSplit(
+            fullMap: _trackLandscapeFullMap,
+            map: map,
+            instruments: TrackLandscapeInstruments(
+              currentLapNumber: timer?.currentLapNumber ?? 0,
+              currentLapMs: timer?.currentLapMs,
+              timerPaused: timerPaused,
+              timerLive: true,
+              liveDeltaMs: liveDelta,
+              showDelta: _showTrackDelta,
+              sectorLabels: labels,
+              sectorTimesMs: timer?.currentCompletedSectorsMs ?? const <int>[],
+              sectorDeltasMs: timer?.currentSectorDeltasVsBest ?? const <int?>[],
+              speedKmh: rec.curSpeed * 3.6,
+              speedColor: _speedColor(rec.curSpeed * 3.6),
+              latG: rec.smoothLat,
+              longG: rec.smoothLong,
+              peakLat: rec.tripPeakLat,
+              peakLong: rec.tripPeakLong,
+              gCalibrated: rec.calibrated,
+              leanDeg: rec.leanDeg,
+              leanQuality: rec.leanQuality,
+              leanCalibrated: rec.calibrated,
+              autoPaused: rec.isAutoPaused || (timer?.isPaused ?? false),
+              distanceKm: rec.distanceM / 1000,
+              elapsedLabel: fmtDur(rec.elapsedMs),
+              onOpenDetails: _openTrackLandscapeDetails,
+              onToggleFullMap: () =>
+                  setState(() => _trackLandscapeFullMap = true),
+            ),
+            fullMapOverlay: TrackLandscapeMapCapsules(
+              currentLapNumber: timer?.currentLapNumber ?? 0,
+              currentLapMs: timer?.currentLapMs,
+              timerPaused: timerPaused,
+              timerLive: true,
+              liveDeltaMs: liveDelta,
+              showDelta: _showTrackDelta,
+              onExitFullMap: () =>
+                  setState(() => _trackLandscapeFullMap = false),
+            ),
+          ),
+        ),
+      ]);
+    }
     if (isLandscape) {
-      // 右栏宽取屏宽 42%，夹在 300~380：800 宽屏上 336，窄横屏
-      // 上不低于 300，左侧地图/计时区至少留约 340。
+      // 街道横屏：右栏宽取屏宽 42%，夹在 300~380。
       final panelW =
           (MediaQuery.of(context).size.width * 0.42).clamp(300.0, 380.0);
       return Column(children: [
@@ -4131,6 +3992,56 @@ class _HomePageState extends State<HomePage>
       // 自然排列，Expanded 的 PageView 拿走全部剩余高度。
       if (_recMapPageIndex == 0) bottomPanelWidget,
     ]);
+  }
+
+  /// 赛道横屏「圈速明细」：圈列表、段速、预测 / 最佳 / 理论最优。
+  /// 默认不占左右栏，只从仪表列的文字按钮打开。
+  void _openTrackLandscapeDetails() {
+    final s = S.of(context);
+    final timer = liveLapTimer;
+    final track = selectedTrack;
+    if (track == null) return;
+    final sectorData = sectorDataFor(track.id);
+    final hasSectorPoints = timer != null && timer.sectorPoints.isNotEmpty;
+    final labels = hasSectorPoints
+        ? (timer.sectorPoints.length >= 2
+            ? const ['S1', 'S2', 'S3']
+            : const ['S1', 'S2'])
+        : (sectorData?.sectorLabels ?? const <String>[]);
+    final laps = timer?.laps ?? const <Lap>[];
+    final bestMs = timer?.bestLap?.durationMs;
+    final optimal = hasSectorPoints ? sessionOptimalLapMs(laps) : null;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF121212),
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: [
+              Text(s.t('圈速明细', 'Lap detail'),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                  '${s.t('预测圈', 'Predicted')} ${LapTimer.formatLapTime(timer?.predictedLapMsVsBest)}'),
+              Text('${s.t('最佳圈', 'Best')} ${LapTimer.formatLapTime(bestMs)}'),
+              Text('${s.t('理论最优', 'Optimal')} ${LapTimer.formatLapTime(optimal)}'),
+              const SizedBox(height: 12),
+              TrackSectorSpeedRow(
+                sectorSpeeds: timer?.sectorSpeeds ?? const <SectorSpeed?>[],
+                sectorLabels: labels,
+                hasSectorPoints: hasSectorPoints,
+                nextLineDistanceM: timer?.nextLineDistanceM,
+              ),
+              const SizedBox(height: 12),
+              _trackLapListCard(laps, bestMs, hasSectorPoints: hasSectorPoints),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   /// 赛道面板：圈速列表卡（最新圈在上；最快圈红字标“最快”；
@@ -4587,6 +4498,8 @@ class _GPageState extends State<GPage> {
             trail: trail,
             threshold: ModeThresholds.of(rec.mode).harshCorner,
             calibrated: rec.calibrated,
+            peakLong: rec.tripPeakLong,
+            peakLat: rec.tripPeakLat,
             size: 260,
           ),
           const SizedBox(height: 12),
