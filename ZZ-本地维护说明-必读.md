@@ -1,6 +1,6 @@
 # DriveTrack 本地维护说明（必读）
 
-工程版本：**v1.5.5+60**（2026-11-09 版本号已升；正式签名包待密钥库）。包名 `com.chixi.drive_track`，仓库 Toryphoto77/drive-track。
+工程版本：**v1.5.6+61**（2026-11-09 版本号已升；正式签名包待本机密钥库）。包名 `com.chixi.drive_track`，仓库 Toryphoto77/drive-track。
 
 ## ⚠️ 先看安全警告
 
@@ -50,11 +50,11 @@
 ./build-apk-x86_64-release.sh
 ```
 
-产物在工程根目录，形如 `DriveTrack-v1.5.5-release-arm64-v8a.apk`。**正式包直接覆盖安装，绝不卸载**（卸载丢本机行程）。验签：`apksigner verify --verbose` 应显示 v2 scheme true，指纹 SHA-256 应为 `5ba8fb8f…`（与密钥库一致）。
+产物在工程根目录，形如 `DriveTrack-v1.5.6-release-arm64-v8a.apk`。**正式包直接覆盖安装，绝不卸载**（卸载丢本机行程）。验签：`apksigner verify --verbose` 应显示 v2 scheme true，指纹 SHA-256 应为 `5ba8fb8f…`（与密钥库一致）。
 
 ## 版本号怎么升
 
-改版本号要同步改 7 处（有测试钉着，漏了测试会失败）：`pubspec.yaml`（如 `1.5.5+60`）、`lib/update_service.dart` 的 `currentVersionName` 与 `currentVersionCode`、`lib/main.dart` 的 `versionName`、4 处 `DriveTrack/x.y.z` User-Agent、`README.md`（2 处）、`update-manifest.json`（versionName / versionCode / apkUrl / notes）。测试里的“新版”模拟值必须高于当前版，否则测试会报 available/upToDate 不符。Android `versionName` / `versionCode` 由 `android/app/build.gradle.kts` 读 Flutter（即 pubspec），没有单独写死的数字。
+改版本号要同步改 7 处（有测试钉着，漏了测试会失败）：`pubspec.yaml`（如 `1.5.6+61`）、`lib/update_service.dart` 的 `currentVersionName` 与 `currentVersionCode`、`lib/main.dart` 的 `versionName`、4 处 `DriveTrack/x.y.z` User-Agent、`README.md`（2 处）、`update-manifest.json`（versionName / versionCode / apkUrl / notes）。测试里的“新版”模拟值必须高于当前版，否则测试会报 available/upToDate 不符。Android `versionName` / `versionCode` 由 `android/app/build.gradle.kts` 读 Flutter（即 pubspec），没有单独写死的数字。
 
 ## 在线更新清单
 
