@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'app_bar_style.dart';
 
+import 'app_locale.dart';
 import 'card_style.dart';
 import 'cloud_page.dart';
+import 'empty_hud.dart';
 import 'cloud_service.dart';
 
 /// 全新个人页（v0.1.3 分工：个人页 UI 重做）。
@@ -113,6 +115,9 @@ class MyPage extends StatefulWidget {
 
   final VoidCallback? onShareInvite;
 
+  /// 空态主操作：去首页开始记录。
+  final VoidCallback? onStartRecording;
+
   /// 统计卡：调用方传入（行程数 / 总里程 / 总时长 / 平均评分等）。
   final List<MyStat> stats;
 
@@ -144,6 +149,7 @@ class MyPage extends StatefulWidget {
     this.email = '',
     this.onEditProfile,
     this.onShareInvite,
+    this.onStartRecording,
     required this.stats,
     this.monthlyStats = const [],
     this.monthlyNote = '',
@@ -290,14 +296,14 @@ class _MyPageState extends State<MyPage> {
           ],
           // v1.5.1：点“编辑”推全页编辑页，不再在卡片内展开编辑器。
           _pillButton(
-            label: '编辑',
+            label: S.of(context).t('编辑', 'Edit'),
             selected: false,
             onTap: widget.onEditProfile,
           ),
         ]),
         const SizedBox(height: 12),
         Text(
-          widget.bio.isEmpty ? '暂无简介，点“编辑”添加' : widget.bio,
+          widget.bio.isEmpty ? S.of(context).t('暂无简介，点“编辑”添加', 'No bio yet. Tap Edit.') : widget.bio,
           style: TextStyle(color: widget.bio.isEmpty ? Colors.white38 : Colors.white70, fontSize: 13),
         ),
         if (widget.email.isNotEmpty) ...[
@@ -316,9 +322,9 @@ class _MyPageState extends State<MyPage> {
         ),
         const SizedBox(height: 10),
         Row(children: [
-          _socialCell('关注', widget.following),
-          _socialCell('粉丝', widget.followers),
-          _socialCell('获赞', widget.likes),
+          _socialCell(S.of(context).t('关注', 'Following'), widget.following),
+          _socialCell(S.of(context).t('粉丝', 'Followers'), widget.followers),
+          _socialCell(S.of(context).t('获赞', 'Likes'), widget.likes),
         ]),
       ]),
     );
@@ -352,7 +358,7 @@ class _MyPageState extends State<MyPage> {
   /// 资料卡内的社交数字格：数字在上、标签在下，居中。
   Widget _socialCell(String label, int n) => Expanded(
         child: Column(children: [
-          Text(n > 0 ? '$n' : '暂无',
+          Text(n > 0 ? '$n' : S.of(context).t('暂无', 'None'),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 2),
           Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
@@ -404,7 +410,7 @@ class _MyPageState extends State<MyPage> {
   Widget _monthlyStatsCard() {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('本月汇总', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        Text(S.of(context).t('本月汇总', 'This month'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,14 +506,15 @@ class _MyPageState extends State<MyPage> {
   /// - 每段 Expanded 均分、内容用 alignment.center + textAlign.center
   ///   双重居中。
   Widget _sectionBar() {
+    final s = S.of(context);
     final achieved =
         widget.achievements.where((a) => a.achieved).length;
-    (String, String) parts(MyPageSection s) => switch (s) {
-          MyPageSection.trips => ('行程', '${widget.trips.length}'),
-          MyPageSection.posts => ('动态', '${widget.posts.length}'),
-          MyPageSection.favorites => ('收藏', '${widget.favorites.length}'),
+    (String, String) parts(MyPageSection section) => switch (section) {
+          MyPageSection.trips => (s.t('行程', 'Trips'), '${widget.trips.length}'),
+          MyPageSection.posts => (s.t('动态', 'Feed'), '${widget.posts.length}'),
+          MyPageSection.favorites => (s.t('收藏', 'Saved'), '${widget.favorites.length}'),
           MyPageSection.achievements =>
-            ('成就', '$achieved/${widget.achievements.length}'),
+            (s.t('成就', 'Badges'), '$achieved/${widget.achievements.length}'),
         };
     return Container(
       height: 40,
@@ -519,13 +526,13 @@ class _MyPageState extends State<MyPage> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(999),
         child: Row(children: [
-          for (final s in MyPageSection.values)
+          for (final section in MyPageSection.values)
             Expanded(
               child: _sectionSegment(
-                label: parts(s).$1,
-                count: parts(s).$2,
-                selected: _section == s,
-                onTap: () => _select(s),
+                label: parts(section).$1,
+                count: parts(section).$2,
+                selected: _section == section,
+                onTap: () => _select(section),
               ),
             ),
         ]),
@@ -615,7 +622,7 @@ class _MyPageState extends State<MyPage> {
         ),
         if (showPublicToggle)
           _pillButton(
-            label: item.isPublic ? '公开' : '仅自己',
+            label: item.isPublic ? S.of(context).t('公开', 'Public') : S.of(context).t('仅自己', 'Private'),
             selected: item.isPublic,
             onTap: item.onTogglePublic,
           )
@@ -636,7 +643,7 @@ class _MyPageState extends State<MyPage> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(a.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 2),
-            Text(a.achieved ? '已达成' : '未达成',
+            Text(a.achieved ? S.of(context).t('已达成', 'Done') : S.of(context).t('未达成', 'Not yet'),
                 style: TextStyle(color: a.achieved ? widget.accentColor : Colors.white38, fontSize: 12)),
             if (a.progress != null) ...[
               const SizedBox(height: 8),
@@ -648,19 +655,22 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
-  Widget _empty(String text) {
-    return _card(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(text, style: const TextStyle(color: Colors.white54, fontSize: 13)),
-        ),
-      ),
+  Widget _emptyHud({
+    required IconData icon,
+    required String status,
+  }) {
+    final s = S.of(context);
+    return EmptyHud(
+      icon: icon,
+      status: status,
+      actionLabel: s.t('开始记录', 'Start recording'),
+      onAction: widget.onStartRecording,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return SingleChildScrollView(
       // v1.0.5：底部 padding 由 48 改回 16，仅作正常内容边距；
       // 不再与主框架叠加留出空黑条，内容在药丸下方划过、透过毛玻璃可见。
@@ -669,6 +679,8 @@ class _MyPageState extends State<MyPage> {
       padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 16)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         _profileCard(),
+        const SizedBox(height: 12),
+        const LanguageSwitch(),
         const SizedBox(height: 12),
         _statsCard(),
         if (widget.monthlyStats.isNotEmpty) ...[
@@ -682,7 +694,7 @@ class _MyPageState extends State<MyPage> {
         const SizedBox(height: 12),
         if (_section == MyPageSection.trips) ...[
           if (widget.trips.isEmpty)
-            _empty('暂无行程\n去首页开始一次记录')
+            _emptyHud(icon: Icons.route, status: s.t('暂无行程', 'No trips yet'))
           else
             for (final t in widget.trips) ...[
               _tripRow(t, showPublicToggle: true),
@@ -690,15 +702,8 @@ class _MyPageState extends State<MyPage> {
             ],
         ],
         if (_section == MyPageSection.posts) ...[
-          _card(
-            child: const Text(
-              '公开说明：设为公开并上传到云端的行程，他人打开你的公开资料页可见；没上传的行程只在你本机动态里。',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 8),
           if (widget.posts.isEmpty)
-            _empty('暂无动态\n把行程设为公开后会显示在这里')
+            _emptyHud(icon: Icons.dynamic_feed, status: s.t('暂无动态', 'No posts yet'))
           else
             for (final p in widget.posts) ...[
               _tripRow(p),
@@ -707,7 +712,7 @@ class _MyPageState extends State<MyPage> {
         ],
         if (_section == MyPageSection.favorites) ...[
           if (widget.favorites.isEmpty)
-            _empty('暂无收藏\n点行程卡片上的星标即可收藏')
+            _emptyHud(icon: Icons.star_border, status: s.t('暂无收藏', 'No saved trips'))
           else
             for (final f in widget.favorites) ...[
               _tripRow(f),
@@ -716,7 +721,7 @@ class _MyPageState extends State<MyPage> {
         ],
         if (_section == MyPageSection.achievements) ...[
           if (widget.achievements.isEmpty)
-            _empty('暂无成就')
+            _emptyHud(icon: Icons.emoji_events_outlined, status: s.t('暂无成就', 'No badges yet'))
           else
             for (final a in widget.achievements) ...[
               _achievementRow(a),

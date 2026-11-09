@@ -15,9 +15,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
+import 'card_style.dart';
+
 const Color _kRed = Color(0xFFE10600);
-const Color _kCard = Color(0xFF141414);
-const Color _kBorder = Color(0xFF2A2A2A);
 
 /// 分项 key → 可过滤的事件 kind。
 /// '平顺' 由急加速 / 急刹车构成；'过弯' 对应 corner；
@@ -94,7 +95,7 @@ class _DrivingScoreRingState extends State<DrivingScoreRing>
                       color: Colors.white,
                       fontSize: 44,
                       fontWeight: FontWeight.bold)),
-              const Text('分',
+              Text(S.of(context).t('分', 'pts'),
                   style: TextStyle(color: Colors.white70, fontSize: 14)),
             ]),
           ]),
@@ -160,49 +161,74 @@ class DrivingScoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _kCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _kBorder),
+        color: CardStyle.cardColor,
+        borderRadius: CardStyle.cardBorderRadius,
+        border: Border.all(color: CardStyle.borderColor),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('驾驶习惯评分',
-            style: TextStyle(
+        Text(s.t('驾驶习惯评分', 'Driving score'),
+            style: const TextStyle(
                 color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         if (isTrackMode)
-          const Text('赛道模式不评分 · 看圈速与稳定性',
-              style: TextStyle(color: Colors.white70, fontSize: 14))
+          Text(s.t('赛道模式不评分 · 看圈速与稳定性', 'Track mode is not scored. Use laps and consistency.'),
+              style: const TextStyle(color: Colors.white70, fontSize: 14))
         else ...[
           Center(child: DrivingScoreRing(total: total)),
           const SizedBox(height: 12),
-          _filterRow('', '全部', null),
+          _filterRow('', s.t('全部', 'All'), null),
           if (subScores.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text('暂无',
-                  style: TextStyle(color: Colors.white54, fontSize: 13)),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(s.t('暂无', 'None'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 13)),
             )
           else
             for (final e in subScores.entries)
-              _filterRow(e.key, e.key, e.value),
+              _filterRow(e.key, _scoreLabel(s, e.key), e.value),
           for (final r in reasons)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('· $r',
+              child: Text('· ${_reasonText(s, r)}',
                   style: const TextStyle(color: Colors.white70, fontSize: 12)),
             ),
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text('注：无可靠限速源时不算超速分',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(s.t('注：无可靠限速源时不算超速分', 'Note: speeding is not scored without a reliable limit.'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
           ),
         ],
       ]),
     );
   }
+
+  String _reasonText(S s, String reason) {
+    if (!s.zh) {
+      if (reason == '数据太少，未评分') return 'Too little data to score';
+      if (reason == '配速平稳') return 'Pace was steady';
+      if (reason == '驾驶平稳') return 'Driving was smooth';
+      final brake = RegExp(r'^急刹车 (\d+) 次$').firstMatch(reason);
+      if (brake != null) return 'Hard braking ×${brake.group(1)}';
+      final accel = RegExp(r'^急加速 (\d+) 次$').firstMatch(reason);
+      if (accel != null) return 'Hard acceleration ×${accel.group(1)}';
+      final corner = RegExp(r'^过弯偏急 (\d+) 次$').firstMatch(reason);
+      if (corner != null) return 'Harsh corners ×${corner.group(1)}';
+    }
+    return reason;
+  }
+
+  String _scoreLabel(S s, String key) => switch (key) {
+        '平顺' => s.t('平顺', 'Smoothness'),
+        '过弯' => s.t('过弯', 'Cornering'),
+        '速度稳定' => s.t('速度稳定', 'Speed stability'),
+        '配速稳定' => s.t('配速稳定', 'Pace'),
+        '功率稳定' => s.t('功率稳定', 'Power'),
+        _ => key,
+      };
 
   Widget _filterRow(String key, String label, double? value) {
     final selected = (selectedKey ?? '') == key;

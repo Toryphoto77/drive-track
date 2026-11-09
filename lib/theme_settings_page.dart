@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'dt_page_route.dart';
 import 'app_notice.dart';
 
 import 'app_bar_style.dart';
@@ -151,6 +153,16 @@ class DriveTrackTheme {
             (s) => s.contains(WidgetState.selected) ? accent : null),
         trackColor: WidgetStateProperty.resolveWith(
             (s) => s.contains(WidgetState.selected) ? accent.withValues(alpha: 0.4) : null),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: DtFadeSlideTransitionsBuilder(),
+          TargetPlatform.iOS: DtFadeSlideTransitionsBuilder(),
+          TargetPlatform.linux: DtFadeSlideTransitionsBuilder(),
+          TargetPlatform.macOS: DtFadeSlideTransitionsBuilder(),
+          TargetPlatform.windows: DtFadeSlideTransitionsBuilder(),
+          TargetPlatform.fuchsia: DtFadeSlideTransitionsBuilder(),
+        },
       ),
     );
   }

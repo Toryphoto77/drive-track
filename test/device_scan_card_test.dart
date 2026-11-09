@@ -22,7 +22,7 @@ void main() {
               scanLabel: '扫描适配设备',
               stopLabel: '停止扫描',
               onScanToggle: () {},
-              statusLine: '尚未扫描：点上方「扫描适配设备」开始。',
+              statusLine: '尚未扫描，点「扫描适配设备」。',
               footnote: '示例脚注：设备须开机、蓝牙打开。',
             ),
           ),
@@ -31,7 +31,7 @@ void main() {
       await tester.pump();
       expect(find.text('外接 GPS'), findsOneWidget);
       expect(find.text('扫描适配设备'), findsOneWidget);
-      expect(find.text('尚未扫描：点上方「扫描适配设备」开始。'), findsOneWidget);
+      expect(find.text('尚未扫描，点「扫描适配设备」。'), findsOneWidget);
       expect(find.textContaining('示例脚注'), findsOneWidget);
       expect(find.byType(DeviceScanRipple), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
@@ -53,7 +53,7 @@ void main() {
               scanLabel: '扫描适配设备',
               stopLabel: '停止扫描',
               onScanToggle: () {},
-              statusLine: '正在扫描周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对）…',
+              statusLine: '正在扫描附近 GPS（BLE、经典蓝牙、已配对）…',
             ),
           ),
         ),
@@ -63,7 +63,7 @@ void main() {
       expect(find.text('停止扫描'), findsOneWidget);
       expect(find.text('扫描适配设备'), findsNothing);
       expect(
-          find.text('正在扫描周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对）…'),
+          find.text('正在扫描附近 GPS（BLE、经典蓝牙、已配对）…'),
           findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -212,7 +212,7 @@ void main() {
       expect(find.text('外接 GPS'), findsOneWidget);
       expect(find.textContaining('第一测试目标'), findsNothing);
       expect(find.textContaining('BLE 服务 UUID 仍未知'), findsNothing);
-      expect(find.text('尚未扫描：点上方「扫描适配设备」开始。'), findsOneWidget);
+      expect(find.text('尚未扫描，点「扫描适配设备」。'), findsOneWidget);
       expect(find.byType(DeviceScanRipple), findsNothing);
       expect(find.text('可适配设备'), findsOneWidget);
       // 旧的裸按钮 / ListTile 已不在：标题与按钮文案只剩卡片里的一处。
@@ -225,7 +225,7 @@ void main() {
       expect(find.byType(DeviceScanRipple), findsOneWidget);
       expect(find.text('停止扫描'), findsOneWidget);
       expect(
-          find.text('正在扫描周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对）…'),
+          find.text('正在扫描附近 GPS（BLE、经典蓝牙、已配对）…'),
           findsOneWidget);
 
       // 注入 D1：行卡片出现，徽标 BLE、说明为名称匹配提示、点按连接。

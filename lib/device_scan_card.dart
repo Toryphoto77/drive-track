@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
+
 /// 设备中心共用扫描卡片（v1.2.12）：运动相机页与外接 GPS 页共用一套。
 ///
 /// 样式（两页一致，不许各改各的）：
@@ -249,7 +251,7 @@ class DeviceScanCard extends StatelessWidget {
                 if (onOpenSettings != null)
                   TextButton(
                     onPressed: onOpenSettings,
-                    child: const Text('去系统设置'),
+                    child: Text(S.of(context).t('去系统设置', 'System settings')),
                   ),
               ],
             ),
@@ -297,6 +299,7 @@ class DeviceScanRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final accent = Theme.of(context).colorScheme.primary;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -378,9 +381,9 @@ class DeviceScanRow extends StatelessWidget {
                       ],
                     )
                   else if (isConnected)
-                    const Text(
-                      '已连接',
-                      style: TextStyle(color: Colors.greenAccent),
+                    Text(
+                      s.t('已连接', 'Connected'),
+                      style: const TextStyle(color: Colors.greenAccent),
                     )
                   else
                     Text(

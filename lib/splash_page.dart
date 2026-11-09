@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_icon_choice.dart';
+import 'app_locale.dart';
 
 /// v1.0.2 启动页：App 冷启动第一帧只能是本页。
 ///
@@ -97,6 +98,7 @@ class _SplashPageState extends State<SplashPage>
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
       body: Center(
@@ -117,9 +119,9 @@ class _SplashPageState extends State<SplashPage>
             const SizedBox(height: 20),
             FadeTransition(
               opacity: _titleOpacity,
-              child: const Text(
-                '驰迹 DriveTrack',
-                style: TextStyle(
+              child: Text(
+                s.t('驰迹 DriveTrack', 'DriveTrack'),
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -129,9 +131,9 @@ class _SplashPageState extends State<SplashPage>
             const SizedBox(height: 8),
             FadeTransition(
               opacity: _sloganOpacity,
-              child: const Text(
-                '记录每一次出发',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+              child: Text(
+                s.t('记录每一次出发', 'Every drive, recorded'),
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ),
           ],

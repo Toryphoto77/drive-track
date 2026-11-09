@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'app_notice.dart';
+import 'dt_page_route.dart';
 
 import 'app_icon_choice.dart';
 import 'card_style.dart';
@@ -75,6 +77,8 @@ class _AboutPageState extends State<AboutPage> {
   UpdateCheckResult? _check;
   bool _checking = false;
   bool _downloading = false;
+  int _downloadReceived = 0;
+  int? _downloadTotal;
   String? _downloadError;
   String? _cacheMsg;
 
@@ -125,12 +129,21 @@ class _AboutPageState extends State<AboutPage> {
     if (r == null || r.downloadUrl == null || r.remoteVersionCode == null) return;
     setState(() {
       _downloading = true;
+      _downloadReceived = 0;
+      _downloadTotal = null;
       _downloadError = null;
     });
     final res = await UpdateService.downloadAndInstallChecked(
       url: r.downloadUrl!,
       remoteVersionCode: r.remoteVersionCode!,
       expectedSha256: r.sha256,
+      onProgress: (received, total) {
+        if (!mounted) return;
+        setState(() {
+          _downloadReceived = received;
+          _downloadTotal = total;
+        });
+      },
     );
     if (mounted) {
       setState(() {
@@ -163,13 +176,17 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final check = _check;
     final accent = CardStyle.accent(context);
+    final knownTotal = _downloadTotal != null && _downloadTotal! > 0;
+    final progress = knownTotal ? (_downloadReceived / _downloadTotal!).clamp(0.0, 1.0).toDouble() : null;
+    final percent = knownTotal ? (progress! * 100).round() : null;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
-        title: const Text('关于'),
+        title: Text(s.t('关于', 'About')),
       ),
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 24, 16, 32)),
@@ -223,15 +240,18 @@ class _AboutPageState extends State<AboutPage> {
           const SizedBox(height: 12),
           // ---- 在线更新区（正式版预留，通道状态如实写） ----
           _infoCard(
-            title: '在线更新',
+            title: s.t('在线更新', 'Update'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('当前版本：${widget.versionName}',
+                Text(s.t('当前版本：${widget.versionName}', 'Version ${widget.versionName}'),
                     style: const TextStyle(fontSize: 14)),
                 const SizedBox(height: 4),
                 Text(
-                  '更新通道状态：${check?.message ?? (widget.updateConfig.isConfigured ? '已配置正式源，尚未检查' : '正式版更新通道待配置')}',
+                  s.t(
+                    '更新通道状态：${check?.message ?? (widget.updateConfig.isConfigured ? '已配置正式源，尚未检查' : '正式版更新通道待配置')}',
+                    'Channel: ${check?.message ?? (widget.updateConfig.isConfigured ? 'Configured, not checked yet' : 'Release channel not configured')}',
+                  ),
                   style: TextStyle(
                     fontSize: 14,
                     color: check?.status == UpdateCheckStatus.error
@@ -243,7 +263,7 @@ class _AboutPageState extends State<AboutPage> {
                 ),
                 if (check?.notes != null && check!.notes!.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text('新版说明：${check.notes}',
+                  Text(s.t('新版说明：${check.notes}', 'Notes: ${check.notes}'),
                       style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 ],
                 if (_downloadError != null) ...[
@@ -251,12 +271,31 @@ class _AboutPageState extends State<AboutPage> {
                   Text(_downloadError!,
                       style: const TextStyle(color: Colors.orange, fontSize: 13)),
                 ],
+                if (_downloading) ...[
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      minHeight: 6,
+                      value: progress,
+                      backgroundColor: Colors.white12,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    percent == null
+                        ? s.t('下载中…', 'Downloading…')
+                        : s.t('下载中 $percent%', 'Downloading $percent%'),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Row(children: [
                   Expanded(
                     child: FilledButton(
                       onPressed: _checking ? null : _onCheckUpdate,
-                      child: Text(_checking ? '检查中…' : '检查更新'),
+                      child: Text(_checking ? s.t('检查中…', 'Checking…') : s.t('检查更新', 'Check')),
                     ),
                   ),
                   if (check?.status == UpdateCheckStatus.available) ...[
@@ -264,7 +303,11 @@ class _AboutPageState extends State<AboutPage> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: _downloading ? null : _onDownloadAndInstall,
-                        child: Text(_downloading ? '下载中…' : '下载并安装'),
+                        child: Text(_downloading
+                            ? (percent == null
+                                ? s.t('下载中…', 'Downloading…')
+                                : '$percent%')
+                            : s.t('下载并安装', 'Download')),
                       ),
                     ),
                   ],
@@ -276,21 +319,21 @@ class _AboutPageState extends State<AboutPage> {
           // v1.0.7：库链接 / 源码 / 作者 ID（点按用系统浏览器打开）。
           _linkCard(
             icon: Icons.code,
-            title: 'GitHub 仓库',
+            title: s.t('GitHub 仓库', 'GitHub repo'),
             subtitle: kDriveTrackRepoUrl,
             onTap: () => Native.openUrl(kDriveTrackRepoUrl),
           ),
           const SizedBox(height: 12),
           _linkCard(
             icon: Icons.source,
-            title: '源码',
+            title: s.t('源码', 'Source'),
             subtitle: kDriveTrackRepoUrl,
             onTap: () => Native.openUrl(kDriveTrackRepoUrl),
           ),
           const SizedBox(height: 12),
           _linkCard(
             icon: Icons.person,
-            title: '作者 ID',
+            title: s.t('作者 ID', 'Author'),
             subtitle: 'Toryphoto77',
             onTap: () => Native.openUrl(kDriveTrackAuthorUrl),
           ),
@@ -298,40 +341,40 @@ class _AboutPageState extends State<AboutPage> {
           // 免责声明入口：关于页本身不再放免责正文，只留入口。
           DriveTrackCard(
             onTap: () => Navigator.pushNamed(context, DisclaimerPage.routeName),
-            child: const Row(children: [
-              Icon(Icons.description_outlined, color: Colors.white70),
-              SizedBox(width: 8),
+            child: Row(children: [
+              const Icon(Icons.description_outlined, color: Colors.white70),
+              const SizedBox(width: 8),
               Expanded(
-                child: Text('免责声明',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                child: Text(s.t('免责声明', 'Disclaimer'),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
               ),
-              Icon(Icons.chevron_right, color: Colors.white38),
+              const Icon(Icons.chevron_right, color: Colors.white38),
             ]),
           ),
           const SizedBox(height: 12),
           // v1.0.7：意见反馈（无服务端，打开 GitHub Issues 页，不假装提交成功）。
           _linkCard(
             icon: Icons.feedback_outlined,
-            title: '意见反馈',
-            subtitle: '打开 GitHub Issues 页提交',
+            title: s.t('意见反馈', 'Feedback'),
+            subtitle: s.t('打开 GitHub Issues 页提交', 'Opens GitHub Issues'),
             onTap: () => Native.openUrl(kDriveTrackIssuesUrl),
           ),
           const SizedBox(height: 12),
           DriveTrackCard(
             onTap: _clearCache,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Row(children: [
-                Icon(Icons.cleaning_services_outlined, color: Colors.white70),
-                SizedBox(width: 8),
+              Row(children: [
+                const Icon(Icons.cleaning_services_outlined, color: Colors.white70),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: Text('清除缓存',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  child: Text(s.t('清除缓存', 'Clear cache'),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
-                Icon(Icons.chevron_right, color: Colors.white38),
+                const Icon(Icons.chevron_right, color: Colors.white38),
               ]),
               const SizedBox(height: 4),
-              const Text('清除缓存文件，不删行程数据、不删设置。',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(s.t('只清缓存，不删行程和设置。', 'Clears cache only. Trips and settings stay.'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
               if (_cacheMsg != null) ...[
                 const SizedBox(height: 4),
                 Text(_cacheMsg!, style: const TextStyle(color: Colors.white70, fontSize: 12)),
@@ -342,8 +385,8 @@ class _AboutPageState extends State<AboutPage> {
           // v1.0.7：数据备份（复用已有数据导出/备份页，不另造备份逻辑）。
           _linkCard(
             icon: Icons.backup_outlined,
-            title: '数据备份',
-            subtitle: '导出 / 恢复本机行程与设置备份',
+            title: s.t('数据备份', 'Backup'),
+            subtitle: s.t('导出 / 恢复本机行程与设置备份', 'Export or restore trips and settings'),
             onTap: widget.onOpenBackup,
           ),
           const SizedBox(height: 16),
@@ -352,10 +395,10 @@ class _AboutPageState extends State<AboutPage> {
             width: double.infinity,
             child: FilledButton.icon(
               icon: const Icon(Icons.volunteer_activism),
-              label: const Text('打赏支持'),
+              label: Text(s.t('打赏支持', 'Support')),
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const DonationPage()),
+                DtPageRoute(builder: (_) => const DonationPage()),
               ),
             ),
           ),

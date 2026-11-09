@@ -191,7 +191,7 @@ void main() {
       expect(find.text('扫描适配设备'), findsOneWidget);
       expect(find.text('高级 / 手动添加'), findsNothing);
       expect(find.text('BleDIY'), findsNothing);
-      expect(find.text('尚未扫描：点上方「扫描适配设备」开始。'),
+      expect(find.text('尚未扫描，点「扫描适配设备」。'),
           findsOneWidget);
 
       // 点主按钮 → 停止态 + 扫描提示。
@@ -200,7 +200,7 @@ void main() {
       await tester.pump();
       expect(find.text('停止扫描'), findsOneWidget);
       expect(
-          find.text('正在扫描周围可适配的 GPS 设备（BLE + 经典蓝牙 + 已配对）…'),
+          find.text('正在扫描附近 GPS（BLE、经典蓝牙、已配对）…'),
           findsOneWidget);
 
       // 注入发现事件：D1（名称匹配）进主列表，耳机不进主列表，

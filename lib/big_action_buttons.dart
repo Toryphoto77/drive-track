@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
 import 'checkered_flag.dart';
 
 /// 首页下方并排大方块按钮行（v0.1.3 新建文件，不改旧文件）。
@@ -137,17 +138,18 @@ class _BigActionButtonsState extends State<BigActionButtons>
   }
 
   Widget _calibrateContent() {
+    final s = S.of(context);
     switch (widget.calibrationState) {
       case CalibrationButtonState.uncalibrated:
-        return const Column(
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.my_location, size: 34, color: Colors.orange),
-            SizedBox(height: 8),
-            Text('标定',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-            SizedBox(height: 4),
-            Text('未标定', style: TextStyle(color: Colors.white54, fontSize: 13)),
+            const Icon(Icons.my_location, size: 34, color: Colors.orange),
+            const SizedBox(height: 8),
+            Text(s.t('标定', 'Calibrate'),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            const SizedBox(height: 4),
+            Text(s.t('未标定', 'Not set'), style: const TextStyle(color: Colors.white54, fontSize: 13)),
           ],
         );
       case CalibrationButtonState.calibrating:
@@ -159,10 +161,10 @@ class _BigActionButtonsState extends State<BigActionButtons>
               children: [
                 Icon(Icons.radar, size: 34, color: Colors.amber.withValues(alpha: 0.6 + 0.4 * _pulse.value)),
                 const SizedBox(height: 8),
-                const Text('标定中…',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                Text(s.t('标定中…', 'Calibrating…'),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 4),
-                const Text('正在锁定车头方向', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                Text(s.t('正在锁定车头方向', 'Locking heading'), style: const TextStyle(color: Colors.white70, fontSize: 13)),
               ],
             );
           },
@@ -174,8 +176,8 @@ class _BigActionButtonsState extends State<BigActionButtons>
           children: [
             const Icon(Icons.check_circle, size: 34, color: Colors.white),
             const SizedBox(height: 8),
-            const Text('已标定 ✓',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            Text(s.t('已标定 ✓', 'Calibrated ✓'),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
             if (detail != null && detail.isNotEmpty) ...[
               const SizedBox(height: 4),
               Padding(
@@ -196,6 +198,7 @@ class _BigActionButtonsState extends State<BigActionButtons>
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final accent = Theme.of(context).colorScheme.primary;
     final (calBg, calBorder) = switch (widget.calibrationState) {
       // 未标定：深色默认态（不是主题色，避免与开始记录混淆）。
@@ -261,8 +264,8 @@ class _BigActionButtonsState extends State<BigActionButtons>
                 // 秒表标志：开始记录的视觉区分，不用纯文字按钮。
                 const Icon(Icons.timer, size: 34, color: Colors.white),
                 const SizedBox(height: 8),
-                const Text('开始记录',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                Text(s.t('开始记录', 'Record'),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                 if (widget.startSubtitle != null && widget.startSubtitle!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Padding(
