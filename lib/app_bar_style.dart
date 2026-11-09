@@ -92,10 +92,19 @@ const Color kAppBarBackground = Color(0xA6121212);
 /// 顶栏模糊半径，与磨砂导航栏一致（28）。
 const double kAppBarBlurSigma = 28;
 
-/// 状态栏 + AppBar 高。供带显式 padding 的滚动视图、非滚动 body
-/// 在顶部叠加，保证首项静止时在栏下、滚动时从栏下透出。
-double appBarTopInset(BuildContext context) =>
-    MediaQuery.of(context).padding.top + kToolbarHeight;
+/// 内容顶缘到屏幕顶的距离，使首项贴在半透顶栏下沿。
+///
+/// 壳外（首页 / 记录的 State context、被 push 的子页）：
+/// `padding.top` 只是状态栏，还要加上工具栏高。
+/// 壳内（`extendBodyBehindAppBar` 的 body，设备页 / 我的页）：
+/// Scaffold 会把已布局的顶栏高度写回 `padding.top`（大于
+/// `viewPadding.top`）。这时再加一截 [kToolbarHeight] 会在栏下
+/// 空出一条空白。两种调用点共用这一函数，避免各页各加一次。
+double appBarTopInset(BuildContext context) {
+  final mq = MediaQuery.of(context);
+  if (mq.padding.top > mq.viewPadding.top) return mq.padding.top;
+  return mq.viewPadding.top + kToolbarHeight;
+}
 
 /// 在原 padding 顶部叠加 [appBarTopInset]（其余三边不动）。
 EdgeInsets withAppBarTopInset(BuildContext context, EdgeInsets padding) =>

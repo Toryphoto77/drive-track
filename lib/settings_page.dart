@@ -67,10 +67,6 @@ class SettingsPage extends StatefulWidget {
   final bool? autoReconnect;
   final ValueChanged<bool>? onAutoReconnectChanged;
 
-  /// 设备入口（总协调传已有 _showSensors 或传感器页跳转）。
-  final VoidCallback onOpenDevices;
-
-
   /// 关于里显示的版本号，总协调传入当前版本（默认 0.1.3）。
   final String version;
 
@@ -92,7 +88,6 @@ class SettingsPage extends StatefulWidget {
     required this.onCountdownVibrationChanged,
     this.bluetoothEnabled,
     this.onBluetoothChanged,
-    required this.onOpenDevices,
     this.version = '0.1.3',
   });
 
@@ -584,17 +579,6 @@ class _SettingsPageState extends State<SettingsPage>
               onChanged: widget.onCountdownVibrationChanged,
             ),
           ),
-          _sectionTitle('设备'),
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: ListTile(
-              leading: const Icon(Icons.bluetooth),
-              title: const Text('骑行传感器连接'),
-              subtitle: const Text('BLE 传感器扫描、连接与功率计归零'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: widget.onOpenDevices,
-            ),
-          ),
           _sectionTitle('更多'),
           // v1.0.2：字体导入行只换 UI 为统一导入画风（ImportCard /
           // ImportFileRow，蓝色主按钮）；onImportFont / onClearFont
@@ -685,7 +669,6 @@ class _SettingsPageState extends State<SettingsPage>
 //     // 若无现有状态，总协调需新增（或先不传，只保留系统设置入口）。
 //     videoRecordingEnabled: videoEnabled,
 //     onVideoRecordingChanged: (v) => setState(() => videoEnabled = v),
-//     onOpenDevices: _showSensors,
 //   ),
 // ));
 // 注意：旧 _showSettings 弹窗里的字体导入/头像、分享截断、自动重连、

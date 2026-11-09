@@ -50,6 +50,12 @@
 
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
+
+/// 一个 G-G 点：纵向 / 横向都是车体坐标（smoothLong / smoothLat），
+/// 不是手机原始轴。
+typedef GPlotPoint = ({double longG, double latG});
+
 /// 实时 G 值数据源：一个 [Listenable]（通知时只刷新 G 值行）+
 /// 读取当前值的回调。调用方（main.dart 接线时）应传 Recorder
 /// 本身作 listenable，longG/latG 取 smoothLong/smoothLat，
@@ -63,6 +69,9 @@ class LiveGSource {
   final double Function()? peakLong;
   final double Function()? peakLat;
 
+  /// 最近几秒的车体坐标拖尾（smoothLong / smoothLat）。不传则只画当前点。
+  final List<GPlotPoint> Function()? trail;
+
   const LiveGSource({
     required this.listenable,
     required this.longG,
@@ -70,6 +79,7 @@ class LiveGSource {
     this.calibrated,
     this.peakLong,
     this.peakLat,
+    this.trail,
   });
 }
 
@@ -84,16 +94,18 @@ class TrackLiveGRow extends StatelessWidget {
     return ListenableBuilder(
       listenable: source.listenable,
       builder: (context, _) {
+        final s = S.of(context);
         if (!(source.calibrated?.call() ?? true)) {
-          return const Text(
-            'G 值：未标定',
-            style: TextStyle(color: Colors.white54, fontSize: 13),
+          return Text(
+            s.t('G 值：未标定', 'G: not calibrated'),
+            style: const TextStyle(color: Colors.white54, fontSize: 13),
           );
         }
         final lo = source.longG();
         final la = source.latG();
         final peakLo = source.peakLong?.call();
         final peakLa = source.peakLat?.call();
+        final trail = source.trail?.call() ?? const <GPlotPoint>[];
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -102,6 +114,7 @@ class TrackLiveGRow extends StatelessWidget {
               latG: la,
               peakLong: peakLo,
               peakLat: peakLa,
+              trail: trail,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -113,8 +126,8 @@ class TrackLiveGRow extends StatelessWidget {
                   // 时数字等比缩小不断行、不溢出（与大计时同款处理）。
                   Row(
                     children: [
-                      const Text('纵向',
-                          style: TextStyle(
+                      Text(s.t('纵向', 'Long'),
+                          style: const TextStyle(
                               color: Colors.white54, fontSize: 12)),
                       const SizedBox(width: 4),
                       Flexible(
@@ -132,8 +145,8 @@ class TrackLiveGRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 14),
-                      const Text('横向',
-                          style: TextStyle(
+                      Text(s.t('横向', 'Lat'),
+                          style: const TextStyle(
                               color: Colors.white54, fontSize: 12)),
                       const SizedBox(width: 4),
                       Flexible(
@@ -155,16 +168,19 @@ class TrackLiveGRow extends StatelessWidget {
                   if (peakLo != null && peakLa != null) ...[
                     const SizedBox(height: 4),
                     Text(
-                      '峰值 纵向 ${formatSignedG(peakLo)}g · '
-                      '横向 ${formatSignedG(peakLa)}g',
+                      s.t(
+                        '峰值 纵向 ${formatSignedG(peakLo)}g · 横向 ${formatSignedG(peakLa)}g',
+                        'Peak long ${formatSignedG(peakLo)}g · lat ${formatSignedG(peakLa)}g',
+                      ),
                       style: const TextStyle(
                           color: Colors.white54, fontSize: 12),
                     ),
                   ],
                   const SizedBox(height: 4),
-                  const Text(
-                    '纵向 +加速 -刹车 · 横向 +右 -左',
-                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  Text(
+                    s.t('纵向 +加速 -刹车 · 横向 +右 -左',
+                        'Long +accel -brake · Lat +right -left'),
+                    style: const TextStyle(color: Colors.white38, fontSize: 11),
                   ),
                 ],
               ),
@@ -192,6 +208,7 @@ class TrackGVectorCircle extends StatelessWidget {
   final double latG;
   final double? peakLong;
   final double? peakLat;
+  final List<GPlotPoint> trail;
 
   /// 满量程：圆边 = 1.5g。
   static const double fullScaleG = 1.5;
@@ -202,6 +219,7 @@ class TrackGVectorCircle extends StatelessWidget {
     required this.latG,
     this.peakLong,
     this.peakLat,
+    this.trail = const [],
   });
 
   @override
@@ -213,6 +231,7 @@ class TrackGVectorCircle extends StatelessWidget {
         latG: latG,
         peakLong: peakLong,
         peakLat: peakLat,
+        trail: trail,
       ),
     );
   }
@@ -223,16 +242,27 @@ class _GVectorCirclePainter extends CustomPainter {
   final double latG;
   final double? peakLong;
   final double? peakLat;
+  final List<GPlotPoint> trail;
 
   _GVectorCirclePainter({
     required this.longG,
     required this.latG,
     this.peakLong,
     this.peakLat,
+    this.trail = const [],
   });
 
   double _clampG(double v) => v.clamp(-TrackGVectorCircle.fullScaleG,
       TrackGVectorCircle.fullScaleG);
+
+  Offset _dot(double lat, double long, Offset c, double r, Size size) {
+    final dx = _clampG(lat) / TrackGVectorCircle.fullScaleG * (r - 1);
+    final dy = _clampG(long) / TrackGVectorCircle.fullScaleG * (r - 1);
+    return Offset(
+      (c.dx + dx).clamp(0.0, size.width),
+      (c.dy - dy).clamp(0.0, size.height),
+    );
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -276,14 +306,24 @@ class _GVectorCirclePainter extends CustomPainter {
     if (peakLat != null) {
       peakTick(peakLat!, false);
     }
+    // 短拖尾：仍是车体坐标，横向 → x，纵向 → y（上正）。
+    if (trail.length > 1) {
+      for (var i = 1; i < trail.length; i++) {
+        final a = _dot(trail[i - 1].latG, trail[i - 1].longG, c, r, size);
+        final b = _dot(trail[i].latG, trail[i].longG, c, r, size);
+        canvas.drawLine(
+          a,
+          b,
+          Paint()
+            ..color = Colors.white.withValues(alpha: 0.15 + 0.55 * i / trail.length)
+            ..strokeWidth = 1.5
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
     // 当前矢量圆点：横向 → x（右正），纵向 → y（上正，即加速向上），
     // 与街道页 GCirlce 的圆点方向约定一致。
-    final dx = _clampG(latG) / TrackGVectorCircle.fullScaleG * (r - 1);
-    final dy = _clampG(longG) / TrackGVectorCircle.fullScaleG * (r - 1);
-    final dot = Offset(
-      (c.dx + dx).clamp(0.0, size.width),
-      (c.dy - dy).clamp(0.0, size.height),
-    );
+    final dot = _dot(latG, longG, c, r, size);
     canvas.drawCircle(
       dot,
       6,
@@ -304,5 +344,120 @@ class _GVectorCirclePainter extends CustomPainter {
       old.longG != longG ||
       old.latG != latG ||
       old.peakLong != peakLong ||
-      old.peakLat != peakLat;
+      old.peakLat != peakLat ||
+      old.trail.length != trail.length;
+}
+
+/// 横屏仪表用的紧凑十字：上加速、下刹车、左负右正。
+/// 只画当前点、轴向峰值刻度和小数字，不画整段拖尾。
+class TrackGCross extends StatelessWidget {
+  const TrackGCross({
+    super.key,
+    required this.longG,
+    required this.latG,
+    required this.calibrated,
+    this.peakLong,
+    this.peakLat,
+    this.size = 72,
+  });
+
+  final double longG;
+  final double latG;
+  final bool calibrated;
+  final double? peakLong;
+  final double? peakLat;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    if (!calibrated) {
+      return Text(
+        s.t('G 值：未标定', 'G: not calibrated'),
+        style: const TextStyle(color: Colors.white54, fontSize: 12),
+      );
+    }
+    return Row(
+      children: [
+        CustomPaint(
+          key: const Key('g-cross-plot'),
+          size: Size(size, size),
+          painter: _GCrossPainter(
+            longG: longG,
+            latG: latG,
+            peakLong: peakLong,
+            peakLat: peakLat,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${s.t('纵向', 'Long')} ${formatSignedG(longG)}g',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              Text(
+                '${s.t('横向', 'Lat')} ${formatSignedG(latG)}g',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              if (peakLong != null && peakLat != null)
+                Text(
+                  '${s.t('峰值', 'Peak')} ${formatSignedG(peakLong!)} / ${formatSignedG(peakLat!)}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GCrossPainter extends CustomPainter {
+  _GCrossPainter({
+    required this.longG,
+    required this.latG,
+    this.peakLong,
+    this.peakLat,
+  });
+
+  final double longG;
+  final double latG;
+  final double? peakLong;
+  final double? peakLat;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final arm = size.width / 2 - 4;
+    final axis = Paint()
+      ..color = Colors.white.withValues(alpha: 0.35)
+      ..strokeWidth = 1.2;
+    canvas.drawLine(Offset(c.dx, 4), Offset(c.dx, size.height - 4), axis);
+    canvas.drawLine(Offset(4, c.dy), Offset(size.width - 4, c.dy), axis);
+    final peak = Paint()
+      ..color = Colors.white.withValues(alpha: 0.7)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    double clampG(double v) => v.clamp(-TrackGVectorCircle.fullScaleG, TrackGVectorCircle.fullScaleG);
+    if (peakLong != null) {
+      final y = c.dy - clampG(peakLong!) / TrackGVectorCircle.fullScaleG * arm;
+      canvas.drawLine(Offset(c.dx - 5, y), Offset(c.dx + 5, y), peak);
+    }
+    if (peakLat != null) {
+      final x = c.dx + clampG(peakLat!) / TrackGVectorCircle.fullScaleG * arm;
+      canvas.drawLine(Offset(x, c.dy - 5), Offset(x, c.dy + 5), peak);
+    }
+    final dot = Offset(
+      (c.dx + clampG(latG) / TrackGVectorCircle.fullScaleG * arm).clamp(2.0, size.width - 2),
+      (c.dy - clampG(longG) / TrackGVectorCircle.fullScaleG * arm).clamp(2.0, size.height - 2),
+    );
+    canvas.drawCircle(dot, 4.5, Paint()..color = const Color(0xFFE10600));
+  }
+
+  @override
+  bool shouldRepaint(_GCrossPainter old) =>
+      old.longG != longG || old.latG != latG || old.peakLong != peakLong || old.peakLat != peakLat;
 }

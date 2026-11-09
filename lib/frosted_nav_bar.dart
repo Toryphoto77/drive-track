@@ -31,6 +31,25 @@ import 'app_haptics.dart';
 import 'app_locale.dart';
 import 'home_layout.dart';
 
+/// 选中圆左边缘，使圆心落在第 [index] 个等分槽的中心。
+///
+/// [AnimatedAlign] 的 Alignment 把子组件中心映射到
+/// `(parentSize - childSize)` 的剩余空间里，不是父级全宽。
+/// `alignX = -1 + (2i+1)/n` 因此会把 48px 选中圆往中间拽：
+/// 288 宽、4 项时两端差约 18px、中间两项差约 6px，图标和
+/// 圆点看起来错开。槽宽中心与图标、点击区用同一套除法。
+double navSelectionLeft({
+  required double barWidth,
+  required int index,
+  required int count,
+  double indicatorSize = 48,
+}) {
+  if (count <= 0 || barWidth <= 0) return 0;
+  final slot = barWidth / count;
+  final i = index.clamp(0, count - 1);
+  return i * slot + (slot - indicatorSize) / 2;
+}
+
 class FrostedGlassNavBar extends StatelessWidget {
   const FrostedGlassNavBar({
     super.key,
@@ -59,9 +78,8 @@ class FrostedGlassNavBar extends StatelessWidget {
       s.t('记录', 'Trips'),
       s.t('我的', 'Me'),
     ];
-    // 4 等分槽位的中心：-1 + (2i+1)/n，与 ModeSwitch 一样用对齐做滑动。
     final n = _tabs.length;
-    final alignX = -1 + (2 * selectedIndex + 1) / n;
+    final index = selectedIndex.clamp(0, n - 1);
     // v1.0.5：删掉 SafeArea，底部位置由调用方 Positioned 直接算，
     // 本组件只输出药丸本身，不带任何背景容器。
     return Center(
@@ -110,61 +128,69 @@ class FrostedGlassNavBar extends StatelessWidget {
                   child: SizedBox(
                     height: 48,
                     width: double.infinity,
-                    child: Stack(
-                      children: [
-                        // 选中圆只做水平滑动，不缩放、不拉伸。
-                        AnimatedAlign(
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOutCubic,
-                          alignment: Alignment(alignX, 0),
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.22),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: accent.withValues(alpha: 0.35),
-                                  blurRadius: 12,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Row(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final left = navSelectionLeft(
+                          barWidth: constraints.maxWidth,
+                          index: index,
+                          count: n,
+                        );
+                        return Stack(
                           children: [
-                            for (var i = 0; i < _tabs.length; i++)
-                              Expanded(
-                                child: Center(
-                                  // 名称只作无障碍语义，不显示文字。
-                                  child: Semantics(
-                                    label: labels[i],
-                                    button: true,
-                                    child: InkWell(
-                                      customBorder: const CircleBorder(),
-                                      onTap: () {
-                                        AppHaptics.tap();
-                                        onTap(i);
-                                      },
-                                      child: SizedBox(
-                                        width: 48,
-                                        height: 48,
-                                        child: Icon(
-                                          _tabs[i].$1,
-                                          color: selectedIndex == i
-                                              ? accent
-                                              : Colors.white70,
+                            // 选中圆只做水平滑动，圆心与槽位中心重合。
+                            AnimatedPositioned(
+                              key: const Key('nav-selection-indicator'),
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              left: left,
+                              top: 0,
+                              width: 48,
+                              height: 48,
+                              child: IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: accent.withValues(alpha: 0.22),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: accent.withValues(alpha: 0.35),
+                                        blurRadius: 12,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                for (var i = 0; i < _tabs.length; i++)
+                                  Expanded(
+                                    // 整槽可点，图标在槽中心，与选中圆同一中心。
+                                    child: Semantics(
+                                      label: labels[i],
+                                      button: true,
+                                      child: InkWell(
+                                        onTap: () {
+                                          AppHaptics.tap();
+                                          onTap(i);
+                                        },
+                                        child: Center(
+                                          child: Icon(
+                                            _tabs[i].$1,
+                                            color: index == i
+                                                ? accent
+                                                : Colors.white70,
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
+                              ],
+                            ),
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                 ),

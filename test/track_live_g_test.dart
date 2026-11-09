@@ -101,6 +101,26 @@ void main() {
       expect(find.text('+0.42g'), findsOneWidget);
     });
 
+    testWidgets('拖尾点不抛错，仍画出 G 圆', (tester) async {
+      source = LiveGSource(
+        listenable: notifier,
+        longG: () => lo,
+        latG: () => la,
+        calibrated: () => cal,
+        peakLong: () => pLo,
+        peakLat: () => pLa,
+        trail: () => const [
+          (longG: 0.1, latG: -0.1),
+          (longG: 0.4, latG: -0.2),
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TrackLiveGRow(source: source))),
+      );
+      expect(find.byType(TrackGVectorCircle), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('超量程 ±3g 不抛错（圆点钳制在圆边上）', (tester) async {
       lo = 3.0;
       la = -3.0;
@@ -109,6 +129,37 @@ void main() {
       );
       expect(find.text('+3.00g'), findsOneWidget);
       expect(find.text('-3.00g'), findsOneWidget);
+    });
+  });
+
+  group('TrackGCross', () {
+    testWidgets('未标定只显示未标定，不画十字', (tester) async {
+      await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+          body: TrackGCross(longG: 0.4, latG: -0.2, calibrated: false),
+        ),
+      ));
+      expect(find.text('G 值：未标定'), findsOneWidget);
+      expect(find.byKey(const Key('g-cross-plot')), findsNothing);
+      expect(find.textContaining('+0.40'), findsNothing);
+    });
+
+    testWidgets('已标定显示纵向横向和峰值', (tester) async {
+      await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+          body: TrackGCross(
+            longG: 0.42,
+            latG: -0.15,
+            peakLong: 1.05,
+            peakLat: -0.87,
+            calibrated: true,
+          ),
+        ),
+      ));
+      expect(find.byKey(const Key('g-cross-plot')), findsOneWidget);
+      expect(find.textContaining('+0.42'), findsOneWidget);
+      expect(find.textContaining('-0.15'), findsOneWidget);
+      expect(find.textContaining('峰值'), findsOneWidget);
     });
   });
 

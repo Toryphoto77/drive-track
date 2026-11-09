@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'gps_source.dart';
 import 'native.dart';
 import 'track_timing.dart';
@@ -245,10 +246,6 @@ class TrackSettingsPage extends StatefulWidget {
   /// （LapTimer 构造后阈值不可改，需用新阈值重建计时器，见文末接线说明）。
   final ValueChanged<TrackSettings>? onChanged;
 
-  /// 外置 GPS 入口回调：总协调传推设备中心页的跳转（main.dart 的
-  /// _openDeviceCenter）。不传时入口只显示提示，不跳转、不伪造。
-  final VoidCallback? onOpenDeviceCenter;
-
   /// IMU 标定入口回调：总协调传推传感器校准页的跳转（main.dart 的
   /// _openSensorCalibration，需 Recorder）。不传时入口只显示提示。
   final VoidCallback? onOpenSensorCalibration;
@@ -257,7 +254,6 @@ class TrackSettingsPage extends StatefulWidget {
     super.key,
     this.initial,
     this.onChanged,
-    this.onOpenDeviceCenter,
     this.onOpenSensorCalibration,
   });
 
@@ -411,12 +407,11 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                 _hardwareStatusTile(),
                 ListTile(
                   leading: const Icon(Icons.satellite_alt),
-                  title: const Text('外置 GPS'),
-                  subtitle: Text(widget.onOpenDeviceCenter == null
-                      ? '从设置首页 → 设备中心进入，可扫描、连接外置 GPS 接收器'
-                      : '扫描、连接 DEXIAN D1 与其它外置 GPS 接收器'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: widget.onOpenDeviceCenter,
+                  title: Text(S.of(context).t('外置 GPS', 'External GPS')),
+                  subtitle: Text(S.of(context).t(
+                    '在底栏「设备」里扫描、连接。本页只显示当前来源。',
+                    'Scan and connect from the Devices tab. This page only shows the current source.',
+                  )),
                 ),
                 ListTile(
                   leading: const Icon(Icons.sensors),
@@ -531,10 +526,8 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
 /// 不改动计时逻辑本身。
 ///
 /// ---- 外置设备与采样接线（总协调） ----
-/// - TrackSettingsPage 构造时传 onOpenDeviceCenter: _openDeviceCenter
-///   与 onOpenSensorCalibration: _openSensorCalibration（main.dart
-///   已有这两个方法，设置首页也在用同一入口），本页的两个入口即
-///   可跳转；不传时入口只显示“从设置首页进入”的提示。
+/// - 外置 GPS 不从本页跳转：设备中心是底栏页。本页只读连接状态。
+///   IMU 标定仍传 onOpenSensorCalibration: _openSensorCalibration。
 /// - 连接状态不由本页维护：device_center.dart 的 ExternalGpsSection
 ///   在连接 / 断开事件里写 gps_source.dart 的 externalGpsStatus，
 ///   本页只监听显示。

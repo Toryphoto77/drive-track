@@ -4,6 +4,8 @@
 /// （居中、无混排错位）；关注/粉丝/获赞已并进资料卡（不再是
 /// 独立卡片）；点“动态”切换分区。
 
+import 'package:drive_track/app_locale.dart';
+import 'package:drive_track/home_layout.dart';
 import 'package:drive_track/my_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -55,6 +57,53 @@ void main() {
       await tester.tap(find.text('动态'));
       await tester.pump();
       expect(find.textContaining('暂无动态'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('个人页没有语言开关，行程区打开记录页并保留公开开关', (tester) async {
+      tester.view.physicalSize = const Size(400, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var opened = 0;
+      var toggled = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MyPage(
+            username: '柴西',
+            userId: 'DT-1234',
+            bio: 'hello',
+            stats: const [],
+            following: 0,
+            followers: 0,
+            likes: 0,
+            trips: [
+              MyTripItem(
+                id: 't1',
+                title: '汽车 · 1.20 km',
+                subtitle: '今天',
+                onTogglePublic: () => toggled++,
+              ),
+            ],
+            posts: const [],
+            favorites: const [],
+            achievements: const [],
+            onOpenTripsTab: () => opened++,
+          ),
+        ),
+      ));
+      await tester.pump();
+      expect(find.byType(LanguageSwitch), findsNothing);
+      expect(find.text('语言'), findsNothing);
+      expect(find.text('打开行程记录'), findsOneWidget);
+      await tester.tap(find.text('打开行程记录'));
+      expect(opened, 1);
+      expect(find.text('仅自己'), findsOneWidget);
+      await tester.tap(find.text('仅自己'));
+      expect(toggled, 1);
+      final scroll = tester.widget<SingleChildScrollView>(find.byType(SingleChildScrollView));
+      final pad = scroll.padding! as EdgeInsets;
+      expect(pad.bottom, greaterThanOrEqualTo(kPillNavHeight + 12));
       expect(tester.takeException(), isNull);
     });
 

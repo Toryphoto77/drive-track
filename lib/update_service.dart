@@ -117,6 +117,10 @@ class UpdateCheckResult {
   /// 选中的安装包架构（如 arm64-v8a）。
   final String? abi;
 
+  /// 按优先顺序尝试的下载地址。[downloadUrl] 仍是清单里的规范
+  /// 地址（旧测试与旧调用只认它）；新下载逻辑先走这里面的国内源。
+  final List<DownloadSource> downloadSources;
+
   const UpdateCheckResult({
     required this.status,
     required this.message,
@@ -126,15 +130,170 @@ class UpdateCheckResult {
     this.notes,
     this.sha256,
     this.abi,
+    this.downloadSources = const [],
   });
 }
 
-/// 一个可下载的安装包：直链 + 可选 SHA-256。
+/// 一个可下载的安装包：直链 + 可选 SHA-256 + 可选国内镜像。
+///
+/// [url] 仍是清单里的 `url` / `apkUrl`（旧客户端只读这一处）。
+/// [cdnUrl] / [mirrors] 是同一文件的国内地址，新客户端优先尝试。
 class ApkChoice {
   final String abi;
   final String url;
   final String? sha256;
-  const ApkChoice(this.abi, this.url, this.sha256);
+  final String? cdnUrl;
+  final List<String> mirrors;
+  const ApkChoice(this.abi, this.url, this.sha256,
+      {this.cdnUrl, this.mirrors = const []});
+}
+
+/// 下载源种类，用来写进度文案。
+enum DownloadSourceKind {
+  /// 清单里的 cdnUrl / mirrors，或本身就不是 GitHub 的直链。
+  cdn,
+
+  /// github.com 的 Release 附件。
+  github,
+
+  /// 内置或清单指定的 GitHub Release 代理前缀。
+  githubProxy,
+
+  /// 无法归类的直链。
+  direct,
+}
+
+class DownloadSource {
+  final String url;
+  final DownloadSourceKind kind;
+  const DownloadSource(this.url, this.kind);
+}
+
+/// 一次下载尝试的进度。换源时 [restarted] 为 true、[received] 从 0 起。
+class DownloadProgress {
+  final int received;
+  final int? total;
+  final DownloadSourceKind kind;
+  final int index;
+  final int count;
+  final double? bytesPerSecond;
+  final bool restarted;
+  const DownloadProgress({
+    required this.received,
+    required this.total,
+    required this.kind,
+    required this.index,
+    required this.count,
+    required this.bytesPerSecond,
+    required this.restarted,
+  });
+}
+
+/// 国内常用的 GitHub Release 文件代理。只在主地址失败或长时间
+/// 几乎没有数据之后才用，且只改写 `github.com/.../releases/download/`。
+///
+/// 都是第三方前缀（`前缀 + 原始 https URL`），与本仓库无关，可能失效：
+/// - `https://ghfast.top/` — ghfast，社区文件加速
+/// - `https://gh-proxy.com/` — gh-proxy 反向代理
+/// - `https://mirror.ghproxy.com/` — 早期 ghproxy 镜像
+///
+/// 清单 `"githubProxyFallback": false` 可关掉。
+/// 清单 `"githubProxies": ["https://example/"]` 可换成自己的前缀列表
+/// （空数组 = 不用任何代理）。
+const List<String> kDefaultGithubReleaseProxyPrefixes = [
+  'https://ghfast.top/',
+  'https://gh-proxy.com/',
+  'https://mirror.ghproxy.com/',
+];
+
+String? _manifestString(Object? value) {
+  if (value is! String) return null;
+  final t = value.trim();
+  return t.isEmpty ? null : t;
+}
+
+List<String> _manifestStringList(Object? value) {
+  if (value is! List) return const [];
+  return [
+    for (final e in value)
+      if (e is String && e.trim().isNotEmpty) e.trim(),
+  ];
+}
+
+bool isGithubReleaseUrl(String url) {
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null) return false;
+  if (uri.host.toLowerCase() != 'github.com') return false;
+  return uri.path.contains('/releases/download/');
+}
+
+/// `prefix + 原始 GitHub Release URL`。不是 Release 附件时返回 null。
+String? githubProxyUrl(String releaseUrl, String prefix) {
+  if (!isGithubReleaseUrl(releaseUrl)) return null;
+  var p = prefix.trim();
+  if (p.isEmpty) return null;
+  if (!p.endsWith('/')) p = '$p/';
+  return '$p${releaseUrl.trim()}';
+}
+
+DownloadSourceKind classifyDownloadUrl(String url) {
+  final trimmed = url.trim();
+  final uri = Uri.tryParse(trimmed);
+  final host = uri?.host.toLowerCase() ?? '';
+  if (host == 'github.com' || host.endsWith('.github.com')) {
+    return DownloadSourceKind.github;
+  }
+  if (trimmed.contains('github.com/') && trimmed.contains('/releases/download/')) {
+    return DownloadSourceKind.githubProxy;
+  }
+  if (host == 'ghfast.top' ||
+      host == 'gh-proxy.com' ||
+      host == 'mirror.ghproxy.com' ||
+      host.endsWith('.ghproxy.com')) {
+    return DownloadSourceKind.githubProxy;
+  }
+  if (host.isEmpty) return DownloadSourceKind.direct;
+  return DownloadSourceKind.cdn;
+}
+
+/// 下载顺序：cdnUrl → mirrors → 清单 url →（GitHub Release 才有）代理。
+/// 重复地址只保留第一次。旧客户端不读这些字段，只认 [url]。
+List<DownloadSource> buildDownloadSources({
+  required String url,
+  String? cdnUrl,
+  List<String> mirrors = const [],
+  bool githubProxyFallback = true,
+  List<String>? githubProxies,
+}) {
+  final ordered = <String>[];
+  void add(String? raw) {
+    final t = raw?.trim() ?? '';
+    if (t.isEmpty || ordered.contains(t)) return;
+    ordered.add(t);
+  }
+
+  add(cdnUrl);
+  for (final m in mirrors) {
+    add(m);
+  }
+  add(url);
+  if (githubProxyFallback && isGithubReleaseUrl(url)) {
+    final prefixes = githubProxies ?? kDefaultGithubReleaseProxyPrefixes;
+    for (final prefix in prefixes) {
+      add(githubProxyUrl(url, prefix));
+    }
+  }
+  return [for (final u in ordered) DownloadSource(u, classifyDownloadUrl(u))];
+}
+
+String formatDownloadSpeed(double bytesPerSecond) {
+  if (bytesPerSecond >= 1024 * 1024) {
+    return '${(bytesPerSecond / (1024 * 1024)).toStringAsFixed(1)} MB/s';
+  }
+  if (bytesPerSecond >= 1024) {
+    return '${(bytesPerSecond / 1024).toStringAsFixed(0)} KB/s';
+  }
+  return '${bytesPerSecond.toStringAsFixed(0)} B/s';
 }
 
 /// 本 App 发布的三种架构（与构建脚本产物文件名一致）。
@@ -146,19 +305,82 @@ const List<String> kPublishedAbis = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
 /// 旧格式只有 `apkUrl`（+ 可选 `sha256`），一直是 arm64-v8a 包，
 /// 只在设备支持 arm64-v8a 时才用它——不再把 arm64 包发给 32 位 / x86 设备。
 /// 找不到匹配架构返回 null。
+ApkChoice _apkWithMirrors({
+  required String abi,
+  required String url,
+  required String? sha256,
+  required Map<String, dynamic> json,
+  Map<dynamic, dynamic>? entry,
+  required String? legacyUrl,
+}) {
+  final entryCdn = entry == null ? null : _manifestString(entry['cdnUrl']);
+  final entryMirrors =
+      entry == null ? const <String>[] : _manifestStringList(entry['mirrors']);
+  final sameFile = legacyUrl != null && legacyUrl == url;
+  final topCdn = _manifestString(json['cdnUrl']);
+  final topMirrors = _manifestStringList(json['mirrors']);
+  final useTop = entry == null || sameFile;
+  return ApkChoice(
+    abi,
+    url,
+    sha256,
+    cdnUrl: entryCdn ?? (useTop ? topCdn : null),
+    mirrors: [
+      ...entryMirrors,
+      if (useTop && topCdn != null && topCdn != entryCdn) topCdn,
+      if (useTop) ...topMirrors,
+    ],
+  );
+}
+
+/// 清单是否允许在 GitHub 主地址之后再试内置/自定义代理。
+/// 缺省为 true。`"githubProxies"` 出现时替换内置列表（可为空）。
+bool manifestAllowsGithubProxies(Map<String, dynamic> json) =>
+    json['githubProxyFallback'] != false;
+
+List<String>? manifestGithubProxyOverride(Map<String, dynamic> json) {
+  if (!json.containsKey('githubProxies')) return null;
+  return _manifestStringList(json['githubProxies']);
+}
+
+List<DownloadSource> sourcesForChoice(ApkChoice choice, Map<String, dynamic> json) {
+  return buildDownloadSources(
+    url: choice.url,
+    cdnUrl: choice.cdnUrl,
+    mirrors: choice.mirrors,
+    githubProxyFallback: manifestAllowsGithubProxies(json),
+    githubProxies: manifestGithubProxyOverride(json),
+  );
+}
+
 ApkChoice? selectManifestApk(Map<String, dynamic> json, List<String> deviceAbis) {
+  final legacyUrl = _manifestString(json['apkUrl'] ?? json['downloadUrl']);
   final apks = json['apks'];
   if (apks is Map) {
     for (final abi in deviceAbis) {
       final e = apks[abi];
-      if (e is Map && e['url'] is String && (e['url'] as String).isNotEmpty) {
-        return ApkChoice(abi, e['url'] as String, normalizeSha256(e['sha256'] as String?));
+      if (e is Map && e['url'] is String && (e['url'] as String).trim().isNotEmpty) {
+        final url = (e['url'] as String).trim();
+        return _apkWithMirrors(
+          abi: abi,
+          url: url,
+          sha256: normalizeSha256(e['sha256'] as String?),
+          json: json,
+          entry: e,
+          legacyUrl: legacyUrl,
+        );
       }
     }
   }
-  final legacy = (json['apkUrl'] ?? json['downloadUrl']) as String?;
-  if (legacy != null && legacy.isNotEmpty && deviceAbis.contains('arm64-v8a')) {
-    return ApkChoice('arm64-v8a', legacy, normalizeSha256(json['sha256'] as String?));
+  if (legacyUrl != null && deviceAbis.contains('arm64-v8a')) {
+    return _apkWithMirrors(
+      abi: 'arm64-v8a',
+      url: legacyUrl,
+      sha256: normalizeSha256(json['sha256'] as String?),
+      json: json,
+      entry: null,
+      legacyUrl: legacyUrl,
+    );
   }
   return null;
 }
@@ -249,6 +471,7 @@ class UpdateService {
         notes: json['body'] as String?,
         sha256: choice.sha256,
         abi: choice.abi,
+        downloadSources: buildDownloadSources(url: choice.url),
       );
     }
     return UpdateCheckResult(
@@ -296,6 +519,7 @@ class UpdateService {
         notes: json['notes'] as String?,
         sha256: choice.sha256,
         abi: choice.abi,
+        downloadSources: sourcesForChoice(choice, json),
       );
     }
     return UpdateCheckResult(
@@ -393,64 +617,153 @@ class UpdateService {
 
   /// 下载 APK 到缓存目录（边下边算 SHA-256），校验后再调原生安装。
   ///
-  /// - 有发布方摘要 [expectedSha256]：不一致即删除下载文件、绝不安装；
-  /// - 没有摘要：照常安装，但结果 verified=false 并明说“未校验”，
-  ///   不把它显示成校验通过（安卓系统仍会拒绝签名不同的升级包）；
-  /// - 建连 15 秒、单次读数据 [downloadIdleTimeout] 超时；Content-Length
-  ///   对不上判为下载不完整；先写 .part，校验通过才改名。
+  /// - 有发布方摘要 [expectedSha256]：不一致即删除下载文件、绝不安装，
+  ///   并继续试下一个地址（代理有时会回一页 HTML）；
+  /// - 没有摘要：照常安装，但结果 verified=false 并明说“未校验”；
+  /// - [sources] 为空时只用 [url]。顺序由 [buildDownloadSources] 决定；
+  /// - 换源时删掉半截 .part，进度从 0 重计（不同主机不能续传）；
+  /// - 除最后一个地址外，若 [stallWindow] 内收到的字节少于
+  ///   [stallMinBytes]，放弃该地址改试下一个。最后一个地址只受
+  ///   [downloadIdleTimeout] 限制，避免把唯一一条慢链路掐掉。
   static Future<UpdateInstallResult> downloadAndInstallChecked({
     required String url,
     required int remoteVersionCode,
     String? expectedSha256,
+    List<DownloadSource>? sources,
     HttpClient? httpClient,
     Future<String> Function()? cacheDir,
     Future<bool> Function(String path)? install,
     void Function(int received, int? total)? onProgress,
+    void Function(DownloadProgress progress)? onProgressDetail,
+    Duration stallWindow = const Duration(seconds: 8),
+    int stallMinBytes = 64 * 1024,
   }) async {
     final expected = normalizeSha256(expectedSha256);
     if (expectedSha256 != null && expectedSha256.trim().isNotEmpty && expected == null) {
       return const UpdateInstallResult(
           ok: false, verified: false, message: 'Invalid checksum in update manifest; download not started');
     }
+    final plan = (sources != null && sources.isNotEmpty)
+        ? sources
+        : [DownloadSource(url, classifyDownloadUrl(url))];
     final client = httpClient ?? _directClient();
     final closeClient = httpClient == null;
+    UpdateInstallResult? last;
+    try {
+      for (var i = 0; i < plan.length; i++) {
+        final source = plan[i];
+        void report(int received, int? total, double? bps) {
+          onProgress?.call(received, total);
+          onProgressDetail?.call(DownloadProgress(
+            received: received,
+            total: total,
+            kind: source.kind,
+            index: i,
+            count: plan.length,
+            bytesPerSecond: bps,
+            restarted: i > 0 && received == 0,
+          ));
+        }
+
+        report(0, null, null);
+        last = await _downloadOne(
+          client: client,
+          source: source,
+          remoteVersionCode: remoteVersionCode,
+          expected: expected,
+          cacheDir: cacheDir ?? Native.getCacheDir,
+          install: install ?? Native.installApk,
+          onProgress: report,
+          stallCheck: i < plan.length - 1,
+          stallWindow: stallWindow,
+          stallMinBytes: stallMinBytes,
+        );
+        if (last.ok) return last;
+      }
+      return last ??
+          const UpdateInstallResult(ok: false, verified: false, message: 'Download failed');
+    } finally {
+      if (closeClient) client.close();
+    }
+  }
+
+  static Future<UpdateInstallResult> _downloadOne({
+    required HttpClient client,
+    required DownloadSource source,
+    required int remoteVersionCode,
+    required String? expected,
+    required Future<String> Function() cacheDir,
+    required Future<bool> Function(String path) install,
+    required void Function(int received, int? total, double? bps) onProgress,
+    required bool stallCheck,
+    required Duration stallWindow,
+    required int stallMinBytes,
+  }) async {
     File? part;
     try {
-      final dir = await (cacheDir ?? Native.getCacheDir)();
+      final dir = await cacheDir();
       final path = '$dir/update-$remoteVersionCode.apk';
       part = File('$path.part');
-      final req = await client.getUrl(Uri.parse(url)).timeout(_requestTimeout);
+      if (await part.exists()) await part.delete();
+      final req = await client.getUrl(Uri.parse(source.url)).timeout(_requestTimeout);
       final resp = await req.close().timeout(_requestTimeout);
       if (resp.statusCode != 200) {
-        return UpdateInstallResult(ok: false, verified: false, message: 'Download failed (HTTP ${resp.statusCode})');
+        return UpdateInstallResult(
+            ok: false, verified: false, message: 'Download failed (HTTP ${resp.statusCode})');
       }
       final hasher = Sha256();
       var received = 0;
       final sink = part.openWrite();
+      final clock = Stopwatch()..start();
+      var speedMark = Duration.zero;
+      var speedBytes = 0;
+      var stallMark = Duration.zero;
+      var stallBytes = 0;
+      double? bps;
       try {
         final total = resp.contentLength >= 0 ? resp.contentLength : null;
-        await for (final chunk in resp.timeout(downloadIdleTimeout)) {
+        // 非最后一源：静默超过 stallWindow 就换源，不必干等 30 秒。
+        final idle = stallCheck ? stallWindow : downloadIdleTimeout;
+        await for (final chunk in resp.timeout(idle)) {
           hasher.add(chunk);
           received += chunk.length;
+          speedBytes += chunk.length;
+          stallBytes += chunk.length;
           sink.add(chunk);
-          onProgress?.call(received, total);
+          final now = clock.elapsed;
+          if (now - speedMark >= const Duration(milliseconds: 400)) {
+            final secs = (now - speedMark).inMicroseconds / 1e6;
+            if (secs > 0) bps = speedBytes / secs;
+            speedMark = now;
+            speedBytes = 0;
+          }
+          if (stallCheck && now - stallMark >= stallWindow) {
+            if (stallBytes < stallMinBytes) {
+              throw const _DownloadStalled();
+            }
+            stallMark = now;
+            stallBytes = 0;
+          }
+          onProgress(received, total, bps);
         }
       } finally {
         await sink.close();
       }
       if (resp.contentLength >= 0 && received != resp.contentLength) {
         await part.delete();
+        part = null;
         return const UpdateInstallResult(ok: false, verified: false, message: 'Download incomplete; please retry');
       }
       final actual = hasher.hexDigest();
       if (expected != null && actual != expected) {
         await part.delete();
+        part = null;
         return const UpdateInstallResult(
             ok: false, verified: false, message: 'Checksum mismatch; download discarded and not installed');
       }
       final apk = await part.rename(path);
       part = null;
-      final launched = await (install ?? Native.installApk)(apk.path);
+      final launched = await install(apk.path);
       if (!launched) {
         return UpdateInstallResult(ok: false, verified: expected != null, message: 'Could not open the system installer');
       }
@@ -461,6 +774,8 @@ class UpdateService {
             ? 'Checksum verified; installer opened'
             : 'No checksum published for this package; integrity NOT verified. Android will still reject a package signed with a different key.',
       );
+    } on _DownloadStalled {
+      return const UpdateInstallResult(ok: false, verified: false, message: 'Download stalled; trying next source');
     } on TimeoutException {
       return const UpdateInstallResult(ok: false, verified: false, message: 'Download timed out; please retry');
     } catch (e) {
@@ -471,7 +786,10 @@ class UpdateService {
           if (await part.exists()) await part.delete();
         } catch (_) {}
       }
-      if (closeClient) client.close();
     }
   }
+}
+
+class _DownloadStalled implements Exception {
+  const _DownloadStalled();
 }

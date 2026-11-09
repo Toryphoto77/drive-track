@@ -1,5 +1,5 @@
 {
-  "_comment": "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：当前指向 GitHub Release 附件；后续可换成 CloudBase 存储公共 URL，实现全程国内下载，无需改 App。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要，本文件当前未带 sha256（手里没有对应 APK，不编造）。",
+  "_comment": "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：当前指向 GitHub Release 附件；后续可换成 CloudBase 存储公共 URL，实现全程国内下载，无需改 App。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要。可选字段（旧客户端忽略）：每个 apks.<abi> 或顶层可加 cdnUrl（字符串）和 mirrors（字符串数组），国内优先下载，失败再回落 url/apkUrl。githubProxyFallback 缺省 true，false 时不再试内置 GitHub 代理；githubProxies 可替换代理前缀列表。1.5.5 不填写虚构的 CDN 地址。下一版应把 APK 放到腾讯云 CloudBase / COS 公共 URL，写入 cdnUrl 或 mirrors。",
   "versionName": "1.5.5",
   "versionCode": 60,
   "apkUrl": "https://github.com/Toryphoto77/drive-track/releases/download/v1.5.5/DriveTrack-v1.5.5-release-arm64-v8a.apk",

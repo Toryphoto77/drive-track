@@ -23,6 +23,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
+import 'app_locale.dart';
+import 'card_style.dart';
+import 'empty_hud.dart';
 import 'models.dart';
 import 'store.dart';
 import 'track_timing.dart';
@@ -220,7 +223,7 @@ class TripAnalyticsPage extends StatefulWidget {
 
 class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
   List<AnalyticsTripInput>? _inputs;
-  String? _loadError;
+  int _failedLoads = 0;
   AnalyticsRange _range = AnalyticsRange.all;
   DateTimeRange? _customRange;
 
@@ -259,7 +262,7 @@ class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
     if (!mounted) return;
     setState(() {
       _inputs = inputs;
-      _loadError = failed > 0 ? '$failed 趟行程文件未能加载，已跳过' : null;
+      _failedLoads = failed;
     });
   }
 
@@ -279,39 +282,50 @@ class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
         .toList();
   }
 
-  String _fmtDur(int ms) {
+  String _fmtDur(S s, int ms) {
     final h = ms ~/ 3600000;
     final m = (ms % 3600000) ~/ 60000;
-    return h > 0 ? '${h}小时${m}分' : '$m分';
+    if (h > 0) return s.t('$h小时$m分', '${h}h ${m}m');
+    return s.t('$m分', '${m}m');
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final inputs = _inputs;
     final summary = inputs == null ? null : summarizeAnalyticsTrips(_filtered);
+    final bottom = 24 + MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: const Text('行程分析')),
+      appBar: DtAppBar(title: Text(s.t('行程分析', 'Trip analysis'))),
       body: inputs == null
-          ? const Center(child: CircularProgressIndicator())
+          ? Padding(
+              padding: EdgeInsets.only(top: appBarTopInset(context)),
+              child: const Center(child: CircularProgressIndicator()),
+            )
           : ListView(
-              padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
+              padding: withAppBarTopInset(
+                  context, EdgeInsets.fromLTRB(16, 12, 16, bottom)),
               children: [
-                Wrap(spacing: 8, children: [
-                  _rangeChip(AnalyticsRange.all, '全部'),
-                  _rangeChip(AnalyticsRange.last30, '近 30 天'),
-                  _rangeChip(AnalyticsRange.last90, '近 90 天'),
-                  ChoiceChip(
-                    label: Text(_customRange == null
-                        ? '自定义区间'
-                        : '${_customRange!.start.month}/${_customRange!.start.day}–${_customRange!.end.month}/${_customRange!.end.day}'),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  _rangeChip(s, AnalyticsRange.all, s.t('全部', 'All')),
+                  _rangeChip(s, AnalyticsRange.last30, s.t('近 30 天', '30 days')),
+                  _rangeChip(s, AnalyticsRange.last90, s.t('近 90 天', '90 days')),
+                  _pill(
+                    label: _customRange == null
+                        ? s.t('自定义区间', 'Custom')
+                        : '${_customRange!.start.month}/${_customRange!.start.day}–${_customRange!.end.month}/${_customRange!.end.day}',
                     selected: _range == AnalyticsRange.custom,
-                    onSelected: (_) async {
+                    onTap: () async {
                       final picked = await showDateRangePicker(
                         context: context,
                         firstDate: DateTime(2020),
                         lastDate: DateTime.now(),
                         initialDateRange: _customRange,
+                        helpText: s.t('选择区间', 'Select range'),
+                        cancelText: s.t('取消', 'Cancel'),
+                        confirmText: s.t('确定', 'OK'),
+                        saveText: s.t('保存', 'Save'),
                       );
                       if (picked == null || !mounted) return;
                       setState(() {
@@ -322,80 +336,135 @@ class _TripAnalyticsPageState extends State<TripAnalyticsPage> {
                   ),
                 ]),
                 const SizedBox(height: 4),
-                const Text('演示行程不计入；赛道行程只统计圈速。',
-                    style: TextStyle(color: Colors.white54, fontSize: 12)),
-                if (_loadError != null) ...[
+                Text(
+                  s.t('演示行程不计入；赛道行程只统计圈速。',
+                      'Demo trips excluded. Track trips count laps only.'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                if (_failedLoads > 0) ...[
                   const SizedBox(height: 8),
-                  Text(_loadError!, style: const TextStyle(color: Colors.orange, fontSize: 12)),
+                  Text(
+                    s.t('$_failedLoads 趟行程文件未能加载，已跳过',
+                        '$_failedLoads trip file(s) failed to load and were skipped'),
+                    style: const TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
                 ],
                 const SizedBox(height: 16),
-                if (summary == null)
-                  const Text('暂无数据', style: TextStyle(color: Colors.white54))
+                if (summary == null ||
+                    (summary.street.tripCount == 0 && summary.track.tripCount == 0))
+                  EmptyHud(
+                    icon: Icons.insights,
+                    status: s.t('暂无数据', 'No data yet'),
+                    actionLabel: s.t('查看全部', 'Show all'),
+                    onAction: () => setState(() => _range = AnalyticsRange.all),
+                  )
                 else ...[
-                  _sectionTitle('街道组'),
-                  _card(children: [
-                    _row('行程数', '${summary.street.tripCount} 趟'),
-                    _row('总里程', '${summary.street.totalDistanceKm.toStringAsFixed(1)} km'),
-                    _row('总时长', _fmtDur(summary.street.totalDurationMs)),
-                    _row('平均速度', summary.street.avgSpeedKmh == null ? '暂无' : '${summary.street.avgSpeedKmh!.toStringAsFixed(1)} km/h'),
-                    _row('极速', '${summary.street.maxSpeedKmh.toStringAsFixed(0)} km/h'),
-                    _row('最大合成 G', '${summary.street.maxG.toStringAsFixed(2)}g'),
-                    const SizedBox(height: 6),
-                    const Text('G 值分布（单位：趟）',
-                        style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    for (final e in summary.street.gBuckets.entries) _row(e.key, '${e.value}'),
-                    const SizedBox(height: 6),
-                    const Text('评分分布（单位：趟）',
-                        style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    for (final e in summary.street.scoreBuckets.entries) _row(e.key, '${e.value}'),
-                  ]),
+                  _sectionTitle(s.t('街道', 'Street')),
+                  DriveTrackCard(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _row(s.t('行程数', 'Trips'), s.t('${summary.street.tripCount} 趟', '${summary.street.tripCount}')),
+                        _row(s.t('总里程', 'Distance'), '${summary.street.totalDistanceKm.toStringAsFixed(1)} km'),
+                        _row(s.t('总时长', 'Time'), _fmtDur(s, summary.street.totalDurationMs)),
+                        _row(s.t('平均速度', 'Avg speed'),
+                            summary.street.avgSpeedKmh == null ? s.t('暂无', '—') : '${summary.street.avgSpeedKmh!.toStringAsFixed(1)} km/h'),
+                        _row(s.t('极速', 'Top speed'), '${summary.street.maxSpeedKmh.toStringAsFixed(0)} km/h'),
+                        _row(s.t('最大合成 G', 'Peak G'), '${summary.street.maxG.toStringAsFixed(2)}g'),
+                        const SizedBox(height: 8),
+                        Text(s.t('G 值分布（单位：趟）', 'G spread (trips)'),
+                            style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        for (final e in summary.street.gBuckets.entries) _row(e.key, '${e.value}'),
+                        const SizedBox(height: 6),
+                        Text(s.t('评分分布（单位：趟）', 'Score spread (trips)'),
+                            style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        for (final e in summary.street.scoreBuckets.entries) _row(e.key, '${e.value}'),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 16),
-                  _sectionTitle('赛道组'),
-                  _card(children: [
-                    _row('赛道行程数', '${summary.track.tripCount} 趟'),
-                    _row('总圈数（计入圈）', '${summary.track.totalLaps} 圈'),
-                    _row('最佳圈', summary.track.bestLapMs == null ? '暂无圈速' : LapTimer.formatLapTime(summary.track.bestLapMs)),
-                    _row('平均圈速', summary.track.meanLapMs == null ? '暂无圈速' : LapTimer.formatLapTime(summary.track.meanLapMs!.round())),
-                    _row('圈速稳定性（标准差）',
-                        summary.track.hasStability ? '${(summary.track.stdDevLapMs! / 1000).toStringAsFixed(3)} 秒' : '圈数不足，暂无稳定性'),
-                    if (summary.track.hasStability)
-                      _row('圈速极差', LapTimer.formatLapTime(summary.track.lapRangeMs)),
-                    const SizedBox(height: 6),
-                    const Text('无效圈不进统计。',
-                        style: TextStyle(color: Colors.white54, fontSize: 12)),
-                  ]),
+                  _sectionTitle(s.t('赛道', 'Track')),
+                  DriveTrackCard(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _row(s.t('赛道行程数', 'Track trips'), s.t('${summary.track.tripCount} 趟', '${summary.track.tripCount}')),
+                        _row(s.t('总圈数（计入圈）', 'Counted laps'), s.t('${summary.track.totalLaps} 圈', '${summary.track.totalLaps}')),
+                        _row(s.t('最佳圈', 'Best lap'),
+                            summary.track.bestLapMs == null ? s.t('暂无圈速', 'No lap') : LapTimer.formatLapTime(summary.track.bestLapMs)),
+                        _row(s.t('平均圈速', 'Avg lap'),
+                            summary.track.meanLapMs == null ? s.t('暂无圈速', 'No lap') : LapTimer.formatLapTime(summary.track.meanLapMs!.round())),
+                        _row(s.t('圈速稳定性（标准差）', 'Lap consistency (SD)'),
+                            summary.track.hasStability
+                                ? s.t('${(summary.track.stdDevLapMs! / 1000).toStringAsFixed(3)} 秒',
+                                    '${(summary.track.stdDevLapMs! / 1000).toStringAsFixed(3)} s')
+                                : s.t('圈数不足，暂无稳定性', 'Need more laps')),
+                        if (summary.track.hasStability)
+                          _row(s.t('圈速极差', 'Lap spread'), LapTimer.formatLapTime(summary.track.lapRangeMs)),
+                        const SizedBox(height: 6),
+                        Text(s.t('无效圈不进统计。', 'Invalid laps are excluded.'),
+                            style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      ],
+                    ),
+                  ),
                 ],
               ],
             ),
     );
   }
 
-  Widget _rangeChip(AnalyticsRange r, String label) => ChoiceChip(
-        label: Text(label),
+  Widget _rangeChip(S s, AnalyticsRange r, String label) => _pill(
+        label: label,
         selected: _range == r,
-        onSelected: (_) => setState(() => _range = r),
+        onTap: () => setState(() => _range = r),
       );
+
+  Widget _pill({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final accent = CardStyle.accent(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? accent : Colors.black54,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: selected ? accent : CardStyle.borderColor),
+          ),
+          child: Text(label,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+  }
 
   Widget _sectionTitle(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(t, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-      );
-
-  Widget _card({required List<Widget> children}) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF141414),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF2A2A2A)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+        child: Text(t,
+            style: const TextStyle(
+                fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
       );
 
   Widget _row(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(children: [
-          Expanded(child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13))),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+          Expanded(
+              child: Text(label,
+                  style: const TextStyle(color: Colors.white54, fontSize: 13))),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
         ]),
       );
 }

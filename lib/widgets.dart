@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+
+import 'app_locale.dart';
 import 'models.dart';
 import 'recorder.dart';
 
@@ -285,10 +287,12 @@ class TrajectoryPainter extends CustomPainter {
 // ---------- G 值圆 ----------
 class GCirlce extends StatelessWidget {
   final double longG, latG;
-  final List<GSample> trail; // 最近 5 秒
+  final List<GSample> trail; // 最近 5 秒，车体坐标
   final double threshold;
   final bool calibrated;
   final double size;
+  final double? peakLong;
+  final double? peakLat;
   const GCirlce({
     super.key,
     required this.longG,
@@ -297,6 +301,8 @@ class GCirlce extends StatelessWidget {
     required this.threshold,
     required this.calibrated,
     this.size = 120,
+    this.peakLong,
+    this.peakLat,
   });
 
   @override
@@ -312,11 +318,25 @@ class GCirlce extends StatelessWidget {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       CustomPaint(
         size: Size(size, size),
-        painter: GCirlcePainter(longG, latG, trail, threshold, calibrated, color),
+        painter: GCirlcePainter(
+          longG,
+          latG,
+          trail,
+          threshold,
+          calibrated,
+          color,
+          peakLong: peakLong,
+          peakLat: peakLat,
+        ),
       ),
       const SizedBox(height: 4),
       Text(
-        calibrated ? '纵向 ${longG.toStringAsFixed(2)}g · 横向 ${latG.toStringAsFixed(2)}g' : '未标定',
+        calibrated
+            ? S.of(context).t(
+                '纵向 ${longG.toStringAsFixed(2)}g · 横向 ${latG.toStringAsFixed(2)}g',
+                'Long ${longG.toStringAsFixed(2)}g · lat ${latG.toStringAsFixed(2)}g',
+              )
+            : S.of(context).t('未标定', 'Not calibrated'),
         style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
       ),
     ]);
@@ -329,7 +349,10 @@ class GCirlcePainter extends CustomPainter {
   final double threshold;
   final bool calibrated;
   final Color color;
-  GCirlcePainter(this.longG, this.latG, this.trail, this.threshold, this.calibrated, this.color);
+  final double? peakLong;
+  final double? peakLat;
+  GCirlcePainter(this.longG, this.latG, this.trail, this.threshold, this.calibrated, this.color,
+      {this.peakLong, this.peakLat});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -357,6 +380,19 @@ class GCirlcePainter extends CustomPainter {
     canvas.drawLine(Offset(c.dx - r, c.dy), Offset(c.dx + r, c.dy), Paint()..color = Colors.white24);
     canvas.drawLine(Offset(c.dx, c.dy - r), Offset(c.dx, c.dy + r), Paint()..color = Colors.white24);
     if (!calibrated) return;
+    // 本节峰值刻度：横向在横轴，纵向在竖轴（上为正）。满圈仍是 1g。
+    final peakPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.7)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    if (peakLong != null) {
+      final y = c.dy - peakLong!.clamp(-1.0, 1.0) * r;
+      canvas.drawLine(Offset(c.dx - 5, y), Offset(c.dx + 5, y), peakPaint);
+    }
+    if (peakLat != null) {
+      final x = c.dx + peakLat!.clamp(-1.0, 1.0) * r;
+      canvas.drawLine(Offset(x, c.dy - 5), Offset(x, c.dy + 5), peakPaint);
+    }
     // 5 秒拖尾
     if (trail.length > 1) {
       for (var i = 1; i < trail.length; i++) {
