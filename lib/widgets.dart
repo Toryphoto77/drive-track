@@ -598,7 +598,7 @@ class _GScatterPainter extends CustomPainter {
 }
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
-// 汽车：低趴跑车 + 尾翼轮廓；摩托：整流罩仿赛 + 骑手压弯姿态感。
+// 汽车：低趴跑车，车头朝右。摩托：同向侧视仿赛（尖鼻、低车架、前后轮分开）。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
   final bool selected;
@@ -665,29 +665,58 @@ class _SportMotoPainter extends CustomPainter {
   _SportMotoPainter(this.c);
   @override
   void paint(Canvas canvas, Size s) {
-    final p = Paint()..color = c..style = PaintingStyle.fill;
     final w = s.width, h = s.height;
-    // 整流罩（前倾仿赛轮廓）
-    final fairing = Path()
-      ..moveTo(w * 0.72, h * 0.18)
-      ..lineTo(w * 0.88, h * 0.42)
-      ..lineTo(w * 0.80, h * 0.62)
-      ..lineTo(w * 0.55, h * 0.66)
-      ..lineTo(w * 0.42, h * 0.50)
-      ..lineTo(w * 0.55, h * 0.34)
-      ..close();
-    canvas.drawPath(fairing, p);
-    // 车身下部 + 排气
-    canvas.drawRect(Rect.fromLTWH(w * 0.18, h * 0.62, w * 0.55, h * 0.10), p);
-    // 骑手压弯姿态：头盔 + 俯身躯干（一条斜线体感）
-    canvas.drawCircle(Offset(w * 0.48, h * 0.22), w * 0.09, Paint()..color = c);
-    final lean = Paint()..color = c..strokeWidth = w * 0.09..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(w * 0.48, h * 0.30), Offset(w * 0.30, h * 0.55), lean);
-    // 车轮
-    canvas.drawCircle(Offset(w * 0.22, h * 0.76), w * 0.14, Paint()..color = Colors.black);
-    canvas.drawCircle(Offset(w * 0.78, h * 0.76), w * 0.14, Paint()..color = Colors.black);
-    canvas.drawCircle(Offset(w * 0.22, h * 0.76), w * 0.05, Paint()..color = c);
-    canvas.drawCircle(Offset(w * 0.78, h * 0.76), w * 0.05, Paint()..color = c);
+    final fill = Paint()..color = c..style = PaintingStyle.fill;
+    final frame = Paint()
+      ..color = c
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (w * 0.055).clamp(1.4, 5.0).toDouble()
+      ..strokeCap = StrokeCap.round;
+    final rear = Offset(w * 0.24, h * 0.72);
+    final front = Offset(w * 0.78, h * 0.72);
+    // 车架先画，语言和旁边的骑行图标同一套：两轮之间用杆连上。
+    canvas.drawLine(rear, Offset(w * 0.46, h * 0.58), frame);
+    canvas.drawLine(Offset(w * 0.40, h * 0.46), front, frame);
+    // 短尾 + 座垫，向左伸出后轮。
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.04, h * 0.46)
+        ..lineTo(w * 0.30, h * 0.38)
+        ..lineTo(w * 0.34, h * 0.50)
+        ..lineTo(w * 0.12, h * 0.54)
+        ..close(),
+      fill,
+    );
+    // 前整流罩：风挡在上、尖鼻朝右并压向前轮，不是整车一块菱形。
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.44, h * 0.42)
+        ..lineTo(w * 0.56, h * 0.26)
+        ..lineTo(w * 0.70, h * 0.36)
+        ..lineTo(w * 0.82, h * 0.50)
+        ..lineTo(w * 0.68, h * 0.58)
+        ..lineTo(w * 0.50, h * 0.52)
+        ..close(),
+      fill,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.52, h * 0.40)
+        ..lineTo(w * 0.58, h * 0.30)
+        ..lineTo(w * 0.66, h * 0.40)
+        ..close(),
+      Paint()..color = Colors.black.withValues(alpha: 0.55),
+    );
+    // 车把：从龙头发往上后方，避免只剩一根斜撑。
+    canvas.drawLine(Offset(w * 0.52, h * 0.40), Offset(w * 0.40, h * 0.30), frame);
+    canvas.drawLine(Offset(w * 0.34, h * 0.28), Offset(w * 0.44, h * 0.32), frame);
+    final wheel = Paint()..color = Colors.black;
+    final hub = Paint()..color = c;
+    final radius = w * 0.155;
+    canvas.drawCircle(rear, radius, wheel);
+    canvas.drawCircle(front, radius, wheel);
+    canvas.drawCircle(rear, w * 0.05, hub);
+    canvas.drawCircle(front, w * 0.05, hub);
   }
 
   @override
