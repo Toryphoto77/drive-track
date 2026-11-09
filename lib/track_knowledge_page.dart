@@ -11,8 +11,10 @@
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'card_style.dart';
 import 'track_knowledge.dart';
+import 'track_knowledge_en.dart';
 
 /// 知识库列表页：顶部说明卡 + 9 张分类目录卡 + 参考来源。
 class TrackKnowledgePage extends StatelessWidget {
@@ -20,11 +22,12 @@ class TrackKnowledgePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
-        title: const Text('赛道知识库'),
+        title: Text(s.t('赛道知识库', 'Track guide')),
         leading: _DirectoryButton(),
       ),
       drawer: _KnowledgeDirectory(
@@ -33,10 +36,13 @@ class TrackKnowledgePage extends StatelessWidget {
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
         children: [
-          const DriveTrackCard(
+          DriveTrackCard(
             child: Text(
-              '面向赛道日新手的静态参考：旗语、规则、赛事架构、驾驶技术。点左上角目录可快速跳转到任意文章。规则以各赛事当年规则与当日安全简报为准；标“未核实”的内容请以官方资料为准。',
-              style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+              s.t(
+                '面向赛道日新手的静态参考：旗语、规则、赛事架构、驾驶技术。点左上角目录可快速跳转到任意文章。规则以各赛事当年规则与当日安全简报为准；标“未核实”的内容请以官方资料为准。',
+                'A static guide for a first track day: flags, rules, how a race is built, and driving. The directory at the top left jumps to any article. That year’s rules and that day’s briefing win. Anything marked unverified should be checked against the official source.',
+              ),
+              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
             ),
           ),
           const SizedBox(height: 12),
@@ -48,16 +54,16 @@ class TrackKnowledgePage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '参考来源',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                Text(
+                  s.t('参考来源', 'Sources'),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 6),
-                for (final s in trackKnowledgeSources)
+                for (final source in trackKnowledgeSources)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      '· $s',
+                      '· ${knowledgeText(s.zh, source)}',
                       style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
                     ),
                   ),
@@ -76,7 +82,7 @@ class _DirectoryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       icon: const Icon(Icons.menu),
-      tooltip: '目录',
+      tooltip: S.of(context).t('目录', 'Contents'),
       onPressed: () => Scaffold.of(context).openDrawer(),
     );
   }
@@ -99,6 +105,7 @@ class _CategorySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final zh = S.of(context).zh;
     return DriveTrackCard(
       padding: EdgeInsets.zero,
       child: Column(children: [
@@ -110,12 +117,12 @@ class _CategorySection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    category.title,
+                    knowledgeText(zh, category.title),
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    category.subtitle,
+                    knowledgeText(zh, category.subtitle),
                     style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ],
@@ -128,7 +135,9 @@ class _CategorySection extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                '${category.articles.length} 篇',
+                zh
+                    ? '${category.articles.length} 篇'
+                    : '${category.articles.length}',
                 style: const TextStyle(color: Colors.white70, fontSize: 11),
               ),
             ),
@@ -162,7 +171,7 @@ class _ArticleRow extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              article.title,
+              knowledgeText(S.of(context).zh, article.title),
               style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
@@ -182,6 +191,7 @@ class _KnowledgeDirectory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final total =
         trackKnowledge.fold<int>(0, (n, c) => n + c.articles.length);
     return Drawer(
@@ -196,13 +206,16 @@ class _KnowledgeDirectory extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '赛道知识库',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    Text(
+                      s.t('赛道知识库', 'Track guide'),
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '目录 · ${trackKnowledge.length} 个分类 · $total 篇文章',
+                      s.t(
+                        '目录 · ${trackKnowledge.length} 个分类 · $total 篇文章',
+                        'Contents · ${trackKnowledge.length} sections · $total articles',
+                      ),
                       style: const TextStyle(color: Colors.white54, fontSize: 12),
                     ),
                   ],
@@ -210,7 +223,7 @@ class _KnowledgeDirectory extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.close, size: 20),
-                tooltip: '关闭目录',
+                tooltip: s.t('关闭目录', 'Close'),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ]),
@@ -224,13 +237,15 @@ class _KnowledgeDirectory extends StatelessWidget {
                   child: Row(children: [
                     Expanded(
                       child: Text(
-                        category.title,
+                        knowledgeText(s.zh, category.title),
                         style: const TextStyle(
                             fontSize: 14, fontWeight: FontWeight.bold),
                       ),
                     ),
                     Text(
-                      '${category.articles.length} 篇',
+                      s.zh
+                          ? '${category.articles.length} 篇'
+                          : '${category.articles.length}',
                       style: const TextStyle(color: Colors.white38, fontSize: 11),
                     ),
                   ]),
@@ -277,7 +292,7 @@ class _DirectoryRow extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              article.title,
+              knowledgeText(S.of(context).zh, article.title),
               style: TextStyle(
                 color: selected ? Colors.white : Colors.white70,
                 fontSize: 13.5,
@@ -298,11 +313,12 @@ class TrackKnowledgeArticlePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final zh = S.of(context).zh;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
-        title: Text(article.title),
+        title: Text(knowledgeText(zh, article.title)),
         leading: _DirectoryButton(),
       ),
       drawer: _KnowledgeDirectory(
@@ -325,7 +341,7 @@ class TrackKnowledgeArticlePage extends StatelessWidget {
         children: [
           DriveTrackCard(
             child: Text(
-              article.intro,
+              knowledgeText(zh, article.intro),
               style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
             ),
           ),
@@ -335,7 +351,7 @@ class TrackKnowledgeArticlePage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (var i = 0; i < article.bullets.length; i++) ...[
-                  _BulletText(text: article.bullets[i]),
+                  _BulletText(text: knowledgeText(zh, article.bullets[i])),
                   if (i != article.bullets.length - 1)
                     const SizedBox(height: 10),
                 ],
@@ -343,10 +359,13 @@ class TrackKnowledgeArticlePage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const DriveTrackCard(
+          DriveTrackCard(
             child: Text(
-              '规则以各赛事当年规则与当日安全简报为准；标“未核实”的内容请以官方资料为准。',
-              style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+              S.of(context).t(
+                '规则以各赛事当年规则与当日安全简报为准；标“未核实”的内容请以官方资料为准。',
+                'That year’s rules and that day’s briefing win. Anything marked unverified should be checked against the official source.',
+              ),
+              style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
             ),
           ),
         ],
@@ -362,13 +381,18 @@ class _BulletText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final idx = text.indexOf('：');
+    var idx = text.indexOf('：');
+    var colon = '：';
+    if (idx < 0) {
+      idx = text.indexOf(':');
+      colon = ':';
+    }
     final hasLead = idx > 0 &&
-        idx <= 30 &&
+        idx <= 48 &&
         !text.substring(0, idx).contains('。') &&
         !text.substring(0, idx).contains('；');
     final lead = hasLead ? text.substring(0, idx) : null;
-    final body = hasLead ? text.substring(idx + 1) : text;
+    final body = hasLead ? text.substring(idx + colon.length) : text;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -385,7 +409,7 @@ class _BulletText extends StatelessWidget {
               children: [
                 if (lead != null)
                   TextSpan(
-                    text: '$lead：',
+                    text: '$lead$colon',
                     style: const TextStyle(
                         color: Colors.white, fontWeight: FontWeight.bold),
                   ),

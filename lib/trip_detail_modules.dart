@@ -10,6 +10,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
 import 'card_style.dart';
 import 'fuel_page.dart';
 import 'altitude_profile.dart';
@@ -25,10 +26,68 @@ String _fmtDur(int ms) {
       '${(s % 60).toString().padLeft(2, '0')}';
 }
 
-String _fmtDate(int ms) {
+String _fmtDate(int ms, BuildContext context) {
   final d = DateTime.fromMillisecondsSinceEpoch(ms);
-  return '${d.month}月${d.day}日 '
+  final hm =
       '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  if (S.of(context).zh) return '${d.month}月${d.day}日 $hm';
+  return '${d.month}/${d.day} $hm';
+}
+
+String _tr(BuildContext context, String zh, String en) =>
+    S.of(context).t(zh, en);
+
+Widget _none(BuildContext context) => Text(
+      _tr(context, '暂无', 'None'),
+      style: const TextStyle(color: Colors.white54, fontSize: 13),
+    );
+
+String _reasonLine(BuildContext context, String reason) {
+  final s = S.of(context);
+  if (s.zh) return reason;
+  if (reason == '数据太少，未评分') return 'Too little data to score';
+  if (reason == '配速平稳') return 'Pace was steady';
+  if (reason == '驾驶平稳') return 'Driving was smooth';
+  final brake = RegExp(r'^急刹车 (\d+) 次$').firstMatch(reason);
+  if (brake != null) return 'Hard braking ×${brake.group(1)}';
+  final accel = RegExp(r'^急加速 (\d+) 次$').firstMatch(reason);
+  if (accel != null) return 'Hard acceleration ×${accel.group(1)}';
+  final corner = RegExp(r'^过弯偏急 (\d+) 次$').firstMatch(reason);
+  if (corner != null) return 'Harsh corners ×${corner.group(1)}';
+  return reason;
+}
+
+String _roadLabel(BuildContext context, String label) {
+  final s = S.of(context);
+  return switch (label) {
+    '低速 / 停车' => s.t(label, 'Slow / stopped'),
+    '城市道路 / 乡村道路（估算）' => s.t(label, 'City / rural (estimate)'),
+    '城市主干道（估算）' => s.t(label, 'Arterial (estimate)'),
+    '高速公路 / 快速路（估算）' => s.t(label, 'Highway (estimate)'),
+    _ => label,
+  };
+}
+
+String _scoreKeyLabel(BuildContext context, String key) {
+  final s = S.of(context);
+  return switch (key) {
+    '平顺' => s.t('平顺', 'Smoothness'),
+    '过弯' => s.t('过弯', 'Cornering'),
+    '速度稳定' => s.t('速度稳定', 'Speed stability'),
+    '配速稳定' => s.t('配速稳定', 'Pace'),
+    '功率稳定' => s.t('功率稳定', 'Power'),
+    _ => key,
+  };
+}
+
+String _modeTripTitle(BuildContext context, TripMode mode) {
+  final s = S.of(context);
+  final name = switch (mode) {
+    TripMode.car => s.t('汽车', 'Car'),
+    TripMode.moto => s.t('摩托', 'Moto'),
+    TripMode.bike => s.t('骑行', 'Ride'),
+  };
+  return s.zh ? '$name行程' : '$name trip';
 }
 
 String _fmtClock(int ms) {
@@ -55,8 +114,6 @@ Widget _cardTitle(String title) {
       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold));
 }
 
-const Widget _emptyNote = Text('暂无',
-    style: TextStyle(color: Colors.white54, fontSize: 13));
 
 /// v1.0.7 遥测关键数据条：里程 / 时长 / 最高时速 / 平均时速 /
 /// 最大 G / 评分，大字一行（小屏自动换行），全部来自实测 trip。
@@ -66,6 +123,7 @@ class TelemetryKpiStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final durH = (trip.endMs - trip.startMs) / 3600000.0;
     final avg = durH > 0 ? (trip.distanceM / 1000) / durH : 0.0;
     Widget kpi(String label, String value) => Expanded(
@@ -86,15 +144,15 @@ class TelemetryKpiStrip extends StatelessWidget {
       ),
       child: Column(children: [
         Row(children: [
-          kpi('里程', '${(trip.distanceM / 1000).toStringAsFixed(2)} km'),
-          kpi('时长', _fmtDur(trip.endMs - trip.startMs)),
-          kpi('最高时速', '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h'),
+          kpi(s.t('里程', 'Distance'), '${(trip.distanceM / 1000).toStringAsFixed(2)} km'),
+          kpi(s.t('时长', 'Time'), _fmtDur(trip.endMs - trip.startMs)),
+          kpi(s.t('最高时速', 'Top speed'), '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h'),
         ]),
         const SizedBox(height: 10),
         Row(children: [
-          kpi('平均时速', '${avg.toStringAsFixed(0)} km/h'),
-          kpi('最大 G', trip.points.isEmpty ? '暂无' : '${trip.maxG.toStringAsFixed(2)}g'),
-          kpi('评分', trip.score.toStringAsFixed(0)),
+          kpi(s.t('平均时速', 'Average'), '${avg.toStringAsFixed(0)} km/h'),
+          kpi(s.t('最大 G', 'Max G'), trip.points.isEmpty ? s.t('暂无', 'None') : '${trip.maxG.toStringAsFixed(2)}g'),
+          kpi(s.t('评分', 'Score'), trip.score.toStringAsFixed(0)),
         ]),
       ]),
     );
@@ -113,33 +171,39 @@ class TripOverviewCard extends StatelessWidget {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: _cardTitle('${trip.mode.label}行程')),
-          Text(_fmtDate(trip.startMs),
+          Expanded(child: _cardTitle(_modeTripTitle(context, trip.mode))),
+          Text(_fmtDate(trip.startMs, context),
               style: const TextStyle(color: Colors.white70, fontSize: 13)),
         ]),
         const SizedBox(height: 10),
         Wrap(spacing: 16, runSpacing: 8, children: [
-          _stat('里程', '${(trip.distanceM / 1000).toStringAsFixed(2)} km'),
-          _stat('时长', _fmtDur(trip.endMs - trip.startMs)),
-          _stat('最高速度', '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h'),
-          _stat('最大 G', trip.points.isEmpty ? '暂无' : trip.maxG.toStringAsFixed(2)),
-          _stat('爬升', '${trip.climbM.toStringAsFixed(0)} m'),
+          _stat(_tr(context, '里程', 'Distance'), '${(trip.distanceM / 1000).toStringAsFixed(2)} km'),
+          _stat(_tr(context, '时长', 'Time'), _fmtDur(trip.endMs - trip.startMs)),
+          _stat(_tr(context, '最高速度', 'Top speed'), '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h'),
+          _stat(_tr(context, '最大 G', 'Max G'), trip.points.isEmpty ? _tr(context, '暂无', 'None') : trip.maxG.toStringAsFixed(2)),
+          _stat(_tr(context, '爬升', 'Climb'), '${trip.climbM.toStringAsFixed(0)} m'),
           if (trip.isTrackMode && trip.trackName.isNotEmpty)
-            _stat('赛道', trip.trackName),
+            _stat(_tr(context, '赛道', 'Track'), trip.trackName),
         ]),
         // 含推算路段时诚实分开列：推算里程不混进实测里程。
         if (trip.estimatedDistanceM > 0) ...[
           const SizedBox(height: 8),
           Text(
-            '含推算路段 ${(trip.estimatedDistanceM / 1000).toStringAsFixed(1)} km'
-            '（实测 ${(trip.measuredDistanceM / 1000).toStringAsFixed(2)} km，'
-            '推算段地图为虚线）',
+            _tr(
+              context,
+              '含推算路段 ${(trip.estimatedDistanceM / 1000).toStringAsFixed(1)} km'
+              '（实测 ${(trip.measuredDistanceM / 1000).toStringAsFixed(2)} km，'
+              '推算段地图为虚线）',
+              'Includes ${(trip.estimatedDistanceM / 1000).toStringAsFixed(1)} km estimated'
+              ' (measured ${(trip.measuredDistanceM / 1000).toStringAsFixed(2)} km;'
+              ' estimated parts are dashed)',
+            ),
             style: const TextStyle(color: Color(0xFFFFB300), fontSize: 12),
           ),
         ],
         if (trip.weatherSummary.isNotEmpty) ...[
           const SizedBox(height: 8),
-          Text('天气：${trip.weatherSummary}',
+          Text('${_tr(context, '天气', 'Weather')}：${trip.weatherSummary}',
               style: const TextStyle(color: Colors.white70, fontSize: 13)),
         ],
       ]),
@@ -234,7 +298,7 @@ class _InspectableChartState extends State<_InspectableChart> {
       Text(
         sel != null && sel >= 0 && sel < widget.points.length
             ? widget.tooltip(widget.points[sel], sel)
-            : '点击或拖动曲线查看该点数值',
+            : _tr(context, '点击或拖动曲线查看该点数值', 'Tap or drag the line to read a point'),
         style: const TextStyle(color: Colors.white70, fontSize: 13),
       ),
     ]);
@@ -371,10 +435,10 @@ class TripSpeedChartCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _cardTitle('速度'),
+        _cardTitle(_tr(context, '速度', 'Speed')),
         const SizedBox(height: 8),
         if (points.length < 2)
-          _emptyNote
+          _none(context)
         else
           _InspectableChart(
             points: points,
@@ -473,21 +537,21 @@ class TripGChartCard extends StatelessWidget {
     final maxCount = counts.isEmpty ? 0 : counts.reduce(math.max);
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _cardTitle('G 值'),
+        _cardTitle(_tr(context, 'G 值', 'G')),
         const SizedBox(height: 10),
         Wrap(spacing: 16, runSpacing: 8, children: [
-          _stat('最大合成 G', '${maxCombined.toStringAsFixed(2)}g'),
-          _stat('最大加速 G', '${maxAccel.toStringAsFixed(2)}g'),
-          _stat('最大刹车 G', '${maxBrake.toStringAsFixed(2)}g'),
-          _stat('最大横向 G', '${maxLat.toStringAsFixed(2)}g'),
-          _stat('样本点', '${points.length}'),
+          _stat(_tr(context, '最大合成 G', 'Max combined'), '${maxCombined.toStringAsFixed(2)}g'),
+          _stat(_tr(context, '最大加速 G', 'Max accel'), '${maxAccel.toStringAsFixed(2)}g'),
+          _stat(_tr(context, '最大刹车 G', 'Max brake'), '${maxBrake.toStringAsFixed(2)}g'),
+          _stat(_tr(context, '最大横向 G', 'Max lateral'), '${maxLat.toStringAsFixed(2)}g'),
+          _stat(_tr(context, '样本点', 'Samples'), '${points.length}'),
         ]),
         const SizedBox(height: 12),
-        const Text('G-G 散点图（红圈为 1g）',
-            style: TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(_tr(context, 'G-G 散点图（红圈为 1g）', 'G-G plot (red ring is 1g)'),
+            style: const TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 6),
         if (points.length < 2)
-          _emptyNote
+          _none(context)
         else
           SizedBox(
             height: 200,
@@ -497,14 +561,14 @@ class TripGChartCard extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 12),
-        const Row(children: [
-          _LegendDot(Colors.white, '纵向'),
-          SizedBox(width: 12),
-          _LegendDot(Color(0xFFE10600), '横向'),
+        Row(children: [
+          _LegendDot(Colors.white, _tr(context, '纵向', 'Long')),
+          const SizedBox(width: 12),
+          _LegendDot(const Color(0xFFE10600), _tr(context, '横向', 'Lat')),
         ]),
         const SizedBox(height: 8),
         if (points.length < 2)
-          _emptyNote
+          _none(context)
         else
           _InspectableChart(
             points: points,
@@ -515,26 +579,26 @@ class TripGChartCard extends StatelessWidget {
             secondColor: const Color(0xFFE10600),
             onPointSelected: onPointSelected,
             selectedIndex: selectedIndex,
-            tooltip: (p, _) => '${_fmtClock(p.timeMs)} · 纵向 '
-                '${p.longG.toStringAsFixed(2)}g · 横向 '
-                '${p.latG.toStringAsFixed(2)}g · 合成 '
+            tooltip: (p, _) => '${_fmtClock(p.timeMs)} · ${_tr(context, '纵向', 'Long')} '
+                '${p.longG.toStringAsFixed(2)}g · ${_tr(context, '横向', 'Lat')} '
+                '${p.latG.toStringAsFixed(2)}g · ${_tr(context, '合成', 'Combined')} '
                 '${p.combinedG.toStringAsFixed(2)}g',
           ),
         const SizedBox(height: 12),
-        const Text('区段标注',
-            style: TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(_tr(context, '区段标注', 'Segments'),
+            style: const TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 4),
         Wrap(spacing: 16, runSpacing: 8, children: [
-          _stat('刹车区段', '$brakeSegs 段 · 峰值 ${maxBrake.toStringAsFixed(2)}g'),
-          _stat('加速区段', '$accelSegs 段 · 峰值 ${maxAccel.toStringAsFixed(2)}g'),
-          _stat('弯道区段', '$cornerSegs 段 · 峰值 ${maxLat.toStringAsFixed(2)}g'),
+          _stat(_tr(context, '刹车区段', 'Braking'), _tr(context, '$brakeSegs 段 · 峰值 ${maxBrake.toStringAsFixed(2)}g', '$brakeSegs · peak ${maxBrake.toStringAsFixed(2)}g')),
+          _stat(_tr(context, '加速区段', 'Accel'), _tr(context, '$accelSegs 段 · 峰值 ${maxAccel.toStringAsFixed(2)}g', '$accelSegs · peak ${maxAccel.toStringAsFixed(2)}g')),
+          _stat(_tr(context, '弯道区段', 'Corners'), _tr(context, '$cornerSegs 段 · 峰值 ${maxLat.toStringAsFixed(2)}g', '$cornerSegs · peak ${maxLat.toStringAsFixed(2)}g')),
         ]),
         const SizedBox(height: 12),
-        const Text('G 值直方图',
-            style: TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(_tr(context, 'G 值直方图', 'G histogram'),
+            style: const TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 6),
         if (points.isEmpty)
-          _emptyNote
+          _none(context)
         else
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -656,22 +720,27 @@ class TripEventListCard extends StatelessWidget {
       ..sort((a, b) => a.startMs.compareTo(b.startMs));
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _cardTitle('事件（${sorted.length}）'),
+        _cardTitle(_tr(context, '事件（${sorted.length}）', 'Events (${sorted.length})')),
         const SizedBox(height: 8),
         if (sorted.isEmpty)
-          _emptyNote
+          _none(context)
         else
           for (final e in sorted)
-            _eventTile(e, e == selectedEvent),
+            _eventTile(context, e, e == selectedEvent),
       ]),
     );
   }
 
-  Widget _eventTile(TripEvent e, bool selected) {
+  Widget _eventTile(BuildContext context, TripEvent e, bool selected) {
     final secs = ((e.endMs - e.startMs) / 1000).round();
+    final s = S.of(context);
     final lean = mode == TripMode.moto
-        ? ' · 左倾 ${e.maxLeanLeft.toStringAsFixed(0)}° '
-            '右倾 ${e.maxLeanRight.toStringAsFixed(0)}°'
+        ? s.t(
+            ' · 左倾 ${e.maxLeanLeft.toStringAsFixed(0)}° '
+            '右倾 ${e.maxLeanRight.toStringAsFixed(0)}°',
+            ' · lean L ${e.maxLeanLeft.toStringAsFixed(0)}° '
+            'R ${e.maxLeanRight.toStringAsFixed(0)}°',
+          )
         : '';
     return Material(
       color: selected ? _kRed.withValues(alpha: 0.18) : Colors.transparent,
@@ -686,16 +755,16 @@ class TripEventListCard extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(
-                    '${e.label} · ${_fmtClock(e.startMs)} · $secs 秒',
+                    '${e.label} · ${_fmtClock(e.startMs)} · ${s.t('$secs 秒', '${secs}s')}',
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 2),
                 Text(
-                    '纵向 ${e.peakLongG.toStringAsFixed(2)}g · '
-                    '横向 ${e.peakLatG.toStringAsFixed(2)}g · '
-                    '速度 ${(e.entrySpeed * 3.6).toStringAsFixed(0)} → '
+                    '${s.t('纵向', 'Long')} ${e.peakLongG.toStringAsFixed(2)}g · '
+                    '${s.t('横向', 'Lat')} ${e.peakLatG.toStringAsFixed(2)}g · '
+                    '${s.t('速度', 'Speed')} ${(e.entrySpeed * 3.6).toStringAsFixed(0)} → '
                     '${(e.exitSpeed * 3.6).toStringAsFixed(0)} km/h$lean',
                     style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 if (e.note.isNotEmpty)
@@ -725,21 +794,21 @@ class TripScoreSummaryCard extends StatelessWidget {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _cardTitle(trip.isTrackMode
-            ? '赛道模式不评分'
-            : '驾驶习惯评分 ${trip.score.toStringAsFixed(0)} 分'),
+            ? _tr(context, '赛道模式不评分', 'Track mode is not scored')
+            : _tr(context, '驾驶习惯评分 ${trip.score.toStringAsFixed(0)} 分', 'Driving score ${trip.score.toStringAsFixed(0)}')),
         const SizedBox(height: 8),
         if (!trip.isTrackMode) ...[
           if (trip.subScores.isEmpty)
-            _emptyNote
+            _none(context)
           else
             for (final e in trip.subScores.entries)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(children: [
-                  Text(e.key,
+                  Text(_scoreKeyLabel(context, e.key),
                       style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   const Spacer(),
-                  Text('${e.value.toStringAsFixed(0)} 分',
+                  Text(_tr(context, '${e.value.toStringAsFixed(0)} 分', e.value.toStringAsFixed(0)),
                       style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
@@ -749,13 +818,13 @@ class TripScoreSummaryCard extends StatelessWidget {
           for (final r in trip.scoreReasons)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('· $r',
+              child: Text('· ${_reasonLine(context, r)}',
                   style: const TextStyle(color: Colors.white70, fontSize: 12)),
             ),
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text('注：无可靠限速源时不算超速分',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_tr(context, '注：无可靠限速源时不算超速分', 'Note: speeding is not scored without a reliable limit.'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
           ),
         ],
       ]),
@@ -811,43 +880,43 @@ class TripFuelCard extends StatelessWidget {
         : null;
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _cardTitle('油耗费用'),
+        _cardTitle(_tr(context, '油耗费用', 'Fuel cost')),
         const SizedBox(height: 8),
         if (vehicleName != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
-            child: Text('车辆：$vehicleName', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            child: Text('${_tr(context, '车辆', 'Vehicle')}：$vehicleName', style: const TextStyle(color: Colors.white70, fontSize: 13)),
           ),
         if (est == null) ...[
-          const Text('未填写油耗/油价',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(_tr(context, '未填写油耗/油价', 'Consumption and price are not set'),
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text('去设置 > 油耗费用填写百公里油耗与油价。',
-              style: TextStyle(color: Colors.white70, fontSize: 13)),
+          Text(_tr(context, '去设置 > 油耗费用填写百公里油耗与油价。', 'Set consumption and price in Settings > Fuel cost.'),
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
         ] else ...[
           Wrap(spacing: 16, runSpacing: 8, children: [
-            _stat('油耗量', '${est.liters.toStringAsFixed(2)} L'),
-            _stat('油钱', '${est.cost.toStringAsFixed(2)} 元'),
-            _stat('里程', '${distanceKm.toStringAsFixed(2)} km'),
-            _stat('百公里油耗', '${effectiveConsumption!.toStringAsFixed(2)} L/100km'),
-            _stat('油价', '${fuelPricePerLiter!.toStringAsFixed(2)} 元/L'),
+            _stat(_tr(context, '油耗量', 'Fuel used'), '${est.liters.toStringAsFixed(2)} L'),
+            _stat(_tr(context, '油钱', 'Cost'), '${est.cost.toStringAsFixed(2)}'),
+            _stat(_tr(context, '里程', 'Distance'), '${distanceKm.toStringAsFixed(2)} km'),
+            _stat(_tr(context, '百公里油耗', 'L/100km'), '${effectiveConsumption!.toStringAsFixed(2)} L/100km'),
+            _stat(_tr(context, '油价', 'Price'), '${fuelPricePerLiter!.toStringAsFixed(2)} /L'),
           ]),
           const SizedBox(height: 6),
           Text(
             vehicleConsumptionLPer100Km != null && vehicleConsumptionLPer100Km! > 0
-                ? '按每车油耗估算，非加油实测。'
-                : '按填写油耗估算，非加油实测。',
+                ? _tr(context, '按每车油耗估算，非加油实测。', 'Estimated from this vehicle’s consumption, not a fill-up.')
+                : _tr(context, '按填写油耗估算，非加油实测。', 'Estimated from the saved consumption, not a fill-up.'),
               style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ],
         if (measuredLiters != null) ...[
           const SizedBox(height: 10),
-          const Text('实测（满油区间）',
-              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          Text(_tr(context, '实测（满油区间）', 'Measured (full-tank interval)'),
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Wrap(spacing: 16, runSpacing: 8, children: [
-            _stat('实测油量', '${measuredLiters.toStringAsFixed(2)} L'),
-            if (measuredCost != null) _stat('实测油钱', '${measuredCost.toStringAsFixed(2)} 元'),
-            _stat('实测油耗', '${measuredConsumptionLPer100Km!.toStringAsFixed(2)} L/100km'),
+            _stat(_tr(context, '实测油量', 'Measured fuel'), '${measuredLiters.toStringAsFixed(2)} L'),
+            if (measuredCost != null) _stat(_tr(context, '实测油钱', 'Measured cost'), '${measuredCost.toStringAsFixed(2)}'),
+            _stat(_tr(context, '实测油耗', 'Measured use'), '${measuredConsumptionLPer100Km!.toStringAsFixed(2)} L/100km'),
           ]),
         ],
       ]),
@@ -900,21 +969,21 @@ class TripPhotoAlbumCard extends StatelessWidget {
         Row(children: [
           Expanded(
               child: _cardTitle(
-                  '事件标记（${photos.length} 个标记 · ${withPhoto.length} 张照片）')),
+                  _tr(context, '事件标记（${photos.length} 个标记 · ${withPhoto.length} 张照片）', 'Marks (${photos.length} · ${withPhoto.length} photos)'))),
           if (onOpenAlbum != null)
             TextButton(
-                onPressed: onOpenAlbum, child: const Text('打开时间线')),
+                onPressed: onOpenAlbum, child: Text(_tr(context, '打开时间线', 'Open timeline'))),
         ]),
         if (photoPointsTruncated)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 4),
-            child: Text('一趟最多保留前 50 条标记。',
-                style: TextStyle(color: Colors.orange, fontSize: 12)),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(_tr(context, '一趟最多保留前 50 条标记。', 'A trip keeps the first 50 marks.'),
+                style: const TextStyle(color: Colors.orange, fontSize: 12)),
           ),
         const SizedBox(height: 8),
         if (photos.isEmpty)
-          const Text('暂无标记：记录中点“标记事件”添加。',
-              style: TextStyle(color: Colors.white70, fontSize: 13))
+          Text(_tr(context, '暂无标记：记录中点“标记事件”添加。', 'No marks. Use Mark while recording.'),
+              style: const TextStyle(color: Colors.white70, fontSize: 13))
         else ...[
           SizedBox(
             height: 140,
@@ -929,8 +998,8 @@ class TripPhotoAlbumCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Text('示意地图：白线为轨迹，彩点为事件',
-              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          Text(_tr(context, '示意地图：白线为轨迹，彩点为事件', 'Sketch map: white line is the track, colored dots are events'),
+              style: const TextStyle(color: Colors.white54, fontSize: 12)),
           const SizedBox(height: 8),
           SizedBox(
             height: 72,
@@ -969,12 +1038,12 @@ class TripPhotoAlbumCard extends StatelessWidget {
           const SizedBox(height: 8),
           OutlinedButton.icon(
             icon: const Icon(Icons.photo_camera, size: 18),
-            label: const Text('给未附照片的标记附照片'),
+            label: Text(_tr(context, '给未附照片的标记附照片', 'Add a photo to a mark')),
             onPressed: onAttachToLatestUnphotographed,
           ),
         ],
-        const Text('照片只存本机，不上传；删行程时副本随之删除，不删相册原图。',
-            style: TextStyle(color: Colors.white54, fontSize: 12)),
+        Text(_tr(context, '照片只存本机，不上传；删行程时副本随之删除，不删相册原图。', 'Photos stay on this phone and are not uploaded. Deleting the trip deletes the copy, not the original in your gallery.'),
+            style: const TextStyle(color: Colors.white54, fontSize: 12)),
       ]),
     );
   }
@@ -1005,29 +1074,35 @@ class TripAltitudeCard extends StatelessWidget {
     final data = computeAltitudeProfile(points);
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _cardTitle('海拔'),
+        _cardTitle(_tr(context, '海拔', 'Altitude')),
         const SizedBox(height: 8),
         if (!data.hasCurve) ...[
-          _emptyNote,
+          _none(context),
           const SizedBox(height: 4),
           Text(
             points.isEmpty
-                ? '本行程无轨迹点。'
-                : '有效海拔点不足（有效 ${data.validCount} 点，已排除 '
-                    '${data.excludedCount} 点）。',
+                ? _tr(context, '本行程无轨迹点。', 'This trip has no track points.')
+                : _tr(
+                    context,
+                    '有效海拔点不足（有效 ${data.validCount} 点，已排除 ${data.excludedCount} 点）。',
+                    'Not enough altitude points (${data.validCount} kept, ${data.excludedCount} excluded).',
+                  ),
             style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ] else ...[
           Wrap(spacing: 16, runSpacing: 8, children: [
-            _stat('累计爬升', '${data.climbM.toStringAsFixed(0)} m'),
-            _stat('最高点', '${data.maxAltM!.toStringAsFixed(0)} m'),
-            _stat('最低点', '${data.minAltM!.toStringAsFixed(0)} m'),
+            _stat(_tr(context, '累计爬升', 'Climb'), '${data.climbM.toStringAsFixed(0)} m'),
+            _stat(_tr(context, '最高点', 'Highest'), '${data.maxAltM!.toStringAsFixed(0)} m'),
+            _stat(_tr(context, '最低点', 'Lowest'), '${data.minAltM!.toStringAsFixed(0)} m'),
           ]),
           const SizedBox(height: 8),
           AltitudeProfileChart(data: data),
           const SizedBox(height: 6),
           Text(
-            '累计爬升只计上升 ≥ 3 米的段，为保守下限。'
-            '${data.excludedCount > 0 ? '已排除无海拔点 ${data.excludedCount} 点。' : ''}',
+            _tr(
+              context,
+              '累计爬升只计上升 ≥ 3 米的段，为保守下限。${data.excludedCount > 0 ? '已排除无海拔点 ${data.excludedCount} 点。' : ''}',
+              'Climb counts only rises of 3 m or more, a conservative floor.${data.excludedCount > 0 ? ' ${data.excludedCount} points had no altitude.' : ''}',
+            ),
             style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ],
       ]),
@@ -1062,10 +1137,10 @@ class TripRoadTypeCard extends StatelessWidget {
     final totalM = buckets.fold(0.0, (a, b) => a + b.distanceM);
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _cardTitle('道路类型（估算，非实测）'),
+        _cardTitle(_tr(context, '道路类型（估算，非实测）', 'Road type (estimate, not measured)')),
         const SizedBox(height: 8),
         if (points.length < 2 || totalM <= 0)
-          _emptyNote
+          _none(context)
         else
           for (final b in buckets)
             Padding(
@@ -1074,7 +1149,7 @@ class TripRoadTypeCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Expanded(
-                      child: Text(b.label,
+                      child: Text(_roadLabel(context, b.label),
                           style: const TextStyle(
                               color: Colors.white, fontSize: 13))),
                   Text(
@@ -1097,9 +1172,9 @@ class TripRoadTypeCard extends StatelessWidget {
               ]),
             ),
         const SizedBox(height: 6),
-        const Text(
-          '仅按速度区间估算，非真实道路等级；高速拥堵、低速行驶时可能误判。',
-          style: TextStyle(color: Colors.white54, fontSize: 12)),
+        Text(
+          _tr(context, '仅按速度区间估算，非真实道路等级；高速拥堵、低速行驶时可能误判。', 'Estimated from speed only, not a real road class. Traffic or slow driving can be misread.'),
+          style: const TextStyle(color: Colors.white54, fontSize: 12)),
       ]),
     );
   }

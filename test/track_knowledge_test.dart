@@ -3,7 +3,9 @@
 /// 所以结构用例逐项断言；页面用例泵 TrackKnowledgePage（纯静态页，
 /// 无 IO、无全局状态，可直接泵）。
 
+import 'package:drive_track/app_locale.dart';
 import 'package:drive_track/track_knowledge.dart';
+import 'package:drive_track/track_knowledge_en.dart';
 import 'package:drive_track/track_knowledge_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +43,21 @@ void main() {
             expect(b.trim().isNotEmpty, true, reason: '${a.title} 有空要点');
           }
         }
+      }
+    });
+
+    test('每条中文都有对应英文，不留空译', () {
+      final strings = <String>[
+        ...trackKnowledgeSources,
+        for (final c in trackKnowledge) ...[
+          c.title,
+          c.subtitle,
+          for (final a in c.articles) ...[a.title, a.intro, ...a.bullets],
+        ],
+      ];
+      for (final zh in strings) {
+        expect(knowledgeEn.containsKey(zh), isTrue, reason: zh);
+        expect(knowledgeEn[zh]!.trim().isNotEmpty, isTrue, reason: zh);
       }
     });
 
@@ -121,6 +138,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('耐力赛的皇冠，一天一夜比谁跑得最远，规则处处与普通分站不同。'),
           findsOneWidget);
+    });
+
+    testWidgets('切到英文后目录标题跟着变', (tester) async {
+      LocaleController.instance.lang = AppLang.en;
+      addTearDown(() {
+        LocaleController.instance.lang = AppLang.zh;
+      });
+      tester.view.physicalSize = const Size(800, 2800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(const MaterialApp(home: TrackKnowledgePage()));
+      await tester.pump();
+      expect(find.text('Track guide'), findsWidgets);
+      expect(find.text('How to read flags'), findsOneWidget);
+      expect(find.text('赛道旗语'), findsNothing);
     });
   });
 }

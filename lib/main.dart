@@ -480,6 +480,11 @@ String fmtDate(int ms) {
   return '${d.month}月${d.day}日 ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
+String _fmtDateEn(int ms) {
+  final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  return '${d.month}/${d.day} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+}
+
 // v0.1.5 安全守则分街道 / 赛道：
 // - 街道模式（含骑行，骑行无赛道模式）：最前面放两条醒目声明
 //   “不要在公开道路上追逐竞技驾驶”“不要超速驾驶”，与关于页
@@ -4565,13 +4570,14 @@ class _GPageState extends State<GPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final rec = widget.rec;
     final now = DateTime.now().millisecondsSinceEpoch;
     final trail = rec.gHistory.where((g) => now - g.timeMs <= 5000).toList();
     final mag = math.sqrt(rec.smoothLong * rec.smoothLong + rec.smoothLat * rec.smoothLat);
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: const Text('G 值实时')),
+      appBar: DtAppBar(title: Text(s.t('G 值实时', 'Live G'))),
       body: SingleChildScrollView(
         padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
         child: Column(children: [
@@ -4584,20 +4590,20 @@ class _GPageState extends State<GPage> {
             size: 260,
           ),
           const SizedBox(height: 12),
-          Text('当前纵向 ${rec.smoothLong.toStringAsFixed(2)}g · 横向 ${rec.smoothLat.toStringAsFixed(2)}g · 合成 ${mag.toStringAsFixed(2)}g',
+          Text(s.t('当前纵向 ${rec.smoothLong.toStringAsFixed(2)}g · 横向 ${rec.smoothLat.toStringAsFixed(2)}g · 合成 ${mag.toStringAsFixed(2)}g', 'Now long ${rec.smoothLong.toStringAsFixed(2)}g · lat ${rec.smoothLat.toStringAsFixed(2)}g · combined ${mag.toStringAsFixed(2)}g'),
               style: const TextStyle(fontWeight: FontWeight.bold)),
-          Text('峰值保持：纵向 ${rec.peakHoldLong.toStringAsFixed(2)}g · 横向 ${rec.peakHoldLat.toStringAsFixed(2)}g（保持 2 秒）',
+          Text(s.t('峰值保持：纵向 ${rec.peakHoldLong.toStringAsFixed(2)}g · 横向 ${rec.peakHoldLat.toStringAsFixed(2)}g（保持 2 秒）', 'Peak hold: long ${rec.peakHoldLong.toStringAsFixed(2)}g · lat ${rec.peakHoldLat.toStringAsFixed(2)}g (2 seconds)'),
               style: const TextStyle(color: Colors.white70)),
-          Text('本趟峰值：纵向 ${rec.tripPeakLong.toStringAsFixed(2)}g · 横向 ${rec.tripPeakLat.toStringAsFixed(2)}g',
+          Text(s.t('本趟峰值：纵向 ${rec.tripPeakLong.toStringAsFixed(2)}g · 横向 ${rec.tripPeakLat.toStringAsFixed(2)}g', 'Trip peak: long ${rec.tripPeakLong.toStringAsFixed(2)}g · lat ${rec.tripPeakLat.toStringAsFixed(2)}g'),
               style: const TextStyle(color: Colors.white70)),
-          Text('姿态：俯仰 ${rec.pitchDeg.toStringAsFixed(1)}° · 横滚 ${rec.rollDeg.toStringAsFixed(1)}°',
+          Text(s.t('姿态：俯仰 ${rec.pitchDeg.toStringAsFixed(1)}° · 横滚 ${rec.rollDeg.toStringAsFixed(1)}°', 'Attitude: pitch ${rec.pitchDeg.toStringAsFixed(1)}° · roll ${rec.rollDeg.toStringAsFixed(1)}°'),
               style: const TextStyle(color: Colors.white70)),
           const SizedBox(height: 16),
-          const Align(alignment: Alignment.centerLeft, child: Text('最近 60 秒波形（青=纵向，品红=横向，橙虚线=阈值）')),
+          Align(alignment: Alignment.centerLeft, child: Text(s.t('最近 60 秒波形（青=纵向，品红=横向，橙虚线=阈值）', 'Last 60 seconds (cyan long, magenta lat, orange threshold)'))),
           const SizedBox(height: 6),
           GWaveform(history: rec.gHistory, threshold: ModeThresholds.of(rec.mode).harshCorner),
           const SizedBox(height: 8),
-          Text(rec.calibrated ? '已标定' : '未标定：G 值仅作参考，不进评分和事件统计',
+          Text(rec.calibrated ? s.t('已标定', 'Calibrated') : s.t('未标定：G 值仅作参考，不进评分和事件统计', 'Not calibrated: G is a guide only, and is not scored'),
               style: TextStyle(color: rec.calibrated ? Colors.green : Colors.orange)),
         ]),
       ),
@@ -4967,8 +4973,9 @@ class _TripDetailPageState extends State<TripDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final t = trip;
-    if (t == null) return Scaffold(extendBodyBehindAppBar: true, appBar: DtAppBar(title: const Text('行程详情')), body: const Center(child: CircularProgressIndicator()));
+    if (t == null) return Scaffold(extendBodyBehindAppBar: true, appBar: DtAppBar(title: Text(s.t('行程详情', 'Trip'))), body: const Center(child: CircularProgressIndicator()));
     final _fk = selectedScoreKey.isEmpty ? null : scoreKeyToEventKinds(selectedScoreKey);
     final _kinds = (_fk == null || _fk.isEmpty) ? null : _fk;
     final corners = t.events.where((e) => e.kind == 'corner' && (_kinds == null || _kinds.contains(e.kind))).toList()..sort((a, b) => b.peakLatG.abs().compareTo(a.peakLatG.abs()));
@@ -5008,7 +5015,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
     final avgCad = cads.isEmpty ? 0.0 : cads.reduce((a, b) => a + b) / cads.length;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(leading: GlassButton.back(onPressed: () => Navigator.pop(context)), title: Text('${t.mode.label}行程 · ${fmtDate(t.startMs)}')),
+      appBar: DtAppBar(leading: GlassButton.back(onPressed: () => Navigator.pop(context)), title: Text('${s.t(t.mode.label, switch (t.mode) { TripMode.car => 'Car', TripMode.moto => 'Moto', TripMode.bike => 'Ride' })} ${s.zh ? '行程' : 'trip'} · ${s.zh ? fmtDate(t.startMs) : _fmtDateEn(t.startMs)}')),
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // v0.1.3 详情页地图同步精细化（跟随关闭、北向上、源切换回调为空时内部切换）。
@@ -5050,7 +5057,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(children: [
-              const Text('拖动回放：'),
+              Text(s.t('拖动回放：', 'Scrub: ')),
               Expanded(
                 child: Slider(
                   value: (scrub < 0 ? t.points.length - 1 : scrub).toDouble(),
@@ -5059,7 +5066,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   onChanged: (v) => setState(() => scrub = v.toInt()),
                 ),
               ),
-              Text(scrub < 0 ? '终点' : fmtDate(t.points[scrub].timeMs)),
+              Text(scrub < 0 ? s.t('终点', 'End') : (s.zh ? fmtDate(t.points[scrub].timeMs) : _fmtDateEn(t.points[scrub].timeMs))),
             ]),
           ),
           if (scrub >= 0)
@@ -5079,11 +5086,11 @@ class _TripDetailPageState extends State<TripDetailPage> {
               // scrub，速度/G/海拔/加速/压弯图共用同一时间轴顺序。
               TelemetryKpiStrip(trip: t),
               const SizedBox(height: 16),
-              const Text('数据分析 · 遥测',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              Text(s.t('数据分析 · 遥测', 'Telemetry'),
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
-              const Text('仅行程实测数据，非官方分析。拖回放滑块或点曲线，各图同步；速度曲线顶部的三角是事件（急加速绿 / 急刹红 / 弯道黄）。',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(s.t('仅行程实测数据，非官方分析。拖回放滑块或点曲线，各图同步；速度曲线顶部的三角是事件（急加速绿 / 急刹红 / 弯道黄）。', 'Measured data from this trip, not an official analysis. The scrubber and the charts stay in sync. Triangles on the speed line are events (green accel, red brake, yellow corner).'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
               const SizedBox(height: 12),
               TripSpeedChartCard(points: t.points, events: t.events, onPointSelected: (i) => setState(() => scrub = i), selectedIndex: scrub >= 0 ? scrub : null),
               const SizedBox(height: 12),
@@ -5098,7 +5105,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 const SizedBox(height: 12),
                 Row(children: [
                   Checkbox(value: leanMountedConfirmed, onChanged: (v) => setState(() => leanMountedConfirmed = v ?? false)),
-                  const Expanded(child: Text('本次手机已固定在车上（勾选后才显示压弯曲线）', style: TextStyle(fontSize: 12))),
+                  Expanded(child: Text(s.t('本次手机已固定在车上（勾选后才显示压弯曲线）', 'The phone was fixed to the bike (check to show the lean chart)'), style: const TextStyle(fontSize: 12))),
                 ]),
                 LeanChartSection(
                   trip: t,
@@ -5150,7 +5157,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
               // 回事，故不随目录分段点改动，仍按实测分段数据走。
               if (t.isTrackMode) ...[
                 const SizedBox(height: 8),
-                Text('赛道：${t.trackName} · 赛道模式（示意轮廓，非官方测绘）', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(s.t('赛道：${t.trackName} · 赛道模式（示意轮廓，非官方测绘）', 'Track: ${t.trackName} · track mode (a sketch, not an official survey)'), style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Builder(builder: (_) {
                   TrackInfo? matched;
@@ -5238,7 +5245,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 onFilterChanged: (k) => setState(() => selectedScoreKey = k),
               ),
               const SizedBox(height: 8),
-              const Text('历次同模式评分趋势（左旧右新）'),
+              Text(s.t('历次同模式评分趋势（左旧右新）', 'Score trend for this mode (old on the left)')),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: trend.map((m) {
@@ -5251,10 +5258,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 }).toList(),
               ),
               const SizedBox(height: 12),
-              const Text('G 值复盘', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(s.t('G 值复盘', 'G review'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               GScatter(points: t.points, threshold: ModeThresholds.of(t.mode).harshCorner, size: 220),
-              Text('每个点是一秒轨迹点，橙圈是本趟最大合成 G；下方是纵向（青）/横向（品红）G 随时间变化',
+              Text(s.t('每个点是一秒轨迹点，橙圈是本趟最大合成 G；下方是纵向（青）/横向（品红）G 随时间变化', 'Each dot is one second. The orange ring is this trip’s peak combined G. Below, long G is cyan and lat G is magenta.'),
                   style: const TextStyle(color: Colors.white54, fontSize: 12)),
               GWaveform(
                 history: t.points.map((p) => GSample(p.timeMs, p.longG, p.latG)).toList(),
@@ -5262,7 +5269,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
               ),
               const SizedBox(height: 12),
               if (corners.isNotEmpty) ...[
-                const Text('过弯榜（按横向 G 排序）', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(s.t('过弯榜（按横向 G 排序）', 'Corners (by lateral G)'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 for (final e in corners)
                   ListTile(
                     title: Text('入弯 ${(e.entrySpeed * 3.6).toStringAsFixed(0)} → 弯中 ${(e.minSpeed * 3.6).toStringAsFixed(0)} → 出弯 ${(e.exitSpeed * 3.6).toStringAsFixed(0)} km/h'),
@@ -5275,11 +5282,11 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   ),
               ],
               if (t.mode == TripMode.moto) ...[
-                const Text('压弯分布', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(s.t('压弯分布', 'Lean'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 Text('超 30° 累计：${t.points.where((p) => p.roll.abs() > 30).length} 秒 · 最大左倾 ${t.events.fold(0.0, (a, e) => math.max(a, e.maxLeanLeft)).toStringAsFixed(0)}° · 最大右倾 ${t.events.fold(0.0, (a, e) => math.max(a, e.maxLeanRight)).toStringAsFixed(0)}°'),
               ],
               if (others.isNotEmpty) ...[
-                const Text('全部事件', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(s.t('全部事件', 'All events'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 for (final e in others)
                   ListTile(
                     title: Text('${e.label}：纵向 ${e.peakLongG.toStringAsFixed(2)}g · 横向 ${e.peakLatG.toStringAsFixed(2)}g'),
@@ -5291,11 +5298,11 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   ),
               ],
               if (t.mode == TripMode.bike && splits.isNotEmpty) ...[
-                const Text('每公里配速', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(s.t('每公里配速', 'Pace per km'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 for (var i = 0; i < splits.length; i++) Text('第 ${i + 1} 公里：${splits[i].toStringAsFixed(2)} min/km'),
               ],
               if (selectedEvent != null) ...[
-                const Text('选中事件的 G 波形小图', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(s.t('选中事件的 G 波形小图', 'G trace for the selected event'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 Text('${selectedEvent!.label} · 纵向峰值 ${selectedEvent!.peakLongG.toStringAsFixed(2)}g · 横向峰值 ${selectedEvent!.peakLatG.toStringAsFixed(2)}g'),
                 GWaveform(
                   history: t.points
@@ -5306,9 +5313,9 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 ),
               ],
               const SizedBox(height: 16),
-              const Text('同步视频', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(s.t('同步视频', 'Video'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               if (t.videoPaths.isEmpty)
-                const Text('暂无关联视频', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                Text(s.t('暂无关联视频', 'No linked video'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
               if (t.videoPaths.isNotEmpty) ...[
                 Text('共 ${t.videoPaths.length} 段（每段最长 10 分钟自动分段），视频仅存本机。',
                     style: const TextStyle(color: Colors.white70, fontSize: 12)),
@@ -5318,7 +5325,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                     title: Text(vp.split('/').last),
                     // v0.1.7 追加项 3：首选应用内视频回顾（画面叠加 HUD），
                     // 系统播放器与分享作为备用入口保留；HUD 未烧录进视频文件。
-                    subtitle: const Text('点回顾进应用内播放，画面叠加速度/G 值'),
+                    subtitle: Text(s.t('点回顾进应用内播放，画面叠加速度/G 值', 'Opens in-app playback with speed and G on the picture')),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       Semantics(label: '视频回顾（应用内叠加）', child: IconButton(icon: const Icon(Icons.ondemand_video), onPressed: () => Navigator.push(context, DtPageRoute(builder: (_) => VideoReviewPage(trip: t, initialSegment: t.videoPaths.indexOf(vp)))))),
                       Semantics(label: '系统播放器播放', child: IconButton(icon: const Icon(Icons.play_arrow), onPressed: () => Native.playVideo(vp))),
@@ -5444,8 +5451,8 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 ),
               ]),
               const SizedBox(height: 8),
-              const Text('分享走系统分享，不登录不上传。GPX 默认按隐私开关截掉首尾；CSV 为完整数据，请自行注意隐私。上传到云端是手动上传完整轨迹（不截首尾），只传你点的这一条。',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(s.t('分享走系统分享，不登录不上传。GPX 默认按隐私开关截掉首尾；CSV 为完整数据，请自行注意隐私。上传到云端是手动上传完整轨迹（不截首尾），只传你点的这一条。', 'Sharing uses the system sheet. It does not sign you in or upload. GPX trims the ends when the privacy switch is on. CSV is the full file. A cloud upload is manual, complete, and only the trip you tap.'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
             ]),
           ),
         ]),
