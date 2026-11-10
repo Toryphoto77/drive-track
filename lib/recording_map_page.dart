@@ -1,8 +1,8 @@
 /// v1.3.2：记录页实时 Map 分页（第 1 页，计时页 / 地图页左右滑）。
 ///
 /// 只看不操作：本页不放任何操作按钮（暂停 / 结束 / 标记都在第 0 页）。
-/// 首版固定视口：以全部中心线 + 已录轨迹为 bounds 一次性框住，
-/// 不跟随平移 / 缩放手势（后续版本再做跟随）。
+/// 固定视口，不跟随平移 / 缩放手势。街道模式框住已录轨迹。
+/// 赛道模式有已知中心线时框住赛道本身，不把整段行程并进范围。
 ///
 /// 数据口径（与分析页一致，不编数）：
 /// - 底图：高德标准路网栅格瓦片（lib/amap_service.dart 的
@@ -28,12 +28,13 @@
 /// （ghostPositionForLap / ghostPositionAt 纯函数），本页只画一个
 /// 空心青色箭头 + 左上角图例；门控缺一不可（见 main.dart 调用处）。
 ///
-/// v1.3.5：地图过线后才出现——赛道叠加层（中心线 / 起终点 / 分段点）
-/// 只在第一次通过起终点线后显示（[showTrackOverlayFor] 纯函数，
-/// 调用方按 LapTimer.hasCrossedStartLine 算好传入 [RecordingMapPage]；
-/// 门控与幽灵车“有最佳圈”不是同一个状态）。过线前本页只显示高德底图
-/// + 当前位置箭头 + 已录轨迹，状态行由调用方写“等待通过起终点线”
-/// （[trackMapStatusLine]）；过线后叠加层出现并保持到本节结束。
+/// 已知赛道（中心线至少 2 点）打开即锁在该赛道上，不等第一次过
+/// 起终点线。[showTrackOverlayFor] 在 hasKnownCircuit 时即为真，
+/// 视口由 [circuitMapFrame] 只框中心线，并入落在赛道附近的车与
+/// 幽灵车。画出的轨迹只保留赛道附近的点，进城路不会把画面拉成
+/// 城市图。没有中心线时仍等第一次过线才画起终点 / 分段点。状态行
+/// 过线前仍是“等待通过起终点线”（[trackMapStatusLine]）。幽灵车
+/// 另有门控（有参考圈才画），与叠加层不是同一个状态。
 
 import 'dart:math' as math;
 
@@ -127,6 +128,7 @@ double ghostBearingDeg(
 
 /// 中心线与已录轨迹的并集视口；两边都空时返回 null（调用方显示占位）。
 /// 单点或全部重合时以该点为中心扩一小框（约 ±220 m），不除零。
+/// 赛道模式不要直接拿整段行程调用本函数，用 [circuitMapFrame]。
 GeoBounds? recordingMapBounds(
   List<GeoPoint> centerline,
   List<GeoPoint> trail,
@@ -147,17 +149,98 @@ GeoBounds? recordingMapBounds(
   );
 }
 
-/// v1.3.5：赛道叠加层是否显示（纯函数）。
+/// 赛道外沿、维修区和定位抖动都在这个量级以内。再远的点属于
+/// 进城路：不参与定框，也不画进赛道图。
+const double circuitCameraMarginM = 400;
+
+/// 点是否落在 [bounds] 外扩 [marginM] 米之内（含框内）。
+bool pointWithinBoundsMargin(
+  GeoBounds bounds,
+  double lat,
+  double lon, {
+  double marginM = circuitCameraMarginM,
+}) {
+  final midLat = (bounds.minLat + bounds.maxLat) / 2 * math.pi / 180;
+  final cosLat = math.cos(midLat).abs().clamp(0.01, 1.0);
+  final dLat = marginM / 110540.0;
+  final dLon = marginM / (111320.0 * cosLat);
+  return lat >= bounds.minLat - dLat &&
+      lat <= bounds.maxLat + dLat &&
+      lon >= bounds.minLon - dLon &&
+      lon <= bounds.maxLon + dLon;
+}
+
+/// 已知赛道的地图框。视口锁在中心线（并入起终点 / 分段点，以及
+/// 落在赛道附近的车与幽灵车），不把远离赛道的轨迹并进范围。
+/// 返回的轨迹只保留赛道附近的点，进城的那一段不会横穿赛道图。
+/// 中心线不足 2 点、或范围退化且无法扩框时返回 null。
+({GeoBounds bounds, List<GeoPoint> trail})? circuitMapFrame({
+  required List<GeoPoint> centerline,
+  GeoPoint? start,
+  GeoPoint? finish,
+  List<GeoPoint> sectorPoints = const [],
+  List<GeoPoint> trail = const [],
+  double? vehicleLat,
+  double? vehicleLon,
+  double? ghostLat,
+  double? ghostLon,
+  double marginM = circuitCameraMarginM,
+}) {
+  if (centerline.length < 2) return null;
+  final base = <GeoPoint>[
+    ...centerline,
+    if (start != null) start,
+    if (finish != null) finish,
+    ...sectorPoints,
+  ];
+  final circuit = recordingMapBounds(base, const []);
+  if (circuit == null) return null;
+  final extra = <GeoPoint>[];
+  if (vehicleLat != null &&
+      vehicleLon != null &&
+      vehicleLat != 0 &&
+      vehicleLon != 0 &&
+      pointWithinBoundsMargin(
+        circuit,
+        vehicleLat,
+        vehicleLon,
+        marginM: marginM,
+      )) {
+    extra.add(GeoPoint(vehicleLat, vehicleLon));
+  }
+  if (ghostLat != null &&
+      ghostLon != null &&
+      pointWithinBoundsMargin(
+        circuit,
+        ghostLat,
+        ghostLon,
+        marginM: marginM,
+      )) {
+    extra.add(GeoPoint(ghostLat, ghostLon));
+  }
+  final bounds =
+      extra.isEmpty ? circuit : (recordingMapBounds(base, extra) ?? circuit);
+  final localTrail = <GeoPoint>[
+    for (final p in trail)
+      if (pointWithinBoundsMargin(circuit, p.lat, p.lon, marginM: marginM)) p,
+  ];
+  return (bounds: bounds, trail: localTrail);
+}
+
+/// 赛道叠加层是否显示（纯函数）。
 /// - 街道模式恒真：街道本就没有起终点线要过，门控只针对赛道模式，
 ///   街道已录轨迹不受影响；
-/// - 赛道模式只在第一次通过起终点线后为真，过线前为假。
-/// 过线后保持真（调用方传入的 hasCrossedStartLine 一旦为真不再变假），
-/// 叠加层不因后续圈数变化而消失。
+/// - 赛道模式只要已有已知中心线（[hasKnownCircuit]）就为真，打开
+///   即框住赛道，不等第一次过线；
+/// - 没有中心线时仍等第一次通过起终点线。过线后保持真
+///   （调用方传入的 hasCrossedStartLine 一旦为真不再变假），
+///   叠加层不因后续圈数变化而消失。
 bool showTrackOverlayFor({
   required bool isTrack,
   required bool hasCrossedStartLine,
+  bool hasKnownCircuit = false,
 }) =>
-    !isTrack || hasCrossedStartLine;
+    !isTrack || hasKnownCircuit || hasCrossedStartLine;
 
 /// v1.3.5：赛道模式 Map 页状态行（纯函数）：无计时器 → '等待定位'；
 /// 未第一次过线 → '等待通过起终点线'；已过线 → '[圈标签] · 当前圈 [用时]'。
@@ -220,11 +303,11 @@ class RecordingMapPage extends StatefulWidget {
   final double? ghostLon;
   final double? ghostHeading;
 
-  /// v1.3.5：赛道叠加层是否显示（调用方按 LapTimer.hasCrossedStartLine
-  /// 算好传入；默认 true = 不门控，兼容旧调用）。为假时本页不画中心线 /
-  /// 起终点 / 分段点，视口也不再以中心线定界，只显示高德底图 + 当前
-  /// 位置箭头 + 已录轨迹；幽灵车不受此门控影响（另有自己的门控）。
-  /// 街道模式调用方传 true（门控只针对赛道模式）。
+  /// 赛道叠加层是否显示（调用方用 [showTrackOverlayFor] 算好传入；
+  /// 默认 true = 不门控，兼容旧调用）。已知中心线时调用方在过线前
+  /// 就传 true，本页随即把视口锁在赛道上。为假时不画中心线 / 起终点 /
+  /// 分段点，视口只跟已录轨迹，只显示高德底图 + 当前位置箭头 + 轨迹。
+  /// 幽灵车不受此门控影响（另有自己的门控）。街道模式调用方传 true。
   final bool showTrackOverlay;
 
   /// 调用方算好的紧凑状态行文本。
@@ -270,9 +353,8 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
 
   @override
   Widget build(BuildContext context) {
-    // v1.3.5：过线前不画叠加层——视口只由已录轨迹定界（中心线不参与，
-    // 否则未过线时视口仍会框住整条赛道），传给 painter 的中心线 /
-    // 起终点 / 分段点一并置空；已录轨迹与当前位置箭头、幽灵车不受影响。
+    // 调用方未打开叠加层时不画中心线 / 起终点 / 分段点。已知赛道
+    // 打开叠加层后，视口锁在赛道上，远处轨迹不参与定框。
     final overlayCenterline =
         widget.showTrackOverlay ? widget.centerline : const <GeoPoint>[];
     final overlayStart = widget.showTrackOverlay ? widget.start : null;
@@ -300,7 +382,25 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
       gcjGhostLat = la;
       gcjGhostLon = lo;
     }
-    final bounds = recordingMapBounds(gcjCenterline, gcjTrail);
+    final frame = widget.isTrack && gcjCenterline.length >= 2
+        ? circuitMapFrame(
+            centerline: gcjCenterline,
+            start: gcjStart,
+            finish: gcjFinish,
+            sectorPoints: gcjSectors,
+            trail: gcjTrail,
+            vehicleLat: widget.curLat != 0 && widget.curLon != 0
+                ? gcjCurLat
+                : null,
+            vehicleLon: widget.curLat != 0 && widget.curLon != 0
+                ? gcjCurLon
+                : null,
+            ghostLat: gcjGhostLat,
+            ghostLon: gcjGhostLon,
+          )
+        : null;
+    final bounds = frame?.bounds ?? recordingMapBounds(gcjCenterline, gcjTrail);
+    final paintedTrail = frame?.trail ?? gcjTrail;
     if (bounds == null) {
       return Container(
         color: const Color(0xFF0A0A0A),
@@ -377,7 +477,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                         start: gcjStart,
                         finish: gcjFinish,
                         sectorPoints: gcjSectors,
-                        trail: gcjTrail,
+                        trail: paintedTrail,
                         curLat: gcjCurLat,
                         curLon: gcjCurLon,
                         curHeading: widget.curHeading,

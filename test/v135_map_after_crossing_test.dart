@@ -1,17 +1,18 @@
-/// v1.3.5 测试：地图过线后才出现（参考 TrackAddict 实时赛道图过线后才出现）。
+/// 赛道地图：已知赛道打开即锁在赛道上，不等第一次过起终点线。
 ///
 /// 覆盖：
 /// - LapTimer.hasCrossedStartLine：发车圈为假，第一次过线后为真，
 ///   完圈后仍为真（保持到本节结束）；与“有最佳圈”不是同一个状态
 ///   （过线后、无最佳圈时已为真）；
-/// - 纯函数 showTrackOverlayFor：赛道模式过线前假、过线后真；
-///   街道模式恒真（不受门控影响）；
+/// - 纯函数 showTrackOverlayFor：有已知中心线时过线前即为真；
+///   没有中心线时过线前假、过线后真；街道模式恒真；
+/// - 纯函数 circuitMapFrame：视口锁在中心线，远处轨迹与远处的车
+///   不把范围拉成城市图；赛道附近的轨迹、车与幽灵车保留；
 /// - 纯函数 trackMapStatusLine：无计时器“等待定位”；过线前
 ///   “等待通过起终点线”；过线后为圈标签 + 当前圈用时；
-/// - widget：过线前叠加层不画（中心线 / 起终点 / 分段点均不出现，
-///   已录轨迹与当前位置箭头仍在）；过线后出现；过线后保持
-///   （后续圈数变化不消失）；街道模式不受门控影响；
-///   状态行文案“等待通过起终点线”只在过线前出现。
+/// - widget：调用方关掉叠加层时中心线不画；已知赛道打开时中心线、
+///   车头朝向、附近轨迹与幽灵车都在，远处轨迹不进视口；
+///   街道模式不受门控影响。
 ///
 /// 不测计时判定本身（越线检测 / 半径法已由 track_timing_crossing_test
 /// 覆盖）、不测幽灵车门控（v134 已覆盖，本版不动）。
@@ -110,13 +111,28 @@ void main() {
   });
 
   group('showTrackOverlayFor 纯函数', () {
-    test('赛道模式：过线前假、过线后真', () {
+    test('没有已知中心线：过线前假、过线后真', () {
       expect(
-        showTrackOverlayFor(isTrack: true, hasCrossedStartLine: false),
+        showTrackOverlayFor(
+          isTrack: true,
+          hasCrossedStartLine: false,
+          hasKnownCircuit: false,
+        ),
         isFalse,
       );
       expect(
         showTrackOverlayFor(isTrack: true, hasCrossedStartLine: true),
+        isTrue,
+      );
+    });
+
+    test('已知中心线：过线前即为真，打开即锁赛道', () {
+      expect(
+        showTrackOverlayFor(
+          isTrack: true,
+          hasCrossedStartLine: false,
+          hasKnownCircuit: true,
+        ),
         isTrue,
       );
     });
@@ -170,8 +186,90 @@ void main() {
     });
   });
 
+  group('circuitMapFrame 视口锁赛道', () {
+    test('中心线不足 2 点时无法定框', () {
+      expect(circuitMapFrame(centerline: const []), isNull);
+      expect(circuitMapFrame(centerline: [_p1]), isNull);
+    });
+
+    test('远处轨迹和远处的车不扩大视口，附近轨迹保留', () {
+      const far = GeoPoint(30.90, 121.50);
+      final frame = circuitMapFrame(
+        centerline: [_p1, _p3, _p2],
+        start: _p1,
+        finish: _p2,
+        sectorPoints: [_p3],
+        trail: [_p1, far, _p3],
+        vehicleLat: 31.00,
+        vehicleLon: 121.22,
+        ghostLat: 31.10,
+        ghostLon: 121.30,
+      )!;
+      expect(frame.trail.map((p) => p.lat).toList(), [_p1.lat, _p3.lat]);
+      expect(frame.bounds.minLat, closeTo(_p1.lat, 1e-9));
+      expect(frame.bounds.maxLat, closeTo(_p2.lat, 1e-9));
+      expect(frame.bounds.minLon, closeTo(_p1.lon, 1e-9));
+      expect(frame.bounds.maxLon, closeTo(_p2.lon, 1e-9));
+    });
+
+    test('赛道附近的车与幽灵车并入视口', () {
+      final vehicleLat = _p2.lat + 0.002;
+      final frame = circuitMapFrame(
+        centerline: [_p1, _p3, _p2],
+        trail: [_p3],
+        vehicleLat: vehicleLat,
+        vehicleLon: _p2.lon,
+        ghostLat: _p1.lat - 0.001,
+        ghostLon: _p1.lon,
+      )!;
+      expect(frame.bounds.maxLat, closeTo(vehicleLat, 1e-9));
+      expect(frame.bounds.minLat, closeTo(_p1.lat - 0.001, 1e-9));
+      expect(frame.trail.single.lat, _p3.lat);
+    });
+  });
+
   group('RecordingMapPage 叠加层显隐', () {
-    testWidgets('过线前叠加层不画：中心线 / 起终点 / 分段点均不出现', (tester) async {
+    testWidgets('已知赛道打开即锁在赛道上：中心线、车头、附近轨迹与幽灵车都在',
+        (tester) async {
+      const far = GeoPoint(30.90, 121.50);
+      await _pumpPage(
+        tester,
+        const RecordingMapPage(
+          isTrack: true,
+          centerline: [_p1, _p3, _p2],
+          start: _p1,
+          finish: _p2,
+          sectorPoints: [_p3],
+          trail: [_p1, far, _p3],
+          curLat: 31.3400,
+          curLon: 121.2230,
+          curHeading: 90,
+          ghostLat: 31.3390,
+          ghostLon: 121.2200,
+          ghostHeading: 45,
+          showTrackOverlay: true,
+          statusLine: '等待通过起终点线',
+        ),
+      );
+      await tester.pumpAndSettle();
+      final painter = _overlayPainter(tester);
+      expect(painter.centerline.length, 3);
+      expect(painter.start, isNotNull);
+      expect(painter.finish, isNotNull);
+      expect(painter.sectorPoints.length, 1);
+      expect(painter.hasValidPosition, isTrue);
+      expect(painter.curHeading, 90);
+      expect(painter.hasGhost, isTrue);
+      expect(painter.ghostHeading, 45);
+      expect(painter.trail.length, 2);
+      expect(painter.trail.any((p) => p.lat < 31.2), isFalse);
+      expect(painter.projector.bounds.maxLat, lessThan(31.36));
+      expect(painter.projector.bounds.minLat, greaterThan(31.30));
+      expect(find.text('◇ 幽灵车 · 参考圈'), findsOneWidget);
+      expect(find.text('暂无位置，等待定位'), findsNothing);
+    });
+
+    testWidgets('调用方关掉叠加层时不画中心线，轨迹与车仍在', (tester) async {
       await _pumpPage(
         tester,
         _trackPage(
