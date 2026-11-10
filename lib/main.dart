@@ -3379,15 +3379,19 @@ class _HomePageState extends State<HomePage>
         ? ghostPositionForLap(
             rec.points, liveLapTimer!.bestLap!, liveLapTimer!.currentLapMs!)
         : null;
-    // v1.3.5：地图过线后才出现——赛道叠加层门控取 LapTimer 派生状态
-    // hasCrossedStartLine（第一次通过起终点线后为真并保持到本节结束），
-    // 与幽灵车门控“有最佳圈”不是同一个状态：发车圈过线后第 1 圈才开始，
-    // 此时叠加层已出现、幽灵车仍须等最佳圈。街道模式不受门控影响
-    // （showTrackOverlayFor 内 !isTrack 即为真）。
+    // 已知赛道（中心线至少 2 点）打开地图即显示叠加层并锁在赛道上，
+    // 不等第一次过起终点线。没有中心线时仍等 hasCrossedStartLine
+    // （第一次过线后为真并保持到本节结束）。与幽灵车门控“有最佳圈”
+    // 不是同一个状态：过线后第 1 圈才开始，叠加层已在，幽灵车仍须
+    // 等参考圈。街道模式不受门控影响。
+    final trackCenterline = isTrackPage
+        ? (selectedPackage?.centerline ?? const <GeoPoint>[])
+        : const <GeoPoint>[];
     final hasCrossedStartLine = liveLapTimer?.hasCrossedStartLine ?? false;
     final showTrackOverlay = showTrackOverlayFor(
       isTrack: isTrackPage,
       hasCrossedStartLine: hasCrossedStartLine,
+      hasKnownCircuit: trackCenterline.length >= 2,
     );
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
@@ -3671,13 +3675,10 @@ class _HomePageState extends State<HomePage>
             // 第 1 页：实时地图（只看不操作）。状态行：赛道模式为当前圈
             // 用时 + 第 N 圈（无计时器时“等待定位”，未第一次过线时
             // “等待通过起终点线”），街道模式为用时 + 里程。
-            // v1.3.5：赛道叠加层只在第一次过线后显示（showTrackOverlay），
-            // 过线前只显示卫星底图 + 当前位置箭头 + 已录轨迹。
+            // 已知中心线时叠加层与视口在打开时就锁在赛道上。
             RecordingMapPage(
               isTrack: isTrackPage,
-              centerline: isTrackPage
-                  ? (selectedPackage?.centerline ?? const <GeoPoint>[])
-                  : const <GeoPoint>[],
+              centerline: trackCenterline,
               start: isTrackPage ? selectedPackage?.start : null,
               finish: isTrackPage ? selectedPackage?.finish : null,
               sectorPoints: liveLapTimer?.sectorPoints ?? const <GeoPoint>[],
@@ -3899,7 +3900,7 @@ class _HomePageState extends State<HomePage>
           (timer?.isPaused ?? false) || rec.state == RecState.paused;
       final map = RecordingMapPage(
         isTrack: true,
-        centerline: selectedPackage?.centerline ?? const <GeoPoint>[],
+        centerline: trackCenterline,
         start: selectedPackage?.start,
         finish: selectedPackage?.finish,
         sectorPoints: timer?.sectorPoints ?? const <GeoPoint>[],
