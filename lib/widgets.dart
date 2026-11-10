@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'app_locale.dart';
 import 'models.dart';
 import 'recorder.dart';
+import 'car_paths.dart';
+import 'mode_icon_paths.dart';
 import 'sport_moto_paths.dart';
 
 // ---------- Web Mercator ----------
@@ -599,7 +601,10 @@ class _GScatterPainter extends CustomPainter {
 }
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
-// 汽车：低趴跑车，车头朝右。摩托：同向侧视仿赛，轮廓描自确认稿。
+// 三个都是车头朝左的侧视矢量，黑底上轮圈用图标色，不靠纯黑轮胎。
+// 汽车：从本应用的侧视剪影描出，车头朝左，不镜像。宽度和轮底对齐仿赛，不撑满高度。
+// 自行车：大轮深框的公路赛车，宽度对齐仿赛。路径不要改。
+// 摩托：描线仿赛，由 _SportMotoPainter 镜像并撑满，路径本身不要改。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
   final bool selected;
@@ -619,42 +624,35 @@ class ModeVehicleIcon extends StatelessWidget {
   }
 }
 
+/// 仿赛把车身高度放进 0.28–0.88 后，宽度大约是图标的 1.164 倍。
+/// 轿跑和公路车用同一宽度、同一条轮底，避免轿跑在槽里显得又高又宽。
+const double _kMotoWidthFrac = 888.39 / 458.01 * 0.60;
+
+void _fitModeWidth(Canvas canvas, Size s, Rect src, void Function(Canvas canvas) draw) {
+  final scale = _kMotoWidthFrac * s.width / src.width;
+  final left = (s.width - src.width * scale) / 2;
+  canvas.save();
+  canvas.translate(left - src.left * scale, 0.88 * s.height - src.bottom * scale);
+  canvas.scale(scale);
+  draw(canvas);
+  canvas.restore();
+}
+
 class _SportCarPainter extends CustomPainter {
   final Color c;
   _SportCarPainter(this.c);
+
+  static final Path _car = coupeSilhouettePath();
+
+  /// 描线端点的外框。轮底在底边上，用来和仿赛接地。
+  static const Rect _src = Rect.fromLTRB(2.0, 2.6, 1034.0, 309.7);
+
   @override
   void paint(Canvas canvas, Size s) {
-    final p = Paint()..color = c..style = PaintingStyle.fill;
-    final w = s.width, h = s.height;
-    // 低趴车身
-    final body = Path()
-      ..moveTo(w * 0.06, h * 0.72)
-      ..lineTo(w * 0.14, h * 0.58)
-      ..lineTo(w * 0.34, h * 0.50)
-      ..lineTo(w * 0.48, h * 0.34)
-      ..lineTo(w * 0.68, h * 0.34)
-      ..lineTo(w * 0.80, h * 0.50)
-      ..lineTo(w * 0.94, h * 0.58)
-      ..lineTo(w * 0.94, h * 0.72)
-      ..close();
-    canvas.drawPath(body, p);
-    // 尾翼
-    canvas.drawRect(Rect.fromLTWH(w * 0.78, h * 0.30, w * 0.20, h * 0.07), p);
-    canvas.drawRect(Rect.fromLTWH(w * 0.84, h * 0.37, w * 0.04, h * 0.14), p);
-    // 车窗
-    canvas.drawPath(Path()
-      ..moveTo(w * 0.38, h * 0.50)
-      ..lineTo(w * 0.50, h * 0.38)
-      ..lineTo(w * 0.66, h * 0.38)
-      ..lineTo(w * 0.74, h * 0.50)
-      ..close(), Paint()..color = Colors.black.withValues(alpha: 0.55));
-    // 车轮
-    final wheel = Paint()..color = Colors.black;
-    canvas.drawCircle(Offset(w * 0.26, h * 0.74), w * 0.13, wheel);
-    canvas.drawCircle(Offset(w * 0.74, h * 0.74), w * 0.13, wheel);
-    final hub = Paint()..color = c;
-    canvas.drawCircle(Offset(w * 0.26, h * 0.74), w * 0.05, hub);
-    canvas.drawCircle(Offset(w * 0.74, h * 0.74), w * 0.05, hub);
+    // 剪影已经朝左，不镜像。按宽度对齐仿赛，轮底对齐，不再按高度撑满。
+    _fitModeWidth(canvas, s, _src, (canvas) {
+      canvas.drawPath(_car, Paint()..color = c);
+    });
   }
 
   @override
@@ -667,13 +665,30 @@ class _SportMotoPainter extends CustomPainter {
 
   static final Path _body = sportMotoBodyPath();
   static final Path _tires = sportMotoTirePath();
+  static final Rect _src = _body.getBounds().expandToInclude(_tires.getBounds());
+
+  /// 和汽车（尾翼 0.30、轮底 0.87）、自行车（车把 0.28、轮底 0.88）同一条垂直槽。
+  /// 仿赛描线比这条槽更扁，等比放大后左右会多出约 3dp，落在模式项 14dp 的间距里，
+  /// 不裁切，避免轮子被切掉后又显得偏小。
+  static const double _slotTop = 0.28;
+  static const double _slotBottom = 0.88;
 
   @override
   void paint(Canvas canvas, Size s) {
+    final b = _src;
+    final scale = (_slotBottom - _slotTop) * s.height / b.height;
+    final left = (s.width - b.width * scale) / 2;
     canvas.save();
-    canvas.scale(s.width / kSportMotoViewBox, s.height / kSportMotoViewBox);
-    canvas.drawPath(_tires, Paint()..color = const Color(0xFF111111));
-    canvas.drawPath(_body, Paint()..color = c);
+    // 描线车头在高 x。镜像后车头朝左，与跑车、自行车一致。
+    // screenX = left + (b.right - x) * scale
+    // screenY = slotTop + (y - b.top) * scale
+    canvas.translate(left + b.right * scale, _slotTop * s.height - b.top * scale);
+    canvas.scale(-scale, scale);
+    // 轮胎与车身同一支颜色。轮圈、辐条靠路径镂空透出底色，
+    // 纯黑或近黑背景上不再消失。选中/未选中都跟图标色走。
+    final paint = Paint()..color = c;
+    canvas.drawPath(_tires, paint);
+    canvas.drawPath(_body, paint);
     canvas.restore();
   }
 
@@ -684,18 +699,21 @@ class _SportMotoPainter extends CustomPainter {
 class _BikePainter extends CustomPainter {
   final Color c;
   _BikePainter(this.c);
+
+  static final Path _wheels = modeIconPath(kRoadBikeWheels);
+  static final Path _frame = modeIconPath(kRoadBikeFrame)..fillType = PathFillType.nonZero;
+  static final Path _chain = modeIconPath(kRoadBikeChain);
+  static const Rect _src = Rect.fromLTRB(70.0, 224.0, 1070.0, 760.0);
+
   @override
   void paint(Canvas canvas, Size s) {
-    final p = Paint()..color = c..strokeWidth = 2.5..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
-    final w = s.width, h = s.height;
-    canvas.drawCircle(Offset(w * 0.24, h * 0.72), w * 0.16, p);
-    canvas.drawCircle(Offset(w * 0.76, h * 0.72), w * 0.16, p);
-    canvas.drawLine(Offset(w * 0.24, h * 0.72), Offset(w * 0.50, h * 0.38), p);
-    canvas.drawLine(Offset(w * 0.76, h * 0.72), Offset(w * 0.50, h * 0.38), p);
-    canvas.drawLine(Offset(w * 0.50, h * 0.38), Offset(w * 0.66, h * 0.38), p);
-    canvas.drawLine(Offset(w * 0.66, h * 0.38), Offset(w * 0.76, h * 0.72), p);
-    canvas.drawLine(Offset(w * 0.42, h * 0.38), Offset(w * 0.36, h * 0.28), p);
-    canvas.drawLine(Offset(w * 0.30, h * 0.28), Offset(w * 0.42, h * 0.28), p);
+    // 和仿赛同一宽度、同一条轮底。车架路径不变。
+    _fitModeWidth(canvas, s, _src, (canvas) {
+      final paint = Paint()..color = c;
+      canvas.drawPath(_wheels, paint);
+      canvas.drawPath(_frame, paint);
+      canvas.drawPath(_chain, paint);
+    });
   }
 
   @override
