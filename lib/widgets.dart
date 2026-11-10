@@ -601,8 +601,8 @@ class _GScatterPainter extends CustomPainter {
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
 // 三个都是车头朝左的侧视矢量，黑底上轮圈用图标色，不靠纯黑轮胎。
-// 汽车：圆润的后置发动机轿跑（溜背、圆前翼、小鸭尾）。自行车：气动公路赛车。
-// 摩托：描线仿赛，由 _SportMotoPainter 镜像并撑满，路径本身不要改。
+// 汽车：长扁的后置发动机轿跑（圆前翼、直立椭圆灯、一条溜背、小鸭尾）。
+// 自行车：大轮深框的公路赛车。摩托：描线仿赛，由 _SportMotoPainter 镜像并撑满，路径本身不要改。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
   final bool selected;
@@ -633,42 +633,23 @@ void _fitModeArt(Canvas canvas, Size s, Rect src, double top, double bottom, voi
   canvas.restore();
 }
 
-void _rimWheel(Canvas canvas, Offset o, double r, double innerFrac, double hub, Color color) {
-  final paint = Paint()..color = color;
-  canvas.drawPath(
-    Path()
-      ..fillType = PathFillType.evenOdd
-      ..addOval(Rect.fromCircle(center: o, radius: r))
-      ..addOval(Rect.fromCircle(center: o, radius: r * innerFrac)),
-    paint,
-  );
-  canvas.drawCircle(o, hub, paint);
-}
-
 class _SportCarPainter extends CustomPainter {
   final Color c;
   _SportCarPainter(this.c);
 
+  static final Path _wheels = modeIconPath(kCoupeWheels);
   static final Path _body = modeIconPath(kCoupeBody);
-  static final Path _tail = modeIconPath(kCoupeTail);
-  static const Offset _front = Offset(33, 76.2);
-  static const Offset _rear = Offset(75, 76.2);
-  static const double _wheelR = 11.6;
-  static final Rect _src = _body
-      .getBounds()
-      .expandToInclude(_tail.getBounds())
-      .expandToInclude(Rect.fromCircle(center: _front, radius: _wheelR))
-      .expandToInclude(Rect.fromCircle(center: _rear, radius: _wheelR));
+
+  /// 车身加轮胎的可见范围。不用 Path.getBounds()：二次曲线的控制点会把框撑大。
+  static const Rect _src = Rect.fromLTRB(61.4, 160.2, 967.2, 560.0);
 
   @override
   void paint(Canvas canvas, Size s) {
-    // 和摩托同一条垂直槽，轮底对齐。
+    // 和摩托同一条垂直槽，轮底对齐。先画轮，车身的轮拱再把胎顶盖住，留下一圈缝。
     _fitModeArt(canvas, s, _src, 0.28, 0.88, (canvas) {
-      _rimWheel(canvas, _front, _wheelR, 0.57, 2.25, c);
-      _rimWheel(canvas, _rear, _wheelR, 0.57, 2.25, c);
       final paint = Paint()..color = c;
+      canvas.drawPath(_wheels, paint);
       canvas.drawPath(_body, paint);
-      canvas.drawPath(_tail, paint);
     });
   }
 
@@ -717,23 +698,19 @@ class _BikePainter extends CustomPainter {
   final Color c;
   _BikePainter(this.c);
 
-  static final Path _frame = modeIconPath(kAeroRoadBike)..fillType = PathFillType.nonZero;
-  static const Offset _front = Offset(26, 75.2);
-  static const Offset _rear = Offset(83.2, 75.6);
-  static const double _wheelR = 15.1;
-  static final Rect _src = _frame
-      .getBounds()
-      .expandToInclude(Rect.fromCircle(center: _front, radius: _wheelR))
-      .expandToInclude(Rect.fromCircle(center: _rear, radius: _wheelR));
+  static final Path _wheels = modeIconPath(kRoadBikeWheels);
+  static final Path _frame = modeIconPath(kRoadBikeFrame)..fillType = PathFillType.nonZero;
+  static final Path _chain = modeIconPath(kRoadBikeChain);
+  static const Rect _src = Rect.fromLTRB(70.0, 224.0, 1070.0, 760.0);
 
   @override
   void paint(Canvas canvas, Size s) {
-    // 和摩托同一条垂直槽：把到轮底撑满，三个图标接地线对齐。
+    // 和摩托同一条垂直槽：坐垫到轮底撑满，三个图标接地线对齐。
     _fitModeArt(canvas, s, _src, 0.28, 0.88, (canvas) {
       final paint = Paint()..color = c;
+      canvas.drawPath(_wheels, paint);
       canvas.drawPath(_frame, paint);
-      _rimWheel(canvas, _front, _wheelR, 0.56, 2.35, c);
-      _rimWheel(canvas, _rear, _wheelR, 0.56, 2.35, c);
+      canvas.drawPath(_chain, paint);
     });
   }
 
