@@ -8,12 +8,14 @@
 /// 测试用例结束时复位，避免污染其它测试。
 
 import 'package:drive_track/camera_connect_page.dart';
+import 'package:drive_track/cloud_service.dart';
 import 'package:drive_track/device_center.dart';
 import 'package:drive_track/gps_source.dart';
 import 'package:drive_track/main.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  debugAllowUnsignedMainUi = true;
   group('首页外接 GPS 状态小药丸', () {
     setUp(() {
       externalGpsStatus.value = ExternalGpsStatus.disconnected;
