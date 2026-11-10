@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:drive_track/cloud_service.dart';
 import 'package:drive_track/main.dart';
 import 'package:drive_track/widgets.dart';
 
 void main() {
+  // 本文件测的是记录首页。正式启动没有云端会话时会停在登录页，
+  // 这里只放开首页用例；登录门本身见 cloud_auth_gate_test.dart。
+  debugAllowUnsignedMainUi = true;
   testWidgets('DriveTrack home smoke test', (WidgetTester tester) async {
     // 菜单 ListView 懒加载：默认 600 高视口装不下全部菜单项，
     // 把视口放大到 1600 高，菜单后两项也能直接构建断言。

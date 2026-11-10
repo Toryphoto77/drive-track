@@ -13,6 +13,8 @@
 
 模板：`.amap-key.example`、`.cloudbase-env.example`（只有占位说明，没有真实值）。复制成 `.amap-key` / `.cloudbase-env` 并填入真实值即可，这两个文件已在 `.gitignore` 里。
 
+登录以手机号短信为主，邮箱仍可登录。短信要等腾讯云短信签名和模板审核；中国大陆与国际号码分开配置。审核完成前，验证码发不出去。
+
 ## 包里有什么、没什么
 
 包含：`lib/`（全部 Dart 源码）、`android/`（原生代码与配置，含 Gradle wrapper）、`test/`、`assets/`、`data/`（赛道库数据）、`cloudbase/`（云端 SQL）、`tools/`（含 `gen_update_manifest.py`）、`icon-concepts/`、`build-logs/`（历史记录，内容是当时的结果，不代表本版）、`flutter-tools-gradle/`（Flutter Gradle 插件，必需）、`tracks-space-data.json`、6 个构建脚本、密钥模板。

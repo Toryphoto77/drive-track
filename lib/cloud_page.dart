@@ -40,6 +40,11 @@ class _CloudPageState extends State<CloudPage> {
     super.initState();
     _tripsFuture = CloudService.instance.listCloudTrips();
     _ownProfileFuture = _loadOwnProfile();
+    CloudService.instance.authVersion.addListener(_onAuthChanged);
+  }
+
+  void _onAuthChanged() {
+    if (mounted) _refresh();
   }
 
   Future<PublicProfile?> _loadOwnProfile() async {
@@ -51,6 +56,7 @@ class _CloudPageState extends State<CloudPage> {
 
   @override
   void dispose() {
+    CloudService.instance.authVersion.removeListener(_onAuthChanged);
     _otherUserIdCtrl.dispose();
     super.dispose();
   }
@@ -147,6 +153,15 @@ class _CloudPageState extends State<CloudPage> {
     );
   }
 
+  String _accountLine(CloudService svc, bool isAnon, String? email) {
+    if (isAnon) return '匿名账号 · ${svc.displayUserId}';
+    final phone = svc.currentUserPhone;
+    return switch (svc.loginKind) {
+      'phone' => '手机号账号 · ${phone ?? svc.displayUserId}',
+      _ => '邮箱账号 · ${email ?? phone ?? svc.displayUserId}',
+    };
+  }
+
   Widget _accountCard(CloudService svc) {
     final isAnon = svc.isAnonymous;
     final email = svc.currentUserEmail;
@@ -158,9 +173,7 @@ class _CloudPageState extends State<CloudPage> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Text(
-            isAnon
-                ? '匿名账号 · ${svc.displayUserId}'
-                : '邮箱账号 · ${email ?? svc.displayUserId}',
+            _accountLine(svc, isAnon, email),
             style: const TextStyle(color: Colors.white, fontSize: 14),
           ),
           const SizedBox(height: 4),
@@ -170,8 +183,8 @@ class _CloudPageState extends State<CloudPage> {
           const SizedBox(height: 4),
           Text(
             isAnon
-                ? '匿名登录无密码；账号只存在本机与云端，不收集手机号与邮箱。绑定邮箱后可升级为正式账号，行程不丢。'
-                : '退出后回到匿名账号；邮箱账号下的云端行程仍在，重新登录可见。',
+                ? '这是尚未升级的匿名账号，不能用来进入记录界面。绑定邮箱或手机号后仍是同一个账号，云端行程保留。本机行程不会被删除。'
+                : '退出后需要重新登录才能继续使用。本机行程保留，不会删除。云端行程留在原账号下，再次登录可见。',
             style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 4),
@@ -220,7 +233,8 @@ class _CloudPageState extends State<CloudPage> {
   Future<void> _signOut() async {
     await CloudService.instance.signOut();
     if (!mounted) return;
-    showAppNotice(context, '已退出登录，回到匿名账号', AppNoticeKind.success);
+    showAppNotice(context, '已退出登录。本机行程仍保留，重新登录后可继续使用。',
+        AppNoticeKind.success);
     _refresh();
   }
 

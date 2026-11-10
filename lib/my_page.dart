@@ -465,7 +465,7 @@ class _MyPageState extends State<MyPage> {
             : svc.status == CloudStatus.uninitialized
                 ? '同步中…'
                 : svc.isAnonymous
-                    ? '匿名账号 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条'
+                    ? '未登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条'
                     : '已登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条';
         return _card(
           child: InkWell(

@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drive_track/cloud_phone.dart';
 import 'package:drive_track/cloud_service.dart';
 import 'package:drive_track/gps_source.dart';
 import 'package:drive_track/models.dart';
@@ -17,6 +18,9 @@ class FakeCloudBackend implements CloudBackend {
   String? userId = 'fake-user-1';
   bool anonymous = true;
   String? email;
+  String? phone;
+  String kind = 'anonymous';
+  String? phonePassword;
   bool failUpload = false;
   bool failInsert = false;
   bool failSignIn = false;
@@ -42,6 +46,12 @@ class FakeCloudBackend implements CloudBackend {
 
   @override
   String? get currentUserEmail => email;
+
+  @override
+  String? get currentUserPhone => phone;
+
+  @override
+  String get loginKind => anonymous ? 'anonymous' : kind;
 
   @override
   Future<void> uploadBytes(String path, Uint8List bytes) async {
@@ -140,6 +150,7 @@ class FakeCloudBackend implements CloudBackend {
     }
     email = _pendingEmail;
     anonymous = false;
+    kind = 'email';
     userId = 'fake-user-2';
     _pendingEmail = null;
     return const CloudAuthResult(
@@ -157,6 +168,7 @@ class FakeCloudBackend implements CloudBackend {
     }
     this.email = email;
     anonymous = false;
+    kind = 'email';
     userId = 'fake-user-2';
     return const CloudAuthResult(
       ok: true,
@@ -182,6 +194,7 @@ class FakeCloudBackend implements CloudBackend {
     }
     email = _pendingEmail;
     anonymous = false;
+    kind = 'email';
     _pendingEmail = null;
     return const CloudAuthResult(
       ok: true,
@@ -191,10 +204,81 @@ class FakeCloudBackend implements CloudBackend {
   }
 
   @override
+  Future<CloudAuthResult> requestPhoneSignInCode(String phone,
+      {String? captchaToken}) async {
+    this.phone = phone;
+    return const CloudAuthResult(
+      ok: true,
+      needsCode: true,
+      message: '验证码已发送。请输入 6 位验证码登录。',
+    );
+  }
+
+  @override
+  Future<CloudAuthResult> verifyPhoneSignInCode(String code) async {
+    anonymous = false;
+    kind = 'phone';
+    userId = 'fake-user-phone';
+    return const CloudAuthResult(
+      ok: true,
+      sessionEstablished: true,
+      message: '登录成功',
+    );
+  }
+
+  @override
+  Future<CloudAuthResult> requestPhoneSignUpCode(String phone,
+      {String? password, String? captchaToken}) async {
+    this.phone = phone;
+    phonePassword = password;
+    return const CloudAuthResult(
+      ok: true,
+      needsCode: true,
+      message: '验证码已发送。请输入 6 位验证码完成注册。',
+    );
+  }
+
+  @override
+  Future<CloudAuthResult> verifyPhoneSignUpCode(String code) async {
+    anonymous = false;
+    kind = 'phone';
+    userId = 'fake-user-phone-new';
+    return const CloudAuthResult(
+      ok: true,
+      sessionEstablished: true,
+      message: '注册成功，已登录',
+    );
+  }
+
+  @override
+  Future<CloudAuthResult> linkPhone(String phone) async {
+    this.phone = phone;
+    return const CloudAuthResult(
+      ok: true,
+      needsCode: true,
+      message: '验证码已发送到手机，输入 6 位验证码完成绑定',
+    );
+  }
+
+  @override
+  Future<CloudAuthResult> verifyLinkPhoneCode(String code) async {
+    anonymous = false;
+    kind = 'phone';
+    return const CloudAuthResult(
+      ok: true,
+      sessionEstablished: true,
+      message: '绑定成功，已升级为手机号账号',
+    );
+  }
+
+  @override
   Future<void> signOut() async {
-    userId = 'fake-user-1';
+    userId = null;
     anonymous = true;
+    kind = 'anonymous';
     email = null;
+    phone = null;
+    phonePassword = null;
   }
 }
 
@@ -248,19 +332,33 @@ void main() {
       expect(content, isNot(contains('cloudbase_flutter')));
     });
 
-    test('两个构建脚本都读 .cloudbase-env 注入 CLOUDBASE_ENV_ID', () {
-      for (final name in ['build-apk.sh', 'build-apk-release.sh']) {
+    test('构建脚本只注入 CloudBase 环境 ID，不引入静态访问令牌', () {
+      for (final name in [
+        'build-apk.sh',
+        'build-apk-release.sh',
+        'build-apk-armeabi-v7a.sh',
+        'build-apk-armeabi-v7a-release.sh',
+        'build-apk-x86_64.sh',
+        'build-apk-x86_64-release.sh',
+      ]) {
         final content = File(name).readAsStringSync();
         expect(content, contains('.cloudbase-env'));
         expect(content, contains('CLOUDBASE_ENV_ID'));
+        expect(content, isNot(contains('WECHAT_APP_ID')));
+        expect(content, isNot(contains('CLOUDBASE_ACCESS_TOKEN')));
+        expect(content, isNot(contains('flutter_dotenv')));
         expect(content, isNot(contains('SUPABASE_ANON_KEY')));
         expect(content, isNot(contains('.supabase-key')));
       }
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      expect(pubspec, isNot(contains('flutter_dotenv')));
+      expect(pubspec, isNot(contains('CLOUDBASE_ACCESS_TOKEN')));
     });
 
     test('.gitignore 含 .cloudbase-env；若本地存在，内容须是合法 env ID', () {
       final gitignore = File('.gitignore').readAsStringSync();
       expect(gitignore, contains('.cloudbase-env'));
+      expect(gitignore, isNot(contains('.wechat-app-id')));
       final envFile = File('.cloudbase-env');
       if (envFile.existsSync()) {
         final envId = envFile.readAsStringSync();
@@ -402,6 +500,7 @@ void main() {
       final step2 = await svc.verifySignUpCode('123456');
       expect(step2.ok, isTrue);
       expect(step2.sessionEstablished, isTrue);
+      await Future<void>.delayed(Duration.zero);
       expect(svc.authVersion.value, before + 1);
       expect(svc.isAnonymous, isFalse);
       expect(svc.currentUserEmail, 'a@b.com');
@@ -434,15 +533,17 @@ void main() {
       expect(svc.isAnonymous, isFalse);
     });
 
-    test('退出登录后回到匿名账号', () async {
+    test('退出登录后不再进入主界面，也不新建匿名账号', () async {
       final svc = _service();
       await svc.init();
       await svc.signInWithEmail('a@b.com', '123456');
-      expect(svc.isAnonymous, isFalse);
+      expect(svc.allowsMainUi, isTrue);
       await svc.signOut();
+      await Future<void>.delayed(Duration.zero);
       expect(svc.isAnonymous, isTrue);
       expect(svc.currentUserEmail, isNull);
-      expect(svc.currentUserId, 'fake-user-1');
+      expect(svc.currentUserId, isNull);
+      expect(svc.allowsMainUi, isFalse);
     });
 
     test('listCloudTrips 映射 int id 与字段', () async {
@@ -937,6 +1038,10 @@ void main() {
     String lastListClientId = '';
     String lastClientId = '';
     String lastDeviceId = '';
+    int anonSignInCalls = 0;
+    String lastVerificationBody = '';
+    String lastCaptchaHeader = '';
+    String lastSignBody = '';
 
     final anonUser = {
       'uid': 'anon-uid-1',
@@ -971,6 +1076,10 @@ void main() {
       lastListClientId = '';
       lastClientId = '';
       lastDeviceId = '';
+      anonSignInCalls = 0;
+      lastVerificationBody = '';
+      lastCaptchaHeader = '';
+      lastSignBody = '';
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((req) async {
         final path = req.uri.path;
@@ -986,6 +1095,7 @@ void main() {
 
         if (req.method == 'POST' &&
             path == '/auth/v1/signin/anonymously') {
+          anonSignInCalls++;
           reply(200, {
             'access_token': 'tok-anon',
             'refresh_token': 'ref-anon',
@@ -1033,18 +1143,17 @@ void main() {
             },
           ]);
         } else if (req.method == 'POST' && path == '/auth/v1/verification') {
-          reply(200, {'verification_id': 'vid-1', 'is_user': false});
+          lastVerificationBody = body;
+          lastCaptchaHeader = req.headers.value('x-captcha-token') ?? '';
+          reply(200, {
+            'verification_id': 'vid-1',
+            'is_user': false,
+          });
         } else if (req.method == 'POST' &&
             path == '/auth/v1/verification/verify') {
           reply(200, {'verification_token': 'vtok-1'});
-        } else if (req.method == 'POST' && path == '/auth/v1/signup') {
-          currentUser = emailUser;
-          reply(200, {
-            'access_token': 'tok-mail',
-            'refresh_token': 'ref-mail',
-            'expires_in': 3600,
-          });
         } else if (req.method == 'POST' && path == '/auth/v1/signin') {
+          lastSignBody = body;
           final parsed = jsonDecode(body) as Map<String, dynamic>;
           if (parsed['password'] == 'wrong') {
             reply(400, {
@@ -1055,7 +1164,17 @@ void main() {
             });
             return;
           }
-          currentUser = emailUser;
+          if (parsed['phone_number'] != null) {
+            currentUser = {
+              'uid': 'phone-user-1',
+              'email': '',
+              'phone': parsed['phone_number'],
+              'name': 'phone-user',
+              'loginType': 'phone',
+            };
+          } else {
+            currentUser = emailUser;
+          }
           reply(200, {
             'access_token': 'tok-mail',
             'refresh_token': 'ref-mail',
@@ -1063,8 +1182,40 @@ void main() {
           });
         } else if (req.method == 'POST' &&
             path == '/auth/v1/user/basic/edit') {
-          currentUser = emailUser;
+          final parsed = jsonDecode(body) as Map<String, dynamic>;
+          if (parsed['phone'] != null) {
+            currentUser = {
+              'uid': 'anon-uid-1',
+              'email': '',
+              'phone': parsed['phone'],
+              'name': 'phone-user',
+              'loginType': 'phone',
+            };
+          } else {
+            currentUser = emailUser;
+          }
           reply(200, {});
+        } else if (req.method == 'POST' && path == '/auth/v1/signup') {
+          lastSignBody = body;
+          final parsed = body.isEmpty
+              ? <String, dynamic>{}
+              : jsonDecode(body) as Map<String, dynamic>;
+          if (parsed['phone_number'] != null) {
+            currentUser = {
+              'uid': 'phone-user-1',
+              'email': '',
+              'phone': parsed['phone_number'],
+              'name': 'phone-user',
+              'loginType': 'phone',
+            };
+          } else {
+            currentUser = emailUser;
+          }
+          reply(200, {
+            'access_token': 'tok-mail',
+            'refresh_token': 'ref-mail',
+            'expires_in': 3600,
+          });
         } else if (req.method == 'POST' && path == '/auth/v1/revoke') {
           reply(200, {});
         } else {
@@ -1084,24 +1235,49 @@ void main() {
       if (await tmp.exists()) await tmp.delete(recursive: true);
     });
 
-    test('匿名登录：拿到 uid，请求带 client_id 与 x-device-id', () async {
-      final uid = await backend.ensureSignedIn();
-      expect(uid, 'anon-uid-1');
-      expect(backend.currentUserId, 'anon-uid-1');
-      expect(backend.isAnonymous, isTrue);
-      expect(lastClientId, 'test-env');
-      expect(lastDeviceId, isNotEmpty);
-      // 会话已落盘：同一目录重建后端，恢复后不再匿名登录。
+    test('没有会话时不匿名登录；已有匿名会话只恢复，供绑定升级', () async {
+      expect(await backend.ensureSignedIn(), isNull);
+      expect(anonSignInCalls, 0);
+      expect(backend.currentUserId, isNull);
+      final expires =
+          DateTime.now().millisecondsSinceEpoch + const Duration(hours: 1).inMilliseconds;
+      await File('${tmp.path}/cloud_session.json').writeAsString(jsonEncode({
+        'accessToken': 'tok-anon',
+        'refreshToken': 'ref-anon',
+        'expiresAtMs': expires,
+        'userId': 'anon-uid-1',
+        'userEmail': null,
+        'isAnonymous': true,
+        'loginKind': 'anonymous',
+      }));
       final again = CloudBaseCloudBackend(
         envId: 'test-env',
         filesDir: tmp.path,
         baseUrlOverride: 'http://127.0.0.1:${server.port}',
       );
       expect(await again.ensureSignedIn(), 'anon-uid-1');
+      expect(again.isAnonymous, isTrue);
+      expect(anonSignInCalls, 0);
+      expect(lastClientId, 'test-env');
+      expect(lastDeviceId, isNotEmpty);
     });
 
-    test('上传与插行：Storage API 直传 + PostgREST 裸对象，不带 client_id', () async {
+    Future<void> _restoreAnon() async {
+      final expires = DateTime.now().millisecondsSinceEpoch +
+          const Duration(hours: 1).inMilliseconds;
+      await File('${tmp.path}/cloud_session.json').writeAsString(jsonEncode({
+        'accessToken': 'tok-anon',
+        'refreshToken': 'ref-anon',
+        'expiresAtMs': expires,
+        'userId': 'anon-uid-1',
+        'isAnonymous': true,
+        'loginKind': 'anonymous',
+      }));
       await backend.ensureSignedIn();
+    }
+
+    test('上传与插行：Storage API 直传 + PostgREST 裸对象，不带 client_id', () async {
+      await _restoreAnon();
       await backend.uploadBytes(
           'anon-uid-1/trip-1.json', Uint8List.fromList([1, 2, 3]));
       expect(lastUploadPath,
@@ -1121,7 +1297,7 @@ void main() {
     });
 
     test('listTripRows：PostgREST 查询带 owner=eq.、排序与分页，解析出 int id', () async {
-      await backend.ensureSignedIn();
+      await _restoreAnon();
       final rows = await backend.listTripRows('anon-uid-1');
       expect(lastListOwner, 'eq.anon-uid-1');
       expect(lastListOrder, 'created_at.desc');
@@ -1156,7 +1332,7 @@ void main() {
     });
 
     test('绑邮箱两步走通：发码 → 验码 → 改邮箱 → 刷新出邮箱', () async {
-      await backend.ensureSignedIn();
+      await _restoreAnon();
       expect(backend.isAnonymous, isTrue);
       final step1 = await backend.linkEmail('a@b.com');
       expect(step1.ok, isTrue);
@@ -1168,11 +1344,129 @@ void main() {
       expect(backend.isAnonymous, isFalse);
     });
 
-    test('退出登录清会话', () async {
-      await backend.ensureSignedIn();
+    test('退出登录清会话，且不调用匿名登录', () async {
+      await _restoreAnon();
+      expect(anonSignInCalls, 0);
       await backend.signOut();
       expect(backend.currentUserId, isNull);
+      expect(anonSignInCalls, 0);
       expect(File('${tmp.path}/cloud_session.json').existsSync(), isFalse);
+    });
+
+    test('手机号登录：USER 发码，signin 使用 phone_number 与验证码令牌', () async {
+      final step1 = await backend.requestPhoneSignInCode('+852 51234567',
+          captchaToken: 'cap-1');
+      expect(step1.needsCode, isTrue);
+      final sent = jsonDecode(lastVerificationBody) as Map<String, dynamic>;
+      expect(sent['phone_number'], '+852 51234567');
+      expect(sent['target'], 'USER');
+      expect(lastCaptchaHeader, 'cap-1');
+      final step2 = await backend.verifyPhoneSignInCode('123456');
+      expect(step2.sessionEstablished, isTrue);
+      final sign = jsonDecode(lastSignBody) as Map<String, dynamic>;
+      expect(sign['phone_number'], '+852 51234567');
+      expect(sign['verification_token'], 'vtok-1');
+      expect(sign.containsKey('username'), isFalse);
+      expect(backend.loginKind, 'phone');
+      expect(backend.currentUserPhone, '+852 51234567');
+      expect(backend.isAnonymous, isFalse);
+      expect(backend.currentUserId, 'phone-user-1');
+    });
+
+    test('手机号注册：NON_USER 发码，signup 只带 phone_number 与验证码令牌', () async {
+      final step1 = await backend.requestPhoneSignUpCode('+1 4155550100',
+          password: 'secret1');
+      expect(step1.needsCode, isTrue);
+      final sent = jsonDecode(lastVerificationBody) as Map<String, dynamic>;
+      expect(sent['phone_number'], '+1 4155550100');
+      expect(sent['target'], 'NON_USER');
+      expect(lastCaptchaHeader, isEmpty);
+      final step2 = await backend.verifyPhoneSignUpCode('654321');
+      expect(step2.sessionEstablished, isTrue);
+      final sign = jsonDecode(lastSignBody) as Map<String, dynamic>;
+      expect(sign['phone_number'], '+1 4155550100');
+      expect(sign['verification_token'], 'vtok-1');
+      expect(sign['password'], 'secret1');
+      expect(sign.containsKey('verification_code'), isFalse);
+      expect(backend.currentUserPhone, '+1 4155550100');
+      expect(backend.isAnonymous, isFalse);
+    });
+
+    test('匿名账号绑定手机号后仍是原 uid，可进入主界面', () async {
+      await _restoreAnon();
+      final step1 = await backend.linkPhone('+852 51234567');
+      expect(step1.needsCode, isTrue);
+      expect(
+          (jsonDecode(lastVerificationBody) as Map)['phone_number'],
+          '+852 51234567');
+      final step2 = await backend.verifyLinkPhoneCode('123456');
+      expect(step2.ok, isTrue);
+      expect(backend.currentUserId, 'anon-uid-1');
+      expect(backend.currentUserPhone, '+852 51234567');
+      expect(backend.isAnonymous, isFalse);
+      expect(
+          cloudSessionAllowsMainUi(
+            configured: true,
+            anonymous: backend.isAnonymous,
+            userId: backend.currentUserId,
+          ),
+          isTrue);
+    });
+  });
+
+  group('账号门与手机号格式', () {
+    test('没有非匿名会话时不能进入主界面', () {
+      expect(
+          cloudSessionAllowsMainUi(
+              configured: true, anonymous: true, userId: 'anon-1'),
+          isFalse);
+      expect(
+          cloudSessionAllowsMainUi(
+              configured: true, anonymous: false, userId: null),
+          isFalse);
+      expect(
+          cloudSessionAllowsMainUi(
+              configured: false, anonymous: false, userId: 'user-1'),
+          isFalse);
+      expect(
+          cloudSessionAllowsMainUi(
+              configured: true, anonymous: false, userId: 'user-1'),
+          isTrue);
+    });
+
+    test('邮箱和手机号都不是匿名；空资料才是匿名', () {
+      expect(cloudProfileIsAnonymous(email: 'a@b.com'), isFalse);
+      expect(cloudProfileIsAnonymous(phone: '+852 51234567'), isFalse);
+      expect(cloudProfileIsAnonymous(loginType: 'phone'), isFalse);
+      expect(
+          cloudProfileIsAnonymous(loginType: 'anonymous', name: 'anonymous'),
+          isTrue);
+      expect(cloudProfileIsAnonymous(), isTrue);
+      final phone = cloudAccountFromUserJson({
+        'uid': 'p1',
+        'phone': '+86 13800000000',
+        'loginType': 'phone',
+      });
+      expect(phone!.isAnonymous, isFalse);
+      expect(phone.loginKind, 'phone');
+    });
+
+    test('手机号格式：国家码与号码之间一个空格，覆盖中国大陆以外', () {
+      expect(formatCloudPhoneNumber('+86', '13800000000'), '+86 13800000000');
+      expect(formatCloudPhoneNumber('+86', '138 0000 0000'), '+86 13800000000');
+      expect(formatCloudPhoneNumber('+852', '5123 4567'), '+852 51234567');
+      expect(formatCloudPhoneNumber('+1', '(415) 555-0100'), '+1 4155550100');
+      expect(formatCloudPhoneNumber('+852', '85251234567'), '+852 51234567');
+      expect(formatCloudPhoneNumber('+86', '+86 13800000000'), '+86 13800000000');
+      expect(normalizeCloudPhoneNumber('+85251234567'), '+852 51234567');
+      expect(normalizeCloudPhoneNumber('13800000000'), '+86 13800000000');
+      expect(formatCloudPhoneNumber('+354', '5551234'), '+354 5551234');
+      expect(formatCloudPhoneNumber('+86', '+852 51234567'), '+852 51234567');
+      expect(isValidCloudPhoneNumber('+86 13800000000'), isTrue);
+      expect(isValidCloudPhoneNumber('+852 51234567'), isTrue);
+      expect(isValidCloudPhoneNumber('13800000000'), isFalse);
+      expect(isValidCloudPhoneNumber('+8613800000000'), isFalse);
+      expect(isValidCloudPhoneNumber('+86 138'), isFalse);
     });
   });
 }

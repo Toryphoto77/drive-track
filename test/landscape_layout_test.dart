@@ -10,11 +10,13 @@
 /// lib/app_bar_style.dart:54 有编译错误（const 构造调了 AppBar
 /// 的非 const 超构造），会拦住本文件加载，等该文件修好后再跑。
 
+import 'package:drive_track/cloud_service.dart';
 import 'package:drive_track/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  debugAllowUnsignedMainUi = true;
   testWidgets('横屏 800x360 整 App 进首页不溢出、不抛错', (tester) async {
     tester.view.physicalSize = const Size(800, 360);
     tester.view.devicePixelRatio = 1.0;

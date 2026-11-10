@@ -6,17 +6,21 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import 'atomic_file.dart';
+import 'cloud_phone.dart';
 import 'gps_source.dart';
 import 'models.dart';
 import 'native.dart';
 import 'public_trip.dart';
 import 'cloud_compare.dart';
 
-/// 云端二期（腾讯 CloudBase，上海区，PG 模式）。
+/// 云端（腾讯 CloudBase，上海区，PG 模式）。
 ///
-/// 架构：[CloudService] 是唯一入口，管配置、匿名账号、上传队列与
+/// 架构：[CloudService] 是唯一入口，管配置、登录会话、上传队列与
 /// 本地持久化；真正调 CloudBase 的活在 [CloudBackend] 后面，测试
 /// 用 fake 替掉，绝不联网。
+///
+/// 进入主界面必须有非匿名会话（手机号或邮箱）。已有的匿名
+/// 会话只用于绑定手机号或邮箱升级，不会新建匿名账号，也不会删本机行程。
 ///
 /// 后端选型（2026-11-07 已核）：走 CloudBase HTTP API，不用
 /// `cloudbase_flutter` SDK。SDK 本身是纯 Dart 代码，但它依赖
@@ -36,9 +40,9 @@ import 'cloud_compare.dart';
 ///
 /// 会话持久化：SDK 本身会用 SharedPreferences 存会话
 /// （key 为 `credentials_<env>`），但我们没接 SDK，所以手动落盘
-/// （cloud_session.json，见 [_persistSession]），跨启动保持同一个
-/// 匿名 user id，否则每次
-/// 启动换账号、云端行程全变别人的、自己读不到。
+/// （cloud_session.json，见 [_persistSession]）。已登录的手机号或邮箱
+/// 账号跨启动保持同一个 user id。已有匿名会话同样
+/// 保留，只为绑定升级，不会在没有会话时再匿名登录。
 
 /// CloudBase 环境 ID：只从 --dart-define=CLOUDBASE_ENV_ID 读
 /// （构建脚本读本地 .cloudbase-env 文件注入，文件不进仓库）。
@@ -47,6 +51,10 @@ import 'cloud_compare.dart';
 /// 但仍走本地文件注入，不写死在代码里、不进仓库、不进推送清单。
 const String cloudBaseEnvId =
     String.fromEnvironment('CLOUDBASE_ENV_ID', defaultValue: '');
+
+/// 仅供既有首页 widget 测试在没有云端会话时进入主界面。
+/// 正式路径保持 false：没有非匿名会话时不得进入记录界面。
+bool debugAllowUnsignedMainUi = false;
 
 /// CloudBase 上海地域网关（region 固定 ap-shanghai；PG 模式与短信
 /// 验证码登录目前仅支持上海地域环境）。
@@ -142,7 +150,9 @@ class _CloudSession {
   final int? expiresAtMs;
   final String userId;
   final String? userEmail;
+  final String? userPhone;
   final bool isAnonymous;
+  final String loginKind;
 
   const _CloudSession({
     required this.accessToken,
@@ -150,7 +160,9 @@ class _CloudSession {
     required this.expiresAtMs,
     required this.userId,
     required this.userEmail,
+    required this.userPhone,
     required this.isAnonymous,
+    required this.loginKind,
   });
 
   Map<String, dynamic> toJson() => {
@@ -159,7 +171,9 @@ class _CloudSession {
         'expiresAtMs': expiresAtMs,
         'userId': userId,
         'userEmail': userEmail,
+        'userPhone': userPhone,
         'isAnonymous': isAnonymous,
+        'loginKind': loginKind,
       };
 
   static _CloudSession? fromJson(Map<String, dynamic> j) {
@@ -168,13 +182,17 @@ class _CloudSession {
     if (access == null || access.isEmpty || userId == null || userId.isEmpty) {
       return null;
     }
+    final anonymous = (j['isAnonymous'] as bool?) ?? true;
     return _CloudSession(
       accessToken: access,
       refreshToken: j['refreshToken'] as String?,
       expiresAtMs: (j['expiresAtMs'] as num?)?.toInt(),
       userId: userId,
       userEmail: j['userEmail'] as String?,
-      isAnonymous: (j['isAnonymous'] as bool?) ?? true,
+      userPhone: j['userPhone'] as String?,
+      isAnonymous: anonymous,
+      loginKind: (j['loginKind'] as String?) ??
+          (anonymous ? 'anonymous' : 'email'),
     );
   }
 
@@ -257,8 +275,8 @@ class _CloudBaseHttp {
   };
 
   Future<Map<String, dynamic>> post(String path,
-      {Object? body, bool auth = true}) async {
-    return _request('POST', path, body: body, auth: auth);
+      {Object? body, bool auth = true, Map<String, String>? headers}) async {
+    return _request('POST', path, body: body, auth: auth, headers: headers);
   }
 
   Future<Map<String, dynamic>> get(String path,
@@ -269,6 +287,7 @@ class _CloudBaseHttp {
   Future<Map<String, dynamic>> _request(String method, String path,
       {Object? body,
       Map<String, String>? query,
+      Map<String, String>? headers,
       bool auth = true,
       bool allowRetry = true}) async {
     final uri = Uri.parse('$_baseUrl$path').replace(queryParameters: {
@@ -286,6 +305,12 @@ class _CloudBaseHttp {
       req.headers.set('X-SDK-Version', '@cloudbase/flutter-sdk/1.2.2');
       req.headers.set('x-device-id', deviceId);
       req.headers.set('x-request-id', _newUuidV4());
+      if (headers != null) {
+        for (final entry in headers.entries) {
+          if (entry.value.isEmpty) continue;
+          req.headers.set(entry.key, entry.value);
+        }
+      }
       if (auth && !_publicPaths.contains(path)) {
         final token = session?.accessToken;
         if (token != null && token.isNotEmpty) {
@@ -317,7 +342,11 @@ class _CloudBaseHttp {
       final refreshed = await onRefreshSession?.call() ?? false;
       if (refreshed) {
         return _request(method, path,
-            body: body, query: query, auth: auth, allowRetry: false);
+            body: body,
+            query: query,
+            headers: headers,
+            auth: auth,
+            allowRetry: false);
       }
       throw const CloudBaseApiException(
           'session_expired', '登录已过期，请重新登录');
@@ -336,7 +365,7 @@ class _CloudBaseHttp {
       );
     }
     if (error is String && error.isNotEmpty) {
-      throw CloudBaseApiException('unknown', error);
+      throw CloudBaseApiException(error, _errorMessage(data, error));
     }
     return data;
   }
@@ -346,6 +375,8 @@ class _CloudBaseHttp {
     if (error is Map && error['code'] != null) {
       return error['code'].toString();
     }
+    if (error is String && error.isNotEmpty) return error;
+    if (data['error_code'] != null) return data['error_code'].toString();
     return (data['code']?.toString() ?? 'unknown');
   }
 
@@ -354,7 +385,10 @@ class _CloudBaseHttp {
     if (error is Map && error['message'] != null) {
       return error['message'].toString();
     }
-    return (data['message']?.toString() ?? data['msg']?.toString() ?? fallback);
+    final desc = data['error_description'] ?? data['message'] ?? data['msg'];
+    if (desc != null && desc.toString().isNotEmpty) return desc.toString();
+    if (error is String && error.isNotEmpty) return error;
+    return fallback;
   }
 
   /// PostgREST 请求（PG 模式数据层，base /v1/rdb/rest/{table}）。
@@ -929,23 +963,27 @@ class CloudUploadResult {
   });
 }
 
-/// 邮箱注册 / 登录 / 绑定的结果。
+/// 手机号 / 邮箱登录的结果。
 ///
-/// [sessionEstablished]：调用后是否已有可用会话。
-/// [needsCode]：需要用户输入邮箱验证码（CloudBase 注册与绑定邮箱
-/// 必须先收验证码；验证码 6 位数字、5 分钟有效）。收到 needsCode
-/// 后调对应的 verify* 方法完成第二步。
+/// [sessionEstablished]：调用后是否已有可用的非匿名会话。
+/// [needsCode]：需要用户输入验证码。收到 needsCode 后调对应的
+/// verify* 方法完成第二步。
 class CloudAuthResult {
   final bool ok;
   final bool notConfigured;
   final bool sessionEstablished;
   final bool needsCode;
+
+  /// 控制台要求图形验证码时为 true。调用方把令牌放进下一次发码请求的
+  /// `x-captcha-token`，不要把它写进日志。
+  final bool needsCaptcha;
   final String message;
   const CloudAuthResult({
     required this.ok,
     this.notConfigured = false,
     this.sessionEstablished = false,
     this.needsCode = false,
+    this.needsCaptcha = false,
     required this.message,
   });
 }
@@ -956,6 +994,87 @@ bool isValidCloudEmail(String email) =>
 
 /// 密码长度：CloudBase 用户名密码登录默认最短 6 位。
 bool isValidCloudPassword(String password) => password.length >= 6;
+
+/// 主界面门闩：已配置，且当前会话是非匿名的手机号或邮箱账号。
+bool cloudSessionAllowsMainUi({
+  required bool configured,
+  required bool anonymous,
+  required String? userId,
+}) =>
+    configured && !anonymous && userId != null && userId.isNotEmpty;
+
+/// 从 GET /auth/v1/user/me 判断是不是匿名账号。
+/// 没有手机号、没有邮箱，且 loginType 为空或 anonymous，才算匿名。
+/// 手机号账号通常没有邮箱，不能只看邮箱。
+bool cloudProfileIsAnonymous({
+  String? email,
+  String? phone,
+  String? loginType,
+  String? name,
+}) {
+  final mail = email?.trim() ?? '';
+  final tel = phone?.trim() ?? '';
+  final kind = (loginType ?? '').trim().toLowerCase();
+  if (mail.isNotEmpty || tel.isNotEmpty) return false;
+  if (kind.isNotEmpty && kind != 'anonymous') return false;
+  if (name == 'anonymous') return true;
+  return true;
+}
+
+/// user/me 解析结果。loginKind：anonymous / email / phone。
+class CloudAccountSnapshot {
+  final String userId;
+  final String? email;
+  final String? phone;
+  final bool isAnonymous;
+  final String loginKind;
+
+  const CloudAccountSnapshot({
+    required this.userId,
+    required this.email,
+    required this.phone,
+    required this.isAnonymous,
+    required this.loginKind,
+  });
+}
+
+CloudAccountSnapshot? cloudAccountFromUserJson(Map<String, dynamic> data) {
+  final userId = (data['uid'] ?? data['sub'] ?? data['id'])?.toString();
+  if (userId == null || userId.isEmpty) return null;
+  final emailRaw = (data['email'] as String?)?.trim();
+  final email = (emailRaw == null || emailRaw.isEmpty) ? null : emailRaw;
+  final phoneRaw =
+      (data['phone'] ?? data['phone_number'] ?? data['phoneNumber'])
+          ?.toString()
+          .trim();
+  final phone = (phoneRaw == null || phoneRaw.isEmpty) ? null : phoneRaw;
+  final name = data['name']?.toString();
+  final loginType =
+      ((data['loginType'] ?? data['login_type']) as String?)?.trim().toLowerCase() ??
+          '';
+  final anonymous = cloudProfileIsAnonymous(
+    email: email,
+    phone: phone,
+    loginType: loginType,
+    name: name,
+  );
+  final loginKind = anonymous
+      ? 'anonymous'
+      : (phone != null && email == null)
+          ? 'phone'
+          : email != null
+              ? 'email'
+              : (loginType.contains('phone') || loginType == 'sms')
+                  ? 'phone'
+                  : 'email';
+  return CloudAccountSnapshot(
+    userId: userId,
+    email: email,
+    phone: phone,
+    isAnonymous: anonymous,
+    loginKind: loginKind,
+  );
+}
 
 /// 把 CloudBase 网关异常翻成中文（调用方直接展示）。
 /// 没命中的返回原文，不编造。
@@ -978,7 +1097,13 @@ String cloudAuthErrorText(Object error) {
   if (raw.contains('User already registered') ||
       raw.contains('already exist') ||
       raw.contains('user already exists')) {
-    return '这个邮箱已经注册过，直接登录';
+    return '这个账号已经注册过，请直接登录';
+  }
+  if ((raw.contains('phone') || raw.contains('手机')) &&
+      (raw.contains('invalid') ||
+          raw.contains('format') ||
+          raw.contains('格式'))) {
+    return '手机号格式不对，请使用国际格式，例如 +86 13800000000';
   }
   if (raw.contains('Password should be at least 6 characters')) {
     return '密码至少 6 位';
@@ -1016,10 +1141,10 @@ String cloudAuthErrorText(Object error) {
 /// linkEmail，返回 needsCode=true），再凭验证码完成
 /// （verifySignUpCode / verifyLinkCode）。CloudBase 注册与
 /// 改邮箱必须先收验证码，密码登录仍是一步。
-/// Google / 微信 OAuth 这期不做（Google OAuth 客户端待 Google
-/// 审批，微信要开放平台配置），相关入口只显示“未配置”。
+/// 手机号同样两步：先发短信验证码，再凭验证码登录或注册。
+/// 手机号是主登录方式，邮箱是已有的备用方式。
 abstract class CloudBackend {
-  /// 确保已匿名登录，返回 user id；未登录成功返回 null。
+  /// 恢复已有会话。没有会话时返回 null，不新建匿名账号。
   Future<String?> ensureSignedIn();
 
   String? get currentUserId;
@@ -1064,8 +1189,14 @@ abstract class CloudBackend {
   /// 当前用户是否匿名（未登录 / 匿名登录都算匿名）。
   bool get isAnonymous;
 
-  /// 当前用户的邮箱（匿名账号为 null）。
+  /// 当前用户的邮箱（没有邮箱时为 null）。
   String? get currentUserEmail;
+
+  /// 当前用户的手机号（国际格式；没有时为 null）。
+  String? get currentUserPhone;
+
+  /// anonymous / email / phone。
+  String get loginKind;
 
   /// 邮箱注册第一步：发验证码。成功返回 needsCode=true，
   /// 再调 [verifySignUpCode] 完成。
@@ -1086,18 +1217,43 @@ abstract class CloudBackend {
   /// 匿名账号绑邮箱第二步：凭验证码完成绑定。
   Future<CloudAuthResult> verifyLinkCode(String code);
 
-  /// 退出登录（清本地会话）。
+  /// 手机号登录第一步：target USER，只给已注册号码发短信。
+  Future<CloudAuthResult> requestPhoneSignInCode(String phone,
+      {String? captchaToken});
+
+  /// 手机号登录第二步：凭验证码换 verification_token，再
+  /// POST /auth/v1/signin（phone_number + verification_token）。
+  Future<CloudAuthResult> verifyPhoneSignInCode(String code);
+
+  /// 手机号注册第一步：target NON_USER，只给未注册号码发短信。
+  /// [password] 有值时写入注册请求，没有则不传。
+  Future<CloudAuthResult> requestPhoneSignUpCode(String phone,
+      {String? password, String? captchaToken});
+
+  /// 手机号注册第二步：凭验证码换 verification_token，再
+  /// POST /auth/v1/signup。
+  Future<CloudAuthResult> verifyPhoneSignUpCode(String code);
+
+  /// 匿名账号绑手机号第一步：发短信验证码。
+  Future<CloudAuthResult> linkPhone(String phone);
+
+  /// 匿名账号绑手机号第二步：凭验证码写入手机号，仍是同一个用户。
+  Future<CloudAuthResult> verifyLinkPhoneCode(String code);
+
+  /// 退出登录（清本地会话，不新建匿名账号）。
   Future<void> signOut();
 }
 
 /// 待完成的邮箱验证码流程（注册 / 绑定共用结构）。
 class _PendingVerification {
-  final String email;
+  final String? email;
+  final String? phone;
   final String? password;
   final String verificationId;
   final bool isUser;
   const _PendingVerification({
     required this.email,
+    required this.phone,
     required this.password,
     required this.verificationId,
     required this.isUser,
@@ -1121,7 +1277,10 @@ class CloudBaseCloudBackend implements CloudBackend {
 
   _CloudSession? _session;
   _PendingVerification? _pendingSignUp;
+  _PendingVerification? _pendingPhone;
+  _PendingVerification? _pendingPhoneSignUp;
   _PendingVerification? _pendingLink;
+  _PendingVerification? _pendingPhoneLink;
   Future<bool>? _refreshFuture;
 
   String get _sessionFile => '$filesDir/cloud_session.json';
@@ -1154,17 +1313,17 @@ class CloudBaseCloudBackend implements CloudBackend {
       expiresAtMs: expiresAtMs,
       userId: '',
       userEmail: null,
+      userPhone: null,
       isAnonymous: true,
+      loginKind: 'anonymous',
     );
     final user = await _fetchUser();
     if (user == null) return null;
-    final session = _CloudSession(
-      accessToken: access,
-      refreshToken: refresh,
+    final session = _sessionFromUser(
+      access: access,
+      refresh: refresh,
       expiresAtMs: expiresAtMs,
-      userId: user.$1,
-      userEmail: user.$2,
-      isAnonymous: user.$3,
+      user: user,
     );
     _session = session;
     _http.session = session;
@@ -1186,47 +1345,45 @@ class CloudBaseCloudBackend implements CloudBackend {
     return null;
   }
 
-  /// GET /auth/v1/user/me，返回 (userId, email, isAnonymous)。
-  /// user id 取 uid ?? sub ?? id；匿名账号没有邮箱、loginType
-  /// 为 anonymous（SDK 的 UserProfile.toUser 同款判定：匿名
-  /// 账号的 name 就是 'anonymous'）。
-  Future<(String, String?, bool)?> _fetchUser() async {
+  _CloudSession _sessionFromUser({
+    required String access,
+    required String? refresh,
+    required int? expiresAtMs,
+    required CloudAccountSnapshot user,
+  }) =>
+      _CloudSession(
+        accessToken: access,
+        refreshToken: refresh,
+        expiresAtMs: expiresAtMs,
+        userId: user.userId,
+        userEmail: user.email,
+        userPhone: user.phone,
+        isAnonymous: user.isAnonymous,
+        loginKind: user.loginKind,
+      );
+
+  /// GET /auth/v1/user/me。手机号和邮箱都算正式账号；
+  /// 只有没有这些身份时才是匿名。
+  Future<CloudAccountSnapshot?> _fetchUser() async {
     try {
       final res = await _http.get('/auth/v1/user/me');
-      final data = _dataOf(res);
-      final userId = (data['uid'] ?? data['sub'] ?? data['id'])?.toString();
-      if (userId == null || userId.isEmpty) return null;
-      final email = (data['email'] as String?)?.trim();
-      final name = data['name'] as String?;
-      final loginType = (data['loginType'] ?? data['login_type']) as String?;
-      final isAnonymous = (email == null || email.isEmpty) &&
-          (loginType == null ||
-              loginType == 'anonymous' ||
-              name == 'anonymous' ||
-              name == null);
-      return (
-        userId,
-        (email == null || email.isEmpty) ? null : email,
-        isAnonymous,
-      );
+      return cloudAccountFromUserJson(_dataOf(res));
     } catch (_) {
       return null;
     }
   }
 
-  /// 刷新当前会话的用户资料（绑定邮箱后用）。
+  /// 刷新当前会话的用户资料（绑定邮箱或手机号后用）。
   Future<void> _refreshUser() async {
     final s = _session;
     if (s == null) return;
     final user = await _fetchUser();
     if (user == null) return;
-    final updated = _CloudSession(
-      accessToken: s.accessToken,
-      refreshToken: s.refreshToken,
+    final updated = _sessionFromUser(
+      access: s.accessToken,
+      refresh: s.refreshToken,
       expiresAtMs: s.expiresAtMs,
-      userId: user.$1,
-      userEmail: user.$2,
-      isAnonymous: user.$3,
+      user: user,
     );
     _session = updated;
     _http.session = updated;
@@ -1285,42 +1442,41 @@ class CloudBaseCloudBackend implements CloudBackend {
 
   @override
   Future<String?> ensureSignedIn() async {
-    // 先恢复上次的会话：匿名账号跨启动保持同一个 user id，
-    // 否则每次启动换账号，云端行程全变“别人的”，自己读不到。
+    // 只恢复已有会话。匿名会话留下来是为了绑定升级，不在这里新建。
+    // 没有会话就返回 null，由登录页接手。本机行程文件不动。
     final saved = await _restoreSession();
-    if (saved != null) {
-      _session = saved;
-      _http.session = saved;
-      if (!saved.isExpired) {
-        final user = await _fetchUser();
-        if (user != null) {
-          final updated = _CloudSession(
-            accessToken: saved.accessToken,
-            refreshToken: saved.refreshToken,
-            expiresAtMs: saved.expiresAtMs,
-            userId: user.$1,
-            userEmail: user.$2,
-            isAnonymous: user.$3,
-          );
-          _session = updated;
-          _http.session = updated;
-          await _persistSession(updated);
-          return user.$1;
-        }
+    if (saved == null) return null;
+    _session = saved;
+    _http.session = saved;
+    if (!saved.isExpired) {
+      final user = await _fetchUser();
+      if (user != null) {
+        final updated = _sessionFromUser(
+          access: saved.accessToken,
+          refresh: saved.refreshToken,
+          expiresAtMs: saved.expiresAtMs,
+          user: user,
+        );
+        _session = updated;
+        _http.session = updated;
+        await _persistSession(updated);
+        return user.userId;
       }
-      // token 过期或用户拉取失败：换票再试。
-      if (await _refreshSession()) return _session?.userId;
+      // 用户接口暂时失败（离线）：沿用已落盘会话，不换账号。
+      return saved.userId;
     }
-    // 没有可用会话：匿名登录。
+    if (await _refreshSession()) return _session?.userId;
+    await _dropSession();
+    return null;
+  }
+
+  Future<void> _dropSession() async {
+    _session = null;
+    _http.session = null;
     try {
-      final res = await _http.post('/auth/v1/signin/anonymously', body: {
-        'type': 'anonymous',
-      });
-      final session = await _saveSessionFromCredentials(_dataOf(res));
-      return session?.userId;
-    } catch (_) {
-      return null;
-    }
+      final f = File(_sessionFile);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
   }
 
   @override
@@ -1333,6 +1489,14 @@ class CloudBaseCloudBackend implements CloudBackend {
   @override
   String? get currentUserEmail =>
       _session?.userEmail ?? _http.session?.userEmail;
+
+  @override
+  String? get currentUserPhone =>
+      _session?.userPhone ?? _http.session?.userPhone;
+
+  @override
+  String get loginKind =>
+      _session?.loginKind ?? _http.session?.loginKind ?? 'anonymous';
 
   @override
   Future<void> uploadBytes(String path, Uint8List bytes) async {
@@ -1481,6 +1645,7 @@ class CloudBaseCloudBackend implements CloudBackend {
       }
       _pendingSignUp = _PendingVerification(
         email: email,
+        phone: null,
         password: password,
         verificationId: verificationId,
         isUser: (data['is_user'] as bool?) ?? false,
@@ -1601,6 +1766,7 @@ class CloudBaseCloudBackend implements CloudBackend {
       }
       _pendingLink = _PendingVerification(
         email: email,
+        phone: null,
         password: null,
         verificationId: verificationId,
         isUser: false,
@@ -1646,6 +1812,242 @@ class CloudBaseCloudBackend implements CloudBackend {
     }
   }
 
+  CloudAuthResult _phoneSendFailure(CloudBaseApiException error, String target) {
+    final raw = '${error.code} ${error.message}'.toLowerCase();
+    if (raw.contains('captcha')) {
+      return const CloudAuthResult(
+        ok: false,
+        needsCaptcha: true,
+        message: '需要图形验证码。完成验证后填写验证码令牌，再发送短信。',
+      );
+    }
+    if (target == 'USER' &&
+        (raw.contains('not exist') ||
+            raw.contains('not found') ||
+            raw.contains('不存在') ||
+            raw.contains('未注册'))) {
+      return const CloudAuthResult(
+          ok: false, message: '这个手机号还没注册，请先注册');
+    }
+    if (target == 'NON_USER' &&
+        (raw.contains('already') ||
+            raw.contains('exist') ||
+            raw.contains('已存在') ||
+            raw.contains('已注册'))) {
+      return const CloudAuthResult(
+          ok: false, message: '这个手机号已经注册，请直接登录');
+    }
+    return CloudAuthResult(ok: false, message: cloudAuthErrorText(error));
+  }
+
+  Map<String, String>? _captchaHeaders(String? captchaToken) {
+    final token = captchaToken?.trim() ?? '';
+    if (token.isEmpty) return null;
+    return {'x-captcha-token': token};
+  }
+
+  String? _normalizePhone(String phone) {
+    final trimmed = phone.trim();
+    final normalized = isValidCloudPhoneNumber(trimmed)
+        ? trimmed
+        : normalizeCloudPhoneNumber(trimmed);
+    if (!isValidCloudPhoneNumber(normalized)) return null;
+    return normalized;
+  }
+
+  /// 发短信。登录用 USER，注册用 NON_USER，绑定匿名账号用 ANY。
+  /// 只保存 verification_id，验证码留给下一步。
+  Future<CloudAuthResult> _sendPhoneCode(
+    String phone, {
+    required String target,
+    required String slot,
+    String? password,
+    String? captchaToken,
+  }) async {
+    final normalized = _normalizePhone(phone);
+    if (normalized == null) {
+      return const CloudAuthResult(
+        ok: false,
+        message: '手机号格式不对，请选择或填写国际区号并填写号码',
+      );
+    }
+    try {
+      final res = await _http.post(
+        '/auth/v1/verification',
+        body: {
+          'phone_number': normalized,
+          'target': target,
+        },
+        headers: _captchaHeaders(captchaToken),
+      );
+      final data = _dataOf(res);
+      final verificationId = (data['verification_id'] as String?) ?? '';
+      if (verificationId.isEmpty) {
+        return const CloudAuthResult(
+            ok: false, message: '验证码发送失败，请稍后再试');
+      }
+      final pending = _PendingVerification(
+        email: null,
+        phone: normalized,
+        password: (password == null || password.isEmpty) ? null : password,
+        verificationId: verificationId,
+        isUser: target == 'USER',
+      );
+      switch (slot) {
+        case 'signUp':
+          _pendingPhoneSignUp = pending;
+        case 'link':
+          _pendingPhoneLink = pending;
+        default:
+          _pendingPhone = pending;
+      }
+      final message = switch (slot) {
+        'signUp' => '验证码已发送。请输入 6 位验证码完成注册。',
+        'link' => '验证码已发送到手机，输入 6 位验证码完成绑定',
+        _ => '验证码已发送。请输入 6 位验证码登录。',
+      };
+      return CloudAuthResult(ok: true, needsCode: true, message: message);
+    } on CloudBaseApiException catch (e) {
+      return _phoneSendFailure(e, target);
+    } catch (e) {
+      return CloudAuthResult(ok: false, message: cloudAuthErrorText(e));
+    }
+  }
+
+  Future<String?> _verificationToken(_PendingVerification pending, String code) async {
+    final verifyRes = await _http.post('/auth/v1/verification/verify', body: {
+      'verification_id': pending.verificationId,
+      'verification_code': code.trim(),
+    });
+    final token = (_dataOf(verifyRes)['verification_token'] as String?) ?? '';
+    if (token.isEmpty) return null;
+    return token;
+  }
+
+  @override
+  Future<CloudAuthResult> requestPhoneSignInCode(String phone,
+          {String? captchaToken}) =>
+      _sendPhoneCode(phone,
+          target: 'USER', slot: 'signIn', captchaToken: captchaToken);
+
+  @override
+  Future<CloudAuthResult> verifyPhoneSignInCode(String code) async {
+    final pending = _pendingPhone;
+    if (pending == null || pending.phone == null) {
+      return const CloudAuthResult(ok: false, message: '请重新获取短信验证码');
+    }
+    try {
+      final verificationToken = await _verificationToken(pending, code);
+      if (verificationToken == null) {
+        return const CloudAuthResult(ok: false, message: '验证码验证失败，请重新获取');
+      }
+      final signRes = await _http.post('/auth/v1/signin', body: {
+        'phone_number': pending.phone,
+        'verification_token': verificationToken,
+      });
+      final session = await _saveSessionFromCredentials(_dataOf(signRes));
+      if (session == null) {
+        return const CloudAuthResult(ok: false, message: '登录失败，请稍后再试');
+      }
+      _pendingPhone = null;
+      return const CloudAuthResult(
+        ok: true,
+        sessionEstablished: true,
+        message: '登录成功',
+      );
+    } on CloudBaseApiException catch (e) {
+      return CloudAuthResult(ok: false, message: cloudAuthErrorText(e));
+    } catch (e) {
+      return CloudAuthResult(ok: false, message: cloudAuthErrorText(e));
+    }
+  }
+
+  @override
+  Future<CloudAuthResult> requestPhoneSignUpCode(String phone,
+          {String? password, String? captchaToken}) =>
+      _sendPhoneCode(
+        phone,
+        target: 'NON_USER',
+        slot: 'signUp',
+        password: password,
+        captchaToken: captchaToken,
+      );
+
+  @override
+  Future<CloudAuthResult> verifyPhoneSignUpCode(String code) async {
+    final pending = _pendingPhoneSignUp;
+    if (pending == null || pending.phone == null) {
+      return const CloudAuthResult(ok: false, message: '请重新获取短信验证码');
+    }
+    try {
+      final verificationToken = await _verificationToken(pending, code);
+      if (verificationToken == null) {
+        return const CloudAuthResult(ok: false, message: '验证码验证失败，请重新获取');
+      }
+      final body = <String, dynamic>{
+        'phone_number': pending.phone,
+        'verification_token': verificationToken,
+      };
+      final password = pending.password;
+      if (password != null && password.isNotEmpty) {
+        body['password'] = password;
+      }
+      final signUpRes = await _http.post('/auth/v1/signup', body: body);
+      final session = await _saveSessionFromCredentials(_dataOf(signUpRes));
+      if (session == null) {
+        return const CloudAuthResult(ok: false, message: '注册失败，请稍后再试');
+      }
+      _pendingPhoneSignUp = null;
+      return const CloudAuthResult(
+        ok: true,
+        sessionEstablished: true,
+        message: '注册成功，已登录',
+      );
+    } on CloudBaseApiException catch (e) {
+      return CloudAuthResult(ok: false, message: cloudAuthErrorText(e));
+    } catch (e) {
+      return CloudAuthResult(ok: false, message: cloudAuthErrorText(e));
+    }
+  }
+
+  @override
+  Future<CloudAuthResult> linkPhone(String phone) async {
+    if (currentUserId == null) {
+      return const CloudAuthResult(
+          ok: false, message: '没有可升级的匿名账号，请直接注册');
+    }
+    return _sendPhoneCode(phone, target: 'ANY', slot: 'link');
+  }
+
+  @override
+  Future<CloudAuthResult> verifyLinkPhoneCode(String code) async {
+    final pending = _pendingPhoneLink;
+    if (pending == null || pending.phone == null) {
+      return const CloudAuthResult(
+          ok: false, message: '请重新获取短信验证码');
+    }
+    try {
+      await _http.post('/auth/v1/verification/verify', body: {
+        'verification_id': pending.verificationId,
+        'verification_code': code.trim(),
+      });
+      await _http.post('/auth/v1/user/basic/edit', body: {
+        'phone': pending.phone,
+      });
+      await _refreshUser();
+      _pendingPhoneLink = null;
+      return const CloudAuthResult(
+        ok: true,
+        sessionEstablished: true,
+        message: '绑定成功，已升级为手机号账号',
+      );
+    } on CloudBaseApiException catch (e) {
+      return CloudAuthResult(ok: false, message: cloudAuthErrorText(e));
+    } catch (e) {
+      return CloudAuthResult(ok: false, message: cloudAuthErrorText(e));
+    }
+  }
+
   @override
   Future<void> signOut() async {
     try {
@@ -1654,7 +2056,10 @@ class CloudBaseCloudBackend implements CloudBackend {
     _session = null;
     _http.session = null;
     _pendingSignUp = null;
+    _pendingPhone = null;
+    _pendingPhoneSignUp = null;
     _pendingLink = null;
+    _pendingPhoneLink = null;
     try {
       final f = File(_sessionFile);
       if (await f.exists()) await f.delete();
@@ -1693,12 +2098,9 @@ class CloudService {
   bool _initStarted = false;
 
   /// 账号状态变化计数（登录 / 注册 / 绑定成功时 +1）。
-  /// 账号页监听它，状态一变就刷新。
+  /// 账号页监听它，状态一变就刷新。加一放在微任务里，调用方可以
+  /// 先把提示挂上再被登录门换成主界面。
   final ValueNotifier<int> authVersion = ValueNotifier<int>(0);
-
-  void _bumpAuthVersion() {
-    authVersion.value++;
-  }
 
   /// 环境 ID 是否已注入。false = 云端未配置，入口只展示、不调接口。
   bool get isConfigured =>
@@ -1711,11 +2113,32 @@ class CloudService {
   /// init() 完成后再读才准（未完成时为 null）。
   String? get currentUserId => _backend?.currentUserId;
 
-  /// 当前是否匿名账号（未配置 / 未就绪时按匿名算）。
+  /// 当前是否匿名账号（未配置 / 未登录时按匿名算）。
   bool get isAnonymous => _backend?.isAnonymous ?? true;
 
-  /// 当前用户的邮箱（匿名账号为 null）。
+  /// 已配置且持有非匿名会话时才能进入主界面。
+  bool get allowsMainUi =>
+      debugAllowUnsignedMainUi ||
+      cloudSessionAllowsMainUi(
+        configured: isConfigured,
+        anonymous: isAnonymous,
+        userId: currentUserId,
+      );
+
+  /// 本机还有一份可升级的匿名会话（绑定邮箱或手机号后仍是同一个用户）。
+  bool get hasAnonymousSession =>
+      isConfigured &&
+      (currentUserId?.isNotEmpty ?? false) &&
+      isAnonymous;
+
+  /// 当前用户的邮箱（没有邮箱时为 null）。
   String? get currentUserEmail => _backend?.currentUserEmail;
+
+  /// 当前用户的手机号（国际格式；没有时为 null）。
+  String? get currentUserPhone => _backend?.currentUserPhone;
+
+  /// anonymous / email / phone。
+  String get loginKind => _backend?.loginKind ?? 'anonymous';
 
   /// 匿名 id 截断显示（user id 只露前 8 位）。
   String get displayUserId {
@@ -1782,6 +2205,8 @@ class CloudService {
       _lastError = e.toString();
     } finally {
       if (!_initialized.isCompleted) _initialized.complete();
+      // 同步通知登录门：init 结束前界面可能还停在“正在连接”。
+      authVersion.value = authVersion.value + 1;
     }
   }
 
@@ -2297,9 +2722,7 @@ class CloudService {
     if (!isConfigured) return _notConfiguredAuth();
     final backend = _backend;
     if (backend == null) return _notReadyAuth();
-    final r = await backend.verifySignUpCode(code);
-    if (r.ok && r.sessionEstablished) _bumpAuthVersion();
-    return r;
+    return _completeSession(await backend.verifySignUpCode(code));
   }
 
   /// 邮箱密码登录（一步）。
@@ -2309,9 +2732,8 @@ class CloudService {
     if (!isConfigured) return _notConfiguredAuth();
     final backend = _backend;
     if (backend == null) return _notReadyAuth();
-    final r = await backend.signInWithEmail(email.trim(), password);
-    if (r.ok && r.sessionEstablished) _bumpAuthVersion();
-    return r;
+    return _completeSession(
+        await backend.signInWithEmail(email.trim(), password));
   }
 
   /// 匿名账号绑邮箱第一步：发验证码（成功后调 verifyLinkCode）。
@@ -2331,13 +2753,82 @@ class CloudService {
     if (!isConfigured) return _notConfiguredAuth();
     final backend = _backend;
     if (backend == null) return _notReadyAuth();
-    final r = await backend.verifyLinkCode(code);
-    if (r.ok && r.sessionEstablished) _bumpAuthVersion();
-    return r;
+    return _completeSession(await backend.verifyLinkCode(code));
   }
 
-  /// 退出登录：清本地会话后重新匿名登录，保持“默认匿名”模型。
-  /// 邮箱账号下的云端行程仍在原账号下，重新登录可见。
+  /// 登录或注册成功后通知界面。版本号放到微任务里加，调用方可以
+  /// 先把提示挂上，再被登录门换成主界面。
+  Future<CloudAuthResult> _completeSession(CloudAuthResult result) async {
+    if (result.ok && result.sessionEstablished) _bumpAuthVersion();
+    return result;
+  }
+
+  void _bumpAuthVersion() {
+    scheduleMicrotask(() {
+      authVersion.value++;
+    });
+  }
+
+  /// 手机号登录：先发短信（target USER），再凭验证码登录。
+  Future<CloudAuthResult> requestPhoneSignInCode(String phone,
+      {String? captchaToken}) async {
+    await initialized;
+    if (!isConfigured) return _notConfiguredAuth();
+    final backend = _backend;
+    if (backend == null) return _notReadyAuth();
+    return backend.requestPhoneSignInCode(phone, captchaToken: captchaToken);
+  }
+
+  Future<CloudAuthResult> verifyPhoneSignInCode(String code) async {
+    await initialized;
+    if (!isConfigured) return _notConfiguredAuth();
+    final backend = _backend;
+    if (backend == null) return _notReadyAuth();
+    return _completeSession(await backend.verifyPhoneSignInCode(code));
+  }
+
+  /// 手机号注册：先发短信（target NON_USER），再凭验证码注册。
+  /// 密码留空则不写入注册请求。
+  Future<CloudAuthResult> requestPhoneSignUpCode(String phone,
+      {String? password, String? captchaToken}) async {
+    await initialized;
+    if (!isConfigured) return _notConfiguredAuth();
+    final backend = _backend;
+    if (backend == null) return _notReadyAuth();
+    return backend.requestPhoneSignUpCode(phone,
+        password: password, captchaToken: captchaToken);
+  }
+
+  Future<CloudAuthResult> verifyPhoneSignUpCode(String code) async {
+    await initialized;
+    if (!isConfigured) return _notConfiguredAuth();
+    final backend = _backend;
+    if (backend == null) return _notReadyAuth();
+    return _completeSession(await backend.verifyPhoneSignUpCode(code));
+  }
+
+  /// 匿名账号绑手机号第一步。
+  Future<CloudAuthResult> linkPhone(String phone) async {
+    await initialized;
+    if (!isConfigured) return _notConfiguredAuth();
+    final backend = _backend;
+    if (backend == null) return _notReadyAuth();
+    if (currentUserId == null) return _notReadyAuth();
+    return backend.linkPhone(phone);
+  }
+
+  /// 匿名账号绑手机号第二步。本机行程不删除。
+  Future<CloudAuthResult> verifyLinkPhoneCode(String code) async {
+    await initialized;
+    if (!isConfigured) return _notConfiguredAuth();
+    final backend = _backend;
+    if (backend == null) return _notReadyAuth();
+    final result = await backend.verifyLinkPhoneCode(code);
+    return _completeSession(result);
+  }
+
+  /// 退出登录：清云端会话，不新建匿名账号，不删除本机行程。
+  /// 退出后必须重新登录才能进入主界面。云端行程留在原账号下。
   Future<void> signOut() async {
     await initialized;
     final backend = _backend;
@@ -2345,13 +2836,7 @@ class CloudService {
     try {
       await backend.signOut();
     } catch (_) {}
-    try {
-      await backend.ensureSignedIn().timeout(const Duration(seconds: 15));
-      _status = CloudStatus.ready;
-    } catch (e) {
-      _status = CloudStatus.error;
-      _lastError = e.toString();
-    }
+    _status = isConfigured ? CloudStatus.ready : CloudStatus.unconfigured;
     _bumpAuthVersion();
   }
 }

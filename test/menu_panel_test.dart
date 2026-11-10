@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:drive_track/cloud_service.dart';
 import 'package:drive_track/main.dart';
 
 void main() {
+  debugAllowUnsignedMainUi = true;
   testWidgets('v1.1.0 menu panel is exactly 280 wide, subtitles wrap inside it',
       (WidgetTester tester) async {
     // 小屏 + 大字体：复现用户实测的菜单底部描述溢出场景。

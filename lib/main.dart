@@ -98,8 +98,10 @@ import 'update_service.dart';
 // v1.0.2 新模块（统合）
 import 'track_home_page.dart';
 import 'performance_challenge.dart';
-// 云端二期：腾讯 CloudBase（匿名 + 邮箱登录，手动上传、
+// 云端：腾讯 CloudBase（手机号短信为主，邮箱为备用，手动上传、
 // 个人页云端入口）。环境 ID 只走 --dart-define，不进仓库。
+// 没有非匿名会话时不进入记录界面。
+import 'cloud_auth_page.dart';
 import 'cloud_service.dart';
 
 void main() {
@@ -393,6 +395,35 @@ class AppPrefs extends ChangeNotifier {
 
 final appPrefs = AppPrefs();
 
+/// 启动后的账号门。正式会话才进入记录首页；匿名会话留在登录页，
+/// 走绑定升级，不删除本机行程。
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (debugAllowUnsignedMainUi) {
+      return const PermissionGate(child: HomePage());
+    }
+    final svc = CloudService.instance;
+    return ListenableBuilder(
+      listenable: svc.authVersion,
+      builder: (context, _) {
+        if (svc.status == CloudStatus.uninitialized) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF000000),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (svc.allowsMainUi) {
+          return const PermissionGate(child: HomePage());
+        }
+        return const CloudAuthPage(gate: true);
+      },
+    );
+  }
+}
+
 class DriveTrackApp extends StatefulWidget {
   const DriveTrackApp({super.key});
   @override
@@ -436,7 +467,9 @@ class _DriveTrackAppState extends State<DriveTrackApp> {
           // 即启动动画完成之后；原生启动背景保持纯黑（v1.0.0 已改黑）。
           home: SplashPage(appIconKey: appPrefs.appIcon),
           routes: {
-            '/home': (_) => const PermissionGate(child: HomePage()),
+            // 启动动画结束后先过账号门：没有邮箱 / 手机号 / 微信会话时
+            // 只显示登录页，不构造记录首页。
+            '/home': (_) => const AuthGate(),
             DisclaimerPage.routeName: (_) => const DisclaimerPage(),
           },
         );
