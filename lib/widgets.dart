@@ -601,7 +601,7 @@ class _GScatterPainter extends CustomPainter {
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
 // 三个都是车头朝左的侧视矢量，黑底上轮圈用图标色，不靠纯黑轮胎。
-// 汽车：低趴 GT（前唇、斜舱、端板尾翼）。自行车：公路车剪影。
+// 汽车：圆润的后置发动机轿跑（溜背、圆前翼、小鸭尾）。自行车：气动公路赛车。
 // 摩托：描线仿赛，由 _SportMotoPainter 镜像并撑满，路径本身不要改。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
@@ -633,59 +633,42 @@ void _fitModeArt(Canvas canvas, Size s, Rect src, double top, double bottom, voi
   canvas.restore();
 }
 
-void _raceWheel(Canvas canvas, Offset o, double r, Color color) {
+void _rimWheel(Canvas canvas, Offset o, double r, double innerFrac, double hub, Color color) {
   final paint = Paint()..color = color;
   canvas.drawPath(
     Path()
       ..fillType = PathFillType.evenOdd
       ..addOval(Rect.fromCircle(center: o, radius: r))
-      ..addOval(Rect.fromCircle(center: o, radius: r * 0.68)),
+      ..addOval(Rect.fromCircle(center: o, radius: r * innerFrac)),
     paint,
   );
-  canvas.drawPath(
-    Path()
-      ..fillType = PathFillType.evenOdd
-      ..addOval(Rect.fromCircle(center: o, radius: r * 0.42))
-      ..addOval(Rect.fromCircle(center: o, radius: r * 0.30)),
-    paint,
-  );
-  final spoke = Paint()
-    ..color = color
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = r * 0.09
-    ..strokeCap = StrokeCap.round;
-  for (var i = 0; i < 5; i++) {
-    final a = -math.pi / 2 + i * 2 * math.pi / 5;
-    final dir = Offset(math.cos(a), math.sin(a));
-    canvas.drawLine(o + dir * r * 0.22, o + dir * r * 0.62, spoke);
-  }
-  canvas.drawCircle(o, r * 0.16, paint);
+  canvas.drawCircle(o, hub, paint);
 }
 
 class _SportCarPainter extends CustomPainter {
   final Color c;
   _SportCarPainter(this.c);
 
-  static final Path _body = modeIconPath(kRaceCarBody);
-  static final Path _wing = modeIconPath(kRaceCarWing);
-  static const Offset _front = Offset(23, 80);
-  static const Offset _rear = Offset(77, 80);
-  static const double _wheelR = 12.2;
+  static final Path _body = modeIconPath(kCoupeBody);
+  static final Path _tail = modeIconPath(kCoupeTail);
+  static const Offset _front = Offset(33, 76.2);
+  static const Offset _rear = Offset(75, 76.2);
+  static const double _wheelR = 11.6;
   static final Rect _src = _body
       .getBounds()
-      .expandToInclude(_wing.getBounds())
+      .expandToInclude(_tail.getBounds())
       .expandToInclude(Rect.fromCircle(center: _front, radius: _wheelR))
       .expandToInclude(Rect.fromCircle(center: _rear, radius: _wheelR));
 
   @override
   void paint(Canvas canvas, Size s) {
-    // 和摩托同一条垂直槽，轮底对齐。车身偏宽，多出来的几 dp 落在模式间距里。
+    // 和摩托同一条垂直槽，轮底对齐。
     _fitModeArt(canvas, s, _src, 0.28, 0.88, (canvas) {
-      _raceWheel(canvas, _front, _wheelR, c);
-      _raceWheel(canvas, _rear, _wheelR, c);
+      _rimWheel(canvas, _front, _wheelR, 0.57, 2.25, c);
+      _rimWheel(canvas, _rear, _wheelR, 0.57, 2.25, c);
       final paint = Paint()..color = c;
       canvas.drawPath(_body, paint);
-      canvas.drawPath(_wing, paint);
+      canvas.drawPath(_tail, paint);
     });
   }
 
@@ -734,14 +717,23 @@ class _BikePainter extends CustomPainter {
   final Color c;
   _BikePainter(this.c);
 
-  static final Path _bike = modeIconPath(kRoadBike);
-  static final Rect _src = _bike.getBounds();
+  static final Path _frame = modeIconPath(kAeroRoadBike)..fillType = PathFillType.nonZero;
+  static const Offset _front = Offset(26, 75.2);
+  static const Offset _rear = Offset(83.2, 75.6);
+  static const double _wheelR = 15.1;
+  static final Rect _src = _frame
+      .getBounds()
+      .expandToInclude(Rect.fromCircle(center: _front, radius: _wheelR))
+      .expandToInclude(Rect.fromCircle(center: _rear, radius: _wheelR));
 
   @override
   void paint(Canvas canvas, Size s) {
-    // 下把比车顶更高，槽比摩托略高一点，三个图标的视觉高度才齐。
-    _fitModeArt(canvas, s, _src, 0.22, 0.90, (canvas) {
-      canvas.drawPath(_bike, Paint()..color = c);
+    // 和摩托同一条垂直槽：把到轮底撑满，三个图标接地线对齐。
+    _fitModeArt(canvas, s, _src, 0.28, 0.88, (canvas) {
+      final paint = Paint()..color = c;
+      canvas.drawPath(_frame, paint);
+      _rimWheel(canvas, _front, _wheelR, 0.56, 2.35, c);
+      _rimWheel(canvas, _rear, _wheelR, 0.56, 2.35, c);
     });
   }
 
