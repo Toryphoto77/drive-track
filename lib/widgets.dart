@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app_locale.dart';
 import 'models.dart';
 import 'recorder.dart';
+import 'car_paths.dart';
 import 'mode_icon_paths.dart';
 import 'sport_moto_paths.dart';
 
@@ -601,8 +602,8 @@ class _GScatterPainter extends CustomPainter {
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
 // 三个都是车头朝左的侧视矢量，黑底上轮圈用图标色，不靠纯黑轮胎。
-// 汽车：低扁的后置发动机轿跑（圆前翼、水滴车顶、小鸭尾），宽度对齐仿赛。
-// 自行车：大轮深框的公路赛车，宽度同样对齐仿赛。
+// 汽车：从本应用的侧视剪影描出，车头朝左，不镜像，高度与仿赛同一条槽。
+// 自行车：大轮深框的公路赛车，宽度对齐仿赛。路径不要改。
 // 摩托：描线仿赛，由 _SportMotoPainter 镜像并撑满，路径本身不要改。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
@@ -641,20 +642,24 @@ class _SportCarPainter extends CustomPainter {
   final Color c;
   _SportCarPainter(this.c);
 
-  static final Path _wheels = modeIconPath(kCoupeWheels);
-  static final Path _body = modeIconPath(kCoupeBody);
+  static final Path _car = coupeSilhouettePath();
 
-  /// 车身加轮胎的可见范围。轮底在底边上，用来和仿赛接地。
-  static const Rect _src = Rect.fromLTRB(42.0, 160.03, 1079.0, 560.0);
+  /// 描线端点的外框。轮底在底边上，和仿赛同一条接地线。
+  static const Rect _src = Rect.fromLTRB(2.0, 2.6, 1034.0, 309.7);
+  static const double _slotTop = 0.28;
+  static const double _slotBottom = 0.88;
 
   @override
   void paint(Canvas canvas, Size s) {
-    // 宽度和轮底都对齐仿赛。先画轮，轮拱再盖住胎顶，留下一圈缝。
-    _fitModeWidth(canvas, s, _src, (canvas) {
-      final paint = Paint()..color = c;
-      canvas.drawPath(_wheels, paint);
-      canvas.drawPath(_body, paint);
-    });
+    // 剪影已经朝左，不镜像。高度放进仿赛那条垂直槽，车身更长，左右超出格子。
+    final b = _src;
+    final scale = (_slotBottom - _slotTop) * s.height / b.height;
+    final left = (s.width - b.width * scale) / 2;
+    canvas.save();
+    canvas.translate(left - b.left * scale, _slotTop * s.height - b.top * scale);
+    canvas.scale(scale);
+    canvas.drawPath(_car, Paint()..color = c);
+    canvas.restore();
   }
 
   @override
