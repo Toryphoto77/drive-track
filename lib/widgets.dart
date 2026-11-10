@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app_locale.dart';
 import 'models.dart';
 import 'recorder.dart';
+import 'mode_icon_paths.dart';
 import 'sport_moto_paths.dart';
 
 // ---------- Web Mercator ----------
@@ -599,9 +600,9 @@ class _GScatterPainter extends CustomPainter {
 }
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
-// 汽车：低趴跑车，车头朝左（尾翼在右）。自行车：车把在左，同向。
-// 摩托：同一朝向的侧视仿赛。描线本身车头朝右、轮胎是近黑色，
-// 由 _SportMotoPainter 镜像、撑满并改成图标色。
+// 三个都是车头朝左的侧视矢量，黑底上轮圈用图标色，不靠纯黑轮胎。
+// 汽车：低趴 GT（前唇、斜舱、端板尾翼）。自行车：公路车剪影。
+// 摩托：描线仿赛，由 _SportMotoPainter 镜像并撑满，路径本身不要改。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
   final bool selected;
@@ -621,42 +622,71 @@ class ModeVehicleIcon extends StatelessWidget {
   }
 }
 
+/// 把 0–100 设计框里的 [src] 等比放进图标的垂直槽，水平居中。
+void _fitModeArt(Canvas canvas, Size s, Rect src, double top, double bottom, void Function(Canvas canvas) draw) {
+  final scale = (bottom - top) * s.height / src.height;
+  final left = (s.width - src.width * scale) / 2;
+  canvas.save();
+  canvas.translate(left - src.left * scale, top * s.height - src.top * scale);
+  canvas.scale(scale);
+  draw(canvas);
+  canvas.restore();
+}
+
+void _raceWheel(Canvas canvas, Offset o, double r, Color color) {
+  final paint = Paint()..color = color;
+  canvas.drawPath(
+    Path()
+      ..fillType = PathFillType.evenOdd
+      ..addOval(Rect.fromCircle(center: o, radius: r))
+      ..addOval(Rect.fromCircle(center: o, radius: r * 0.68)),
+    paint,
+  );
+  canvas.drawPath(
+    Path()
+      ..fillType = PathFillType.evenOdd
+      ..addOval(Rect.fromCircle(center: o, radius: r * 0.42))
+      ..addOval(Rect.fromCircle(center: o, radius: r * 0.30)),
+    paint,
+  );
+  final spoke = Paint()
+    ..color = color
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = r * 0.09
+    ..strokeCap = StrokeCap.round;
+  for (var i = 0; i < 5; i++) {
+    final a = -math.pi / 2 + i * 2 * math.pi / 5;
+    final dir = Offset(math.cos(a), math.sin(a));
+    canvas.drawLine(o + dir * r * 0.22, o + dir * r * 0.62, spoke);
+  }
+  canvas.drawCircle(o, r * 0.16, paint);
+}
+
 class _SportCarPainter extends CustomPainter {
   final Color c;
   _SportCarPainter(this.c);
+
+  static final Path _body = modeIconPath(kRaceCarBody);
+  static final Path _wing = modeIconPath(kRaceCarWing);
+  static const Offset _front = Offset(23, 80);
+  static const Offset _rear = Offset(77, 80);
+  static const double _wheelR = 12.2;
+  static final Rect _src = _body
+      .getBounds()
+      .expandToInclude(_wing.getBounds())
+      .expandToInclude(Rect.fromCircle(center: _front, radius: _wheelR))
+      .expandToInclude(Rect.fromCircle(center: _rear, radius: _wheelR));
+
   @override
   void paint(Canvas canvas, Size s) {
-    final p = Paint()..color = c..style = PaintingStyle.fill;
-    final w = s.width, h = s.height;
-    // 低趴车身
-    final body = Path()
-      ..moveTo(w * 0.06, h * 0.72)
-      ..lineTo(w * 0.14, h * 0.58)
-      ..lineTo(w * 0.34, h * 0.50)
-      ..lineTo(w * 0.48, h * 0.34)
-      ..lineTo(w * 0.68, h * 0.34)
-      ..lineTo(w * 0.80, h * 0.50)
-      ..lineTo(w * 0.94, h * 0.58)
-      ..lineTo(w * 0.94, h * 0.72)
-      ..close();
-    canvas.drawPath(body, p);
-    // 尾翼
-    canvas.drawRect(Rect.fromLTWH(w * 0.78, h * 0.30, w * 0.20, h * 0.07), p);
-    canvas.drawRect(Rect.fromLTWH(w * 0.84, h * 0.37, w * 0.04, h * 0.14), p);
-    // 车窗
-    canvas.drawPath(Path()
-      ..moveTo(w * 0.38, h * 0.50)
-      ..lineTo(w * 0.50, h * 0.38)
-      ..lineTo(w * 0.66, h * 0.38)
-      ..lineTo(w * 0.74, h * 0.50)
-      ..close(), Paint()..color = Colors.black.withValues(alpha: 0.55));
-    // 车轮
-    final wheel = Paint()..color = Colors.black;
-    canvas.drawCircle(Offset(w * 0.26, h * 0.74), w * 0.13, wheel);
-    canvas.drawCircle(Offset(w * 0.74, h * 0.74), w * 0.13, wheel);
-    final hub = Paint()..color = c;
-    canvas.drawCircle(Offset(w * 0.26, h * 0.74), w * 0.05, hub);
-    canvas.drawCircle(Offset(w * 0.74, h * 0.74), w * 0.05, hub);
+    // 和摩托同一条垂直槽，轮底对齐。车身偏宽，多出来的几 dp 落在模式间距里。
+    _fitModeArt(canvas, s, _src, 0.28, 0.88, (canvas) {
+      _raceWheel(canvas, _front, _wheelR, c);
+      _raceWheel(canvas, _rear, _wheelR, c);
+      final paint = Paint()..color = c;
+      canvas.drawPath(_body, paint);
+      canvas.drawPath(_wing, paint);
+    });
   }
 
   @override
@@ -703,18 +733,16 @@ class _SportMotoPainter extends CustomPainter {
 class _BikePainter extends CustomPainter {
   final Color c;
   _BikePainter(this.c);
+
+  static final Path _bike = modeIconPath(kRoadBike);
+  static final Rect _src = _bike.getBounds();
+
   @override
   void paint(Canvas canvas, Size s) {
-    final p = Paint()..color = c..strokeWidth = 2.5..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
-    final w = s.width, h = s.height;
-    canvas.drawCircle(Offset(w * 0.24, h * 0.72), w * 0.16, p);
-    canvas.drawCircle(Offset(w * 0.76, h * 0.72), w * 0.16, p);
-    canvas.drawLine(Offset(w * 0.24, h * 0.72), Offset(w * 0.50, h * 0.38), p);
-    canvas.drawLine(Offset(w * 0.76, h * 0.72), Offset(w * 0.50, h * 0.38), p);
-    canvas.drawLine(Offset(w * 0.50, h * 0.38), Offset(w * 0.66, h * 0.38), p);
-    canvas.drawLine(Offset(w * 0.66, h * 0.38), Offset(w * 0.76, h * 0.72), p);
-    canvas.drawLine(Offset(w * 0.42, h * 0.38), Offset(w * 0.36, h * 0.28), p);
-    canvas.drawLine(Offset(w * 0.30, h * 0.28), Offset(w * 0.42, h * 0.28), p);
+    // 下把比车顶更高，槽比摩托略高一点，三个图标的视觉高度才齐。
+    _fitModeArt(canvas, s, _src, 0.22, 0.90, (canvas) {
+      canvas.drawPath(_bike, Paint()..color = c);
+    });
   }
 
   @override
