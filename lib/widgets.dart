@@ -599,7 +599,9 @@ class _GScatterPainter extends CustomPainter {
 }
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
-// 汽车：低趴跑车，车头朝右。摩托：同向侧视仿赛，轮廓描自确认稿。
+// 汽车：低趴跑车，车头朝左（尾翼在右）。自行车：车把在左，同向。
+// 摩托：同一朝向的侧视仿赛。描线本身车头朝右、轮胎是近黑色，
+// 由 _SportMotoPainter 镜像、撑满并改成图标色。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
   final bool selected;
@@ -667,13 +669,30 @@ class _SportMotoPainter extends CustomPainter {
 
   static final Path _body = sportMotoBodyPath();
   static final Path _tires = sportMotoTirePath();
+  static final Rect _src = _body.getBounds().expandToInclude(_tires.getBounds());
+
+  /// 和汽车（尾翼 0.30、轮底 0.87）、自行车（车把 0.28、轮底 0.88）同一条垂直槽。
+  /// 仿赛描线比这条槽更扁，等比放大后左右会多出约 3dp，落在模式项 14dp 的间距里，
+  /// 不裁切，避免轮子被切掉后又显得偏小。
+  static const double _slotTop = 0.28;
+  static const double _slotBottom = 0.88;
 
   @override
   void paint(Canvas canvas, Size s) {
+    final b = _src;
+    final scale = (_slotBottom - _slotTop) * s.height / b.height;
+    final left = (s.width - b.width * scale) / 2;
     canvas.save();
-    canvas.scale(s.width / kSportMotoViewBox, s.height / kSportMotoViewBox);
-    canvas.drawPath(_tires, Paint()..color = const Color(0xFF111111));
-    canvas.drawPath(_body, Paint()..color = c);
+    // 描线车头在高 x。镜像后车头朝左，与跑车、自行车一致。
+    // screenX = left + (b.right - x) * scale
+    // screenY = slotTop + (y - b.top) * scale
+    canvas.translate(left + b.right * scale, _slotTop * s.height - b.top * scale);
+    canvas.scale(-scale, scale);
+    // 轮胎与车身同一支颜色。轮圈、辐条靠路径镂空透出底色，
+    // 纯黑或近黑背景上不再消失。选中/未选中都跟图标色走。
+    final paint = Paint()..color = c;
+    canvas.drawPath(_tires, paint);
+    canvas.drawPath(_body, paint);
     canvas.restore();
   }
 

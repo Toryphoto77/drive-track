@@ -1,7 +1,10 @@
 import 'dart:ui';
 
 /// 计时页摩托模式图标。路径从确认过的侧视仿赛位图描出（1024 视框），
-/// 保留轮辐、盘面、整流罩镂空和排气。不要再手画简化轮廓。
+/// 车头朝右，保留轮辐、盘面、整流罩镂空和排气。
+/// 朝向、尺寸和轮胎颜色由 widgets.dart 的 _SportMotoPainter 处理：
+/// 水平镜像到车头朝左，按车身外包撑到与汽车/自行车同一垂直槽，
+/// 轮胎用图标色而不是近黑，避免黑底上轮子消失。
 const double kSportMotoViewBox = 1024;
 
 Path sportMotoBodyPath() {
