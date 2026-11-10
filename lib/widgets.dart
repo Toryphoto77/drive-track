@@ -601,8 +601,9 @@ class _GScatterPainter extends CustomPainter {
 
 // ---------- 模式矢量图标（v0.1.2 自绘，拒绝只换 Material 图标名） ----------
 // 三个都是车头朝左的侧视矢量，黑底上轮圈用图标色，不靠纯黑轮胎。
-// 汽车：长扁的后置发动机轿跑（圆前翼、直立椭圆灯、一条溜背、小鸭尾）。
-// 自行车：大轮深框的公路赛车。摩托：描线仿赛，由 _SportMotoPainter 镜像并撑满，路径本身不要改。
+// 汽车：低扁的后置发动机轿跑（圆前翼、水滴车顶、小鸭尾），宽度对齐仿赛。
+// 自行车：大轮深框的公路赛车，宽度同样对齐仿赛。
+// 摩托：描线仿赛，由 _SportMotoPainter 镜像并撑满，路径本身不要改。
 class ModeVehicleIcon extends StatelessWidget {
   final TripMode mode;
   final bool selected;
@@ -622,12 +623,15 @@ class ModeVehicleIcon extends StatelessWidget {
   }
 }
 
-/// 把 0–100 设计框里的 [src] 等比放进图标的垂直槽，水平居中。
-void _fitModeArt(Canvas canvas, Size s, Rect src, double top, double bottom, void Function(Canvas canvas) draw) {
-  final scale = (bottom - top) * s.height / src.height;
+/// 仿赛把车身高度放进 0.28–0.88 后，宽度大约是图标的 1.164 倍。
+/// 轿跑和公路车用同一宽度、同一条轮底，避免轿跑在槽里显得又高又宽。
+const double _kMotoWidthFrac = 888.39 / 458.01 * 0.60;
+
+void _fitModeWidth(Canvas canvas, Size s, Rect src, void Function(Canvas canvas) draw) {
+  final scale = _kMotoWidthFrac * s.width / src.width;
   final left = (s.width - src.width * scale) / 2;
   canvas.save();
-  canvas.translate(left - src.left * scale, top * s.height - src.top * scale);
+  canvas.translate(left - src.left * scale, 0.88 * s.height - src.bottom * scale);
   canvas.scale(scale);
   draw(canvas);
   canvas.restore();
@@ -640,13 +644,13 @@ class _SportCarPainter extends CustomPainter {
   static final Path _wheels = modeIconPath(kCoupeWheels);
   static final Path _body = modeIconPath(kCoupeBody);
 
-  /// 车身加轮胎的可见范围。不用 Path.getBounds()：二次曲线的控制点会把框撑大。
-  static const Rect _src = Rect.fromLTRB(61.4, 160.2, 967.2, 560.0);
+  /// 车身加轮胎的可见范围。轮底在底边上，用来和仿赛接地。
+  static const Rect _src = Rect.fromLTRB(42.0, 160.03, 1079.0, 560.0);
 
   @override
   void paint(Canvas canvas, Size s) {
-    // 和摩托同一条垂直槽，轮底对齐。先画轮，车身的轮拱再把胎顶盖住，留下一圈缝。
-    _fitModeArt(canvas, s, _src, 0.28, 0.88, (canvas) {
+    // 宽度和轮底都对齐仿赛。先画轮，轮拱再盖住胎顶，留下一圈缝。
+    _fitModeWidth(canvas, s, _src, (canvas) {
       final paint = Paint()..color = c;
       canvas.drawPath(_wheels, paint);
       canvas.drawPath(_body, paint);
@@ -705,8 +709,8 @@ class _BikePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size s) {
-    // 和摩托同一条垂直槽：坐垫到轮底撑满，三个图标接地线对齐。
-    _fitModeArt(canvas, s, _src, 0.28, 0.88, (canvas) {
+    // 和仿赛同一宽度、同一条轮底。车架路径不变。
+    _fitModeWidth(canvas, s, _src, (canvas) {
       final paint = Paint()..color = c;
       canvas.drawPath(_wheels, paint);
       canvas.drawPath(_frame, paint);
