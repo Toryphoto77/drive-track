@@ -1,6 +1,6 @@
 #!/bin/bash
 # 驰迹 DriveTrack debug APK 离线构建（arm64）。
-# 不用 Ordnance 的正式签名密钥库；debug 包用 Flutter 默认 debug 签名。
+# debug 包使用 Flutter 默认 debug 签名。
 set -e
 # 路径可用环境变量覆盖（装在别处时不必改脚本）。
 export JAVA_HOME=${DRIVETRACK_JAVA_HOME:-$HOME/sdk/jdk17}
@@ -32,9 +32,8 @@ if [ "$OFFLINE_BUILD" = 1 ]; then
   printf 'gradle.startParameter.offline = true\n' > "$GUH/init.d/offline.gradle"
 fi
 trap 'rm -f "$GUH/init.d/offline.gradle"' EXIT
-# 云端二期：CloudBase 环境 ID（仅本地 .cloudbase-env 文件，600 权限，
-# gitignore，不进仓库、不进推送清单）：有则以 --dart-define 注入，
-# 无则不传，代码侧空值即云端未配置、上传禁用；内容绝不回显到日志。
+# 可选：云端环境标识，从本机文件读取后以 --dart-define 注入；
+# 无文件则不传，代码侧空值即云端未配置；内容不打印。
 CLOUDBASE_DEFINE=()
 if [ -f .cloudbase-env ]; then
   CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")

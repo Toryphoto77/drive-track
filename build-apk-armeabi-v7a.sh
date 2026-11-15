@@ -42,9 +42,8 @@ trap 'rm -f "$GUH/init.d/offline.gradle"' EXIT
 # 读不到即停，不编出文件名带空版本号的包。
 VERSION="$(sed -n 's/^version: \([0-9][0-9.]*\)+.*/\1/p' pubspec.yaml)"
 if [ -z "$VERSION" ]; then echo "读不到 pubspec.yaml 的 version"; exit 1; fi
-# 云端二期：CloudBase 环境 ID（仅本地 .cloudbase-env 文件，600 权限，
-# gitignore，不进仓库、不进推送清单）：有则以 --dart-define 注入，
-# 无则不传，代码侧空值即云端未配置、上传禁用；内容绝不回显到日志。
+# 可选：云端环境标识，从本机文件读取后以 --dart-define 注入；
+# 无文件则不传，代码侧空值即云端未配置；内容不打印。
 CLOUDBASE_DEFINE=()
 if [ -f .cloudbase-env ]; then
   CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")

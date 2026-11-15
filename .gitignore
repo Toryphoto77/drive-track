@@ -69,3 +69,7 @@ android/local.properties
 flutter-tools-gradle/.gradle/
 flutter-tools-gradle/build/
 icon-concepts/
+
+# Internal ops notes stay local only
+ZZ-本地维护说明-必读.md
+RELEASE_CHECKLIST.md

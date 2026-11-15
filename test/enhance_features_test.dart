@@ -299,9 +299,8 @@ void main() {
           isTrue);
     });
 
-    test('release pipeline script and checklist exist', () {
+    test('release pipeline script exists', () {
       expect(File('tools/release_pipeline.sh').existsSync(), isTrue);
-      expect(File('RELEASE_CHECKLIST.md').existsSync(), isTrue);
       final sh = File('tools/release_pipeline.sh').readAsStringSync();
       expect(sh.contains('gen_update_manifest.py'), isTrue);
       expect(sh.contains('purge.jsdelivr.net'), isTrue);

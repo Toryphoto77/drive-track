@@ -56,7 +56,7 @@ for abi in "${ABIS[@]}"; do
 done
 if [[ "$missing" = 1 ]]; then
   echo
-  echo "请先构建三架构正式包，或加 --build（需本机密钥库环境变量）。"
+  echo "请先构建三架构正式包，或加 --build（需本机签名材料）。"
   echo "  bash build-apk-release.sh"
   echo "  bash build-apk-armeabi-v7a-release.sh"
   echo "  bash build-apk-x86_64-release.sh"
@@ -107,5 +107,5 @@ cat <<NEXT
      DriveTrack-v${VERSION}-release-x86_64.apk
 5) 刷新 jsDelivr 缓存：
      curl -s "https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json"
-6) 真机按 RELEASE_CHECKLIST.md 回归后再对外宣布
+6) 真机回归通过后再对外宣布
 NEXT
