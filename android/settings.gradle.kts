@@ -47,6 +47,10 @@ dependencyResolutionManagement {
         }
         google()
         mavenCentral()
-        maven { url = uri("https://storage.googleapis.com/download.flutter.io") }
+        // Flutter 引擎构件仓库：默认官方源；国内网络可设
+        // FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn 走镜像。
+        val flutterStorage =
+            System.getenv("FLUTTER_STORAGE_BASE_URL") ?: "https://storage.googleapis.com"
+        maven { url = uri("$flutterStorage/download.flutter.io") }
     }
 }

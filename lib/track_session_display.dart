@@ -231,6 +231,11 @@ class TrackSessionDisplay extends StatelessWidget {
   /// 只重建自身，不重建整个面板、不干扰大计时 ticker。
   final LiveGSource? liveGSource;
 
+  /// v1.5.7 卡丁精简档：只留当前圈时段、圈号、Delta（数字 + 边缘条），
+  /// 去掉分段表、最佳/预测/理论与 G 值行。卡丁车速低、圈短、驾驶中
+  /// 注意力全在路面，三数原则够用；汽车/摩托保持默认 false 的完整面板。
+  final bool compact;
+
   const TrackSessionDisplay({
     super.key,
     required this.currentLapNumber,
@@ -250,10 +255,12 @@ class TrackSessionDisplay extends StatelessWidget {
     this.timerLive = false,
     this.timerPaused = false,
     this.liveGSource,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (compact) return _buildCompact();
     final labels = sectorLabels;
     return Container(
       padding: const EdgeInsets.all(14),
@@ -449,6 +456,104 @@ class TrackSessionDisplay extends StatelessWidget {
               child: Text(
                 sectorSourceNote!,
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// v1.5.7 卡丁精简档：大数字 + 圈号 + Delta 数字与边缘条。
+  /// 数据全部复用本 widget 的入参，不另算一套。
+  Widget _buildCompact() {
+    final delta = showDelta ? liveDeltaMs : null;
+    final frac = deltaBarFraction(delta);
+    final faster = delta != null && delta < 0;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kBorder),
+      ),
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      currentLapNumber <= 0 ? '发车圈' : '第 $currentLapNumber 圈',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (delta != null)
+                      Text(
+                        LapTimer.formatDelta(delta),
+                        style: TextStyle(
+                          color: sectorDeltaColor(delta),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: LiveLapTimeText(
+                    anchorMs: currentLapMs,
+                    lapNumber: currentLapNumber,
+                    paused: timerPaused,
+                    live: timerLive,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 64,
+                      fontWeight: FontWeight.bold,
+                      height: 1.05,
+                    ),
+                  ),
+                ),
+                if (isPaused)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Text(
+                      '已自动暂停，暂停时长不计入圈速',
+                      style: TextStyle(color: _kRed, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Delta 边缘条：快了左侧绿、慢了右侧红，长度按同一对数刻度，
+          // 余光就能判断，不必低头读数字。
+          if (delta != null && frac > 0)
+            Positioned(
+              left: faster ? 0 : null,
+              right: faster ? null : 0,
+              top: 0,
+              bottom: 0,
+              width: 6,
+              child: LayoutBuilder(
+                builder: (context, cons) => Align(
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 6,
+                    height: cons.maxHeight * frac,
+                    decoration: BoxDecoration(
+                      color: (faster ? _kGreen : _kRed).withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
               ),
             ),
         ],

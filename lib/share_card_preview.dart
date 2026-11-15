@@ -63,7 +63,7 @@ String _fmtDate(int ms) {
 /// （估算时标注“估算”）。
 String shareCardHighlight(Trip trip) {
   switch (trip.mode) {
-    case TripMode.car:
+    case TripMode.car || TripMode.kart:
       final corners = trip.events.where((e) => e.kind == 'corner').toList();
       if (corners.isEmpty) return '无偏急过弯';
       final c = corners.reduce(

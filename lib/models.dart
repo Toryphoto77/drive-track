@@ -3,12 +3,19 @@ import 'dart:math' as math;
 import 'photo_points.dart';
 
 /// 出行模式。阈值与指标按模式分开，绝不混用。
-enum TripMode { car, moto, bike }
+///
+/// v1.5.7：首页模式行只保留 car / moto / kart（见 [kHomeModes]），
+/// bike 下线但枚举值保留——历史行程按 name 序列化，删掉会解析不了。
+enum TripMode { car, moto, kart, bike }
+
+/// 首页模式行顺序（骑行已下线，卡丁车占用原骑行档位）。
+const List<TripMode> kHomeModes = [TripMode.car, TripMode.moto, TripMode.kart];
 
 extension TripModeLabel on TripMode {
   String get label => switch (this) {
         TripMode.car => '汽车',
         TripMode.moto => '摩托',
+        TripMode.kart => '卡丁车',
         TripMode.bike => '骑行',
       };
   String get key => name;
@@ -24,10 +31,12 @@ class ModeThresholds {
   const ModeThresholds(this.harshAccel, this.harshBrake, this.harshCorner);
   static const car = ModeThresholds(0.30, -0.35, 0.40);
   static const moto = ModeThresholds(0.35, -0.40, 0.50);
+  static const kart = ModeThresholds(0.35, -0.40, 0.50);
   static const bike = ModeThresholds(0.20, -0.20, 0.30);
   static ModeThresholds of(TripMode m) => switch (m) {
         TripMode.car => car,
         TripMode.moto => moto,
+        TripMode.kart => kart,
         TripMode.bike => bike,
       };
 }

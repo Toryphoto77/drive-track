@@ -208,6 +208,7 @@ class _VehicleMarkerSettingsSectionState
   VehicleMarkerSelection _selectionForRow(String key) => switch (_tab) {
         TripMode.car => _sel.copyWith(car: CarMarkerStyleLabel.fromKey(key)),
         TripMode.moto => _sel.copyWith(moto: MotoMarkerStyleLabel.fromKey(key)),
+        TripMode.kart => _sel.copyWith(car: CarMarkerStyleLabel.fromKey(key)),
         TripMode.bike => _sel.copyWith(bike: BikeMarkerStyleLabel.fromKey(key)),
       };
 
@@ -216,6 +217,7 @@ class _VehicleMarkerSettingsSectionState
       _sel = switch (mode) {
         TripMode.car => _sel.copyWith(car: CarMarkerStyleLabel.fromKey(key)),
         TripMode.moto => _sel.copyWith(moto: MotoMarkerStyleLabel.fromKey(key)),
+        TripMode.kart => _sel.copyWith(car: CarMarkerStyleLabel.fromKey(key)),
         TripMode.bike => _sel.copyWith(bike: BikeMarkerStyleLabel.fromKey(key)),
       };
     });
@@ -230,6 +232,9 @@ class _VehicleMarkerSettingsSectionState
           .toList(),
       TripMode.moto => MotoMarkerStyle.values
           .map((e) => (key: e.key, label: e.label, sel: _sel.moto.key))
+          .toList(),
+      TripMode.kart => CarMarkerStyle.values
+          .map((e) => (key: e.key, label: e.label, sel: _sel.car.key))
           .toList(),
       TripMode.bike => BikeMarkerStyle.values
           .map((e) => (key: e.key, label: e.label, sel: _sel.bike.key))
@@ -246,7 +251,7 @@ class _VehicleMarkerSettingsSectionState
               segments: const [
                 ButtonSegment(value: TripMode.car, label: Text('汽车')),
                 ButtonSegment(value: TripMode.moto, label: Text('摩托')),
-                ButtonSegment(value: TripMode.bike, label: Text('自行车')),
+                ButtonSegment(value: TripMode.kart, label: Text('卡丁车')),
               ],
               selected: {_tab},
               onSelectionChanged: (v) => setState(() => _tab = v.first),

@@ -85,6 +85,7 @@ String _modeTripTitle(BuildContext context, TripMode mode) {
   final name = switch (mode) {
     TripMode.car => s.t('汽车', 'Car'),
     TripMode.moto => s.t('摩托', 'Moto'),
+    TripMode.kart => s.t('卡丁车', 'Kart'),
     TripMode.bike => s.t('骑行', 'Ride'),
   };
   return s.zh ? '$name行程' : '$name trip';

@@ -183,7 +183,7 @@ class TrackHomePage extends StatelessWidget {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    '· 赛道模式只在汽车 / 摩托下计时，骑行不进赛道计时。',
+                    '· 赛道模式在汽车 / 摩托 / 卡丁车下计时（均需连接外接定位），骑行不进赛道计时。',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   Text(

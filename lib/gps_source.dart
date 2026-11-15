@@ -120,15 +120,54 @@ class ExternalGpsStatus {
   /// 优先用外接设备。
   final bool binaryOnly;
 
+  /// 最近一次收到外接定位的本地时间（epoch ms）；0 = 尚未收到。
+  final int lastFixAtMs;
+
+  /// 外接设备的定位更新率（Hz）；0 = 未知。
+  final double sampleRateHz;
+
   const ExternalGpsStatus({
     this.connected = false,
     this.deviceName = '',
     this.channel = '',
     this.binaryOnly = false,
+    this.lastFixAtMs = 0,
+    this.sampleRateHz = 0,
   });
 
   static const disconnected = ExternalGpsStatus();
+
+  ExternalGpsStatus copyWith({
+    bool? connected,
+    String? deviceName,
+    String? channel,
+    bool? binaryOnly,
+    int? lastFixAtMs,
+    double? sampleRateHz,
+  }) =>
+      ExternalGpsStatus(
+        connected: connected ?? this.connected,
+        deviceName: deviceName ?? this.deviceName,
+        channel: channel ?? this.channel,
+        binaryOnly: binaryOnly ?? this.binaryOnly,
+        lastFixAtMs: lastFixAtMs ?? this.lastFixAtMs,
+        sampleRateHz: sampleRateHz ?? this.sampleRateHz,
+      );
+
+  /// 赛道模式的硬件门槛：连接活跃、非二进制待解析设备、3 秒内有定位、
+  /// 且更新率达到 5Hz。少一条都不放行——手机内置 1Hz 不满足。
+  bool get hardwareReady {
+    if (!connected || binaryOnly || lastFixAtMs <= 0) return false;
+    final ageMs = DateTime.now().millisecondsSinceEpoch - lastFixAtMs;
+    return ageMs >= 0 && ageMs <= 3000 && sampleRateHz >= 5;
+  }
 }
+
+/// 调试放行开关：硬件联调期用
+/// `flutter build apk --dart-define=HARDWARE_GATE_BYPASS=true`
+/// 打包，可在未连接硬件时进入赛道/卡丁模式；正式包不传，默认关闭。
+const bool kHardwareGateBypass =
+    bool.fromEnvironment('HARDWARE_GATE_BYPASS', defaultValue: false);
 
 /// 外接 GPS 连接状态的唯一共享源。
 final ValueNotifier<ExternalGpsStatus> externalGpsStatus =

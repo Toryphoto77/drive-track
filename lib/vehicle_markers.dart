@@ -159,6 +159,7 @@ class VehicleMarkerSelection {
   String keyFor(TripMode mode) => switch (mode) {
         TripMode.car => car.key,
         TripMode.moto => moto.key,
+        TripMode.kart => car.key,
         TripMode.bike => bike.key,
       };
 
@@ -191,6 +192,7 @@ class VehicleMarkerSelection {
 List<String> markerOptionsFor(TripMode mode) => switch (mode) {
       TripMode.car => CarMarkerStyle.values.map((e) => e.label).toList(),
       TripMode.moto => MotoMarkerStyle.values.map((e) => e.label).toList(),
+      TripMode.kart => CarMarkerStyle.values.map((e) => e.label).toList(),
       TripMode.bike => BikeMarkerStyle.values.map((e) => e.label).toList(),
     };
 
@@ -248,6 +250,8 @@ class VehicleMarkerPainter extends CustomPainter {
         _paintCar(canvas, size, CarMarkerStyleLabel.fromKey(styleKey));
       case TripMode.moto:
         _paintMoto(canvas, size, MotoMarkerStyleLabel.fromKey(styleKey));
+      case TripMode.kart:
+        _paintCar(canvas, size, CarMarkerStyleLabel.fromKey(styleKey));
       case TripMode.bike:
         _paintBike(canvas, size, BikeMarkerStyleLabel.fromKey(styleKey));
     }
@@ -1087,6 +1091,7 @@ class _VehicleMarkerPickerPageState extends State<VehicleMarkerPickerPage> {
   VehicleMarkerSelection _selectionForRow(String key) => switch (_tab) {
         TripMode.car => _sel.copyWith(car: CarMarkerStyleLabel.fromKey(key)),
         TripMode.moto => _sel.copyWith(moto: MotoMarkerStyleLabel.fromKey(key)),
+        TripMode.kart => _sel.copyWith(car: CarMarkerStyleLabel.fromKey(key)),
         TripMode.bike => _sel.copyWith(bike: BikeMarkerStyleLabel.fromKey(key)),
       };
 
@@ -1095,6 +1100,7 @@ class _VehicleMarkerPickerPageState extends State<VehicleMarkerPickerPage> {
       _sel = switch (mode) {
         TripMode.car => _sel.copyWith(car: CarMarkerStyleLabel.fromKey(key)),
         TripMode.moto => _sel.copyWith(moto: MotoMarkerStyleLabel.fromKey(key)),
+        TripMode.kart => _sel.copyWith(car: CarMarkerStyleLabel.fromKey(key)),
         TripMode.bike => _sel.copyWith(bike: BikeMarkerStyleLabel.fromKey(key)),
       };
     });
@@ -1105,6 +1111,7 @@ class _VehicleMarkerPickerPageState extends State<VehicleMarkerPickerPage> {
   String _blurbFor(String key) => switch (_tab) {
         TripMode.car => CarMarkerStyleLabel.fromKey(key).blurb,
         TripMode.moto => MotoMarkerStyleLabel.fromKey(key).blurb,
+        TripMode.kart => CarMarkerStyleLabel.fromKey(key).blurb,
         TripMode.bike => BikeMarkerStyleLabel.fromKey(key).blurb,
       };
 
@@ -1117,6 +1124,9 @@ class _VehicleMarkerPickerPageState extends State<VehicleMarkerPickerPage> {
       TripMode.moto => MotoMarkerStyle.values
           .map((e) => (key: e.key, label: e.label, sel: _sel.moto.key))
           .toList(),
+      TripMode.kart => CarMarkerStyle.values
+          .map((e) => (key: e.key, label: e.label, sel: _sel.car.key))
+          .toList(),
       TripMode.bike => BikeMarkerStyle.values
           .map((e) => (key: e.key, label: e.label, sel: _sel.bike.key))
           .toList(),
@@ -1124,6 +1134,7 @@ class _VehicleMarkerPickerPageState extends State<VehicleMarkerPickerPage> {
     final (currentLabel, currentKey) = switch (_tab) {
       TripMode.car => (_sel.car.label, _sel.car.key),
       TripMode.moto => (_sel.moto.label, _sel.moto.key),
+      TripMode.kart => (_sel.car.label, _sel.car.key),
       TripMode.bike => (_sel.bike.label, _sel.bike.key),
     };
     return Scaffold(
@@ -1151,7 +1162,7 @@ class _VehicleMarkerPickerPageState extends State<VehicleMarkerPickerPage> {
               segments: const [
                 ButtonSegment(value: TripMode.car, label: Text('汽车')),
                 ButtonSegment(value: TripMode.moto, label: Text('摩托')),
-                ButtonSegment(value: TripMode.bike, label: Text('自行车')),
+                ButtonSegment(value: TripMode.kart, label: Text('卡丁车')),
               ],
               selected: {_tab},
               onSelectionChanged: (v) => setState(() => _tab = v.first),

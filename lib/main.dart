@@ -69,6 +69,7 @@ import 'track_session_display.dart';
 import 'track_live_g.dart';
 import 'track_sector_data.dart';
 import 'track_analysis_page.dart';
+import 'kart_prep_page.dart';
 import 'trip_analytics_page.dart';
 import 'vehicle_profile.dart';
 import 'vehicle_profile_page.dart';
@@ -529,6 +530,7 @@ List<String> safetyItems(TripMode m, {bool isTrack = false, bool english = false
     final base = switch (m) {
       TripMode.car => ['Phone is mounted', 'Do not use the phone while driving', 'Seatbelt on', 'Vehicle checked'],
       TripMode.moto => ['Helmet and gloves on', 'Mount is locked', 'Do not use the phone while riding', 'Bike checked'],
+      TripMode.kart => ['Helmet and gloves on', 'Kart and harness checked', 'Phone secured on body or mount', 'Do not use the phone while driving'],
       TripMode.bike => ['Helmet on', 'Brakes and tires checked', 'Lights ready at night', 'Do not use the phone while riding'],
     };
     if (isTrack) return ['Closed circuit only', ...base];
@@ -537,6 +539,7 @@ List<String> safetyItems(TripMode m, {bool isTrack = false, bool english = false
   final base = switch (m) {
     TripMode.car => ['手机已固定在支架上', '不开车时操作手机', '已系好安全带', '出发前已检查车况'],
     TripMode.moto => ['头盔、手套已戴好', '手机支架已锁紧', '不开车时操作手机', '出发前已检查车况'],
+    TripMode.kart => ['头盔、手套已戴好', '已确认车辆与安全带', '手机已固定在身上或支架', '行驶中不操作手机'],
     TripMode.bike => ['头盔已戴好', '已检查刹车与轮胎', '夜骑已准备灯光', '骑行中不操作手机'],
   };
   if (isTrack) return ['仅在正规封闭赛道使用', ...base];
@@ -622,7 +625,12 @@ class _HomePageState extends State<HomePage>
   final Store store = Store();
   final Recorder rec = Recorder();
   int tab = 0;
-  late final PageController _modeController = PageController(initialPage: rec.mode.index);
+  // v1.5.7：模式行只剩 car / moto / kart（bike 下线）；历史设置若是
+  // bike，索引会越界，回落到第一页。
+  late final PageController _modeController = PageController(
+      initialPage: kHomeModes.contains(rec.mode)
+          ? kHomeModes.indexOf(rec.mode)
+          : 0);
   // v1.3.2：记录页实时 Map 分页（计时页 / 地图页左右滑）。
   late final PageController _recMapPageController = PageController();
   int _recMapPageIndex = 0;
@@ -876,6 +884,8 @@ class _HomePageState extends State<HomePage>
       // 跑，实时显示最多滞后约 1 秒。在此同样触发一次排空，只改
       // 触发时机，不改排空逻辑、不改落点/存储频率（见 _drainLapTimer）。
       if (fedExternalFix) unawaited(_drainLapTimer());
+      // v1.5.7 硬件门槛心跳：记录最近定位时间与更新率，门槛据此放行。
+      if (fedExternalFix) _markExternalFix();
       // v1.4.x 街道语音：外接 GPS 定位同样刷新 GPS 看门狗（手机定位
       // 回调不经过外接路径；只刷新看门狗，不跑超速/里程等街道播报，
       // 那些仍以手机定位回调的 noteStreetLocation 为准）。
@@ -902,6 +912,35 @@ class _HomePageState extends State<HomePage>
       if (e['type'] == 'disconnected') bleConnected = null;
       if (mounted) setState(() {});
     }, onError: (_) {});
+  }
+
+  /// 过线反馈：短震动 + 一帧全屏闪光（个人最佳绿、否则红）。
+  /// 语音播报在调用点紧接着执行；三者同时出现，驾驶中不需要看屏。
+  Color? _lapFlashColor;
+  Timer? _lapFlashTimer;
+  void _lapCrossingFeedback({required bool isBest}) {
+    if (!mounted) return;
+    HapticFeedback.mediumImpact();
+    _lapFlashTimer?.cancel();
+    setState(() => _lapFlashColor =
+        isBest ? const Color(0xFF22C55E) : const Color(0xFFE10600));
+    _lapFlashTimer = Timer(const Duration(milliseconds: 320), () {
+      if (mounted) setState(() => _lapFlashColor = null);
+    });
+  }
+
+  /// 外接定位的“最近一次定位时间 + 更新率”写入全局状态，供赛道硬件门槛判定。
+  /// 1Hz 节流：外接点可能 25Hz，避免每个点都通知监听方重建。
+  int _lastFixStatusMs = 0;
+  void _markExternalFix() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastFixStatusMs < 1000) return;
+    _lastFixStatusMs = now;
+    final st = externalGpsStatus.value;
+    if (!st.connected) return;
+    updateExternalGpsStatus(
+      st.copyWith(lastFixAtMs: now, sampleRateHz: _blediyFeed.hz),
+    );
   }
 
   /// v1.2.14 排空时序：手机定位回调与外接 GPS 回调共用的 LapTimer
@@ -966,6 +1005,9 @@ class _HomePageState extends State<HomePage>
               deltaVsBestMs: (!isBest && prevBest != null)
                   ? done.durationMs - prevBest
                   : null);
+          // v1.5.7 过线三反馈：语音 + 短震动 + 一帧全屏闪光，
+          // 三者同一时刻，驾驶中不必看屏。
+          _lapCrossingFeedback(isBest: isBest);
         }
       } else if (nb != null && nb.counted && prevBest != null && nb.durationMs < prevBest) {
         VoiceService.instance.announceLap(lapNumber: nb.number, lapMs: nb.durationMs, isBest: true);
@@ -1026,9 +1068,89 @@ class _HomePageState extends State<HomePage>
   }
 
   /// 模式切换只改 rec.mode，不触碰记录流程；记录中不展示模式切换器。
+  ///
+  /// v1.5.7：骑行档在首页下线（历史行程仍可打开），第三档改为卡丁车；
+  /// 卡丁车等价于进入赛道模式，进入前必须先通过硬件门槛。
   void _selectMode(TripMode m) {
     if (rec.mode == m) return;
-    _modeController.animateToPage(m.index, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+    if (m == TripMode.kart && !_requireTrackHardware()) return;
+    final i = kHomeModes.indexOf(m);
+    if (i < 0) return;
+    if (m == TripMode.kart) {
+      setState(() {
+        trackMode = true;
+        rec.roadSnapEnabled = false;
+      });
+    }
+    _modeController.animateToPage(i,
+        duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+  }
+
+  /// 赛道 / 卡丁的硬件门槛：未就绪时弹说明并返回 false。
+  bool _requireTrackHardware() {
+    final st = externalGpsStatus.value;
+    if (kHardwareGateBypass || st.hardwareReady) return true;
+    _showHardwareGateSheet(st);
+    return false;
+  }
+
+  void _showHardwareGateSheet(ExternalGpsStatus st) {
+    final String reason;
+    if (!st.connected) {
+      reason = '赛道与卡丁计时需要连接外接定位硬件。手机内置 GPS 约 1Hz，无法保证圈速精度。';
+    } else if (st.binaryOnly) {
+      reason = '当前连接的是二进制协议设备，协议尚未支持解析，暂时不能用于计时。';
+    } else if (st.lastFixAtMs <= 0) {
+      reason = '设备已连接，但还没收到定位数据。请到空旷处等待定位后再试。';
+    } else if (st.sampleRateHz > 0 && st.sampleRateHz < 5) {
+      reason = '当前定位约 ${st.sampleRateHz.toStringAsFixed(0)}Hz，低于赛道计时要求的 5Hz。';
+    } else {
+      reason = '定位数据已中断，请检查设备连接与定位状态。';
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF141414),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('需要连接硬件',
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+            const SizedBox(height: 10),
+            Text(reason,
+                style: const TextStyle(
+                    fontSize: 13, height: 1.5, color: Colors.white70)),
+            const SizedBox(height: 18),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('稍后'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _openDeviceCenter();
+                  },
+                  child: const Text('去连接设备'),
+                ),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
   }
 
   /// 底部导航四页同壳：0 首页 / 1 设备 / 2 记录 / 3 我的。
@@ -1075,7 +1197,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.5.6',
+          versionName: '1.5.7',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1120,6 +1242,7 @@ class _HomePageState extends State<HomePage>
     _menuAnim.dispose();
     _modeController.dispose();
     _recMapPageController.dispose();
+    _lapFlashTimer?.cancel();
     _locSub?.cancel();
     _senSub?.cancel();
     _bleDevSub?.cancel();
@@ -1344,6 +1467,7 @@ class _HomePageState extends State<HomePage>
           final modeName = switch (mode) {
             TripMode.car => s.t('汽车', 'Car'),
             TripMode.moto => s.t('摩托', 'Moto'),
+            TripMode.kart => s.t('卡丁车', 'Kart'),
             TripMode.bike => s.t('骑行', 'Ride'),
           };
           return AlertDialog(
@@ -1447,6 +1571,8 @@ class _HomePageState extends State<HomePage>
 
   /// 倒计时结束后的真正开录：视频启动 + rec.start（与旧 _showSafety 尾段一致）。
   Future<void> _beginRecording(TripMode mode) async {
+    // v1.5.7 硬闸：赛道/卡丁开录前再校验一次硬件，倒计时期间掉线也拦住。
+    if (trackMode && !_requireTrackHardware()) return;
     videoActive = false;
     videoError = null;
     if (videoEnabled && mode != TripMode.bike) {
@@ -1882,6 +2008,16 @@ class _HomePageState extends State<HomePage>
               ),
             ),
           ),
+          // v1.5.7 过线闪光：320ms 一帧全屏淡色（绿=个人最佳，红=慢于
+          // 参照），不吃点击，叠在最上层，驾驶中余光可见。
+          if (_lapFlashColor != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: _lapFlashColor!.withValues(alpha: 0.22),
+                ),
+              ),
+            ),
         ]);
       },
       child: RepaintBoundary(child: _buildMainScaffold()),
@@ -2150,18 +2286,25 @@ class _HomePageState extends State<HomePage>
   // 街道为默认；骑行模式不显示（返回空占位）。
   // 赛道选择器紧随药丸开关下方展开，复用菜单赛道目录的同一底部表。
   Widget _buildSurfaceSwitch() {
-    if (rec.mode == TripMode.bike) return const SizedBox.shrink();
+    // 骑行档已从首页下线；卡丁车固定走赛道，不展示街道/赛道开关。
+    if (rec.mode == TripMode.bike || rec.mode == TripMode.kart) {
+      return const SizedBox.shrink();
+    }
     return ModeSwitchSection(
       surface: trackMode ? DriveSurface.track : DriveSurface.street,
       enabled: !rec.isRecording,
-      onSurfaceChanged: (s) => setState(() {
-        trackMode = s == DriveSurface.track;
-        rec.roadSnapEnabled = !trackMode;
-        if (!trackMode) {
-          selectedTrack = null;
-          selectedPackage = null;
-        }
-      }),
+      onSurfaceChanged: (s) {
+        // v1.5.7 硬件门槛：切赛道前必须已连接合格的外接定位设备。
+        if (s == DriveSurface.track && !_requireTrackHardware()) return;
+        setState(() {
+          trackMode = s == DriveSurface.track;
+          rec.roadSnapEnabled = !trackMode;
+          if (!trackMode) {
+            selectedTrack = null;
+            selectedPackage = null;
+          }
+        });
+      },
       trackSelector: trackMode
           ? OutlinedButton.icon(
               icon: const Icon(Icons.flag, size: 16),
@@ -2208,8 +2351,26 @@ class _HomePageState extends State<HomePage>
         : const SizedBox.shrink();
     final modePageView = PageView(
       controller: _modeController,
-      onPageChanged: (i) => rec.setMode(TripMode.values[i]),
-      children: [for (final _ in TripMode.values) _buildIdleHome()],
+      // v1.5.7：只翻 car / moto / kart 三页；滑到卡丁页要先过硬件门槛，
+      // 不通过就滑回原页（否则滑动手势能绕过门槛）。
+      onPageChanged: (i) {
+        if (i < 0 || i >= kHomeModes.length) return;
+        final m = kHomeModes[i];
+        if (m == TripMode.kart && !_requireTrackHardware()) {
+          final back = kHomeModes.indexOf(rec.mode);
+          _modeController.animateToPage(back < 0 ? 0 : back,
+              duration: const Duration(milliseconds: 250), curve: Curves.easeInOut);
+          return;
+        }
+        rec.setMode(m);
+        if (m == TripMode.kart) {
+          setState(() {
+            trackMode = true;
+            rec.roadSnapEnabled = false;
+          });
+        }
+      },
+      children: [for (final _ in kHomeModes) _buildIdleHome()],
     );
     if (MediaQuery.of(context).orientation == Orientation.landscape) {
       return SingleChildScrollView(
@@ -2569,7 +2730,7 @@ class _HomePageState extends State<HomePage>
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            for (final m in TripMode.values)
+            for (final m in kHomeModes)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
               child: RippleTap(
@@ -2715,7 +2876,7 @@ class _HomePageState extends State<HomePage>
     final totalLikes = real.where((m) => m.isPublic).fold(0, (a, m) => a + m.likes);
     MyTripItem item(TripMeta m) => MyTripItem(
           id: m.id,
-          title: '${s.t(m.mode.label, switch (m.mode) { TripMode.car => 'Car', TripMode.moto => 'Moto', TripMode.bike => 'Ride' })} · ${(m.distanceM / 1000).toStringAsFixed(2)} km · ${s.t('评分', 'Score')} ${m.score.toStringAsFixed(0)}',
+          title: '${s.t(m.mode.label, switch (m.mode) { TripMode.car => 'Car', TripMode.moto => 'Moto', TripMode.kart => 'Kart', TripMode.bike => 'Ride' })} · ${(m.distanceM / 1000).toStringAsFixed(2)} km · ${s.t('评分', 'Score')} ${m.score.toStringAsFixed(0)}',
           // 高德逆地理编码：两端地名都有时追加“起点 → 终点”，缺一端时
           // 不拼半句（只显示日期），避免“地名 → 终点”这种半成品。
           subtitle: '${fmtDate(m.startMs)}${m.startPlace.isNotEmpty && m.endPlace.isNotEmpty ? ' · ${m.startPlace} → ${m.endPlace}' : ''}',
@@ -2923,6 +3084,8 @@ class _HomePageState extends State<HomePage>
   // v1.2.1：赛道专区页（TrackHomePage：赛道行程分组 + 赛道库 +
   // 分析 + 模式说明），由记录页“赛道专区”卡片进入。
   void _openTrackHome() {
+    // v1.5.7：赛道专区等同于进入赛道模式，先过硬件门槛。
+    if (!_requireTrackHardware()) return;
     Navigator.push(
       context,
       DtPageRoute(
@@ -2930,6 +3093,26 @@ class _HomePageState extends State<HomePage>
           metas: trips,
           bestLapMsByTripId: trackBestLapMs,
           loadTrip: store.loadTrip,
+        ),
+      ),
+    );
+  }
+
+  /// 卡丁车准备页：确认硬件、手机放置，再拉起现有赛道选择。
+  void _openKartPrep() {
+    if (!_requireTrackHardware()) return;
+    Navigator.push(
+      context,
+      DtPageRoute(
+        builder: (pageCtx) => KartPrepPage(
+          onPickTrack: () {
+            Navigator.of(pageCtx).pop();
+            _openTrackCatalogSheet();
+          },
+          onConnectDevice: () {
+            Navigator.of(pageCtx).pop();
+            _openDeviceCenter();
+          },
         ),
       ),
     );
@@ -3062,6 +3245,8 @@ class _HomePageState extends State<HomePage>
   /// 骑行模式下选了赛道也不会进赛道计时（_endTrip 的 isTrack 判定
   /// 排除骑行），切回汽车/摩托后该选择仍有效。
   void _openTrackCatalogSheet() async {
+    // v1.5.7：选赛道即进入赛道计时链路，先过硬件门槛。
+    if (!_requireTrackHardware()) return;
     final snap = await TrackLibraryService.instance.loadAll();
     if (!mounted) return;
     showModalBottomSheet(
@@ -3628,6 +3813,8 @@ class _HomePageState extends State<HomePage>
                             rec.state == RecState.paused,
                         sectorDeltasMs: sectorDeltasMs,
                         showDelta: _showTrackDelta,
+                        // v1.5.7：卡丁车用精简档（大数字 + Delta 边缘条）。
+                        compact: rec.mode == TripMode.kart,
                         sectorTimesMs: completedTimes,
                         currentSectorIndex: currentSectorIndex,
                         liveDeltaMs: liveDelta,
@@ -3666,13 +3853,15 @@ class _HomePageState extends State<HomePage>
                       // 只取 GPS 实测点）；无真实分段点时显示占位
                       // “段速 --”，不编数。下一计时线距离取计时器
                       // nextLineDistanceM，为 null 时该段不显示。
-                      TrackSectorSpeedRow(
-                        sectorSpeeds:
-                            timer?.sectorSpeeds ?? const <SectorSpeed?>[],
-                        sectorLabels: labels,
-                        hasSectorPoints: hasSectorPoints,
-                        nextLineDistanceM: timer?.nextLineDistanceM,
-                      ),
+                      // v1.5.7：卡丁精简档不显示分段段速，减少干扰。
+                      if (rec.mode != TripMode.kart)
+                        TrackSectorSpeedRow(
+                          sectorSpeeds:
+                              timer?.sectorSpeeds ?? const <SectorSpeed?>[],
+                          sectorLabels: labels,
+                          hasSectorPoints: hasSectorPoints,
+                          nextLineDistanceM: timer?.nextLineDistanceM,
+                        ),
                       const SizedBox(height: 12),
                       _trackLapListCard(laps, bestMs,
                           hasSectorPoints: hasSectorPoints),
@@ -4234,6 +4423,7 @@ class _HomePageState extends State<HomePage>
       return switch (m.mode) {
         TripMode.car => s.t('汽车', 'Car'),
         TripMode.moto => s.t('摩托', 'Moto'),
+        TripMode.kart => s.t('卡丁车', 'Kart'),
         TripMode.bike => s.t('骑行', 'Ride'),
       };
     }
@@ -4259,6 +4449,7 @@ class _HomePageState extends State<HomePage>
       return switch (m.mode) {
         TripMode.car => const Color(0xFF60A5FA),
         TripMode.moto => const Color(0xFFFBBF24),
+        TripMode.kart => const Color(0xFFF87171),
         TripMode.bike => const Color(0xFF4ADE80),
       };
     }
@@ -4292,12 +4483,13 @@ class _HomePageState extends State<HomePage>
                 style: const TextStyle(color: Colors.white54, fontSize: 12)),
           ]),
         ),
-        // 分区二：赛道专区唯一入口（醒目红底卡片）。
+        // 分区二：赛道 / 卡丁唯一入口（醒目红底卡片）。
+        // v1.5.7：卡丁档走准备页（确认硬件、手机放置，再选赛道）。
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: _openTrackHome,
+            onTap: rec.mode == TripMode.kart ? _openKartPrep : _openTrackHome,
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -4306,14 +4498,27 @@ class _HomePageState extends State<HomePage>
                 border: Border.all(color: red),
               ),
               child: Row(children: [
-                const Icon(Icons.flag, color: red, size: 22),
+                Icon(
+                    rec.mode == TripMode.kart
+                        ? Icons.sports_motorsports_outlined
+                        : Icons.flag,
+                    color: red,
+                    size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(s.t('赛道专区', 'Track'),
+                    Text(
+                        rec.mode == TripMode.kart
+                            ? s.t('卡丁车准备', 'Kart prep')
+                            : s.t('赛道专区', 'Track'),
                         style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 2),
-                    Text(s.t('我的赛道行程 · 赛道库 · 分析', 'My track trips, library, analysis'),
+                    Text(
+                        rec.mode == TripMode.kart
+                            ? s.t('硬件状态 · 手机放置 · 选择赛道',
+                                'Hardware · phone placement · track')
+                            : s.t('我的赛道行程 · 赛道库 · 分析',
+                                'My track trips, library, analysis'),
                         style: const TextStyle(color: Colors.white70, fontSize: 12)),
                   ]),
                 ),
@@ -4588,7 +4793,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
 
   int _vehicleKind(TripMode m) {
     final sel = appPrefs.vehicleSelection;
-    return switch (m) { TripMode.car => sel.car == CarMarkerStyle.sport ? 1 : 0, TripMode.moto => 2, TripMode.bike => 3 };
+    return switch (m) { TripMode.car => sel.car == CarMarkerStyle.sport ? 1 : 0, TripMode.moto => 2, TripMode.kart => sel.car == CarMarkerStyle.sport ? 1 : 0, TripMode.bike => 3 };
   }
 
   Color _vehicleColor(TripMode m) {
@@ -4962,7 +5167,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
     final avgCad = cads.isEmpty ? 0.0 : cads.reduce((a, b) => a + b) / cads.length;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(leading: GlassButton.back(onPressed: () => Navigator.pop(context)), title: Text('${s.t(t.mode.label, switch (t.mode) { TripMode.car => 'Car', TripMode.moto => 'Moto', TripMode.bike => 'Ride' })} ${s.zh ? '行程' : 'trip'} · ${s.zh ? fmtDate(t.startMs) : _fmtDateEn(t.startMs)}')),
+      appBar: DtAppBar(leading: GlassButton.back(onPressed: () => Navigator.pop(context)), title: Text('${s.t(t.mode.label, switch (t.mode) { TripMode.car => 'Car', TripMode.moto => 'Moto', TripMode.kart => 'Kart', TripMode.bike => 'Ride' })} ${s.zh ? '行程' : 'trip'} · ${s.zh ? fmtDate(t.startMs) : _fmtDateEn(t.startMs)}')),
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // v0.1.3 详情页地图同步精细化（跟随关闭、北向上、源切换回调为空时内部切换）。

@@ -615,13 +615,73 @@ class ModeVehicleIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size(size, size),
-      painter: mode == TripMode.car
-          ? _SportCarPainter(color)
-          : mode == TripMode.moto
-              ? _SportMotoPainter(color)
-              : _BikePainter(color),
+      painter: switch (mode) {
+        TripMode.car => _SportCarPainter(color),
+        TripMode.moto => _SportMotoPainter(color),
+        TripMode.kart => _KartPainter(color),
+        TripMode.bike => _BikePainter(color),
+      },
     );
   }
+}
+
+/// 卡丁车（v1.5.7）：低矮车架 + 外露车轮 + 方向盘与头盔，与汽车轮廓明显区分。
+class _KartPainter extends CustomPainter {
+  final Color c;
+  _KartPainter(this.c);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final u = s.width / 36.0;
+    Paint fill(Color color) => Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(Offset(8 * u, 27 * u), 4.5 * u, fill(c));
+    canvas.drawCircle(Offset(29 * u, 27 * u), 4.5 * u, fill(c));
+
+    final body = Path()
+      ..moveTo(4 * u, 22 * u)
+      ..lineTo(9 * u, 18 * u)
+      ..lineTo(24 * u, 18 * u)
+      ..lineTo(32 * u, 21 * u)
+      ..lineTo(32 * u, 23 * u)
+      ..lineTo(4 * u, 23 * u)
+      ..close();
+    canvas.drawPath(body, fill(c));
+
+    // 靠背
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(9 * u, 10 * u, 5 * u, 9 * u),
+        Radius.circular(1.5 * u),
+      ),
+      fill(c),
+    );
+
+    // 方向盘
+    canvas.drawCircle(
+      Offset(19 * u, 14 * u),
+      3.6 * u,
+      Paint()
+        ..color = c
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 * u,
+    );
+
+    // 头盔
+    canvas.drawCircle(Offset(24 * u, 8.5 * u), 3.2 * u, fill(c));
+
+    // 前鼻锥
+    final nose = Path()
+      ..moveTo(30 * u, 20 * u)
+      ..lineTo(35 * u, 22 * u)
+      ..lineTo(31 * u, 23.5 * u)
+      ..close();
+    canvas.drawPath(nose, fill(c));
+  }
+
+  @override
+  bool shouldRepaint(covariant _KartPainter old) => old.c != c;
 }
 
 /// 仿赛把车身高度放进 0.28–0.88 后，宽度大约是图标的 1.164 倍。

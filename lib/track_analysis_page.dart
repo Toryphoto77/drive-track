@@ -754,6 +754,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 ),
               ),
               const SizedBox(height: 12),
+              // v1.5.7 完赛汇总：每圈条形（越高越快）+ 圈速标准差。
+              _sessionSummaryCard(laps),
+              const SizedBox(height: 12),
               // 圈次与参照圈选择器。
               _card(
                 child: Column(
@@ -1181,6 +1184,104 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           ),
         ),
       ],
+    );
+  }
+
+  /// v1.5.7 完赛汇总：每圈一根条形（越高越快，个人最佳红）+ 圈数 /
+  /// 平均圈 / 圈速标准差 σ。只用计入圈：无效圈不参与一致性统计，
+  /// 避免维修区、出界把 σ 拉大。圈多时横向滚动，不挤压条形。
+  Widget _sessionSummaryCard(List<Lap> laps) {
+    final counted = laps.where((l) => lapInvalidReason(l) == null).toList();
+    if (counted.isEmpty) return const SizedBox.shrink();
+    final durations = counted.map((l) => l.durationMs).toList();
+    final fastest = durations.reduce(math.min);
+    final mean = durations.reduce((a, b) => a + b) / durations.length;
+    final sigma = math.sqrt(
+        durations.map((d) => (d - mean) * (d - mean)).reduce((a, b) => a + b) /
+            durations.length);
+    final spreadPct = mean > 0 ? sigma / mean * 100 : 0.0;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '本会话',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 96,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (final l in counted)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 70,
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: FractionallySizedBox(
+                                heightFactor:
+                                    (fastest / math.max(1, l.durationMs))
+                                        .clamp(0.08, 1.0)
+                                        .toDouble(),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: l.durationMs == fastest
+                                        ? _kRed
+                                        : Colors.white24,
+                                    borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(3)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${l.number}',
+                            style: const TextStyle(
+                                color: Colors.white54, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: _stat('计入圈数', '${counted.length}')),
+              Expanded(
+                  child:
+                      _stat('平均圈', LapTimer.formatLapTime(mean.round()))),
+              Expanded(
+                  child:
+                      _stat('标准差 σ', LapTimer.formatLapTime(sigma.round()))),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            spreadPct <= 1.0
+                ? '一致性 ${spreadPct.toStringAsFixed(1)}% · 圈速很稳'
+                : '一致性 ${spreadPct.toStringAsFixed(1)}%（σ 越小越稳）',
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1758,7 +1859,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                           satelliteTileUrl(zoom, x, y),
                           key: ValueKey('analysis-sat-$zoom-$x-$y'),
                           headers: const {
-                            'User-Agent': 'DriveTrack/1.5.6',
+                            'User-Agent': 'DriveTrack/1.5.7',
                           },
                           fit: BoxFit.fill,
                           gaplessPlayback: true,
