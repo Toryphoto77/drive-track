@@ -3,7 +3,7 @@
 /// 覆盖：
 /// - 配置值：jsDelivr 清单地址、回落 GitHub 地址均指向
 ///   Toryphoto77/drive-track（旧账号链接已清掉）；
-/// - 仓库根 update-manifest.json：当前版 1.5.7+62、apkUrl 指向
+/// - 仓库根 update-manifest.json：当前版 1.5.8+63、apkUrl 指向
 ///   Toryphoto77 Release 附件；
 /// - 本地 HttpServer 编排：清单成功时不走回落；清单失败时回落
 ///   GitHub 接口；两路都失败时返回 error、绝不谎称最新。
@@ -57,10 +57,10 @@ void main() {
       final file = File('update-manifest.json');
       expect(file.existsSync(), isTrue);
       final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-      expect(json['versionName'], '1.5.7');
-      expect(json['versionCode'], 62);
+      expect(json['versionName'], '1.5.8');
+      expect(json['versionCode'], 63);
       expect(json['apkUrl'],
-          'https://github.com/Toryphoto77/drive-track/releases/download/v1.5.7/DriveTrack-v1.5.7-release-arm64-v8a.apk');
+          'https://github.com/Toryphoto77/drive-track/releases/download/v1.5.8/DriveTrack-v1.5.8-release-arm64-v8a.apk');
       expect(json['notes'], isA<String>());
     });
   });
@@ -73,8 +73,8 @@ void main() {
         if (req.uri.path == '/manifest.json') {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'versionName': '1.5.8',
-            'versionCode': 63,
+            'versionName': '1.5.9',
+            'versionCode': 64,
             'apkUrl': 'https://example.invalid/app.apk',
             'notes': 'test',
           }));
@@ -93,8 +93,8 @@ void main() {
           ),
         );
         expect(r.status, UpdateCheckStatus.available);
-        expect(r.remoteVersionName, '1.5.8');
-        expect(r.remoteVersionCode, 63);
+        expect(r.remoteVersionName, '1.5.9');
+        expect(r.remoteVersionCode, 64);
         expect(r.downloadUrl, 'https://example.invalid/app.apk');
         expect(githubHits, 0);
       } finally {
@@ -108,8 +108,8 @@ void main() {
         if (req.uri.path == '/manifest.json') {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'versionName': '1.5.7',
-            'versionCode': 62,
+            'versionName': '1.5.8',
+            'versionCode': 63,
             'apkUrl': 'https://example.invalid/app.apk',
           }));
         } else {
@@ -140,11 +140,11 @@ void main() {
         } else {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'tag_name': 'v1.5.8',
+            'tag_name': 'v1.5.9',
             'body': 'fallback notes',
             'assets': [
               {
-                'name': 'DriveTrack-v1.5.8-release-arm64-v8a.apk',
+                'name': 'DriveTrack-v1.5.9-release-arm64-v8a.apk',
                 'browser_download_url': 'https://example.invalid/v158.apk',
               },
             ],
@@ -161,7 +161,7 @@ void main() {
           ),
         );
         expect(r.status, UpdateCheckStatus.available);
-        expect(r.remoteVersionName, '1.5.8');
+        expect(r.remoteVersionName, '1.5.9');
         expect(r.downloadUrl, 'https://example.invalid/v158.apk');
       } finally {
         await server.close(force: true);

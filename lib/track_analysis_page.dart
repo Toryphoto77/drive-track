@@ -1859,7 +1859,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                           satelliteTileUrl(zoom, x, y),
                           key: ValueKey('analysis-sat-$zoom-$x-$y'),
                           headers: const {
-                            'User-Agent': 'DriveTrack/1.5.7',
+                            'User-Agent': 'DriveTrack/1.5.8',
                           },
                           fit: BoxFit.fill,
                           gaplessPlayback: true,

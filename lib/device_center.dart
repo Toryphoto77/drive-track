@@ -35,15 +35,6 @@ extension DeviceLinkStatusLabel on DeviceLinkStatus {
       };
 }
 
-/// 通用 BLE 添加表单的类型下拉选项。
-const List<String> customSensorTypes = [
-  '功率计',
-  '踏频/速度传感器',
-  '心率带',
-  '外部 GPS（BleDIY）',
-  '其他',
-];
-
 /// 本机保存的一台通用传感器。地址可选：没填地址就无法下次重连，
 /// 界面会明说，而不是假装能重连。
 class SavedDevice {
@@ -1387,12 +1378,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   StreamSubscription<Map<String, dynamic>>? _devSub;
   StreamSubscription<Map<String, dynamic>>? _dataSub;
 
-  final _nameCtrl = TextEditingController();
-  final _serviceCtrl = TextEditingController();
-  final _charCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
-  String _formType = customSensorTypes.last;
-
   final BleDiyGpsFeed _gpsFeed = BleDiyGpsFeed();
 
   @override
@@ -1429,10 +1414,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   void dispose() {
     _devSub?.cancel();
     _dataSub?.cancel();
-    _nameCtrl.dispose();
-    _serviceCtrl.dispose();
-    _charCtrl.dispose();
-    _addressCtrl.dispose();
     super.dispose();
   }
 
@@ -1474,7 +1455,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   Future<void> _connectSaved(SavedDevice device) async {
     final addr = device.address;
     if (addr == null || addr.isEmpty) {
-      setState(() => _notice = '“${device.name}”未保存蓝牙地址，无法重连，请在表单里补填地址。');
+      setState(() => _notice = '“${device.name}”未保存蓝牙地址，无法重连，请重新扫描连接。');
       return;
     }
     try {
@@ -1488,33 +1469,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         _notice = '连接失败：$e';
       });
     }
-  }
-
-  Future<void> _saveForm() async {
-    final name = _nameCtrl.text.trim();
-    final service = normalizeUuid(_serviceCtrl.text);
-    final characteristic = normalizeUuid(_charCtrl.text);
-    if (name.isEmpty || service == null || characteristic == null) {
-      setState(() => _notice = '保存失败：名称不能为空，UUID 须为 128-bit 或 4/8 位短格式。');
-      return;
-    }
-    final device = SavedDevice(
-      name: name,
-      serviceUuid: service,
-      characteristicUuid: characteristic,
-      type: _formType,
-      address: _addressCtrl.text.trim().isEmpty
-          ? null
-          : _addressCtrl.text.trim(),
-    );
-    setState(() {
-      _saved = [..._saved, device];
-      _nameCtrl.clear();
-      _serviceCtrl.clear();
-      _charCtrl.clear();
-      _addressCtrl.clear();
-    });
-    await _persist();
   }
 
   @override
@@ -1621,41 +1575,11 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             ),
           ),
           const SizedBox(height: 16),
-          _sectionTitle(s.t('传感器：自定义 BLE 设备', 'Sensors: custom BLE')),
-          ExpansionTile(
-            title: Text(s.t('添加自定义传感器', 'Add custom sensor'),
-                style: const TextStyle(color: Colors.white, fontSize: 14)),
-            subtitle: Text(s.t('名称 / 类型 / 服务 / 特征 / 地址（必填前四项）', 'Name, type, service, characteristic, address'),
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            iconColor: Colors.white70,
-            collapsedIconColor: Colors.white70,
-            children: [
-              _textField(_nameCtrl, s.t('名称，如：我的功率计', 'Name, e.g. my power meter')),
-              _textField(_serviceCtrl, s.t('服务 UUID（完整或 4/8 位短 UUID）', 'Service UUID (full or 4/8-digit short)')),
-              _textField(_charCtrl, s.t('特征 UUID（完整或 4/8 位短 UUID）', 'Characteristic UUID (full or short)')),
-              _textField(_addressCtrl, s.t('蓝牙地址（可选，用于下次重连，如 AA:BB:CC:DD:EE:FF）', 'Bluetooth address (optional, for reconnect)')),
-              DropdownButton<String>(
-                value: _formType,
-                dropdownColor: const Color(0xFF1A1A1A),
-                style: const TextStyle(color: Colors.white),
-                isExpanded: true,
-                items: customSensorTypes
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (v) => setState(() => _formType = v ?? _formType),
-              ),
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: _saveForm,
-                icon: const Icon(Icons.save, size: 18),
-                label: Text(s.t('保存到本机', 'Save on device')),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
+          // v1.5.8：删除「传感器：自定义 BLE 设备」手动添加表单。
+          // 传感器统一走下方「附近扫描结果」直接连接，不再让用户手填 UUID。
           _sectionTitle(s.t('传感器：已保存设备（点重连）', 'Saved sensors (tap to reconnect)')),
           if (_saved.isEmpty)
-            Text(s.t('还没有保存的设备。填地址才能重连。', 'No saved devices. An address is required to reconnect.'),
+            Text(s.t('还没有保存的设备。', 'No saved devices.'),
                 style: const TextStyle(color: Colors.white54, fontSize: 12)),
           for (final device in _saved)
             _savedRow(accent, device),
@@ -1814,19 +1738,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                 color: Colors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.bold)),
-      );
-
-  Widget _textField(TextEditingController ctrl, String hint) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: TextField(
-          controller: ctrl,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-            border: const OutlineInputBorder(),
-          ),
-        ),
       );
 
   Widget _savedRow(Color accent, SavedDevice device) {

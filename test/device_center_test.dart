@@ -27,11 +27,14 @@ void main() {
     // 档案卡扩至兼容清单后页面变长，传感器区需滚动才进入
     // 懒加载 ListView 的视口；功能仍在，只是测试要按页顺序滚动断言。
     await tester.scrollUntilVisible(
-      find.text('传感器：自定义 BLE 设备'),
+      find.text('传感器：已保存设备（点重连）'),
       300,
     );
     await tester.pump();
-    expect(find.text('传感器：自定义 BLE 设备'), findsOneWidget);
+    expect(find.text('传感器：已保存设备（点重连）'), findsOneWidget);
+    // v1.5.8：自定义 BLE 手动添加表单已移除，标题与表单都不在树里。
+    expect(find.text('传感器：自定义 BLE 设备'), findsNothing);
+    expect(find.text('添加自定义传感器'), findsNothing);
     // 旧的按品牌三张卡已删：设备中心里「高级 / 按品牌」整个区不在，
     // 相机唯一入口是「打开连接运动相机」。先断言主入口，再断言旧区与旧操作全不在树里。
     expect(find.text('打开连接运动相机'), findsOneWidget);
@@ -52,19 +55,9 @@ void main() {
     // 单入口主按钮在顶部；档案卡已随高级区删除，不在树里。
     expect(find.text('扫描适配设备'), findsOneWidget);
     expect(find.text('BleDIY'), findsNothing);
-    // 自定义表单收进展开区：未展开时字段不在树里。
+    // v1.5.8：自定义表单整体移除，字段不再出现在树里。
     expect(find.text('名称，如：我的功率计'), findsNothing);
-    await tester.scrollUntilVisible(
-      find.text('添加自定义传感器'),
-      300,
-    );
-    await tester.pump();
-    await tester.tap(find.text('添加自定义传感器'));
-    await tester.pumpAndSettle();
-    expect(find.text('名称，如：我的功率计'), findsOneWidget);
-    expect(find.text('服务 UUID（完整或 4/8 位短 UUID）'), findsOneWidget);
-    expect(find.text('特征 UUID（完整或 4/8 位短 UUID）'), findsOneWidget);
-    expect(find.text('保存到本机'), findsOneWidget);
+    expect(find.text('保存到本机'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

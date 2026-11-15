@@ -155,6 +155,9 @@ class AppPrefs extends ChangeNotifier {
   // 记录地图 3D 透视（默认开启，关闭为 2D 俯视示意，存 profile.json）。
   bool keepScreenOn = true;
   bool recordingMap3d = true;
+  // v1.5.8：自用调试模式（存 profile.json）。开启后跳过赛道/卡丁的
+  // 外接硬件门槛，方便无硬件联调；设置页有开关可随时恢复正常模式。
+  bool debugMode = false;
   // 街道记录 3D 视角俯仰角（65° 默认 → 50° → 35°，存 profile.json）。
   double recordingMapPitch = 65.0;
   // v1.0.3：可切换启动图标（profile.json 'appIcon'，'steering' 默认，见 AppIconChoice）。
@@ -202,6 +205,7 @@ class AppPrefs extends ChangeNotifier {
         directSatellite = (j['directSatellite'] as bool?) ?? directSatellite;
         keepScreenOn = (j['keepScreenOn'] as bool?) ?? keepScreenOn;
         recordingMap3d = (j['recordingMap3d'] as bool?) ?? recordingMap3d;
+        debugMode = (j['debugMode'] as bool?) ?? debugMode;
         final rp = (j['recordingMapPitch'] as num?)?.toDouble();
         recordingMapPitch = (rp == 50.0 || rp == 35.0) ? rp! : 65.0;
         appIcon = AppIconChoice.normalize(j['appIcon'] as String?);
@@ -281,6 +285,7 @@ class AppPrefs extends ChangeNotifier {
         'directSatellite': directSatellite,
         'keepScreenOn': keepScreenOn,
         'recordingMap3d': recordingMap3d,
+        'debugMode': debugMode,
         'recordingMapPitch': recordingMapPitch,
         'appIcon': appIcon,
         'safetyAckDate': safetyAckDate,
@@ -368,6 +373,13 @@ class AppPrefs extends ChangeNotifier {
 
   Future<void> setRecordingMap3d(bool v) async {
     recordingMap3d = v;
+    notifyListeners();
+    await save();
+  }
+
+  /// v1.5.8 自用调试模式：跳过外接硬件门槛，恢复正常模式即关闭。
+  Future<void> setDebugMode(bool v) async {
+    debugMode = v;
     notifyListeners();
     await save();
   }
@@ -1087,9 +1099,10 @@ class _HomePageState extends State<HomePage>
   }
 
   /// 赛道 / 卡丁的硬件门槛：未就绪时弹说明并返回 false。
+  /// v1.5.8：自用调试模式可直接放行，设置页开关可随时恢复正常模式。
   bool _requireTrackHardware() {
     final st = externalGpsStatus.value;
-    if (kHardwareGateBypass || st.hardwareReady) return true;
+    if (kHardwareGateBypass || appPrefs.debugMode || st.hardwareReady) return true;
     _showHardwareGateSheet(st);
     return false;
   }
@@ -1197,7 +1210,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.5.7',
+          versionName: '1.5.8',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -2717,51 +2730,80 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  /// v0.1.10 改回原来：Row 居中紧凑布局，每项左右 margin 14，
-  /// 图标 36px 不变，整行宽度 = 3 × 64 = 192（kModeRowWidth），
+  /// v0.1.10 改回原来：Row 居中紧凑布局；v1.5.8 每项左右 margin
+  /// 由 14 加到 20（图标间距 40），整行宽度 = 3 × 76 = 228（kModeRowWidth），
   /// 不再用 Expanded 三等分撑满屏宽；底部导航栏用同一宽度，
   /// 两行同长、按钮中心点重合。
   Widget _buildModeSwitcher() {
     final accent = Theme.of(context).colorScheme.primary;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 12, 0, 4),
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (final m in kHomeModes)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: RippleTap(
-                circular: true,
-                onTap: () => _selectMode(m),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: Column(children: [
-                    AnimatedScale(
-                      scale: rec.mode == m ? 1.25 : 1.0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: ModeVehicleIcon(mode: m, selected: rec.mode == m, color: rec.mode == m ? accent : Colors.white54, size: 36),
+    final modeRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (final m in kHomeModes)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: RippleTap(
+              circular: true,
+              onTap: () => _selectMode(m),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                child: Column(children: [
+                  AnimatedScale(
+                    scale: rec.mode == m ? 1.25 : 1.0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    child: ModeVehicleIcon(mode: m, selected: rec.mode == m, color: rec.mode == m ? accent : Colors.white54, size: 36),
+                  ),
+                  const SizedBox(height: 4),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: rec.mode == m ? 18 : 6,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: rec.mode == m ? accent : Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    const SizedBox(height: 4),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: rec.mode == m ? 18 : 6,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: rec.mode == m ? accent : Colors.white24,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ]),
-                ),
+                  ),
+                ]),
               ),
             ),
-          ],
-        ),
+          ),
+      ],
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(child: modeRow),
+          // v1.5.8：调试模式常驻提示，避免联调后忘记关回正常模式。
+          // 首页路由只构造一次，这里单独监听 appPrefs 才能在设置页关掉后立即隐藏。
+          ListenableBuilder(
+            listenable: appPrefs,
+            builder: (context, _) {
+              if (!appPrefs.debugMode) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(999),
+                    border:
+                        Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                  ),
+                  child: const Text(
+                    '调试模式 · 已跳过硬件门槛',
+                    style: TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -2964,7 +3006,10 @@ class _HomePageState extends State<HomePage>
     Navigator.push(
       context,
       DtPageRoute(
-        builder: (_) => SettingsHomePage(
+        // v1.5.8：设置页里的调试开关要即时回显，这里监听 appPrefs 重建。
+        builder: (_) => ListenableBuilder(
+          listenable: appPrefs,
+          builder: (context, __) => SettingsHomePage(
           onOpenPermission: _openPermissionSettings,
           onOpenTheme: _openThemeSettings,
           onOpenVoice: _openVoiceSettings,
@@ -2991,6 +3036,10 @@ class _HomePageState extends State<HomePage>
           onVideoRecordingChanged: (v) => setState(() => videoEnabled = v),
           trimPrivacy: trimPrivacy,
           onTrimPrivacyChanged: (v) => setState(() => trimPrivacy = v),
+          // v1.5.8：自用版调试开关（持久化在本机 profile.json）。
+          debugMode: appPrefs.debugMode,
+          onDebugModeChanged: (v) => appPrefs.setDebugMode(v),
+          ),
         ),
       ),
     );
