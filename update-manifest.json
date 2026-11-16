@@ -1,22 +1,22 @@
 {
-    "_comment":  "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：当前指向 GitHub Release 附件；后续可换成 CloudBase 存储公共 URL，实现全程国内下载，无需改 App。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要。可选字段（旧客户端忽略）：每个 apks.\u003cabi\u003e 或顶层可加 cdnUrl（字符串）和 mirrors（字符串数组），国内优先下载，失败再回落 url/apkUrl。githubProxyFallback 缺省 true，false 时不再试内置 GitHub 代理；githubProxies 可替换代理前缀列表。1.6.0 三 ABI 的 GitHub Release 地址（DriveTrack-v1.6.0-release-arm64-v8a.apk / armeabi-v7a / x86_64）。sha256 按本版实际 APK 生成后写入。不填写 cdnUrl。App 更新支持的前缀仍为 1.5.6 及以下（旧客户端只读 apkUrl）。摘要与 Release 附件齐之前不要刷新 jsDelivr。",
-    "versionName":  "1.6.0",
-    "versionCode":  65,
-    "apkUrl":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.0/DriveTrack-v1.6.0-release-arm64-v8a.apk",
-    "sha256":  "bf2f377a7f91bcf08d858520084f71c52e98b055b40beebc6f8bf7b11d4c62f6",
+    "_comment":  "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：当前指向 GitHub Release 附件；后续可换成 CloudBase 存储公共 URL，实现全程国内下载，无需改 App。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要。可选字段（旧客户端忽略）：每个 apks.\u003cabi\u003e 或顶层可加 cdnUrl（字符串）和 mirrors（字符串数组），国内优先下载，失败再回落 url/apkUrl。githubProxyFallback 缺省 true，false 时不再试内置 GitHub 代理；githubProxies 可替换代理前缀列表。1.6.1 三 ABI 的 GitHub Release 地址（DriveTrack-v1.6.1-release-arm64-v8a.apk / armeabi-v7a / x86_64）。sha256 按本版实际 APK 生成后写入。不填写 cdnUrl。App 更新支持的前缀仍为 1.5.6 及以下（旧客户端只读 apkUrl）。摘要与 Release 附件齐之前不要刷新 jsDelivr。",
+    "versionName":  "1.6.1",
+    "versionCode":  66,
+    "apkUrl":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.1/DriveTrack-v1.6.1-release-arm64-v8a.apk",
+    "sha256":  "108f01120d2aa378d70901236a9cc39cb83eff452e2a348522d15585bf12460c",
     "apks":  {
                  "arm64-v8a":  {
-                                   "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.0/DriveTrack-v1.6.0-release-arm64-v8a.apk",
-                                   "sha256":  "bf2f377a7f91bcf08d858520084f71c52e98b055b40beebc6f8bf7b11d4c62f6"
+                                   "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.1/DriveTrack-v1.6.1-release-arm64-v8a.apk",
+                                   "sha256":  "108f01120d2aa378d70901236a9cc39cb83eff452e2a348522d15585bf12460c"
                                },
                  "armeabi-v7a":  {
-                                     "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.0/DriveTrack-v1.6.0-release-armeabi-v7a.apk",
-                                     "sha256":  "cf3e8a2b624128398dfc36baa8a4d1107840ec7dc952288d8923a66c7534e17e"
+                                     "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.1/DriveTrack-v1.6.1-release-armeabi-v7a.apk",
+                                     "sha256":  "f88798575b65bd298fa4747902239f5de8d39170ec92dc10fdda70b7ff54ae18"
                                  },
                  "x86_64":  {
-                                "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.0/DriveTrack-v1.6.0-release-x86_64.apk",
-                                "sha256":  "3400157be32d1560edf7ead7c7e4e04c9d921ec7564976eb97b8c465b011db59"
+                                "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.1/DriveTrack-v1.6.1-release-x86_64.apk",
+                                "sha256":  "22a0bfe4e1e1d5488b8abc675fe2d1ab81664f162016cc1d358b44e6d3f0376b"
                             }
              },
-    "notes":  "1.6.0：启动不再闪图标与权限页，首页三个模式图标点击稳定切页；汽车/摩托选赛道模式未选赛道时改为引导按实录自建赛道；视频页新增时间对齐、HUD 预览与手机内直接烧录成片（FFmpeg 硬件编码，原片不改、成片另存），并保留三件套导出；赛道库调整导入入口、已知赛道显示具体地点、新增附近赛道地图入口；性能测试新增 0-400 加速（需自研硬件）；倾角数据只保留摩托并加强双模式可视化。"
+    "notes":  "1.6.1：修复后台不稳定闪退——前台服务被系统拒绝启动（Android 12+ 后台限制 / 14+ 定位型 FGS 权限）时不再崩溃而是提示并回滚；定位权限缺失时服务自停，杜绝「通知栏记录中却没数据」的幽灵录制；新增全局崩溃日志（本机 200KB 滚动，设置页可导出分享），定位写盘移出主线程并限制日志文件大小。"
 }
