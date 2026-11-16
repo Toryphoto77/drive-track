@@ -1,21 +1,24 @@
 {
-    "_comment":  "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：当前指向 GitHub Release 附件；后续可换成 CloudBase 存储公共 URL，实现全程国内下载，无需改 App。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要。可选字段（旧客户端忽略）：每个 apks.\u003cabi\u003e 或顶层可加 cdnUrl（字符串）和 mirrors（字符串数组），国内优先下载，失败再回落 url/apkUrl。githubProxyFallback 缺省 true，false 时不再试内置 GitHub 代理；githubProxies 可替换代理前缀列表。1.6.2 三 ABI 的 GitHub Release 地址（DriveTrack-v1.6.2-release-arm64-v8a.apk / armeabi-v7a / x86_64）。sha256 按本版实际 APK 生成后写入。不填写 cdnUrl。App 更新支持的前缀仍为 1.5.6 及以下（旧客户端只读 apkUrl）。摘要与 Release 附件齐之前不要刷新 jsDelivr。",
+    "_comment":  "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：1.6.2 起指向 CloudBase 存储国内 CDN，GitHub Release 地址保留在 apks.url 作兜底。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要。可选字段（旧客户端忽略）：每个 apks.\u003cabi\u003e 或顶层可加 cdnUrl（字符串）和 mirrors（字符串数组），国内优先下载，失败再回落 url/apkUrl。githubProxyFallback 缺省 true，false 时不再试内置 GitHub 代理；githubProxies 可替换代理前缀列表。1.6.2 三 ABI：GitHub Release 地址保留在 apks.\u003cabi\u003e.url 作兜底，cdnUrl 与顶层 apkUrl 指向 CloudBase 存储（国内 CDN，apk/1.6.2/ 前缀），由 tools/upload_cdn.ps1 上传并写入。App 更新支持的前缀仍为 1.5.6 及以下（旧客户端只读 apkUrl）。",
     "versionName":  "1.6.2",
     "versionCode":  67,
-    "apkUrl":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.2/DriveTrack-v1.6.2-release-arm64-v8a.apk",
+    "apkUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.6.2/DriveTrack-v1.6.2-release-arm64-v8a.apk",
     "sha256":  "e69effa31ce83965db9b007181de9e7276135c2038c96742698e11b1163b6ca7",
     "apks":  {
                  "arm64-v8a":  {
                                    "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.2/DriveTrack-v1.6.2-release-arm64-v8a.apk",
-                                   "sha256":  "e69effa31ce83965db9b007181de9e7276135c2038c96742698e11b1163b6ca7"
+                                   "sha256":  "e69effa31ce83965db9b007181de9e7276135c2038c96742698e11b1163b6ca7",
+                                   "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.6.2/DriveTrack-v1.6.2-release-arm64-v8a.apk"
                                },
                  "armeabi-v7a":  {
                                      "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.2/DriveTrack-v1.6.2-release-armeabi-v7a.apk",
-                                     "sha256":  "d981e7e2cb9e4a16339b07a475cec4382bffde3cf6e7add46fe629cfbeea6b73"
+                                     "sha256":  "d981e7e2cb9e4a16339b07a475cec4382bffde3cf6e7add46fe629cfbeea6b73",
+                                     "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.6.2/DriveTrack-v1.6.2-release-armeabi-v7a.apk"
                                  },
                  "x86_64":  {
                                 "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.6.2/DriveTrack-v1.6.2-release-x86_64.apk",
-                                "sha256":  "19abc5fcc95b24e020fe6376fce082ca0f2b4e339bb2602ac9ff884a8457717c"
+                                "sha256":  "19abc5fcc95b24e020fe6376fce082ca0f2b4e339bb2602ac9ff884a8457717c",
+                                "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.6.2/DriveTrack-v1.6.2-release-x86_64.apk"
                             }
              },
     "notes":  "1.6.2：登录/注册全新极简界面（品牌首屏 + 手机号单入口验证码，未注册号码自动建号），并修复未注入云端环境 ID 时按钮静默无响应；设备中心取消自研固件升级入口，改由外接 GPS 卡片在识别到自研硬件后切换为硬件管理界面（实时电量、固件信息、App 内关机、圈速导入）；设置页新增账号管理与 AI 分析配置；赛道分析新增弯角分析、速度差对比与 AI 赛后/单圈分析（只基于实测数据，缺失通道明确标注）。"
