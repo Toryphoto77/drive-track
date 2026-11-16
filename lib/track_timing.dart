@@ -221,36 +221,37 @@ class Lap {
   bool get counted => !dwellNotCounted;
 
   Map<String, dynamic> toJson() => {
-        'n': number,
-        's': startMs,
-        'e': endMs,
-        'd': durationMs,
-        'paused': pausedMs,
-        'dwell': dwellNotCounted,
-        'sec': sectorsMs,
-        'k': switch (kind) {
-          LapKind.flying => 'flying',
-          LapKind.outLap => 'out',
-          LapKind.inLap => 'in',
-        },
-      };
+    'n': number,
+    's': startMs,
+    'e': endMs,
+    'd': durationMs,
+    'paused': pausedMs,
+    'dwell': dwellNotCounted,
+    'sec': sectorsMs,
+    'k': switch (kind) {
+      LapKind.flying => 'flying',
+      LapKind.outLap => 'out',
+      LapKind.inLap => 'in',
+    },
+  };
 
   static Lap fromJson(Map<String, dynamic> j) => Lap(
-        number: (j['n'] as num).toInt(),
-        startMs: (j['s'] as num).toInt(),
-        endMs: (j['e'] as num).toInt(),
-        durationMs: (j['d'] as num).toInt(),
-        pausedMs: (j['paused'] as num?)?.toInt() ?? 0,
-        dwellNotCounted: (j['dwell'] as bool?) ?? false,
-        sectorsMs:
-            ((j['sec'] as List?) ?? []).map((e) => (e as num).toInt()).toList(),
-        // 老数据无 'k' 键时读作飞驰圈，保持兼容。
-        kind: switch (j['k'] as String?) {
-          'out' => LapKind.outLap,
-          'in' => LapKind.inLap,
-          _ => LapKind.flying,
-        },
-      );
+    number: (j['n'] as num).toInt(),
+    startMs: (j['s'] as num).toInt(),
+    endMs: (j['e'] as num).toInt(),
+    durationMs: (j['d'] as num).toInt(),
+    pausedMs: (j['paused'] as num?)?.toInt() ?? 0,
+    dwellNotCounted: (j['dwell'] as bool?) ?? false,
+    sectorsMs: ((j['sec'] as List?) ?? [])
+        .map((e) => (e as num).toInt())
+        .toList(),
+    // 老数据无 'k' 键时读作飞驰圈，保持兼容。
+    kind: switch (j['k'] as String?) {
+      'out' => LapKind.outLap,
+      'in' => LapKind.inLap,
+      _ => LapKind.flying,
+    },
+  );
 }
 
 /// 一段内的速度区间（km/h，v1.2.17）：该段内已喂入轨迹点速度的
@@ -382,31 +383,31 @@ class LapTimer {
     List<TrackDirection>? sectorTangents,
     this.pitIn,
     this.pitOut,
-  })  : sectorPoints = sectorPoints.take(2).toList(),
-        centerline = centerline,
-        _centerlineReversed = _tangentsReversed(
-          startFinish,
-          sectorPoints.take(2).toList(),
-          centerline,
-          startFinishTangent,
-          sectorTangents,
-        ),
-        _pitBoundaries = _resolvePitBoundaries(
-          pitIn,
-          pitOut,
-          centerline,
-          startFinish,
-          sectorPoints.take(2).toList(),
-          startFinishTangent,
-          sectorTangents,
-        ),
-        _boundaries = _resolveBoundaries(
-          startFinish,
-          sectorPoints.take(2).toList(),
-          centerline,
-          startFinishTangent,
-          sectorTangents,
-        ) {
+  }) : sectorPoints = sectorPoints.take(2).toList(),
+       centerline = centerline,
+       _centerlineReversed = _tangentsReversed(
+         startFinish,
+         sectorPoints.take(2).toList(),
+         centerline,
+         startFinishTangent,
+         sectorTangents,
+       ),
+       _pitBoundaries = _resolvePitBoundaries(
+         pitIn,
+         pitOut,
+         centerline,
+         startFinish,
+         sectorPoints.take(2).toList(),
+         startFinishTangent,
+         sectorTangents,
+       ),
+       _boundaries = _resolveBoundaries(
+         startFinish,
+         sectorPoints.take(2).toList(),
+         centerline,
+         startFinishTangent,
+         sectorTangents,
+       ) {
     _resetSectorSpeeds();
   }
 
@@ -459,8 +460,13 @@ class LapTimer {
     var tIn = tangentAtPoint(centerline, pitIn);
     var tOut = tangentAtPoint(centerline, pitOut);
     if (tIn == null || tOut == null) return null;
-    if (_tangentsReversed(startFinish, sectorPoints, centerline,
-        startFinishTangent, sectorTangents)) {
+    if (_tangentsReversed(
+      startFinish,
+      sectorPoints,
+      centerline,
+      startFinishTangent,
+      sectorTangents,
+    )) {
       tIn = TrackDirection(-tIn.east, -tIn.north);
       tOut = TrackDirection(-tOut.east, -tOut.north);
     }
@@ -480,12 +486,11 @@ class LapTimer {
   ) {
     final points = [startFinish, ...sectorPoints];
     final fromCenterline =
-        startFinishTangent == null && (sectorTangents == null || sectorTangents.isEmpty);
+        startFinishTangent == null &&
+        (sectorTangents == null || sectorTangents.isEmpty);
     var tangents = List<TrackDirection?>.generate(points.length, (i) {
       if (i == 0 && startFinishTangent != null) return startFinishTangent;
-      if (i > 0 &&
-          sectorTangents != null &&
-          i - 1 < sectorTangents.length) {
+      if (i > 0 && sectorTangents != null && i - 1 < sectorTangents.length) {
         return sectorTangents[i - 1];
       }
       if (centerline != null) return tangentAtPoint(centerline, points[i]);
@@ -495,19 +500,28 @@ class LapTimer {
         centerline != null &&
         sectorPoints.length == 2 &&
         tangents.every((t) => t != null) &&
-        _tangentsReversed(startFinish, sectorPoints, centerline,
-            startFinishTangent, sectorTangents)) {
+        _tangentsReversed(
+          startFinish,
+          sectorPoints,
+          centerline,
+          startFinishTangent,
+          sectorTangents,
+        )) {
       // 中心线按行车反方向排序，全部切线取反（反向中心线否则会让
       // 正向过线永远不触发、反向误触发）。
-      tangents =
-          tangents.map((t) => TrackDirection(-t!.east, -t.north)).toList();
+      tangents = tangents
+          .map((t) => TrackDirection(-t!.east, -t.north))
+          .toList();
     }
     return List<_Boundary>.generate(
-        points.length, (i) => _Boundary(points[i], tangents[i]));
+      points.length,
+      (i) => _Boundary(points[i], tangents[i]),
+    );
   }
 
   final List<Lap> _laps = [];
   final List<int> _pointLapNumbers = [];
+  final List<int?> _pointSectorIndexes = [];
   final List<bool> _sectorCrossed = [];
 
   TimedPoint? _prev;
@@ -732,8 +746,10 @@ class LapTimer {
 
   /// 圈速稳定性（只统计计入圈）；计入圈不足 2 圈时为 null。
   LapStability? get stability {
-    final ds =
-        _laps.where((l) => l.counted).map((l) => l.durationMs.toDouble()).toList();
+    final ds = _laps
+        .where((l) => l.counted)
+        .map((l) => l.durationMs.toDouble())
+        .toList();
     if (ds.length < 2) return null;
     final mean = ds.reduce((a, b) => a + b) / ds.length;
     var sumSq = 0.0;
@@ -743,7 +759,11 @@ class LapTimer {
     final std = math.sqrt(sumSq / ds.length);
     final range = ds.reduce(math.max) - ds.reduce(math.min);
     return LapStability(
-        count: ds.length, meanMs: mean, stdDevMs: std, rangeMs: range);
+      count: ds.length,
+      meanMs: mean,
+      stdDevMs: std,
+      rangeMs: range,
+    );
   }
 
   /// 逐点对应的圈号（与喂入点数一一对应）：
@@ -751,6 +771,11 @@ class LapTimer {
   /// 供行程详情页按圈分段显示轨迹时分组用（见接线规格）。
   /// 穿越点本身归属新开始的一圈。
   List<int> get pointLapNumbers => List.unmodifiable(_pointLapNumbers);
+
+  /// 逐点对应的分段索引（0=S1、1=S2、2=S3），与喂入点一一对应。
+  /// 发车圈或无真实分段点时为 null；穿越分段线后的当前点归入新段，
+  /// 与段速统计使用同一顺序，不按地图距离另猜一套分段。
+  List<int?> get pointSectorIndexes => List.unmodifiable(_pointSectorIndexes);
 
   /// 喂入一个轨迹点（调用方按时间顺序喂，1Hz 即可）。
   void addPoint(TimedPoint p) {
@@ -809,7 +834,8 @@ class LapTimer {
         if (hitMs != null) {
           _sectorCrossed[i] = true;
           _sectorSplitElapsed.add(
-              hitMs - _lapStartMs! - _effectivePausedMs(hitMs));
+            hitMs - _lapStartMs! - _effectivePausedMs(hitMs),
+          );
         }
       }
     }
@@ -828,8 +854,13 @@ class LapTimer {
       }
     }
 
-    // 6) 记录本点归属圈号与最新点。
+    // 6) 记录本点归属圈号、分段与最新点。
     _pointLapNumbers.add(_currentLapNumber);
+    _pointSectorIndexes.add(
+      _lapStartMs == null || sectorPoints.isEmpty
+          ? null
+          : _sectorSplitElapsed.length,
+    );
     _prev = p;
     _last = p;
   }
@@ -904,8 +935,7 @@ class LapTimer {
 
   /// 给定经纬度点相对边界点的沿线横向偏移（m）：沿计时线方向为正，
   /// 计时线方向 = 切线逆时针旋转 90°（-north, east）。
-  double _lateralOffsetM(
-      double lat, double lon, GeoPoint g, TrackDirection t) {
+  double _lateralOffsetM(double lat, double lon, GeoPoint g, TrackDirection t) {
     final meanLat = _rad((lat + g.lat) / 2);
     final east = (lon - g.lon) * math.cos(meanLat) * 111320;
     final north = (lat - g.lat) * 110540;
@@ -950,18 +980,20 @@ class LapTimer {
     final kind = _crossedPitOutCurrentLap
         ? LapKind.outLap
         : _crossedPitInCurrentLap
-            ? LapKind.inLap
-            : LapKind.flying;
-    _laps.add(Lap(
-      number: _currentLapNumber,
-      startMs: start,
-      endMs: endMs,
-      durationMs: duration,
-      pausedMs: paused,
-      dwellNotCounted: _dwellInCurrentLap,
-      sectorsMs: sectors,
-      kind: kind,
-    ));
+        ? LapKind.inLap
+        : LapKind.flying;
+    _laps.add(
+      Lap(
+        number: _currentLapNumber,
+        startMs: start,
+        endMs: endMs,
+        durationMs: duration,
+        pausedMs: paused,
+        dwellNotCounted: _dwellInCurrentLap,
+        sectorsMs: sectors,
+        kind: kind,
+      ),
+    );
   }
 
   List<int> _buildSectors(int duration) {
@@ -989,17 +1021,16 @@ class LapTimer {
     }
     // 自动暂停模式：停车门槛 / 暂停延迟 / 恢复门槛各取自动值，
     // 未启用时三者回落旧 dwell 值（旧行为不动）。
-    final autoPause = autoPauseThresholdMs != null &&
+    final autoPause =
+        autoPauseThresholdMs != null &&
         autoPauseSpeedMs != null &&
         autoResumeSpeedMs != null;
     final stopSpeedMs = autoPause ? autoPauseSpeedMs! : dwellSpeedMs;
-    final pauseAfterMs =
-        autoPause ? autoPauseThresholdMs! : dwellThresholdMs;
+    final pauseAfterMs = autoPause ? autoPauseThresholdMs! : dwellThresholdMs;
     final resumeSpeedMs = autoPause ? autoResumeSpeedMs! : dwellSpeedMs;
     if (p.speed < stopSpeedMs) {
       _lowSpeedSinceMs ??= p.timeMs;
-      if (!_paused &&
-          p.timeMs - _lowSpeedSinceMs! >= pauseAfterMs) {
+      if (!_paused && p.timeMs - _lowSpeedSinceMs! >= pauseAfterMs) {
         // 停车超阈值：自动暂停计时。旧 dwell 模式本圈标注停留不计圈；
         // 自动暂停模式短暂停不标，只有停车总时长达到 dwellThresholdMs
         // 才标（长停仍不计圈，短暂停圈速只扣暂停时长）。
@@ -1069,8 +1100,12 @@ double _distanceM(TimedPoint p, GeoPoint g) {
   const r = 6371000.0;
   final dLat = _rad(g.lat - p.lat);
   final dLon = _rad(g.lon - p.lon);
-  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-      math.cos(_rad(p.lat)) * math.cos(_rad(g.lat)) * math.sin(dLon / 2) * math.sin(dLon / 2);
+  final a =
+      math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(_rad(p.lat)) *
+          math.cos(_rad(g.lat)) *
+          math.sin(dLon / 2) *
+          math.sin(dLon / 2);
   return 2 * r * math.asin(math.sqrt(a));
 }
 

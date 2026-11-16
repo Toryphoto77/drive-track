@@ -113,7 +113,12 @@ List<({int z, int x, int y})> satelliteTilesForBounds({
 
 /// 瓦片在画布上的屏幕矩形：瓦片西北 / 东南角点经纬度经同一
 /// [EditorViewTransform] 投影得到（与中心线、落点共用换算）。
-Rect satelliteTileScreenRect(EditorViewTransform transform, int z, int x, int y) {
+Rect satelliteTileScreenRect(
+  EditorViewTransform transform,
+  int z,
+  int x,
+  int y,
+) {
   final nw = transform.project(
     GeoPoint(satelliteTileNorthLat(y, z), satelliteTileWestLon(x, z)),
   );
@@ -148,12 +153,18 @@ extension _EditToolLabel on _EditTool {
 }
 
 /// 准星位置：手指位置向上偏移 [liftPx]，不被手指盖住。
-Offset editorCrosshairPosition(Offset finger, [double liftPx = editorCrosshairLiftPx]) =>
-    Offset(finger.dx, finger.dy - liftPx);
+Offset editorCrosshairPosition(
+  Offset finger, [
+  double liftPx = editorCrosshairLiftPx,
+]) => Offset(finger.dx, finger.dy - liftPx);
 
 /// 按米微调一点：northM 向北、eastM 向东（局部等距圆柱近似，
 /// 与中心线简化共用 110540 / 111320 常数）。
-GeoPoint nudgeGeoPoint(GeoPoint p, {required double northM, required double eastM}) {
+GeoPoint nudgeGeoPoint(
+  GeoPoint p, {
+  required double northM,
+  required double eastM,
+}) {
   final cosLat = math.cos(p.lat * math.pi / 180);
   return GeoPoint(
     p.lat + northM / 110540,
@@ -192,7 +203,10 @@ NearestOnPolyline nearestOnPolyline(GeoPoint p, List<GeoPoint> line) {
     final d = math.sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
     if (d < bestDist) {
       bestDist = d;
-      bestPoint = GeoPoint(a.lat + t * (b.lat - a.lat), a.lon + t * (b.lon - a.lon));
+      bestPoint = GeoPoint(
+        a.lat + t * (b.lat - a.lat),
+        a.lon + t * (b.lon - a.lon),
+      );
       bestAlong = acc + t * segLen;
     }
     acc += segLen;
@@ -358,11 +372,15 @@ enum _CanvasMode { none, crosshair, drag, zoom }
 class TrackPackageEditorPage extends StatefulWidget {
   final TrackPackage package;
   final ValueChanged<TrackPackage> onSave;
+  final GeoPoint? initialCenter;
+  final bool initialSatelliteOn;
 
   const TrackPackageEditorPage({
     super.key,
     required this.package,
     required this.onSave,
+    this.initialCenter,
+    this.initialSatelliteOn = false,
   });
 
   @override
@@ -445,6 +463,7 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
     _pitIn = widget.package.pitIn;
     _pitOut = widget.package.pitOut;
     _sectors = List.of(widget.package.sectorPoints);
+    _satelliteEnabled = widget.initialSatelliteOn;
   }
 
   @override
@@ -455,14 +474,30 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
   }
 
   List<GeoPoint> get _framePoints {
-    if (_centerline.isNotEmpty) return _centerline;
+    final points = _centerline.isNotEmpty
+        ? List<GeoPoint>.of(_centerline)
+        : <GeoPoint>[
+            if (_start != null) _start!,
+            if (_finish != null) _finish!,
+            if (_gantry != null) _gantry!,
+            if (_pitIn != null) _pitIn!,
+            if (_pitOut != null) _pitOut!,
+            ..._sectors,
+          ];
+    if (points.length >= 2 &&
+        points.any(
+          (p) => p.lat != points.first.lat || p.lon != points.first.lon,
+        )) {
+      return points;
+    }
+    final center =
+        widget.initialCenter ?? (points.isEmpty ? null : points.first);
+    if (center == null) return points;
+    // 空草稿和首个落点也需要非零视口；锚点只控制显示，不写入赛道。
     return [
-      if (_start != null) _start!,
-      if (_finish != null) _finish!,
-      if (_gantry != null) _gantry!,
-      if (_pitIn != null) _pitIn!,
-      if (_pitOut != null) _pitOut!,
-      ..._sectors,
+      GeoPoint(center.lat - 0.001, center.lon - 0.001),
+      GeoPoint(center.lat + 0.001, center.lon + 0.001),
+      ...points,
     ];
   }
 
@@ -510,7 +545,9 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
     _EditTool.pitIn => _pitIn,
     _EditTool.pitOut => _pitOut,
     _EditTool.sector =>
-      (sel.index >= 0 && sel.index < _sectors.length) ? _sectors[sel.index] : null,
+      (sel.index >= 0 && sel.index < _sectors.length)
+          ? _sectors[sel.index]
+          : null,
     _EditTool.outline => null,
   };
 
@@ -589,14 +626,10 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
         // 按住已有落点：进入拖动微调（选中该点）。
         _mode = _CanvasMode.drag;
         _selected = hit;
-        setState(
-          () => _crosshair = editorCrosshairPosition(d.localFocalPoint),
-        );
+        setState(() => _crosshair = editorCrosshairPosition(d.localFocalPoint));
       } else {
         _mode = _CanvasMode.crosshair;
-        setState(
-          () => _crosshair = editorCrosshairPosition(d.localFocalPoint),
-        );
+        setState(() => _crosshair = editorCrosshairPosition(d.localFocalPoint));
       }
     } else {
       _mode = _CanvasMode.zoom;
@@ -920,7 +953,10 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 0)),
+            padding: withAppBarTopInset(
+              context,
+              const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -945,7 +981,8 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
                             height: 64,
                             decoration: BoxDecoration(
                               color: selected
-                                  ? const Color(0xFFE10600).withValues(alpha: 0.18)
+                                  ? const Color(0xFFE10600)
+                                        .withValues(alpha: 0.18)
                                   : const Color(0xFF1E1E1E),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
@@ -1020,7 +1057,8 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
                     SizedBox(
                       height: 44,
                       child: OutlinedButton(
-                        onPressed: (_zoom == editorMinZoom && _pan == Offset.zero)
+                        onPressed:
+                            (_zoom == editorMinZoom && _pan == Offset.zero)
                             ? null
                             : _resetView,
                         child: const Text('回到全景'),
@@ -1127,7 +1165,10 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
                     )
                   : LayoutBuilder(
                       builder: (context, constraints) {
-                        final size = Size(constraints.maxWidth, constraints.maxHeight);
+                        final size = Size(
+                          constraints.maxWidth,
+                          constraints.maxHeight,
+                        );
                         _canvasSize = size;
                         // 卫星开且未回落时才叠瓦片层；回落即回纯示意图。
                         final showSatellite =
@@ -1219,55 +1260,70 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
                     color: Colors.green,
                     label: '起点',
                     point: _start,
-                    selected: _selected == const _SelectedPoint(_EditTool.start),
+                    selected:
+                        _selected == const _SelectedPoint(_EditTool.start),
                     onTap: _start == null
                         ? null
                         : () => setState(
-                            () => _selected = const _SelectedPoint(_EditTool.start),
+                            () => _selected = const _SelectedPoint(
+                              _EditTool.start,
+                            ),
                           ),
                   ),
                   _pointRow(
                     color: Colors.black,
                     label: '终点',
                     point: _finish,
-                    selected: _selected == const _SelectedPoint(_EditTool.finish),
+                    selected:
+                        _selected == const _SelectedPoint(_EditTool.finish),
                     onTap: _finish == null
                         ? null
                         : () => setState(
-                            () => _selected = const _SelectedPoint(_EditTool.finish),
+                            () => _selected = const _SelectedPoint(
+                              _EditTool.finish,
+                            ),
                           ),
                   ),
                   _pointRow(
                     color: Colors.orange,
                     label: '龙门架',
                     point: _gantry,
-                    selected: _selected == const _SelectedPoint(_EditTool.gantry),
+                    selected:
+                        _selected == const _SelectedPoint(_EditTool.gantry),
                     onTap: _gantry == null
                         ? null
                         : () => setState(
-                            () => _selected = const _SelectedPoint(_EditTool.gantry),
+                            () => _selected = const _SelectedPoint(
+                              _EditTool.gantry,
+                            ),
                           ),
                   ),
                   _pointRow(
                     color: Colors.purple,
                     label: '维修区入口',
                     point: _pitIn,
-                    selected: _selected == const _SelectedPoint(_EditTool.pitIn),
+                    selected:
+                        _selected == const _SelectedPoint(_EditTool.pitIn),
                     onTap: _pitIn == null
                         ? null
                         : () => setState(
-                            () => _selected = const _SelectedPoint(_EditTool.pitIn),
+                            () => _selected = const _SelectedPoint(
+                              _EditTool.pitIn,
+                            ),
                           ),
                   ),
                   _pointRow(
                     color: Colors.teal,
                     label: '维修区出口',
                     point: _pitOut,
-                    selected: _selected == const _SelectedPoint(_EditTool.pitOut),
+                    selected:
+                        _selected == const _SelectedPoint(_EditTool.pitOut),
                     onTap: _pitOut == null
                         ? null
                         : () => setState(
-                            () => _selected = const _SelectedPoint(_EditTool.pitOut),
+                            () => _selected = const _SelectedPoint(
+                              _EditTool.pitOut,
+                            ),
                           ),
                   ),
                   for (var i = 0; i < _sectors.length; i++)
@@ -1278,7 +1334,8 @@ class _TrackPackageEditorPageState extends State<TrackPackageEditorPage> {
                       trailing: _centerline.length >= 2
                           ? '距起点 ${centerlineDistanceAt(_sectors[i], _centerline).round()} 米'
                           : null,
-                      selected: _selected == _SelectedPoint(_EditTool.sector, i),
+                      selected:
+                          _selected == _SelectedPoint(_EditTool.sector, i),
                       onTap: () => setState(
                         () => _selected = _SelectedPoint(_EditTool.sector, i),
                       ),
@@ -1784,19 +1841,44 @@ class _EditorPainter extends CustomPainter {
       );
     }
     if (gantry != null) {
-      dot(gantry!, Colors.orange, '门', selected == const _SelectedPoint(_EditTool.gantry));
+      dot(
+        gantry!,
+        Colors.orange,
+        '门',
+        selected == const _SelectedPoint(_EditTool.gantry),
+      );
     }
     if (pitIn != null) {
-      dot(pitIn!, Colors.purple, '入', selected == const _SelectedPoint(_EditTool.pitIn));
+      dot(
+        pitIn!,
+        Colors.purple,
+        '入',
+        selected == const _SelectedPoint(_EditTool.pitIn),
+      );
     }
     if (pitOut != null) {
-      dot(pitOut!, Colors.teal, '出', selected == const _SelectedPoint(_EditTool.pitOut));
+      dot(
+        pitOut!,
+        Colors.teal,
+        '出',
+        selected == const _SelectedPoint(_EditTool.pitOut),
+      );
     }
     if (finish != null) {
-      dot(finish!, Colors.black, '终', selected == const _SelectedPoint(_EditTool.finish));
+      dot(
+        finish!,
+        Colors.black,
+        '终',
+        selected == const _SelectedPoint(_EditTool.finish),
+      );
     }
     if (start != null) {
-      dot(start!, Colors.green, '起', selected == const _SelectedPoint(_EditTool.start));
+      dot(
+        start!,
+        Colors.green,
+        '起',
+        selected == const _SelectedPoint(_EditTool.start),
+      );
     }
     if (lastTap != null) {
       final o = pt(lastTap!);
@@ -1859,11 +1941,7 @@ class _EditorPainter extends CustomPainter {
       canvas.drawLine(c + const Offset(8, 0), c + const Offset(22, 0), paint);
       canvas.drawLine(c + const Offset(0, -22), c + const Offset(0, -8), paint);
       canvas.drawLine(c + const Offset(0, 8), c + const Offset(0, 22), paint);
-      canvas.drawCircle(
-        c,
-        2,
-        Paint()..color = const Color(0xFFE10600),
-      );
+      canvas.drawCircle(c, 2, Paint()..color = const Color(0xFFE10600));
     }
   }
 
@@ -1940,7 +2018,7 @@ class _SatelliteTiles extends StatelessWidget {
             child: Image.network(
               satelliteTileUrl(t.z, t.x, t.y),
               key: ValueKey('sat-${t.z}-${t.x}-${t.y}'),
-              headers: const {'User-Agent': 'DriveTrack/1.5.8'},
+              headers: const {'User-Agent': 'DriveTrack/1.5.9'},
               fit: BoxFit.fill,
               gaplessPlayback: true,
               errorBuilder: (_, _, _) {

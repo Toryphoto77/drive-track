@@ -14,10 +14,17 @@ class KartPrepPage extends StatelessWidget {
   /// 去连接设备：跳设备中心。
   final VoidCallback onConnectDevice;
 
+  final String selectedTrackName;
+  final VoidCallback onCreateMeasuredTrack;
+  final VoidCallback onCreateSatelliteTrack;
+
   const KartPrepPage({
     super.key,
     required this.onPickTrack,
     required this.onConnectDevice,
+    required this.selectedTrackName,
+    required this.onCreateMeasuredTrack,
+    required this.onCreateSatelliteTrack,
   });
 
   static const _bg = Color(0xFF121212);
@@ -39,33 +46,28 @@ class KartPrepPage extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back_ios_new,
-                      color: Colors.white, size: 20),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
-                const Text('卡丁车准备',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold)),
+                const Text(
+                  '卡丁车准备',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
             _hardwareCard(context),
             const SizedBox(height: 12),
-            _placementCard(),
-            const SizedBox(height: 12),
             _trackCard(),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 48,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: _red),
-                onPressed: onPickTrack,
-                icon: const Icon(Icons.flag, size: 18),
-                label: const Text('选择赛道',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-              ),
-            ),
+            const SizedBox(height: 12),
+            _placementCard(),
           ],
         ),
       ),
@@ -80,10 +82,14 @@ class KartPrepPage extends StatelessWidget {
         final fixText = !st.connected
             ? '未连接'
             : st.binaryOnly
-                ? '二进制协议，暂不能用于计时'
-                : st.lastFixAtMs <= 0
-                    ? '已连接，等待定位'
-                    : '定位正常';
+            ? '二进制协议，暂不能用于计时'
+            : st.lastFixAtMs <= 0
+            ? '已连接，等待定位'
+            : st.fixMode == 3
+            ? '3D 定位正常'
+            : st.fixMode == 2
+            ? '2D 定位正常'
+            : '定位正常';
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -96,20 +102,29 @@ class KartPrepPage extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(ready ? Icons.check_circle : Icons.error_outline,
-                      color: ready ? const Color(0xFF22C55E) : _red, size: 18),
+                  Icon(
+                    ready ? Icons.check_circle : Icons.error_outline,
+                    color: ready ? const Color(0xFF22C55E) : _red,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
-                  const Text('定位硬件',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold)),
+                  const Text(
+                    '定位硬件',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const Spacer(),
-                  Text(ready ? '已就绪' : '未就绪',
-                      style: TextStyle(
-                          color: ready ? const Color(0xFF22C55E) : _red,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold)),
+                  Text(
+                    ready ? '已就绪' : '未就绪',
+                    style: TextStyle(
+                      color: ready ? const Color(0xFF22C55E) : _red,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -153,18 +168,23 @@ class KartPrepPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('手机放哪',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold)),
+          const Text(
+            '手机放哪',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 8),
           _bullet('手机只做显示与记录，可以放在身上或场边，不必固定在车上。'),
           _bullet('与硬件保持在 10 米以内，避免金属和人体大面积遮挡。'),
           _bullet('不要夹在方向盘或车架附近，震动会损伤接口且遮挡视线。'),
           const SizedBox(height: 6),
-          const Text('计时和圈速均来自外接硬件定位，手机是否随身不影响精度。',
-              style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5)),
+          const Text(
+            '计时和圈速均来自外接硬件定位，手机是否随身不影响精度。',
+            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5),
+          ),
         ],
       ),
     );
@@ -181,24 +201,75 @@ class KartPrepPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('赛道',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold)),
+          const Text(
+            '赛道',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            selectedTrackName.isEmpty ? '尚未选择赛道' : '当前：$selectedTrackName',
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+          ),
           const SizedBox(height: 6),
-          const Text('选择卡丁场赛道包后，撞线点与分段就绪，回到记录页即可开始计时。',
-              style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5)),
-          const SizedBox(height: 10),
+          const Text(
+            '卡丁车必须关联赛道中心线和起终点；没有合适赛道时可现场实测或卫星图绘制。',
+            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: _red),
+              onPressed: onPickTrack,
+              icon: const Icon(Icons.flag, size: 18),
+              label: const Text('选择赛道'),
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.timer_outlined, color: Colors.white54, size: 16),
-              const SizedBox(width: 6),
-              const Expanded(
-                child: Text('短赛道分段不足时，Delta 会显示 --，以圈速为准。',
-                    style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: _border),
+                    minimumSize: const Size(0, 44),
+                  ),
+                  onPressed: onCreateMeasuredTrack,
+                  child: const Text(
+                    '3D 定位实测建赛',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: _border),
+                    minimumSize: const Size(0, 44),
+                  ),
+                  onPressed: onCreateSatelliteTrack,
+                  child: const Text(
+                    '卫星图手动建赛',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '短赛道分段不足时，Delta 会显示 --，以圈速为准。',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ],
       ),
@@ -212,12 +283,16 @@ class KartPrepPage extends StatelessWidget {
         children: [
           SizedBox(
             width: 64,
-            child: Text(k,
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            child: Text(
+              k,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
           ),
           Expanded(
-            child: Text(v,
-                style: const TextStyle(color: Colors.white, fontSize: 13)),
+            child: Text(
+              v,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -241,9 +316,14 @@ class KartPrepPage extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(text,
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 13, height: 1.5)),
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
           ),
         ],
       ),

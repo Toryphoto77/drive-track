@@ -35,8 +35,8 @@ trap 'rm -f "$GUH/init.d/offline.gradle"' EXIT
 # 可选：云端环境标识，从本机文件读取后以 --dart-define 注入；
 # 无文件则不传，代码侧空值即云端未配置；内容不打印。
 CLOUDBASE_DEFINE=()
-if [ -f .cloudbase-env ]; then
-  CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")
+if [ -f $HOME/.local/share/drive-track/secrets/.cloudbase-env ]; then
+  CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat $HOME/.local/share/drive-track/secrets/.cloudbase-env)")
 fi
 flutter build apk --debug --target-platform android-arm64 --no-android-gradle-daemon "${CLOUDBASE_DEFINE[@]}"
 # 版本号从 pubspec.yaml 读（与新增多 ABI 脚本同法，不再硬编码旧版号）。

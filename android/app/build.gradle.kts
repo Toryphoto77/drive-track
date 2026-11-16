@@ -31,13 +31,12 @@ android {
 
     // v1.0.0 正式签名：DriveTrack 专属密钥库，绝不用 Ordnance 的
     // guns-map-release.keystore，也绝不用 debug 签名。
-    // 密码只从环境变量读（构建脚本从 ~/release-keystore/ 的 600 权限
-    // 密码文件读出后以环境变量传入），不写进本文件、不另建 properties 文件。
+    // 密码只从环境变量读（构建脚本从当前用户私有目录的密码文件读出后
+    // 以环境变量传入），不写进本文件、不另建 properties 文件。
     // 密钥库路径：环境变量 DRIVETRACK_KEYSTORE（构建脚本会传入），未设时
-    // 回落 ~/release-keystore/drive-track-release.keystore。不再写死某台
-    // 机器的绝对路径；任何电脑只要按维护说明放好密钥库即可编正式包。
+    // 回落当前用户私有目录，不写死某台机器的绝对路径。
     val releaseKeystorePath: String = System.getenv("DRIVETRACK_KEYSTORE")
-        ?: "${System.getProperty("user.home")}/release-keystore/drive-track-release.keystore"
+        ?: "${System.getProperty("user.home")}/.local/share/drive-track/secrets/drive-track-release.keystore"
     signingConfigs {
         create("release") {
             storeFile = file(releaseKeystorePath)

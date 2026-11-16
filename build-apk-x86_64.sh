@@ -46,8 +46,8 @@ if [ -z "$VERSION" ]; then echo "读不到 pubspec.yaml 的 version"; exit 1; fi
 # 可选：云端环境标识，从本机文件读取后以 --dart-define 注入；
 # 无文件则不传，代码侧空值即云端未配置；内容不打印。
 CLOUDBASE_DEFINE=()
-if [ -f .cloudbase-env ]; then
-  CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")
+if [ -f $HOME/.local/share/drive-track/secrets/.cloudbase-env ]; then
+  CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat $HOME/.local/share/drive-track/secrets/.cloudbase-env)")
 fi
 flutter build apk --debug --target-platform android-x64 --no-android-gradle-daemon "${CLOUDBASE_DEFINE[@]}"
 cp build/app/outputs/flutter-apk/app-debug.apk "./DriveTrack-v${VERSION}-debug-x86_64.apk"

@@ -3,14 +3,114 @@
 /// 左栏只有赛道地图，右栏是唯一的仪表列。圈速列表、预测圈、
 /// 理论最优、段速明细默认不放在这一列里，由调用方用底部表打开。
 /// 全图模式只在地图角上留圈时 + Delta 两个胶囊，不再叠第二列仪表。
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_locale.dart';
+import 'gps_source_badge.dart';
 import 'lean_estimator.dart';
 import 'live_lap_timer_text.dart';
 import 'track_live_g.dart';
 import 'track_session_display.dart';
 import 'track_timing.dart';
+
+/// 仅赛道横屏记录时进入沉浸；切回竖屏、街道或离开记录页即恢复系统栏。
+class TrackLandscapeImmersive extends StatefulWidget {
+  const TrackLandscapeImmersive({
+    super.key,
+    required this.active,
+    required this.child,
+  });
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<TrackLandscapeImmersive> createState() =>
+      _TrackLandscapeImmersiveState();
+}
+
+class _TrackLandscapeImmersiveState extends State<TrackLandscapeImmersive> {
+  void _apply(bool active) {
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(
+        active ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      ),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _apply(true);
+  }
+
+  @override
+  void didUpdateWidget(covariant TrackLandscapeImmersive oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active) _apply(widget.active);
+  }
+
+  @override
+  void dispose() {
+    if (widget.active) _apply(false);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// 悬浮在地图上的状态层，不参与 Column 排版，不占独立顶栏。
+class TrackLandscapeStatusOverlay extends StatelessWidget {
+  const TrackLandscapeStatusOverlay({
+    super.key,
+    required this.trackName,
+    required this.gpsBadge,
+  });
+
+  final String trackName;
+  final GpsSourceBadge gpsBadge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      key: const Key('track-landscape-status-overlay'),
+      left: 8,
+      top: 8,
+      right: 8,
+      child: Row(
+        children: [
+          Container(
+            key: const Key('track-landscape-gps-pill'),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(999)),
+            child: gpsBadge,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xCC121212),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Text(
+                trackName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// 左 58% 地图 / 右 42% 仪表。全图时只留地图和角标。
 class TrackLandscapeSplit extends StatelessWidget {
@@ -19,29 +119,32 @@ class TrackLandscapeSplit extends StatelessWidget {
     required this.map,
     required this.instruments,
     this.fullMap = false,
+    this.mapOverlay,
     this.fullMapOverlay,
   });
 
   final Widget map;
   final Widget instruments;
   final bool fullMap;
+  final Widget? mapOverlay;
   final Widget? fullMapOverlay;
 
   @override
   Widget build(BuildContext context) {
+    final layeredMap = Stack(
+      fit: StackFit.expand,
+      children: [map, if (mapOverlay != null) mapOverlay!],
+    );
     if (fullMap) {
       return Stack(
         fit: StackFit.expand,
-        children: [
-          map,
-          if (fullMapOverlay != null) fullMapOverlay!,
-        ],
+        children: [layeredMap, if (fullMapOverlay != null) fullMapOverlay!],
       );
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(flex: 58, child: map),
+        Expanded(flex: 58, child: layeredMap),
         Expanded(flex: 42, child: instruments),
       ],
     );
@@ -116,7 +219,10 @@ class _TrackLandscapeInstrumentsState extends State<TrackLandscapeInstruments> {
     final delta = widget.showDelta ? widget.liveDeltaMs : null;
     final lapLabel = widget.currentLapNumber <= 0
         ? s.t('发车圈', 'Out lap')
-        : s.t('第 ${widget.currentLapNumber} 圈', 'Lap ${widget.currentLapNumber}');
+        : s.t(
+            '第 ${widget.currentLapNumber} 圈',
+            'Lap ${widget.currentLapNumber}',
+          );
     return ColoredBox(
       color: const Color(0xFF1E1E1E),
       child: SingleChildScrollView(
@@ -183,30 +289,41 @@ class _TrackLandscapeInstrumentsState extends State<TrackLandscapeInstruments> {
                     Expanded(
                       child: Container(
                         margin: EdgeInsets.only(
-                            right: i == widget.sectorLabels.length - 1 ? 0 : 6),
+                          right: i == widget.sectorLabels.length - 1 ? 0 : 6,
+                        ),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 6),
+                          horizontal: 6,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF141414),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: const Color(0xFF2A2A2A)),
                         ),
-                        child: Column(children: [
-                          Text(widget.sectorLabels[i],
+                        child: Column(
+                          children: [
+                            Text(
+                              widget.sectorLabels[i],
                               style: const TextStyle(
-                                  color: Colors.white70, fontSize: 11)),
-                          const SizedBox(height: 2),
-                          Text(
-                            i < widget.sectorTimesMs.length
-                                ? LapTimer.formatLapTime(widget.sectorTimesMs[i])
-                                : '--:--.---',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
                             ),
-                          ),
-                        ]),
+                            const SizedBox(height: 2),
+                            Text(
+                              i < widget.sectorTimesMs.length
+                                  ? LapTimer.formatLapTime(
+                                      widget.sectorTimesMs[i],
+                                    )
+                                  : '--:--.---',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
@@ -226,8 +343,10 @@ class _TrackLandscapeInstrumentsState extends State<TrackLandscapeInstruments> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Text('km/h',
-                    style: TextStyle(color: Colors.white60, fontSize: 12)),
+                const Text(
+                  'km/h',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -247,12 +366,16 @@ class _TrackLandscapeInstrumentsState extends State<TrackLandscapeInstruments> {
               const SizedBox(height: 4),
               Container(
                 key: const Key('track-landscape-pause'),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.amber.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: Colors.amber.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: Text(
                   s.t('已自动暂停 · 等待起步', 'Auto-paused · waiting to roll'),
@@ -280,8 +403,10 @@ class _TrackLandscapeInstrumentsState extends State<TrackLandscapeInstruments> {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     onPressed: widget.onOpenDetails,
-                    child: Text(s.t('圈速明细', 'Lap detail'),
-                        style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      s.t('圈速明细', 'Lap detail'),
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 const Spacer(),
                 if (widget.onToggleFullMap != null)
@@ -293,8 +418,10 @@ class _TrackLandscapeInstrumentsState extends State<TrackLandscapeInstruments> {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     onPressed: widget.onToggleFullMap,
-                    child: Text(s.t('全图', 'Full map'),
-                        style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      s.t('全图', 'Full map'),
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
               ],
             ),
@@ -313,13 +440,15 @@ class _TrackLandscapeInstrumentsState extends State<TrackLandscapeInstruments> {
     final side = lean > 1
         ? s.t('右倾', 'right')
         : lean < -1
-            ? s.t('左倾', 'left')
-            : s.t('正直', 'upright');
+        ? s.t('左倾', 'left')
+        : s.t('正直', 'upright');
     final weak = widget.leanQuality == LeanQuality.degraded
         ? s.t(' · 信号弱', ' · weak')
         : '';
-    return s.t('倾角 ${lean.abs().toStringAsFixed(0)}° $side$weak',
-        'Lean ${lean.abs().toStringAsFixed(0)}° $side$weak');
+    return s.t(
+      '倾角 ${lean.abs().toStringAsFixed(0)}° $side$weak',
+      'Lean ${lean.abs().toStringAsFixed(0)}° $side$weak',
+    );
   }
 }
 
@@ -333,6 +462,7 @@ class TrackLandscapeMapCapsules extends StatelessWidget {
     required this.timerLive,
     required this.liveDeltaMs,
     required this.showDelta,
+    this.topPadding = 8,
     this.onExitFullMap,
   });
 
@@ -342,6 +472,7 @@ class TrackLandscapeMapCapsules extends StatelessWidget {
   final bool timerLive;
   final int? liveDeltaMs;
   final bool showDelta;
+  final double topPadding;
   final VoidCallback? onExitFullMap;
 
   @override
@@ -355,7 +486,7 @@ class TrackLandscapeMapCapsules extends StatelessWidget {
       child: Align(
         alignment: Alignment.topLeft,
         child: Padding(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.fromLTRB(8, topPadding, 8, 8),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -363,9 +494,13 @@ class TrackLandscapeMapCapsules extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(lapLabel,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 12)),
+                    Text(
+                      lapLabel,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     LiveLapTimeText(
                       anchorMs: currentLapMs,
@@ -394,8 +529,10 @@ class TrackLandscapeMapCapsules extends StatelessWidget {
               if (onExitFullMap != null)
                 _capsule(
                   onTap: onExitFullMap,
-                  child: Text(s.t('仪表', 'Gauges'),
-                      style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  child: Text(
+                    s.t('仪表', 'Gauges'),
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
                 ),
             ],
           ),

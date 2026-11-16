@@ -31,8 +31,8 @@ fi
 if [ ! -f "$FLUTTER_HOME/bin/cache/artifacts/engine/android-arm64-release/flutter.jar" ]; then
   echo "缺 Flutter release 引擎：android-arm64-release/flutter.jar"; exit 1
 fi
-KEYSTORE=${DRIVETRACK_KEYSTORE:-$HOME/release-keystore/drive-track-release.keystore}
-PW_FILE=${DRIVETRACK_KEYSTORE_PASSWORD_FILE:-$HOME/release-keystore/drive-track-release.password}
+KEYSTORE=${DRIVETRACK_KEYSTORE:-$HOME/.local/share/drive-track/secrets/drive-track-release.keystore}
+PW_FILE=${DRIVETRACK_KEYSTORE_PASSWORD_FILE:-$HOME/.local/share/drive-track/secrets/drive-track-release.password}
 if [ ! -f "$KEYSTORE" ]; then echo "缺正式密钥库：$KEYSTORE"; exit 1; fi
 if [ ! -f "$PW_FILE" ]; then echo "缺密钥库密码文件：$PW_FILE"; exit 1; fi
 # 把签名材料路径传给 Gradle（变量名见 build.gradle.kts）。
@@ -58,14 +58,14 @@ if [ -z "$VERSION" ]; then echo "读不到 pubspec.yaml 的 version"; exit 1; fi
 # 可选：高德底图 Key，从本机文件读取后以 --dart-define 注入；
 # 无文件则不传，代码侧空值即关闭该数据源；内容不打印。
 AMAP_DEFINE=()
-if [ -f .amap-key ]; then
-  AMAP_DEFINE=(--dart-define="AMAP_KEY=$(cat .amap-key)")
+if [ -f $HOME/.local/share/drive-track/secrets/.amap-key ]; then
+  AMAP_DEFINE=(--dart-define="AMAP_KEY=$(cat $HOME/.local/share/drive-track/secrets/.amap-key)")
 fi
 # 可选：云端环境标识，从本机文件读取后以 --dart-define 注入；
 # 无文件则不传，代码侧空值即云端未配置；内容不打印。
 CLOUDBASE_DEFINE=()
-if [ -f .cloudbase-env ]; then
-  CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat .cloudbase-env)")
+if [ -f $HOME/.local/share/drive-track/secrets/.cloudbase-env ]; then
+  CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat $HOME/.local/share/drive-track/secrets/.cloudbase-env)")
 fi
 flutter build apk --release --target-platform android-arm64 --no-android-gradle-daemon "${AMAP_DEFINE[@]}" "${CLOUDBASE_DEFINE[@]}"
 cp build/app/outputs/flutter-apk/app-release.apk "./DriveTrack-v${VERSION}-release-arm64-v8a.apk"

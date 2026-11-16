@@ -17,7 +17,6 @@
 /// 不测计时判定本身（越线检测 / 半径法已由 track_timing_crossing_test
 /// 覆盖）、不测幽灵车门控（v134 已覆盖，本版不动）。
 
-import 'package:drive_track/amap_service.dart';
 import 'package:drive_track/recording_map_page.dart';
 import 'package:drive_track/track_timing.dart';
 import 'package:flutter/material.dart';
@@ -27,26 +26,15 @@ const _p1 = GeoPoint(31.3380, 121.2180);
 const _p2 = GeoPoint(31.3420, 121.2280);
 const _p3 = GeoPoint(31.3400, 121.2230);
 
-/// 记录页叠加层以 GCJ-02 交给 painter：期望值同样经 wgsToGcjLocal 算。
-GeoPoint _gcj(GeoPoint p) {
-  final (la, lo) = wgsToGcjLocal(p.lat, p.lon);
-  return GeoPoint(la, lo);
-}
-
 /// 半径法回落用点：lat 为南北向米数（赤道附近 1 度纬度 = 110540 m）。
 TimedPoint _pt(int timeMs, double northM, [double speed = 30]) =>
     TimedPoint(timeMs: timeMs, lat: northM / 110540, lon: 0, speed: speed);
 
-Future<void> _pumpPage(
-  WidgetTester tester,
-  RecordingMapPage page,
-) async {
+Future<void> _pumpPage(WidgetTester tester, RecordingMapPage page) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: Center(
-          child: SizedBox(width: 360, height: 480, child: page),
-        ),
+        body: Center(child: SizedBox(width: 360, height: 480, child: page)),
       ),
     ),
   );
@@ -62,20 +50,19 @@ RecordingMapPainter _overlayPainter(WidgetTester tester) {
 RecordingMapPage _trackPage({
   required bool showTrackOverlay,
   required String statusLine,
-}) =>
-    RecordingMapPage(
-      isTrack: true,
-      centerline: [_p1, _p3, _p2],
-      start: _p1,
-      finish: _p2,
-      sectorPoints: [_p3],
-      trail: [_p1, _p3],
-      curLat: 31.3400,
-      curLon: 121.2230,
-      curHeading: 90,
-      showTrackOverlay: showTrackOverlay,
-      statusLine: statusLine,
-    );
+}) => RecordingMapPage(
+  isTrack: true,
+  centerline: [_p1, _p3, _p2],
+  start: _p1,
+  finish: _p2,
+  sectorPoints: [_p3],
+  trail: [_p1, _p3],
+  curLat: 31.3400,
+  curLon: 121.2230,
+  curHeading: 90,
+  showTrackOverlay: showTrackOverlay,
+  statusLine: statusLine,
+);
 
 void main() {
   group('LapTimer.hasCrossedStartLine', () {
@@ -229,8 +216,7 @@ void main() {
   });
 
   group('RecordingMapPage 叠加层显隐', () {
-    testWidgets('已知赛道打开即锁在赛道上：中心线、车头、附近轨迹与幽灵车都在',
-        (tester) async {
+    testWidgets('已知赛道打开即锁在赛道上：中心线、车头、附近轨迹与幽灵车都在', (tester) async {
       const far = GeoPoint(30.90, 121.50);
       await _pumpPage(
         tester,
@@ -272,10 +258,7 @@ void main() {
     testWidgets('调用方关掉叠加层时不画中心线，轨迹与车仍在', (tester) async {
       await _pumpPage(
         tester,
-        _trackPage(
-          showTrackOverlay: false,
-          statusLine: '等待通过起终点线',
-        ),
+        _trackPage(showTrackOverlay: false, statusLine: '等待通过起终点线'),
       );
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
@@ -292,18 +275,15 @@ void main() {
     testWidgets('过线后叠加层出现', (tester) async {
       await _pumpPage(
         tester,
-        _trackPage(
-          showTrackOverlay: true,
-          statusLine: '第 1 圈 · 当前圈 00:05',
-        ),
+        _trackPage(showTrackOverlay: true, statusLine: '第 1 圈 · 当前圈 00:05'),
       );
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      expect(painter.start!.lat, closeTo(_gcj(_p1).lat, 1e-9));
-      expect(painter.start!.lon, closeTo(_gcj(_p1).lon, 1e-9));
-      expect(painter.finish!.lat, closeTo(_gcj(_p2).lat, 1e-9));
-      expect(painter.finish!.lon, closeTo(_gcj(_p2).lon, 1e-9));
+      expect(painter.start!.lat, closeTo(_p1.lat, 1e-9));
+      expect(painter.start!.lon, closeTo(_p1.lon, 1e-9));
+      expect(painter.finish!.lat, closeTo(_p2.lat, 1e-9));
+      expect(painter.finish!.lon, closeTo(_p2.lon, 1e-9));
       expect(painter.sectorPoints.length, 1);
       expect(painter.trail.length, 2);
       expect(find.textContaining('第 1 圈 · 当前圈 00:05'), findsOneWidget);
@@ -313,28 +293,22 @@ void main() {
     testWidgets('过线后保持：后续圈数变化不消失', (tester) async {
       await _pumpPage(
         tester,
-        _trackPage(
-          showTrackOverlay: true,
-          statusLine: '第 1 圈 · 当前圈 00:05',
-        ),
+        _trackPage(showTrackOverlay: true, statusLine: '第 1 圈 · 当前圈 00:05'),
       );
       await tester.pumpAndSettle();
       expect(_overlayPainter(tester).centerline.length, 3);
       // 第 3 圈：叠加层仍在，等待文案仍不出现。
       await _pumpPage(
         tester,
-        _trackPage(
-          showTrackOverlay: true,
-          statusLine: '第 3 圈 · 当前圈 01:10',
-        ),
+        _trackPage(showTrackOverlay: true, statusLine: '第 3 圈 · 当前圈 01:10'),
       );
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      expect(painter.start!.lat, closeTo(_gcj(_p1).lat, 1e-9));
-      expect(painter.start!.lon, closeTo(_gcj(_p1).lon, 1e-9));
-      expect(painter.finish!.lat, closeTo(_gcj(_p2).lat, 1e-9));
-      expect(painter.finish!.lon, closeTo(_gcj(_p2).lon, 1e-9));
+      expect(painter.start!.lat, closeTo(_p1.lat, 1e-9));
+      expect(painter.start!.lon, closeTo(_p1.lon, 1e-9));
+      expect(painter.finish!.lat, closeTo(_p2.lat, 1e-9));
+      expect(painter.finish!.lon, closeTo(_p2.lon, 1e-9));
       expect(painter.sectorPoints.length, 1);
       expect(find.textContaining('第 3 圈 · 当前圈 01:10'), findsOneWidget);
       expect(find.textContaining('等待通过起终点线'), findsNothing);

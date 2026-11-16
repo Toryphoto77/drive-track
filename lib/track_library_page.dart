@@ -86,6 +86,9 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
 
+  // v1.5.9：官方赛道包核对状态筛选（0=全部 1=已核对 2=待核）+ 按地区分组。
+  int _verificationFilter = 0;
+
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -418,14 +421,25 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       for (final u in check?.updates ?? const <PackageUpdate>[]) u.id: u,
     };
     // v1.5.2：官方包搜索过滤（snap 为空时给空列表，页面仍显示加载中）。
+    // v1.5.9：叠加核对状态筛选（全部 / 已核对 / 待核）。
     final query = _searchQuery.trim().toLowerCase();
     final official = snap == null
         ? const <TrackPackage>[]
-        : query.isEmpty
-            ? snap.official
-            : snap.official
-                .where((p) => matchesTrackSearch(p, query))
-                .toList();
+        : snap.official.where((p) {
+            if (query.isNotEmpty && !matchesTrackSearch(p, query)) return false;
+            if (_verificationFilter == 1 && p.verification != TrackPackageVerification.verified) return false;
+            if (_verificationFilter == 2 && p.verification != TrackPackageVerification.pending) return false;
+            return true;
+          }).toList();
+    // v1.5.9：按地区分组（保留原顺序，仅折叠同地区）。
+    final grouped = <String, List<TrackPackage>>{};
+    for (final p in official) {
+      final r = p.region.isEmpty ? '其他' : p.region;
+      grouped.putIfAbsent(r, () => <TrackPackage>[]).add(p);
+    }
+    final regionOrder = grouped.keys.toList();
+    final verifiedCount = snap?.official.where((p) => p.verification == TrackPackageVerification.verified).length ?? 0;
+    final pendingCount = snap?.official.where((p) => p.verification == TrackPackageVerification.pending).length ?? 0;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
@@ -498,6 +512,16 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                   _searchField(),
                 ],
                 const SizedBox(height: 8),
+                // v1.5.9：核对状态筛选 chips + 已核对/待核计数。
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    _filterChip('全部 ${snap.official.length}', 0),
+                    _filterChip('已核对 $verifiedCount', 1),
+                    _filterChip('待核 $pendingCount', 2),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 if (_showSearch && query.isNotEmpty) ...[
                   Text(
                     official.isEmpty
@@ -508,13 +532,32 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                for (final p in official)
-                  _packageRow(
-                    p,
-                    update: updatesById[p.id],
-                    canReset: snap.overrideIds.contains(p.id),
-                    isUser: false,
-                  ),
+                if (official.isEmpty && query.isEmpty && _verificationFilter != 0)
+                  const Text(
+                    '该筛选下暂无赛道',
+                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  )
+                else
+                  for (final region in regionOrder) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 6),
+                      child: Text(
+                        '$region（${grouped[region]!.length}）',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    for (final p in grouped[region]!)
+                      _packageRow(
+                        p,
+                        update: updatesById[p.id],
+                        canReset: snap.overrideIds.contains(p.id),
+                        isUser: false,
+                      ),
+                  ],
                 const SizedBox(height: 20),
                 const Text(
                   '我的赛道',
@@ -739,6 +782,36 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       child: Text(
         label,
         style: const TextStyle(color: Colors.white70, fontSize: 11),
+      ),
+    );
+  }
+
+  /// v1.5.9：核对状态筛选 chip（选中时高亮）。
+  Widget _filterChip(String label, int value) {
+    final selected = _verificationFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _verificationFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF3B82F6)
+              : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFF3B82F6)
+                : Colors.white.withValues(alpha: 0.15),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.white70,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }

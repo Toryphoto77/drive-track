@@ -9,8 +9,11 @@
 /// 本版不测手势跟随（首版固定视口）、不测离线瓦片下载（不做）、
 /// 不测 3D 回放（不做）。
 
+import 'dart:io';
+
 import 'package:drive_track/amap_service.dart';
 import 'package:drive_track/recording_map_page.dart';
+import 'package:drive_track/satellite_tiles.dart';
 import 'package:drive_track/track_analysis_geo.dart';
 import 'package:drive_track/track_timing.dart';
 import 'package:flutter/material.dart';
@@ -26,16 +29,11 @@ GeoPoint _gcj(GeoPoint p) {
   return GeoPoint(la, lo);
 }
 
-Future<void> _pumpPage(
-  WidgetTester tester,
-  RecordingMapPage page,
-) async {
+Future<void> _pumpPage(WidgetTester tester, RecordingMapPage page) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: Center(
-          child: SizedBox(width: 360, height: 480, child: page),
-        ),
+        body: Center(child: SizedBox(width: 360, height: 480, child: page)),
       ),
     ),
   );
@@ -47,6 +45,11 @@ RecordingMapPainter _overlayPainter(WidgetTester tester) {
   );
   return paint.painter as RecordingMapPainter;
 }
+
+List<String> _tileUrls(WidgetTester tester) => tester
+    .widgetList<Image>(find.byType(Image))
+    .map((image) => (image.image as NetworkImage).url)
+    .toList();
 
 void main() {
   group('视口 bounds 计算', () {
@@ -79,11 +82,7 @@ void main() {
 
     test('并集点落在投影画布内', () {
       final b = recordingMapBounds([_p1, _p2], [_p3])!;
-      final zoom = analysisGeoZoom(
-        bounds: b,
-        widthPx: 360,
-        heightPx: 480,
-      );
+      final zoom = analysisGeoZoom(bounds: b, widthPx: 360, heightPx: 480);
       final projector = AnalysisGeoProjector(
         bounds: b,
         zoom: zoom,
@@ -121,6 +120,73 @@ void main() {
     });
   });
 
+  group('固定分段色轨迹', () {
+    test('计时器按真实过线记录逐点分段，发车圈不伪造分段', () {
+      final timer = LapTimer(
+        startFinish: const GeoPoint(0, 0),
+        sectorPoints: const [
+          GeoPoint(200 / 110540, 0),
+          GeoPoint(400 / 110540, 0),
+        ],
+      );
+      TimedPoint point(int timeMs, double northM) =>
+          TimedPoint(timeMs: timeMs, lat: northM / 110540, lon: 0, speed: 30);
+      timer.addPoint(point(0, -100));
+      timer.addPoint(point(1000, 100));
+      timer.addPoint(point(2000, 250));
+      timer.addPoint(point(3000, 450));
+      expect(timer.pointLapNumbers, [0, 1, 1, 1]);
+      expect(timer.pointSectorIndexes, [null, 0, 1, 2]);
+    });
+
+    test('分段变化时切分轨迹，边界点由前后两段共用', () {
+      final segments = recordingTrailSegments(
+        const [_p1, _p2, _p3, _p1],
+        const [0, 0, 1, 2],
+      );
+      expect(segments.length, 3);
+      expect(segments[0].sectorIndex, 0);
+      expect(segments[0].points.map((p) => p.lat), [_p1.lat, _p2.lat]);
+      expect(segments[1].sectorIndex, 1);
+      expect(segments[1].points.map((p) => p.lat), [_p2.lat, _p3.lat]);
+      expect(segments[2].sectorIndex, 2);
+      expect(segments[2].points.map((p) => p.lat), [_p3.lat, _p1.lat]);
+      expect(segments[0].color, recordingSectorColor(0));
+      expect(segments[1].color, recordingSectorColor(1));
+      expect(segments[2].color, recordingSectorColor(2));
+      expect(recordingSectorColor(0), isNot(recordingSectorColor(1)));
+      expect(recordingSectorColor(1), isNot(recordingSectorColor(2)));
+    });
+
+    test('缺少逐点分段时保留原白色轨迹，不按位置猜段', () {
+      final segments = recordingTrailSegments(const [_p1, _p2, _p3], const [0]);
+      expect(segments.single.sectorIndex, isNull);
+      expect(segments.single.color, Colors.white);
+      expect(segments.single.points.length, 3);
+    });
+
+    test('锁定赛道视口过滤远处轨迹时同步保留分段索引', () {
+      const far = GeoPoint(30.90, 121.50);
+      final frame = circuitMapFrame(
+        centerline: const [_p1, _p3, _p2],
+        trail: const [_p1, far, _p3],
+        trailSectorIndexes: const [0, 0, 1],
+      )!;
+      expect(frame.trail.length, 2);
+      expect(frame.trailSectorIndexes, [0, 1]);
+    });
+
+    test('主框架把计时器逐点分段传给竖屏和横屏记录地图', () {
+      final source = File('lib/main.dart').readAsStringSync();
+      const wiring = 'liveLapTimer?.pointSectorIndexes ?? const <int?>[]';
+      expect(
+        source.split(wiring).length - 1,
+        2,
+        reason: '竖屏分页地图和横屏主地图都必须收到真实逐点分段索引',
+      );
+    });
+  });
+
   group('RecordingMapPage widget', () {
     testWidgets('无点时显示占位，不画假线', (tester) async {
       await _pumpPage(
@@ -141,10 +207,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('暂无位置，等待定位'), findsOneWidget);
       expect(find.text('等待定位'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('recording-map-overlay')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('recording-map-overlay')), findsNothing);
     });
 
     testWidgets('测试环境瓦片失败达阈值后回落示意图', (tester) async {
@@ -189,15 +252,30 @@ void main() {
           statusLine: '第 2 圈 · 当前圈 01:23',
         ),
       );
+      final tileUrls = _tileUrls(tester);
+      expect(tileUrls, isNotEmpty);
+      for (final url in tileUrls) {
+        expect(
+          url,
+          startsWith(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/'
+            'World_Imagery/MapServer/tile/',
+          ),
+        );
+      }
+      expect(find.text(satelliteTileAttribution), findsOneWidget);
+      expect(find.text(amapTileAttribution), findsNothing);
       await tester.pumpAndSettle();
       expect(find.textContaining('第 2 圈 · 当前圈 01:23'), findsOneWidget);
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      // 叠加层以 GCJ-02 交给 painter：与 WGS-84 入参比应有偏移。
-      expect(painter.start!.lat, closeTo(_gcj(_p1).lat, 1e-9));
-      expect(painter.start!.lon, closeTo(_gcj(_p1).lon, 1e-9));
-      expect(painter.finish!.lat, closeTo(_gcj(_p2).lat, 1e-9));
-      expect(painter.finish!.lon, closeTo(_gcj(_p2).lon, 1e-9));
+      // Esri 使用 WGS-84，赛道叠加层不得再做 GCJ-02 偏移。
+      expect(painter.start!.lat, closeTo(_p1.lat, 1e-9));
+      expect(painter.start!.lon, closeTo(_p1.lon, 1e-9));
+      expect(painter.finish!.lat, closeTo(_p2.lat, 1e-9));
+      expect(painter.finish!.lon, closeTo(_p2.lon, 1e-9));
+      expect(painter.curLat, closeTo(31.3400, 1e-9));
+      expect(painter.curLon, closeTo(121.2230, 1e-9));
       expect(painter.startFinishCoincident, isFalse);
       expect(painter.sectorPoints.length, 2);
       expect(painter.trail.length, 2);
@@ -226,6 +304,41 @@ void main() {
       expect(painter.hasValidPosition, isFalse);
     });
 
+    testWidgets('赛道轨迹按 S1/S2/S3 固定色绘制并显示图例', (tester) async {
+      await _pumpPage(
+        tester,
+        const RecordingMapPage(
+          isTrack: true,
+          centerline: [_p1, _p3, _p2],
+          start: _p1,
+          finish: _p1,
+          sectorPoints: [_p3, _p2],
+          trail: [_p1, _p3, _p2, _p1],
+          trailSectorIndexes: [0, 0, 1, 2],
+          curLat: 31.3400,
+          curLon: 121.2230,
+          curHeading: 90,
+          statusLine: '第 2 圈 · 当前圈 01:23',
+        ),
+      );
+      await tester.pumpAndSettle();
+      final painter = _overlayPainter(tester);
+      expect(painter.trailSectorIndexes, [0, 0, 1, 2]);
+      expect(painter.trailSegments.length, 3);
+      expect(painter.trailSegments.map((s) => s.color), [
+        recordingSectorColor(0),
+        recordingSectorColor(1),
+        recordingSectorColor(2),
+      ]);
+      expect(
+        find.byKey(const ValueKey('recording-sector-legend')),
+        findsOneWidget,
+      );
+      expect(find.text('S1'), findsOneWidget);
+      expect(find.text('S2'), findsOneWidget);
+      expect(find.text('S3'), findsOneWidget);
+    });
+
     testWidgets('街道轨迹渲染：无中心线，只有实测轨迹', (tester) async {
       await _pumpPage(
         tester,
@@ -242,10 +355,21 @@ void main() {
           statusLine: '用时 05:00 · 里程 3.40 km',
         ),
       );
+      final tileUrls = _tileUrls(tester);
+      expect(tileUrls, isNotEmpty);
+      for (final url in tileUrls) {
+        expect(url, startsWith('https://webrd01.is.autonavi.com/'));
+      }
+      expect(find.text(amapTileAttribution), findsOneWidget);
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
       expect(painter.centerline, isEmpty);
       expect(painter.trail.length, 3);
+      // 街道仍走高德 GCJ-02，不能随赛道卫星图一起改掉。
+      expect(painter.trail.first.lat, closeTo(_gcj(_p1).lat, 1e-9));
+      expect(painter.trail.first.lon, closeTo(_gcj(_p1).lon, 1e-9));
+      expect(painter.curLat, closeTo(_gcj(_p2).lat, 1e-9));
+      expect(painter.curLon, closeTo(_gcj(_p2).lon, 1e-9));
       expect(painter.start, isNull);
       expect(painter.finish, isNull);
       expect(painter.sectorPoints, isEmpty);

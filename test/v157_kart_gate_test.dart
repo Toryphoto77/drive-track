@@ -83,5 +83,12 @@ void main() {
       expect(next.lastFixAtMs, 123);
       expect(next.sampleRateHz, 10);
     });
+
+    test('copyWith 同步并保留 GSA 3D 定位模式', () {
+      const base = ExternalGpsStatus(connected: true, fixMode: 2);
+      final next = base.copyWith(lastFixAtMs: 123, fixMode: 3);
+      expect(next.fixMode, 3);
+      expect(next.copyWith(sampleRateHz: 10).fixMode, 3);
+    });
   });
 }

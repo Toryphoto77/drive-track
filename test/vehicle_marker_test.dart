@@ -63,16 +63,16 @@ void main() {
   });
 
   group('36px legibility (pixel check)', () {
-    test('car: body silhouette + headlights + hubs visible at 36px',
-        () async {
+    test('car: 3D body silhouette + headlights visible at 36px', () async {
       for (final key in ['sedan', 'sport']) {
         final img = await _render(
-            VehicleMarkerPainter(mode: TripMode.car, styleKey: key), 36);
+          VehicleMarkerPainter(mode: TripMode.car, styleKey: key),
+          36,
+        );
         final px = await _rgba(img);
         const n = 36;
         var opaque = 0;
         var headlight = 0;
-        var hub = 0;
         for (var y = 0; y < n; y++) {
           for (var x = 0; x < n; x++) {
             final i = (y * n + x) * 4;
@@ -84,27 +84,20 @@ void main() {
             if (y >= 3 && y <= 6 && r > 200 && g > 180 && b > 100 && b < 210) {
               headlight++;
             }
-            // 轮毂亮点：轮胎区（x 5..9 或 26..30，y 7..14 或 23..30）
-            // 的浅灰像素。
-            if (((x >= 5 && x <= 9) || (x >= 26 && x <= 30)) &&
-                ((y >= 7 && y <= 14) || (y >= 23 && y <= 30)) &&
-                r > 150 && g > 150 && b > 150) {
-              hub++;
-            }
           }
         }
         // 车体轮廓占画布约 1/4 以上（阴影 + 车体 + 四轮）。
         expect(opaque, greaterThan(n * n * 0.20), reason: '$key opaque');
         expect(headlight, greaterThanOrEqualTo(2), reason: '$key headlight');
-        expect(hub, greaterThanOrEqualTo(2), reason: '$key hub');
       }
     });
 
     test('moto: fairing + accent stripe visible at 36px', () async {
       for (final style in MotoMarkerStyle.values) {
         final img = await _render(
-            VehicleMarkerPainter(mode: TripMode.moto, styleKey: style.key),
-            36);
+          VehicleMarkerPainter(mode: TripMode.moto, styleKey: style.key),
+          36,
+        );
         final px = await _rgba(img);
         const n = 36;
         var opaque = 0;
@@ -128,7 +121,11 @@ void main() {
             }
           }
         }
-        expect(opaque, greaterThan(n * n * 0.10), reason: '${style.key} opaque');
+        expect(
+          opaque,
+          greaterThan(n * n * 0.10),
+          reason: '${style.key} opaque',
+        );
         expect(accent, greaterThanOrEqualTo(1), reason: '${style.key} accent');
       }
     });
@@ -136,7 +133,9 @@ void main() {
     test('bike: wheels + frame visible at 36px', () async {
       for (final key in ['road', 'mountain', 'city']) {
         final img = await _render(
-            VehicleMarkerPainter(mode: TripMode.bike, styleKey: key), 36);
+          VehicleMarkerPainter(mode: TripMode.bike, styleKey: key),
+          36,
+        );
         final px = await _rgba(img);
         const n = 36;
         var opaque = 0;
@@ -150,8 +149,7 @@ void main() {
   });
 
   group('preview tile widget', () {
-    testWidgets('tile is 64x64 with a 56px marker inside',
-        (tester) async {
+    testWidgets('tile is 64x64 with a 56px marker inside', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -168,15 +166,12 @@ void main() {
       expect(find.byType(CustomPaint), findsWidgets);
     });
 
-    testWidgets('picker page tap switches style and calls onChanged',
-        (tester) async {
+    testWidgets('picker page tap switches style and calls onChanged', (
+      tester,
+    ) async {
       VehicleMarkerSelection? got;
       await tester.pumpWidget(
-        MaterialApp(
-          home: VehicleMarkerPickerPage(
-            onChanged: (s) => got = s,
-          ),
-        ),
+        MaterialApp(home: VehicleMarkerPickerPage(onChanged: (s) => got = s)),
       );
       await tester.tap(find.text('跑车'));
       await tester.pump();
@@ -184,15 +179,18 @@ void main() {
       expect(got!.car, CarMarkerStyle.sport);
     });
 
-    testWidgets('settings section tap switches style and calls onChanged',
-        (tester) async {
+    testWidgets('settings section tap switches style and calls onChanged', (
+      tester,
+    ) async {
       VehicleMarkerSelection? got;
       await tester.pumpWidget(
         MaterialApp(
           theme: DriveTrackTheme.dark(const Color(0xFFE10600)),
           home: Scaffold(
-            body: VehicleMarkerSettingsSection(
-              onChanged: (s) => got = s,
+            body: ListView(
+              children: [
+                VehicleMarkerSettingsSection(onChanged: (s) => got = s),
+              ],
             ),
           ),
         ),

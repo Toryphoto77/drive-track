@@ -11,25 +11,25 @@ enum GpsSource { external, phone, mixed, unknown }
 extension GpsSourceLabel on GpsSource {
   /// 中文标签。unknown 无标签（界面不显示）。
   String get label => switch (this) {
-        GpsSource.external => '外接 GPS',
-        GpsSource.phone => '手机 GPS',
-        GpsSource.mixed => '混合',
-        GpsSource.unknown => '',
-      };
+    GpsSource.external => '外接 GPS',
+    GpsSource.phone => '手机 GPS',
+    GpsSource.mixed => '混合',
+    GpsSource.unknown => '',
+  };
 
   /// 徽标配色：外接绿、手机灰、混合琥珀。
   Color get chipColor => switch (this) {
-        GpsSource.external => const Color(0xFF4CAF50),
-        GpsSource.phone => const Color(0xFF9E9E9E),
-        GpsSource.mixed => const Color(0xFFFFB300),
-        GpsSource.unknown => Colors.transparent,
-      };
+    GpsSource.external => const Color(0xFF4CAF50),
+    GpsSource.phone => const Color(0xFF9E9E9E),
+    GpsSource.mixed => const Color(0xFFFFB300),
+    GpsSource.unknown => Colors.transparent,
+  };
 
   /// JSON 键解析：缺键 / null / 非法值一律回退 unknown，绝不抛错。
   static GpsSource fromKey(String? key) => GpsSource.values.firstWhere(
-        (e) => e.name == key,
-        orElse: () => GpsSource.unknown,
-      );
+    (e) => e.name == key,
+    orElse: () => GpsSource.unknown,
+  );
 }
 
 /// 按轨迹点 provider 统计来源（纯函数）。
@@ -126,6 +126,9 @@ class ExternalGpsStatus {
   /// 外接设备的定位更新率（Hz）；0 = 未知。
   final double sampleRateHz;
 
+  /// GSA 定位模式：2=2D、3=3D；null = 尚未收到。
+  final int? fixMode;
+
   const ExternalGpsStatus({
     this.connected = false,
     this.deviceName = '',
@@ -133,6 +136,7 @@ class ExternalGpsStatus {
     this.binaryOnly = false,
     this.lastFixAtMs = 0,
     this.sampleRateHz = 0,
+    this.fixMode,
   });
 
   static const disconnected = ExternalGpsStatus();
@@ -144,15 +148,16 @@ class ExternalGpsStatus {
     bool? binaryOnly,
     int? lastFixAtMs,
     double? sampleRateHz,
-  }) =>
-      ExternalGpsStatus(
-        connected: connected ?? this.connected,
-        deviceName: deviceName ?? this.deviceName,
-        channel: channel ?? this.channel,
-        binaryOnly: binaryOnly ?? this.binaryOnly,
-        lastFixAtMs: lastFixAtMs ?? this.lastFixAtMs,
-        sampleRateHz: sampleRateHz ?? this.sampleRateHz,
-      );
+    int? fixMode,
+  }) => ExternalGpsStatus(
+    connected: connected ?? this.connected,
+    deviceName: deviceName ?? this.deviceName,
+    channel: channel ?? this.channel,
+    binaryOnly: binaryOnly ?? this.binaryOnly,
+    lastFixAtMs: lastFixAtMs ?? this.lastFixAtMs,
+    sampleRateHz: sampleRateHz ?? this.sampleRateHz,
+    fixMode: fixMode ?? this.fixMode,
+  );
 
   /// 赛道模式的硬件门槛：连接活跃、非二进制待解析设备、3 秒内有定位、
   /// 且更新率达到 5Hz。少一条都不放行——手机内置 1Hz 不满足。
@@ -166,8 +171,10 @@ class ExternalGpsStatus {
 /// 调试放行开关：硬件联调期用
 /// `flutter build apk --dart-define=HARDWARE_GATE_BYPASS=true`
 /// 打包，可在未连接硬件时进入赛道/卡丁模式；正式包不传，默认关闭。
-const bool kHardwareGateBypass =
-    bool.fromEnvironment('HARDWARE_GATE_BYPASS', defaultValue: false);
+const bool kHardwareGateBypass = bool.fromEnvironment(
+  'HARDWARE_GATE_BYPASS',
+  defaultValue: false,
+);
 
 /// 外接 GPS 连接状态的唯一共享源。
 final ValueNotifier<ExternalGpsStatus> externalGpsStatus =

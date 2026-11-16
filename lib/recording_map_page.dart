@@ -5,13 +5,10 @@
 /// 赛道模式有已知中心线时框住赛道本身，不把整段行程并进范围。
 ///
 /// 数据口径（与分析页一致，不编数）：
-/// - 底图：高德标准路网栅格瓦片（lib/amap_service.dart 的
-///   [amapTileUrl]，免 Key，style=7），落点换算走
-///   lib/track_analysis_geo.dart 的 [AnalysisGeoProjector]。
-///   高德瓦片是 GCJ-02，全部叠加点（中心线 / 轨迹 / 当前位置 /
-///   幽灵车 / 起终点 / 分段点）均为 WGS-84，画之前一律经
-///   [wgsToGcjLocal] 转 GCJ-02 再定界 / 投影，否则叠加层与道路
-///   错位可达约 500 米。编辑页与分析页仍用 Esri 卫星瓦片，不动。
+/// - 底图按模式选择：赛道使用 Esri World Imagery 卫星瓦片，叠加点
+///   保持 WGS-84；街道保留高德标准路网栅格瓦片，叠加点先从 WGS-84
+///   转 GCJ-02。两种模式都复用 [AnalysisGeoProjector]，但绝不混用
+///   坐标系，否则叠加层会与底图错位。
 /// - 赛道中心线只用包经纬度实点（[TrackPackage.centerline]），
 ///   起终点 / 分段点只用包与计时器已采用的经纬度实点；
 ///   目录归一化轮廓（[TrackInfo]）不是经纬度，绝不画到地图上。
@@ -56,12 +53,7 @@ import 'track_timing.dart';
 /// - 超出参考圈时长时钳制到最后一个点（幽灵车在终点线等），
 ///   朝向取末段行进方向；
 /// - 两点之间按时间线性插值经纬度，朝向取该段行进方向（0° = 北）。
-double ghostBearingDeg(
-  double lat1,
-  double lon1,
-  double lat2,
-  double lon2,
-) {
+double ghostBearingDeg(double lat1, double lon1, double lat2, double lon2) {
   final meanLat = (lat1 + lat2) / 2 * math.pi / 180;
   final dx = (lon2 - lon1) * math.cos(meanLat);
   final dy = lat2 - lat1;
@@ -129,10 +121,7 @@ double ghostBearingDeg(
 /// 中心线与已录轨迹的并集视口；两边都空时返回 null（调用方显示占位）。
 /// 单点或全部重合时以该点为中心扩一小框（约 ±220 m），不除零。
 /// 赛道模式不要直接拿整段行程调用本函数，用 [circuitMapFrame]。
-GeoBounds? recordingMapBounds(
-  List<GeoPoint> centerline,
-  List<GeoPoint> trail,
-) {
+GeoBounds? recordingMapBounds(List<GeoPoint> centerline, List<GeoPoint> trail) {
   final pts = <({double lat, double lon})>[
     ...centerline.map((p) => (lat: p.lat, lon: p.lon)),
     ...trail.map((p) => (lat: p.lat, lon: p.lon)),
@@ -174,12 +163,14 @@ bool pointWithinBoundsMargin(
 /// 落在赛道附近的车与幽灵车），不把远离赛道的轨迹并进范围。
 /// 返回的轨迹只保留赛道附近的点，进城的那一段不会横穿赛道图。
 /// 中心线不足 2 点、或范围退化且无法扩框时返回 null。
-({GeoBounds bounds, List<GeoPoint> trail})? circuitMapFrame({
+({GeoBounds bounds, List<GeoPoint> trail, List<int?> trailSectorIndexes})?
+circuitMapFrame({
   required List<GeoPoint> centerline,
   GeoPoint? start,
   GeoPoint? finish,
   List<GeoPoint> sectorPoints = const [],
   List<GeoPoint> trail = const [],
+  List<int?> trailSectorIndexes = const [],
   double? vehicleLat,
   double? vehicleLon,
   double? ghostLat,
@@ -210,21 +201,28 @@ bool pointWithinBoundsMargin(
   }
   if (ghostLat != null &&
       ghostLon != null &&
-      pointWithinBoundsMargin(
-        circuit,
-        ghostLat,
-        ghostLon,
-        marginM: marginM,
-      )) {
+      pointWithinBoundsMargin(circuit, ghostLat, ghostLon, marginM: marginM)) {
     extra.add(GeoPoint(ghostLat, ghostLon));
   }
-  final bounds =
-      extra.isEmpty ? circuit : (recordingMapBounds(base, extra) ?? circuit);
-  final localTrail = <GeoPoint>[
-    for (final p in trail)
-      if (pointWithinBoundsMargin(circuit, p.lat, p.lon, marginM: marginM)) p,
-  ];
-  return (bounds: bounds, trail: localTrail);
+  final bounds = extra.isEmpty
+      ? circuit
+      : (recordingMapBounds(base, extra) ?? circuit);
+  final localTrail = <GeoPoint>[];
+  final localSectorIndexes = <int?>[];
+  final hasSectorIndexes = trailSectorIndexes.length == trail.length;
+  for (var i = 0; i < trail.length; i++) {
+    final p = trail[i];
+    if (!pointWithinBoundsMargin(circuit, p.lat, p.lon, marginM: marginM)) {
+      continue;
+    }
+    localTrail.add(p);
+    if (hasSectorIndexes) localSectorIndexes.add(trailSectorIndexes[i]);
+  }
+  return (
+    bounds: bounds,
+    trail: localTrail,
+    trailSectorIndexes: localSectorIndexes,
+  );
 }
 
 /// 赛道叠加层是否显示（纯函数）。
@@ -239,8 +237,7 @@ bool showTrackOverlayFor({
   required bool isTrack,
   required bool hasCrossedStartLine,
   bool hasKnownCircuit = false,
-}) =>
-    !isTrack || hasKnownCircuit || hasCrossedStartLine;
+}) => !isTrack || hasKnownCircuit || hasCrossedStartLine;
 
 /// v1.3.5：赛道模式 Map 页状态行（纯函数）：无计时器 → '等待定位'；
 /// 未第一次过线 → '等待通过起终点线'；已过线 → '[圈标签] · 当前圈 [用时]'。
@@ -272,8 +269,58 @@ String trackMapStatusLine({
   );
 }
 
-/// 记录页实时地图页（第 1 页）：高德底图 + 中心线 / 起终点 / 分段点 /
-/// 已录轨迹 / 当前位置箭头 + 底部状态行。只看不操作。
+/// 固定分段颜色：S1 青、S2 黄、S3 粉；与快慢 Delta 无关。
+Color recordingSectorColor(int sectorIndex) => switch (sectorIndex) {
+  0 => const Color(0xFF22D3EE),
+  1 => const Color(0xFFFACC15),
+  2 => const Color(0xFFF472B6),
+  _ => Colors.white,
+};
+
+/// 一段同色实测轨迹；[sectorIndex] 为 null 时沿用原白色轨迹。
+class RecordingTrailSegment {
+  final List<GeoPoint> points;
+  final int? sectorIndex;
+
+  const RecordingTrailSegment({required this.points, this.sectorIndex});
+
+  Color get color =>
+      sectorIndex == null ? Colors.white : recordingSectorColor(sectorIndex!);
+}
+
+/// 按计时器给出的逐点分段索引切分轨迹。
+/// 索引变化前的最后一个实测点由前后两段共用，保证线条连续；不插值、
+/// 不编造过线点。索引缺失或数量不一致时返回原白色轨迹。
+List<RecordingTrailSegment> recordingTrailSegments(
+  List<GeoPoint> trail,
+  List<int?> sectorIndexes,
+) {
+  if (trail.length < 2) return const [];
+  if (sectorIndexes.length != trail.length) {
+    return [RecordingTrailSegment(points: trail)];
+  }
+  final segments = <RecordingTrailSegment>[];
+  var currentIndex = sectorIndexes.first;
+  var points = <GeoPoint>[trail.first];
+  for (var i = 1; i < trail.length; i++) {
+    if (sectorIndexes[i] == currentIndex) {
+      points.add(trail[i]);
+      continue;
+    }
+    segments.add(
+      RecordingTrailSegment(points: points, sectorIndex: currentIndex),
+    );
+    currentIndex = sectorIndexes[i];
+    points = [trail[i - 1], trail[i]];
+  }
+  segments.add(
+    RecordingTrailSegment(points: points, sectorIndex: currentIndex),
+  );
+  return segments;
+}
+
+/// 记录页实时地图页（第 1 页）：按模式显示卫星 / 路网底图，叠加中心线 /
+/// 起终点 / 分段点 / 已录轨迹 / 当前位置箭头与底部状态行。只看不操作。
 class RecordingMapPage extends StatefulWidget {
   /// 是否赛道模式（只决定调用方传什么数据，本页不另取状态）。
   final bool isTrack;
@@ -290,6 +337,9 @@ class RecordingMapPage extends StatefulWidget {
 
   /// 已录轨迹（经纬度实点）。
   final List<GeoPoint> trail;
+
+  /// 计时器给出的逐点分段索引；空或长度不一致时轨迹保持白色。
+  final List<int?> trailSectorIndexes;
 
   /// 当前位置（0 表示无效）与朝向（度，0 = 北）。
   final double curLat;
@@ -321,6 +371,7 @@ class RecordingMapPage extends StatefulWidget {
     required this.finish,
     required this.sectorPoints,
     required this.trail,
+    this.trailSectorIndexes = const [],
     required this.curLat,
     required this.curLon,
     required this.curHeading,
@@ -355,52 +406,59 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
   Widget build(BuildContext context) {
     // 调用方未打开叠加层时不画中心线 / 起终点 / 分段点。已知赛道
     // 打开叠加层后，视口锁在赛道上，远处轨迹不参与定框。
-    final overlayCenterline =
-        widget.showTrackOverlay ? widget.centerline : const <GeoPoint>[];
+    final overlayCenterline = widget.showTrackOverlay
+        ? widget.centerline
+        : const <GeoPoint>[];
     final overlayStart = widget.showTrackOverlay ? widget.start : null;
     final overlayFinish = widget.showTrackOverlay ? widget.finish : null;
-    final overlaySectors =
-        widget.showTrackOverlay ? widget.sectorPoints : const <GeoPoint>[];
-    // 高德瓦片是 GCJ-02，入参全部是 WGS-84：先统一转 GCJ-02 再定界 /
-    // 投影，否则叠加层与道路错位。框外点（包括无效的 0,0）原样返回。
-    GeoPoint toGcj(GeoPoint p) {
+    final overlaySectors = widget.showTrackOverlay
+        ? widget.sectorPoints
+        : const <GeoPoint>[];
+    // 赛道 Esri 瓦片使用 WGS-84；街道高德瓦片使用 GCJ-02。
+    // 框外点（包括无效的 0,0）由原转换函数原样返回。
+    GeoPoint toMapPoint(GeoPoint p) {
+      if (widget.isTrack) return p;
       final (la, lo) = wgsToGcjLocal(p.lat, p.lon);
       return GeoPoint(la, lo);
     }
 
-    final gcjCenterline = overlayCenterline.map(toGcj).toList();
-    final gcjTrail = widget.trail.map(toGcj).toList();
-    final gcjStart = overlayStart == null ? null : toGcj(overlayStart);
-    final gcjFinish = overlayFinish == null ? null : toGcj(overlayFinish);
-    final gcjSectors = overlaySectors.map(toGcj).toList();
-    final (gcjCurLat, gcjCurLon) =
-        wgsToGcjLocal(widget.curLat, widget.curLon);
-    double? gcjGhostLat;
-    double? gcjGhostLon;
+    final mapCenterline = overlayCenterline.map(toMapPoint).toList();
+    final mapTrail = widget.trail.map(toMapPoint).toList();
+    final mapStart = overlayStart == null ? null : toMapPoint(overlayStart);
+    final mapFinish = overlayFinish == null ? null : toMapPoint(overlayFinish);
+    final mapSectors = overlaySectors.map(toMapPoint).toList();
+    final (mapCurLat, mapCurLon) = widget.isTrack
+        ? (widget.curLat, widget.curLon)
+        : wgsToGcjLocal(widget.curLat, widget.curLon);
+    double? mapGhostLat;
+    double? mapGhostLon;
     if (widget.ghostLat != null && widget.ghostLon != null) {
-      final (la, lo) = wgsToGcjLocal(widget.ghostLat!, widget.ghostLon!);
-      gcjGhostLat = la;
-      gcjGhostLon = lo;
+      final (la, lo) = widget.isTrack
+          ? (widget.ghostLat!, widget.ghostLon!)
+          : wgsToGcjLocal(widget.ghostLat!, widget.ghostLon!);
+      mapGhostLat = la;
+      mapGhostLon = lo;
     }
-    final frame = widget.isTrack && gcjCenterline.length >= 2
+    final frame = widget.isTrack && mapCenterline.length >= 2
         ? circuitMapFrame(
-            centerline: gcjCenterline,
-            start: gcjStart,
-            finish: gcjFinish,
-            sectorPoints: gcjSectors,
-            trail: gcjTrail,
+            centerline: mapCenterline,
+            start: mapStart,
+            finish: mapFinish,
+            sectorPoints: mapSectors,
+            trail: mapTrail,
+            trailSectorIndexes: widget.trailSectorIndexes,
             vehicleLat: widget.curLat != 0 && widget.curLon != 0
-                ? gcjCurLat
+                ? mapCurLat
                 : null,
             vehicleLon: widget.curLat != 0 && widget.curLon != 0
-                ? gcjCurLon
+                ? mapCurLon
                 : null,
-            ghostLat: gcjGhostLat,
-            ghostLon: gcjGhostLon,
+            ghostLat: mapGhostLat,
+            ghostLon: mapGhostLon,
           )
         : null;
-    final bounds = frame?.bounds ?? recordingMapBounds(gcjCenterline, gcjTrail);
-    final paintedTrail = frame?.trail ?? gcjTrail;
+    final bounds = frame?.bounds ?? recordingMapBounds(mapCenterline, mapTrail);
+    final paintedTrail = frame?.trail ?? mapTrail;
     if (bounds == null) {
       return Container(
         color: const Color(0xFF0A0A0A),
@@ -422,10 +480,12 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width =
-            constraints.maxWidth.isFinite ? constraints.maxWidth : 320.0;
-        final height =
-            constraints.maxHeight.isFinite ? constraints.maxHeight : 320.0;
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 320.0;
+        final height = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 320.0;
         final zoom = analysisGeoZoom(
           bounds: bounds,
           widthPx: width,
@@ -445,26 +505,37 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                 child: Stack(
                   children: [
                     if (satelliteOn)
-                      for (var y = projector.tileRange.y0;
-                          y <= projector.tileRange.y1;
-                          y++)
-                        for (var x = projector.tileRange.x0;
-                            x <= projector.tileRange.x1;
-                            x++)
+                      for (
+                        var y = projector.tileRange.y0;
+                        y <= projector.tileRange.y1;
+                        y++
+                      )
+                        for (
+                          var x = projector.tileRange.x0;
+                          x <= projector.tileRange.x1;
+                          x++
+                        )
                           Positioned.fromRect(
                             rect: projector.tileScreenRect(x, y),
                             child: Image.network(
-                              amapTileUrl(zoom, x, y),
-                              key: ValueKey('recmap-amap-$zoom-$x-$y'),
-                              headers: const {
-                                'User-Agent': 'DriveTrack/1.5.8',
-                              },
+                              widget.isTrack
+                                  ? satelliteTileUrl(zoom, x, y)
+                                  : amapTileUrl(zoom, x, y),
+                              key: ValueKey(
+                                'recmap-${widget.isTrack ? 'satellite' : 'amap'}-$zoom-$x-$y',
+                              ),
+                              headers: const {'User-Agent': 'DriveTrack/1.5.9'},
                               fit: BoxFit.fill,
                               gaplessPlayback: true,
                               errorBuilder: (_, _, _) {
-                                _onTileError(amapTileUrl(zoom, x, y));
+                                _onTileError(
+                                  widget.isTrack
+                                      ? satelliteTileUrl(zoom, x, y)
+                                      : amapTileUrl(zoom, x, y),
+                                );
                                 return Container(
-                                    color: const Color(0xFF0A0A0A));
+                                  color: const Color(0xFF0A0A0A),
+                                );
                               },
                             ),
                           ),
@@ -473,16 +544,19 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                       size: Size(width, height),
                       painter: RecordingMapPainter(
                         projector: projector,
-                        centerline: gcjCenterline,
-                        start: gcjStart,
-                        finish: gcjFinish,
-                        sectorPoints: gcjSectors,
+                        centerline: mapCenterline,
+                        start: mapStart,
+                        finish: mapFinish,
+                        sectorPoints: mapSectors,
                         trail: paintedTrail,
-                        curLat: gcjCurLat,
-                        curLon: gcjCurLon,
+                        trailSectorIndexes:
+                            frame?.trailSectorIndexes ??
+                            widget.trailSectorIndexes,
+                        curLat: mapCurLat,
+                        curLon: mapCurLon,
                         curHeading: widget.curHeading,
-                        ghostLat: gcjGhostLat,
-                        ghostLon: gcjGhostLon,
+                        ghostLat: mapGhostLat,
+                        ghostLon: mapGhostLon,
                         ghostHeading: widget.ghostHeading,
                         satelliteOn: satelliteOn,
                       ),
@@ -497,7 +571,9 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                         child: Container(
                           key: const ValueKey('ghost-legend'),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.55),
                             borderRadius: BorderRadius.circular(4),
@@ -505,7 +581,64 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                           child: const Text(
                             '◇ 幽灵车 · 参考圈',
                             style: TextStyle(
-                                color: Colors.white70, fontSize: 11),
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (widget.isTrack &&
+                        widget.showTrackOverlay &&
+                        widget.sectorPoints.isNotEmpty)
+                      Positioned(
+                        left: 8,
+                        bottom: 8,
+                        child: Container(
+                          key: const ValueKey('recording-sector-legend'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.62),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (
+                                var i = 0;
+                                i <= widget.sectorPoints.length;
+                                i++
+                              )
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    left: i == 0 ? 0 : 8,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: recordingSectorColor(i),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'S${i + 1}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ),
@@ -515,15 +648,21 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                         bottom: 8,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.55),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
-                            amapTileAttribution,
-                            style: TextStyle(
-                                color: Colors.white70, fontSize: 11),
+                          child: Text(
+                            widget.isTrack
+                                ? satelliteTileAttribution
+                                : amapTileAttribution,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ),
@@ -531,20 +670,22 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                 ),
               ),
             ),
-            Container(
-              width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              color: const Color(0xFF111111),
-              child: Text(
-                _fallback
-                    ? '${widget.statusLine} · 地图未加载，已显示示意图'
-                    : widget.statusLine,
-                style:
-                    const TextStyle(color: Colors.white70, fontSize: 12),
-                overflow: TextOverflow.ellipsis,
+            if (widget.statusLine.isNotEmpty || _fallback)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                color: const Color(0xFF111111),
+                child: Text(
+                  _fallback
+                      ? '${widget.statusLine}${widget.statusLine.isEmpty ? '' : ' · '}地图未加载，已显示示意图'
+                      : widget.statusLine,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
           ],
         );
       },
@@ -561,6 +702,7 @@ class RecordingMapPainter extends CustomPainter {
   final GeoPoint? finish;
   final List<GeoPoint> sectorPoints;
   final List<GeoPoint> trail;
+  final List<int?> trailSectorIndexes;
   final double curLat;
   final double curLon;
   final double curHeading;
@@ -580,6 +722,7 @@ class RecordingMapPainter extends CustomPainter {
     required this.finish,
     required this.sectorPoints,
     required this.trail,
+    this.trailSectorIndexes = const [],
     required this.curLat,
     required this.curLon,
     required this.curHeading,
@@ -597,6 +740,9 @@ class RecordingMapPainter extends CustomPainter {
       (start!.lon - finish!.lon).abs() < 1e-6;
 
   bool get hasValidPosition => curLat != 0 && curLon != 0;
+
+  List<RecordingTrailSegment> get trailSegments =>
+      recordingTrailSegments(trail, trailSectorIndexes);
 
   /// v1.3.4：是否有幽灵车可画（三值齐全才画，缺一不可）。
   bool get hasGhost =>
@@ -633,18 +779,30 @@ class RecordingMapPainter extends CustomPainter {
       );
     }
 
-    // 已录轨迹：实测点连线，白色 2px。
-    if (trail.length >= 2) {
-      final path = Path()..moveTo(pt(trail.first).dx, pt(trail.first).dy);
-      for (var i = 1; i < trail.length; i++) {
-        final o = pt(trail[i]);
+    // 已录轨迹：街道与无分段数据保持白色；赛道按真实过线索引使用
+    // S1/S2/S3 固定色。分段色在卫星图上加白晕，中心线与箭头仍清晰。
+    for (final segment in trailSegments) {
+      if (segment.points.length < 2) continue;
+      final path = Path()
+        ..moveTo(pt(segment.points.first).dx, pt(segment.points.first).dy);
+      for (var i = 1; i < segment.points.length; i++) {
+        final o = pt(segment.points[i]);
         path.lineTo(o.dx, o.dy);
+      }
+      if (segment.sectorIndex != null) {
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = Colors.white.withValues(alpha: 0.75)
+            ..strokeWidth = 6
+            ..style = PaintingStyle.stroke,
+        );
       }
       canvas.drawPath(
         path,
         Paint()
-          ..color = Colors.white
-          ..strokeWidth = 2
+          ..color = segment.color
+          ..strokeWidth = segment.sectorIndex == null ? 2 : 3
           ..style = PaintingStyle.stroke,
       );
     }
@@ -671,10 +829,7 @@ class RecordingMapPainter extends CustomPainter {
         ..lineTo(v.baseRight.dx, v.baseRight.dy)
         ..lineTo(v.baseLeft.dx, v.baseLeft.dy)
         ..close();
-      canvas.drawPath(
-        path,
-        Paint()..color = const Color(0xFFE10600),
-      );
+      canvas.drawPath(path, Paint()..color = const Color(0xFFE10600));
       canvas.drawPath(
         path,
         Paint()
@@ -769,8 +924,7 @@ class RecordingMapPainter extends CustomPainter {
       for (var c = 0; c < cols; c++) {
         canvas.drawRect(
           Rect.fromLTWH(left + c * cw, top + r * ch, cw, ch),
-          Paint()
-            ..color = (r + c) % 2 == 0 ? Colors.black : Colors.white,
+          Paint()..color = (r + c) % 2 == 0 ? Colors.black : Colors.white,
         );
       }
     }
