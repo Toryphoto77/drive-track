@@ -1,0 +1,95 @@
+{
+    "id":  "kart_osm_1362459380",
+    "nameCn":  "杭州市卡丁车赛道（OSM 1362459380）",
+    "nameEn":  "OSM Karting Track 1362459380",
+    "region":  "中国",
+    "version":  1,
+    "source":  "osm",
+    "sourceDetail":  "OSM way 1362459380（sport=karting）（© OpenStreetMap contributors，ODbL）",
+    "verification":  "pending",
+    "verificationNote":  "OSM 未标注具体场馆名称，显示名按杭州市位置生成并附 way ID，正式名称待核；闭合中心线；计算长度 760 m；最大节点间距 128.2 m；公开长度待核；起终点取中心线首点作为临时计时线，位置待现场核对",
+    "centerline":  [
+                       {
+                           "lat":  29.609929,
+                           "lon":  119.139748
+                       },
+                       {
+                           "lat":  29.609791,
+                           "lon":  119.139941
+                       },
+                       {
+                           "lat":  29.609396,
+                           "lon":  119.140131
+                       },
+                       {
+                           "lat":  29.609198,
+                           "lon":  119.140162
+                       },
+                       {
+                           "lat":  29.609087,
+                           "lon":  119.140972
+                       },
+                       {
+                           "lat":  29.608002,
+                           "lon":  119.14081
+                       },
+                       {
+                           "lat":  29.608159,
+                           "lon":  119.139496
+                       },
+                       {
+                           "lat":  29.608313,
+                           "lon":  119.138727
+                       },
+                       {
+                           "lat":  29.60853,
+                           "lon":  119.13849
+                       },
+                       {
+                           "lat":  29.60873,
+                           "lon":  119.138325
+                       },
+                       {
+                           "lat":  29.609006,
+                           "lon":  119.138372
+                       },
+                       {
+                           "lat":  29.609301,
+                           "lon":  119.138758
+                       },
+                       {
+                           "lat":  29.609688,
+                           "lon":  119.139297
+                       },
+                       {
+                           "lat":  29.609843,
+                           "lon":  119.139521
+                       },
+                       {
+                           "lat":  29.609929,
+                           "lon":  119.139748
+                       }
+                   ],
+    "lengthM":  760,
+    "publishedLengthM":  null,
+    "corners":  [
+
+                ],
+    "cornerSource":  null,
+    "sectorPoints":  [
+
+                     ],
+    "sectorNote":  "分段点待核：OSM 几何无法推导官方分段线",
+    "gantry":  null,
+    "start":  {
+                  "lat":  29.609929,
+                  "lon":  119.139748
+              },
+    "finish":  {
+                   "lat":  29.609929,
+                   "lon":  119.139748
+               },
+    "startNote":  "临时计时线取 OSM 闭合中心线首点，非官方起终点，待现场核对",
+    "userModified":  false,
+    "isUserTrack":  false
+}

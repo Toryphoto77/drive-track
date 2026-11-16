@@ -1,8 +1,64 @@
 {
-  "dataVersion": "V1.2.0",
+  "dataVersion": "V1.3.0",
   "updatedAt": "2026-11-16",
   "attribution": "© OpenStreetMap contributors，ODbL（http://osm.org/copyright）",
   "packages": [
+    {
+      "id": "kart_osm_691951920",
+      "nameCn": "南岸卡丁车乐园",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_691951920.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_1203970946",
+      "nameCn": "金华市卡丁车赛道（OSM 1203970946）",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1203970946.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_1362459380",
+      "nameCn": "杭州市卡丁车赛道（OSM 1362459380）",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1362459380.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_1246419977",
+      "nameCn": "杭州市卡丁车赛道（OSM 1246419977）",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1246419977.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_1355324138",
+      "nameCn": "杭州市卡丁车赛道（OSM 1355324138）",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1355324138.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_892243324",
+      "nameCn": "宁波市卡丁车赛道（OSM 892243324）",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_892243324.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_1531417329",
+      "nameCn": "幻想岛乐园即刻追光卡丁车",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1531417329.json",
+      "source": "osm",
+      "verification": "pending"
+    },
     {
       "id": "chengdu_tianfu",
       "nameCn": "成都天府国际赛道",
