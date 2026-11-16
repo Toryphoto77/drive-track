@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import 'app_bar_style.dart';
 
 import 'app_locale.dart';
@@ -28,11 +29,11 @@ enum MyPageSection { trips, posts, favorites, achievements }
 
 extension MyPageSectionLabel on MyPageSection {
   String get label => switch (this) {
-        MyPageSection.trips => '行程',
-        MyPageSection.posts => '动态',
-        MyPageSection.favorites => '收藏',
-        MyPageSection.achievements => '成就',
-      };
+    MyPageSection.trips => '行程',
+    MyPageSection.posts => '动态',
+    MyPageSection.favorites => '收藏',
+    MyPageSection.achievements => '成就',
+  };
 }
 
 /// 一条统计：[progress] 为 0..1 的真实进度（例如里程相对目标），
@@ -72,7 +73,11 @@ class MyAchievement {
   final String title;
   final bool achieved;
   final double? progress;
-  const MyAchievement({required this.title, required this.achieved, this.progress});
+  const MyAchievement({
+    required this.title,
+    required this.achieved,
+    this.progress,
+  });
 }
 
 /// 编辑页回传的结果：用户名 / 简介 / 头像本机路径 / 扩展资料，由
@@ -107,6 +112,7 @@ class MyPage extends StatefulWidget {
   final String username;
   final String userId;
   final String bio;
+
   /// v1.0.7：邮箱（本机存储，见 ProfileEditResult 说明）。
   final String email;
 
@@ -225,7 +231,11 @@ class _MyPageState extends State<MyPage> {
   /// 药丸按钮：选中态红底黑字，未选中态黑底白字 + 白 12% 边框。
   /// 注意：本方法不包 Expanded（避免放进 SizedBox 等非 Flex 父级时
   /// 报错）；需要均分宽度的场景由调用方在外层包 Expanded。
-  Widget _pillButton({required String label, required bool selected, required VoidCallback? onTap}) {
+  Widget _pillButton({
+    required String label,
+    required bool selected,
+    required VoidCallback? onTap,
+  }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -235,24 +245,28 @@ class _MyPageState extends State<MyPage> {
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           alignment: Alignment.center,
-            decoration: BoxDecoration(
-              // v1.0.3：选中态用当前主题色（默认法拉利红），不再写死截图蓝；
-              // 未选中边框用统一细亮边框。
-              color: selected ? CardStyle.accent(context) : Colors.black54,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: selected ? CardStyle.accent(context) : CardStyle.borderColor),
+          decoration: BoxDecoration(
+            // v1.0.3：选中态用当前主题色（默认法拉利红），不再写死截图蓝；
+            // 未选中边框用统一细亮边框。
+            color: selected ? CardStyle.accent(context) : Colors.black54,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected
+                  ? CardStyle.accent(context)
+                  : CardStyle.borderColor,
             ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.white,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                fontSize: 13,
-              ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: selected ? Colors.white : Colors.white,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 13,
             ),
           ),
         ),
+      ),
     );
   }
 
@@ -263,10 +277,9 @@ class _MyPageState extends State<MyPage> {
     return Container(
       width: 64,
       height: 64,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: widget.accentColor, width: 2),
-      ),
+      // v1.7.0：去掉主题色描边——头像本身已是圆形照片/图标，外加一圈
+      // 红框在深色背景上显得突兀；未上传头像时靠黑色底区分边界。
+      decoration: const BoxDecoration(shape: BoxShape.circle),
       child: ClipOval(
         child: hasFile
             ? Image.file(file, fit: BoxFit.cover)
@@ -284,61 +297,92 @@ class _MyPageState extends State<MyPage> {
   /// 放旁边：36 圆角图标钮，与“编辑”并排在头行右侧。
   Widget _profileCard() {
     return _card(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          _avatar(),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.username, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              Text('ID · ${widget.userId}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _avatar(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.username,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'ID · ${widget.userId}',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (widget.onShareInvite != null) ...[
+                _iconButton(
+                  icon: Icons.share,
+                  onTap: widget.onShareInvite,
+                  tooltip: '分享',
+                ),
+                const SizedBox(width: 8),
+              ],
+              // v1.5.1：点“编辑”推全页编辑页，不再在卡片内展开编辑器。
+              _pillButton(
+                label: S.of(context).t('编辑', 'Edit'),
+                selected: false,
+                onTap: widget.onEditProfile,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          if (widget.onShareInvite != null) ...[
-            _iconButton(icon: Icons.share, onTap: widget.onShareInvite, tooltip: '分享'),
-            const SizedBox(width: 8),
-          ],
-          // v1.5.1：点“编辑”推全页编辑页，不再在卡片内展开编辑器。
-          _pillButton(
-            label: S.of(context).t('编辑', 'Edit'),
-            selected: false,
-            onTap: widget.onEditProfile,
-          ),
-        ]),
-        const SizedBox(height: 12),
-        Text(
-          widget.bio.isEmpty ? S.of(context).t('暂无简介，点“编辑”添加', 'No bio yet. Tap Edit.') : widget.bio,
-          style: TextStyle(color: widget.bio.isEmpty ? Colors.white38 : Colors.white70, fontSize: 13),
-        ),
-        if (widget.email.isNotEmpty) ...[
-          const SizedBox(height: 2),
+          const SizedBox(height: 12),
           Text(
-            widget.email,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            widget.bio.isEmpty
+                ? S.of(context).t('暂无简介，点“编辑”添加', 'No bio yet. Tap Edit.')
+                : widget.bio,
+            style: TextStyle(
+              color: widget.bio.isEmpty ? Colors.white38 : Colors.white70,
+              fontSize: 13,
+            ),
+          ),
+          if (widget.email.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              widget.email,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ],
+          // v1.5.1：关注/粉丝/获赞并进资料卡（原独立社交卡已删）；
+          // 数字为调用方传入的真实本机数字，为 0 时显示“暂无”，不编数。
+          const SizedBox(height: 14),
+          Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _socialCell(S.of(context).t('关注', 'Following'), widget.following),
+              _socialCell(S.of(context).t('粉丝', 'Followers'), widget.followers),
+              _socialCell(S.of(context).t('获赞', 'Likes'), widget.likes),
+            ],
           ),
         ],
-        // v1.5.1：关注/粉丝/获赞并进资料卡（原独立社交卡已删）；
-        // 数字为调用方传入的真实本机数字，为 0 时显示“暂无”，不编数。
-        const SizedBox(height: 14),
-        Container(
-          height: 1,
-          color: Colors.white.withValues(alpha: 0.08),
-        ),
-        const SizedBox(height: 10),
-        Row(children: [
-          _socialCell(S.of(context).t('关注', 'Following'), widget.following),
-          _socialCell(S.of(context).t('粉丝', 'Followers'), widget.followers),
-          _socialCell(S.of(context).t('获赞', 'Likes'), widget.likes),
-        ]),
-      ]),
+      ),
     );
   }
 
   /// 小圆形图标钮（分享等）：36 高、黑底 + 细亮边框，与药丸按钮同风格。
-  Widget _iconButton(
-      {required IconData icon, required VoidCallback? onTap, String? tooltip}) {
+  Widget _iconButton({
+    required IconData icon,
+    required VoidCallback? onTap,
+    String? tooltip,
+  }) {
     final btn = Material(
       color: Colors.transparent,
       child: InkWell(
@@ -363,13 +407,20 @@ class _MyPageState extends State<MyPage> {
 
   /// 资料卡内的社交数字格：数字在上、标签在下，居中。
   Widget _socialCell(String label, int n) => Expanded(
-        child: Column(children: [
-          Text(n > 0 ? '$n' : S.of(context).t('暂无', 'None'),
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-        ]),
-      );
+    child: Column(
+      children: [
+        Text(
+          n > 0 ? '$n' : S.of(context).t('暂无', 'None'),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+      ],
+    ),
+  );
 
   Widget _statsCard() {
     if (widget.stats.isEmpty) return const SizedBox.shrink();
@@ -380,29 +431,39 @@ class _MyPageState extends State<MyPage> {
           for (var i = 0; i < widget.stats.length; i++) ...[
             if (i > 0) const SizedBox(width: 12),
             Expanded(
-              child: Column(children: [
-                // v0.1.9 总里程不换行：数字与单位同一行——maxLines 1 +
-                // softWrap false 禁止在空格处折行，FittedBox scaleDown
-                // 在栏宽内自适应缩小字号，不截断、不把单位挤到下一行。
-                // 千分位分组由调用方 formatDistanceKm 负责（如 123,456.7 km）。
-                SizedBox(
-                  width: double.infinity,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(widget.stats[i].value,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              child: Column(
+                children: [
+                  // v0.1.9 总里程不换行：数字与单位同一行——maxLines 1 +
+                  // softWrap false 禁止在空格处折行，FittedBox scaleDown
+                  // 在栏宽内自适应缩小字号，不截断、不把单位挤到下一行。
+                  // 千分位分组由调用方 formatDistanceKm 负责（如 123,456.7 km）。
+                  SizedBox(
+                    width: double.infinity,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        widget.stats[i].value,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                         maxLines: 1,
                         softWrap: false,
-                        textAlign: TextAlign.center),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(widget.stats[i].label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                if (widget.stats[i].progress != null) ...[
-                  const SizedBox(height: 8),
-                  _thinBar(widget.stats[i].progress!),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.stats[i].label,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  if (widget.stats[i].progress != null) ...[
+                    const SizedBox(height: 8),
+                    _thinBar(widget.stats[i].progress!),
+                  ],
                 ],
-              ]),
+              ),
             ),
           ],
         ],
@@ -415,40 +476,62 @@ class _MyPageState extends State<MyPage> {
   /// 仅汽车/摩托、未填写时显示“未填写”）。
   Widget _monthlyStatsCard() {
     return _card(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(S.of(context).t('本月汇总', 'This month'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < widget.monthlyStats.length; i++) ...[
-              if (i > 0) const SizedBox(width: 12),
-              Expanded(
-                child: Column(children: [
-                  // v0.1.9：与统计卡同一不换行处理（见 _statsCard 注释）。
-                  SizedBox(
-                    width: double.infinity,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(widget.monthlyStats[i].value,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          softWrap: false,
-                          textAlign: TextAlign.center),
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            S.of(context).t('本月汇总', 'This month'),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < widget.monthlyStats.length; i++) ...[
+                if (i > 0) const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    children: [
+                      // v0.1.9：与统计卡同一不换行处理（见 _statsCard 注释）。
+                      SizedBox(
+                        width: double.infinity,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            widget.monthlyStats[i].value,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            softWrap: false,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.monthlyStats[i].label,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(widget.monthlyStats[i].label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                ]),
-              ),
+                ),
+              ],
             ],
+          ),
+          if (widget.monthlyNote.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              widget.monthlyNote,
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
           ],
-        ),
-        if (widget.monthlyNote.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(widget.monthlyNote, style: const TextStyle(color: Colors.white38, fontSize: 11)),
         ],
-      ]),
+      ),
     );
   }
 
@@ -463,10 +546,10 @@ class _MyPageState extends State<MyPage> {
         final subtitle = !svc.isConfigured
             ? '云端未配置'
             : svc.status == CloudStatus.uninitialized
-                ? '同步中…'
-                : svc.isAnonymous
-                    ? '未登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条'
-                    : '已登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条';
+            ? '同步中…'
+            : svc.isAnonymous
+            ? '未登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条'
+            : '已登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条';
         return _card(
           child: InkWell(
             onTap: () {
@@ -475,30 +558,44 @@ class _MyPageState extends State<MyPage> {
                 MaterialPageRoute(builder: (_) => const CloudPage()),
               );
             },
-            child: Row(children: [
-              const Icon(Icons.cloud_outlined, size: 22),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('云端',
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_outlined, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '云端',
                         style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    Text(subtitle,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
                         style: const TextStyle(
-                            color: Colors.white54, fontSize: 12)),
-                    const SizedBox(height: 2),
-                    const Text('昵称、简介、头像会同步到云端公开资料，他人打开你的公开资料页可见；邮箱只存本机。',
-                        style: TextStyle(
-                            color: Colors.white38, fontSize: 11)),
-                  ],
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        '昵称、简介、头像会同步到云端公开资料，他人打开你的公开资料页可见；邮箱只存本机。',
+                        style: TextStyle(color: Colors.white38, fontSize: 11),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(Icons.chevron_right,
-                  size: 20, color: Colors.white54),
-            ]),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Colors.white54,
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -513,15 +610,19 @@ class _MyPageState extends State<MyPage> {
   ///   双重居中。
   Widget _sectionBar() {
     final s = S.of(context);
-    final achieved =
-        widget.achievements.where((a) => a.achieved).length;
+    final achieved = widget.achievements.where((a) => a.achieved).length;
     (String, String) parts(MyPageSection section) => switch (section) {
-          MyPageSection.trips => (s.t('行程', 'Trips'), '${widget.trips.length}'),
-          MyPageSection.posts => (s.t('动态', 'Feed'), '${widget.posts.length}'),
-          MyPageSection.favorites => (s.t('收藏', 'Saved'), '${widget.favorites.length}'),
-          MyPageSection.achievements =>
-            (s.t('成就', 'Badges'), '$achieved/${widget.achievements.length}'),
-        };
+      MyPageSection.trips => (s.t('行程', 'Trips'), '${widget.trips.length}'),
+      MyPageSection.posts => (s.t('动态', 'Feed'), '${widget.posts.length}'),
+      MyPageSection.favorites => (
+        s.t('收藏', 'Saved'),
+        '${widget.favorites.length}',
+      ),
+      MyPageSection.achievements => (
+        s.t('成就', 'Badges'),
+        '$achieved/${widget.achievements.length}',
+      ),
+    };
     return Container(
       height: 40,
       decoration: BoxDecoration(
@@ -531,17 +632,19 @@ class _MyPageState extends State<MyPage> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(999),
-        child: Row(children: [
-          for (final section in MyPageSection.values)
-            Expanded(
-              child: _sectionSegment(
-                label: parts(section).$1,
-                count: parts(section).$2,
-                selected: _section == section,
-                onTap: () => _select(section),
+        child: Row(
+          children: [
+            for (final section in MyPageSection.values)
+              Expanded(
+                child: _sectionSegment(
+                  label: parts(section).$1,
+                  count: parts(section).$2,
+                  selected: _section == section,
+                  onTap: () => _select(section),
+                ),
               ),
-            ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -575,8 +678,7 @@ class _MyPageState extends State<MyPage> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight:
-                        selected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                     fontSize: 13,
                   ),
                 ),
@@ -586,8 +688,7 @@ class _MyPageState extends State<MyPage> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight:
-                        selected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                     fontSize: 13,
                   ),
                 ),
@@ -603,40 +704,61 @@ class _MyPageState extends State<MyPage> {
     final s = S.of(context);
     return _card(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(children: [
-        Expanded(
-          child: InkWell(
-            // 公开管理列表不是第二套行程浏览器，行本身不进详情。
-            onTap: showPublicToggle ? null : item.onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 2),
-                Text(item.subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              ]),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              // 公开管理列表不是第二套行程浏览器，行本身不进详情。
+              onTap: showPublicToggle ? null : item.onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.subtitle,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-        if (!showPublicToggle) ...[
-          const SizedBox(width: 8),
-          Semantics(
-            label: s.t('收藏', 'Save'),
-            child: IconButton(
-              icon: Icon(item.isFavorite ? Icons.star : Icons.star_border,
-                  color: item.isFavorite ? widget.accentColor : Colors.white54),
-              onPressed: item.onToggleFavorite,
+          if (!showPublicToggle) ...[
+            const SizedBox(width: 8),
+            Semantics(
+              label: s.t('收藏', 'Save'),
+              child: IconButton(
+                icon: Icon(
+                  item.isFavorite ? Icons.star : Icons.star_border,
+                  color: item.isFavorite ? widget.accentColor : Colors.white54,
+                ),
+                onPressed: item.onToggleFavorite,
+              ),
             ),
-          ),
-          const Icon(Icons.chevron_right, color: Colors.white38),
-        ] else
-          _pillButton(
-            label: item.isPublic ? s.t('公开', 'Public') : s.t('仅自己', 'Private'),
-            selected: item.isPublic,
-            onTap: item.onTogglePublic,
-          ),
-      ]),
+            const Icon(Icons.chevron_right, color: Colors.white38),
+          ] else
+            _pillButton(
+              label: item.isPublic
+                  ? s.t('公开', 'Public')
+                  : s.t('仅自己', 'Private'),
+              selected: item.isPublic,
+              onTap: item.onTogglePublic,
+            ),
+        ],
+      ),
     );
   }
 
@@ -645,50 +767,79 @@ class _MyPageState extends State<MyPage> {
     return DriveTrackCard(
       onTap: widget.onOpenTripsTab,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(children: [
-        Icon(Icons.list_alt, color: CardStyle.accent(context)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(s.t('打开行程记录', 'Open trips'),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 2),
-            Text(s.t('完整行程在「记录」页', 'Full list is on the Trips tab'),
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          ]),
-        ),
-        const Icon(Icons.chevron_right, color: Colors.white38),
-      ]),
+      child: Row(
+        children: [
+          Icon(Icons.list_alt, color: CardStyle.accent(context)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.t('打开行程记录', 'Open trips'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  s.t('完整行程在「记录」页', 'Full list is on the Trips tab'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: Colors.white38),
+        ],
+      ),
     );
   }
 
   Widget _achievementRow(MyAchievement a) {
     return _card(
       padding: const EdgeInsets.all(12),
-      child: Row(children: [
-        Icon(a.achieved ? Icons.emoji_events : Icons.emoji_events_outlined,
-            color: a.achieved ? widget.accentColor : Colors.white24),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(a.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 2),
-            Text(a.achieved ? S.of(context).t('已达成', 'Done') : S.of(context).t('未达成', 'Not yet'),
-                style: TextStyle(color: a.achieved ? widget.accentColor : Colors.white38, fontSize: 12)),
-            if (a.progress != null) ...[
-              const SizedBox(height: 8),
-              _thinBar(a.progress!),
-            ],
-          ]),
-        ),
-      ]),
+      child: Row(
+        children: [
+          Icon(
+            a.achieved ? Icons.emoji_events : Icons.emoji_events_outlined,
+            color: a.achieved ? widget.accentColor : Colors.white24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  a.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  a.achieved
+                      ? S.of(context).t('已达成', 'Done')
+                      : S.of(context).t('未达成', 'Not yet'),
+                  style: TextStyle(
+                    color: a.achieved ? widget.accentColor : Colors.white38,
+                    fontSize: 12,
+                  ),
+                ),
+                if (a.progress != null) ...[
+                  const SizedBox(height: 8),
+                  _thinBar(a.progress!),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _emptyHud({
-    required IconData icon,
-    required String status,
-  }) {
+  Widget _emptyHud({required IconData icon, required String status}) {
     final s = S.of(context);
     return EmptyHud(
       icon: icon,
@@ -702,72 +853,92 @@ class _MyPageState extends State<MyPage> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     // 底栏药丸盖住滚动末尾：留出药丸高 + 距底 12 + 系统底 inset + 间隙。
-    final bottomPad = kPillNavHeight + 12 + MediaQuery.paddingOf(context).bottom + 16;
+    final bottomPad =
+        kPillNavHeight + 12 + MediaQuery.paddingOf(context).bottom + 16;
     return SingleChildScrollView(
       // v1.4.2：顶栏改半透 + 主框架 extendBodyBehindAppBar，顶部再加
       // 顶栏高度，首张卡片静止时才不会藏进顶栏后。
-      padding: withAppBarTopInset(context, EdgeInsets.fromLTRB(16, 16, 16, bottomPad)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        _profileCard(),
-        const SizedBox(height: 12),
-        _statsCard(),
-        if (widget.monthlyStats.isNotEmpty) ...[
+      padding: withAppBarTopInset(
+        context,
+        EdgeInsets.fromLTRB(16, 16, 16, bottomPad),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _profileCard(),
           const SizedBox(height: 12),
-          _monthlyStatsCard(),
+          _statsCard(),
+          if (widget.monthlyStats.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _monthlyStatsCard(),
+          ],
+          const SizedBox(height: 12),
+          _cloudCard(),
+          const SizedBox(height: 12),
+          _sectionBar(),
+          const SizedBox(height: 12),
+          if (_section == MyPageSection.trips) ...[
+            _openTripsCard(),
+            const SizedBox(height: 8),
+            Text(
+              s.t('公开范围', 'Visibility'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              s.t(
+                '只切换是否公开。完整行程在「记录」页。',
+                'Publish toggles only. Full trips are on the Trips tab.',
+              ),
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            if (widget.trips.isEmpty)
+              _emptyHud(icon: Icons.route, status: s.t('暂无行程', 'No trips yet'))
+            else
+              for (final t in widget.trips) ...[
+                _tripRow(t, showPublicToggle: true),
+                const SizedBox(height: 8),
+              ],
+          ],
+          if (_section == MyPageSection.posts) ...[
+            if (widget.posts.isEmpty)
+              _emptyHud(
+                icon: Icons.dynamic_feed,
+                status: s.t('暂无动态', 'No posts yet'),
+              )
+            else
+              for (final p in widget.posts) ...[
+                _tripRow(p),
+                const SizedBox(height: 8),
+              ],
+          ],
+          if (_section == MyPageSection.favorites) ...[
+            if (widget.favorites.isEmpty)
+              _emptyHud(
+                icon: Icons.star_border,
+                status: s.t('暂无收藏', 'No saved trips'),
+              )
+            else
+              for (final f in widget.favorites) ...[
+                _tripRow(f),
+                const SizedBox(height: 8),
+              ],
+          ],
+          if (_section == MyPageSection.achievements) ...[
+            if (widget.achievements.isEmpty)
+              _emptyHud(
+                icon: Icons.emoji_events_outlined,
+                status: s.t('暂无成就', 'No badges yet'),
+              )
+            else
+              for (final a in widget.achievements) ...[
+                _achievementRow(a),
+                const SizedBox(height: 8),
+              ],
+          ],
         ],
-        const SizedBox(height: 12),
-        _cloudCard(),
-        const SizedBox(height: 12),
-        _sectionBar(),
-        const SizedBox(height: 12),
-        if (_section == MyPageSection.trips) ...[
-          _openTripsCard(),
-          const SizedBox(height: 8),
-          Text(s.t('公开范围', 'Visibility'),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          const SizedBox(height: 2),
-          Text(
-            s.t('只切换是否公开。完整行程在「记录」页。',
-                'Publish toggles only. Full trips are on the Trips tab.'),
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          if (widget.trips.isEmpty)
-            _emptyHud(icon: Icons.route, status: s.t('暂无行程', 'No trips yet'))
-          else
-            for (final t in widget.trips) ...[
-              _tripRow(t, showPublicToggle: true),
-              const SizedBox(height: 8),
-            ],
-        ],
-        if (_section == MyPageSection.posts) ...[
-          if (widget.posts.isEmpty)
-            _emptyHud(icon: Icons.dynamic_feed, status: s.t('暂无动态', 'No posts yet'))
-          else
-            for (final p in widget.posts) ...[
-              _tripRow(p),
-              const SizedBox(height: 8),
-            ],
-        ],
-        if (_section == MyPageSection.favorites) ...[
-          if (widget.favorites.isEmpty)
-            _emptyHud(icon: Icons.star_border, status: s.t('暂无收藏', 'No saved trips'))
-          else
-            for (final f in widget.favorites) ...[
-              _tripRow(f),
-              const SizedBox(height: 8),
-            ],
-        ],
-        if (_section == MyPageSection.achievements) ...[
-          if (widget.achievements.isEmpty)
-            _emptyHud(icon: Icons.emoji_events_outlined, status: s.t('暂无成就', 'No badges yet'))
-          else
-            for (final a in widget.achievements) ...[
-              _achievementRow(a),
-              const SizedBox(height: 8),
-            ],
-        ],
-      ]),
+      ),
     );
   }
 }

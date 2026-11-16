@@ -47,11 +47,18 @@
 /// - 扇区待核的赛道：分段表用“第 1 段/第 2 段…”通用标签，分段点
 ///   缩放不可用（无分界点可缩），界面写明原因，不硬标 S1/S2/S3。
 
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'ai_analysis_service.dart';
+import 'ai_settings_page.dart';
 import 'app_bar_style.dart';
+import 'app_locale.dart';
+import 'corner_analysis.dart';
+import 'dt_page_route.dart';
+import 'lap_speed_delta.dart';
 import 'logic.dart';
 import 'models.dart';
 import 'replay_3d.dart';
@@ -61,6 +68,7 @@ import 'trip_detail_modules.dart';
 import 'track_sector_data.dart';
 import 'track_session_display.dart';
 import 'track_timing.dart';
+import 'voice_service.dart';
 
 const Color _kBg = Color(0xFF121212);
 const Color _kCard = Color(0xFF141414);
@@ -125,8 +133,10 @@ _LapSlice _sliceLap(Trip trip, Lap lap) {
       .toList();
   final dists = <double>[0];
   for (var i = 1; i < pts.length; i++) {
-    dists.add(dists.last +
-        haversineM(pts[i - 1].lat, pts[i - 1].lon, pts[i].lat, pts[i].lon));
+    dists.add(
+      dists.last +
+          haversineM(pts[i - 1].lat, pts[i - 1].lon, pts[i].lat, pts[i].lon),
+    );
   }
   final elapsed = pts.map((p) => p.timeMs - lap.startMs).toList();
   return _LapSlice(pts, dists, elapsed);
@@ -200,11 +210,22 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
   // 无参照圈时开关不出现，见 _tripOverviewSection）。
   bool _showReferenceOverlay = true;
 
+  // v1.7.0：AI 分析。配置只从本机读取；只有用户点“生成分析”时
+  // 才发请求，结果不落盘，切走即丢。
+  final AiAnalysisService _aiService = AiAnalysisService();
+  AiSettings _aiSettings = AiSettings.defaults;
+  bool _aiBusy = false;
+  String? _aiResult;
+  String? _aiError;
+
   TrackSectorData? get _sectorData => sectorDataFor(widget.trip.trackId);
 
   @override
   void initState() {
     super.initState();
+    AiSettingsStore.load().then((settings) {
+      if (mounted) setState(() => _aiSettings = settings);
+    });
     final best = sessionBestLap(widget.laps);
     Lap? byNumber(int? n) {
       if (n == null) return null;
@@ -214,10 +235,12 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       return null;
     }
 
-    _selected = byNumber(widget.initialLapNumber) ??
+    _selected =
+        byNumber(widget.initialLapNumber) ??
         best ??
         (widget.laps.isEmpty ? null : widget.laps.first);
-    _reference = widget.referenceLap ??
+    _reference =
+        widget.referenceLap ??
         byNumber(widget.initialReferenceLapNumber) ??
         best;
   }
@@ -270,8 +293,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     final trip = widget.trip;
     final pts = trip.points;
     final durMs = trip.endMs - trip.startMs;
-    final avgKmh =
-        durMs > 0 ? (trip.distanceM / 1000) / (durMs / 3600000.0) : 0.0;
+    final avgKmh = durMs > 0
+        ? (trip.distanceM / 1000) / (durMs / 3600000.0)
+        : 0.0;
     final maxLong = pts.isEmpty
         ? 0.0
         : pts.map((p) => p.longG).reduce(math.max);
@@ -281,8 +305,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     final maxLat = pts.isEmpty
         ? 0.0
         : pts.map((p) => p.latG.abs()).reduce(math.max);
-    final validAlts =
-        pts.where((p) => p.altValid).map((p) => p.alt).toList();
+    final validAlts = pts.where((p) => p.altValid).map((p) => p.alt).toList();
     final altRange = validAlts.isEmpty
         ? '暂无海拔数据'
         : '${validAlts.reduce(math.min).toStringAsFixed(0)}–${validAlts.reduce(math.max).toStringAsFixed(0)} m · 累计爬升 ${trip.climbM.toStringAsFixed(0)} m';
@@ -291,12 +314,21 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     if (pts.length >= 2) {
       final dists = <double>[0];
       for (var i = 1; i < pts.length; i++) {
-        dists.add(dists.last +
-            haversineM(
-                pts[i - 1].lat, pts[i - 1].lon, pts[i].lat, pts[i].lon));
+        dists.add(
+          dists.last +
+              haversineM(
+                pts[i - 1].lat,
+                pts[i - 1].lon,
+                pts[i].lat,
+                pts[i].lon,
+              ),
+        );
       }
       wholeSlice = _LapSlice(
-          pts, dists, pts.map((p) => p.timeMs - pts.first.timeMs).toList());
+        pts,
+        dists,
+        pts.map((p) => p.timeMs - pts.first.timeMs).toList(),
+      );
     }
     // v1.3.4：参照圈切片（与 Delta 用同一个 _reference 对象；点数
     // < 2 时不画叠加线）。全程走线图的底线是整节轨迹、不是分析圈，
@@ -312,17 +344,28 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       }
     }
     final showRefOverlay = _showReferenceOverlay && refSlice != null;
-    final splits =
-        trip.mode == TripMode.bike ? paceSplitsKm(pts) : const <double>[];
-    final leanOver30 =
-        trip.mode == TripMode.moto ? pts.where((p) => p.roll.abs() > 30).length : 0;
+    final splits = trip.mode == TripMode.bike
+        ? paceSplitsKm(pts)
+        : const <double>[];
+    final leanOver30 = trip.mode == TripMode.moto
+        ? pts.where((p) => p.roll.abs() > 30).length
+        : 0;
     return [
-      const Text('本节行程总览 · 传感器实测',
-          style: TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+      const Text(
+        '本节行程总览 · 传感器实测',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
       const SizedBox(height: 8),
-      _sectionHeader('总览', 'hide-overview', _hideOverview,
-          (v) => setState(() => _hideOverview = v)),
+      _sectionHeader(
+        '总览',
+        'hide-overview',
+        _hideOverview,
+        (v) => setState(() => _hideOverview = v),
+      ),
       if (!_hideOverview) ...[
         TripOverviewCard(trip: trip),
         const SizedBox(height: 12),
@@ -330,44 +373,80 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('关键极值',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold)),
+              const Text(
+                '关键极值',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 8),
-              Wrap(spacing: 16, runSpacing: 8, children: [
-                _stat('总里程', '${(trip.distanceM / 1000).toStringAsFixed(2)} km'),
-                _stat('总时长', _fmtDur(durMs)),
-                _stat('平均时速', '${avgKmh.toStringAsFixed(0)} km/h'),
-                _stat('极速', '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h'),
-                _stat('纵向 G 极值', '加速 ${maxLong.toStringAsFixed(2)}g / 刹车 ${maxBrake.toStringAsFixed(2)}g'),
-                _stat('横向 G 极值', '${maxLat.toStringAsFixed(2)}g'),
-                _stat('最大合成 G',
-                    pts.isEmpty ? '暂无' : '${trip.maxG.toStringAsFixed(2)}g'),
-              ]),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  _stat(
+                    '总里程',
+                    '${(trip.distanceM / 1000).toStringAsFixed(2)} km',
+                  ),
+                  _stat('总时长', _fmtDur(durMs)),
+                  _stat('平均时速', '${avgKmh.toStringAsFixed(0)} km/h'),
+                  _stat(
+                    '极速',
+                    '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h',
+                  ),
+                  _stat(
+                    '纵向 G 极值',
+                    '加速 ${maxLong.toStringAsFixed(2)}g / 刹车 ${maxBrake.toStringAsFixed(2)}g',
+                  ),
+                  _stat('横向 G 极值', '${maxLat.toStringAsFixed(2)}g'),
+                  _stat(
+                    '最大合成 G',
+                    pts.isEmpty ? '暂无' : '${trip.maxG.toStringAsFixed(2)}g',
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
-              Text('海拔变化：$altRange',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              Text(
+                '海拔变化：$altRange',
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
             ],
           ),
         ),
       ],
       const SizedBox(height: 12),
-      _sectionHeader('速度曲线', 'hide-speed', _hideSpeed,
-          (v) => setState(() => _hideSpeed = v)),
+      _sectionHeader(
+        '速度曲线',
+        'hide-speed',
+        _hideSpeed,
+        (v) => setState(() => _hideSpeed = v),
+      ),
       if (!_hideSpeed) TripSpeedChartCard(points: pts, events: trip.events),
       const SizedBox(height: 12),
-      _sectionHeader('G 值', 'hide-g', _hideG,
-          (v) => setState(() => _hideG = v)),
+      _sectionHeader(
+        'G 值',
+        'hide-g',
+        _hideG,
+        (v) => setState(() => _hideG = v),
+      ),
       if (!_hideG) TripGChartCard(points: pts),
       const SizedBox(height: 12),
-      _sectionHeader('海拔', 'hide-altitude', _hideAltitude,
-          (v) => setState(() => _hideAltitude = v)),
+      _sectionHeader(
+        '海拔',
+        'hide-altitude',
+        _hideAltitude,
+        (v) => setState(() => _hideAltitude = v),
+      ),
       if (!_hideAltitude) TripAltitudeCard(points: pts),
       const SizedBox(height: 12),
-      _sectionHeader('轨迹走线图', 'hide-track-line', _hideTrackLine,
-          (v) => setState(() => _hideTrackLine = v)),
+      _sectionHeader(
+        '轨迹走线图',
+        'hide-track-line',
+        _hideTrackLine,
+        (v) => setState(() => _hideTrackLine = v),
+      ),
       if (!_hideTrackLine)
         _card(
           child: Column(
@@ -401,8 +480,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     key: const ValueKey('analysis-map-3d-replay'),
                     label: const Text('3D 回放'),
                     selected: _replay3d,
-                    onSelected: (_) =>
-                        setState(() => _replay3d = true),
+                    onSelected: (_) => setState(() => _replay3d = true),
                   ),
                   // v1.3.4：参考圈叠加开关（默认开，只影响本页会话；
                   // 无参照圈时不出现，参照圈切片点数 < 2 时不画线；
@@ -412,8 +490,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       key: const ValueKey('reference-overlay-toggle'),
                       label: const Text('参考圈叠加'),
                       selected: _showReferenceOverlay,
-                      onSelected: (_) => setState(() =>
-                          _showReferenceOverlay = !_showReferenceOverlay),
+                      onSelected: (_) => setState(
+                        () => _showReferenceOverlay = !_showReferenceOverlay,
+                      ),
                     ),
                 ],
               ),
@@ -421,8 +500,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               if (_replay3d)
                 Replay3dView(points: pts)
               else if (wholeSlice == null)
-                const Text('暂无轨迹点，走线为空',
-                    style: TextStyle(color: Colors.white54, fontSize: 12))
+                const Text(
+                  '暂无轨迹点，走线为空',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                )
               else if (_satelliteMap)
                 _SatelliteTrackMap(
                   slice: wholeSlice,
@@ -440,9 +521,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 ),
               const SizedBox(height: 6),
               Text(
-                _replay3d
-                    ? '3D 透视回放：仅作复盘示意，不用于计时判定'
-                    : '走线按速度着色，仅作复盘示意，不用于计时判定',
+                _replay3d ? '3D 透视回放：仅作复盘示意，不用于计时判定' : '走线按速度着色，仅作复盘示意，不用于计时判定',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
               // v1.3.4：参考圈叠加图例（开关关 / 无参照圈 / 点数 < 2
@@ -453,8 +532,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     '青色 = 参照圈（第 $refLapNumber 圈）',
-                    style: const TextStyle(
-                        color: _kGhostCyan, fontSize: 11),
+                    style: const TextStyle(color: _kGhostCyan, fontSize: 11),
                   ),
                 ),
             ],
@@ -466,17 +544,23 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('压弯数据',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold)),
+              const Text(
+                '压弯数据',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 6),
               Text(
-                  '最大压弯角 ${trip.maxLean.toStringAsFixed(0)}° · 超 30° 约 $leanOver30 秒（1Hz 采样点数）',
-                  style: const TextStyle(color: Colors.white, fontSize: 13)),
-              const Text('仅手机固定在车上且标定后可信；未确认固定时仅作参考。',
-                  style: TextStyle(color: Colors.white54, fontSize: 11)),
+                '最大压弯角 ${trip.maxLean.toStringAsFixed(0)}° · 超 30° 约 $leanOver30 秒（1Hz 采样点数）',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+              const Text(
+                '仅手机固定在车上且标定后可信；未确认固定时仅作参考。',
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
             ],
           ),
         ),
@@ -487,20 +571,26 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('配速分段',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold)),
+              const Text(
+                '配速分段',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 6),
               if (splits.isEmpty)
-                const Text('不足 1 公里，暂无整公里配速分段',
-                    style: TextStyle(color: Colors.white54, fontSize: 12))
+                const Text(
+                  '不足 1 公里，暂无整公里配速分段',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                )
               else
                 for (var i = 0; i < splits.length; i++)
-                  Text('第 ${i + 1} 公里：${splits[i].toStringAsFixed(2)} min/km',
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 13)),
+                  Text(
+                    '第 ${i + 1} 公里：${splits[i].toStringAsFixed(2)} min/km',
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
             ],
           ),
         ),
@@ -523,8 +613,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       speeds = samples
           .map((s) => (s['vKmh'] as num?)?.toDouble() ?? 0)
           .toList();
-      final times =
-          samples.map((s) => (s['t'] as num?)?.toInt() ?? 0).toList();
+      final times = samples.map((s) => (s['t'] as num?)?.toInt() ?? 0).toList();
       final span = times.last - times.first;
       xs = span > 0
           ? times.map((t) => (t - times.first) / span).toList()
@@ -545,42 +634,54 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('OBD 通道',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold)),
+          const Text(
+            'OBD 通道',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 6),
-          const Text('通道：车速 / 转速 / 油门 / 水温（ELM327 实测采样）',
-              style: TextStyle(color: Colors.white70, fontSize: 13)),
+          const Text(
+            '通道：车速 / 转速 / 油门 / 水温（ELM327 实测采样）',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
           if (!hasSamples)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Text(
                 widget.obdConnected ? 'OBD 已连接，暂无数据' : '未连接 OBD，暂无此通道',
-                style:
-                    const TextStyle(color: Colors.white70, fontSize: 13),
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
             )
           else ...[
             const SizedBox(height: 8),
-            Wrap(spacing: 16, runSpacing: 8, children: [
-              _stat('实测采样', '${samples.length} 条'),
-              _stat('最高车速', '${maxSpeed.toStringAsFixed(0)} km/h'),
-              _stat('最高转速',
-                  maxRpm == null ? '—' : '${maxRpm.toStringAsFixed(0)} rpm'),
-              _stat('最大油门',
-                  maxThr == null ? '—' : '${maxThr.toStringAsFixed(0)} %'),
-              _stat('最高水温',
-                  maxCool == null ? '—' : '${maxCool.toStringAsFixed(0)} ℃'),
-            ]),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                _stat('实测采样', '${samples.length} 条'),
+                _stat('最高车速', '${maxSpeed.toStringAsFixed(0)} km/h'),
+                _stat(
+                  '最高转速',
+                  maxRpm == null ? '—' : '${maxRpm.toStringAsFixed(0)} rpm',
+                ),
+                _stat(
+                  '最大油门',
+                  maxThr == null ? '—' : '${maxThr.toStringAsFixed(0)} %',
+                ),
+                _stat(
+                  '最高水温',
+                  maxCool == null ? '—' : '${maxCool.toStringAsFixed(0)} ℃',
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             _chartTitle('OBD 车速（实测采样，未连接时段无曲线）'),
             _SeriesChart(
               xs: xs,
-              series: [
-                _Series(values: speeds, color: const Color(0xFF38BDF8)),
-              ],
+              series: [_Series(values: speeds, color: const Color(0xFF38BDF8))],
               viewStart: 0,
               viewEnd: 1,
               scrub: 0,
@@ -611,6 +712,319 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
   }
 
   @override
+  void dispose() {
+    _aiService.close();
+    super.dispose();
+  }
+
+  Future<void> _openAiSettings() async {
+    await Navigator.of(context)
+        .push(DtPageRoute(builder: (_) => const AiSettingsPage()));
+    final settings = await AiSettingsStore.load();
+    if (!mounted) return;
+    setState(() => _aiSettings = settings);
+  }
+
+  Future<void> _runAiAnalysis() async {
+    if (_aiBusy) return;
+    final s = S.of(context);
+    final zh = LocaleScope.of(context).lang == AppLang.zh;
+    final facts = _aiFactsJson();
+    setState(() {
+      _aiBusy = true;
+      _aiError = null;
+      _aiResult = null;
+    });
+    try {
+      final text = await _aiService.analyze(
+        settings: _aiSettings,
+        factsJson: facts,
+        zh: zh,
+      );
+      if (!mounted) return;
+      setState(() {
+        _aiBusy = false;
+        _aiResult = text;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _aiBusy = false;
+        _aiError = e is AiAnalysisException
+            ? e.message
+            : s.t('AI 请求失败：$e', 'AI request failed: $e');
+      });
+    }
+  }
+
+  /// 组装发给 AI 的事实 JSON：只放本页实测值，缺失通道单独列出，
+  /// 明确告诉模型哪些不可用——避免它自行补数。
+  String _aiFactsJson() {
+    final trip = widget.trip;
+    final selected = _selected;
+    final reference = _reference;
+    final selSlice = selected == null ? null : _sliceLap(trip, selected);
+    final refSlice = reference == null ? null : _sliceLap(trip, reference);
+    final corners = selSlice == null
+        ? const <CornerAnalysis>[]
+        : analyzeCorners(selSlice.points);
+    final speedDelta =
+        (selSlice != null &&
+            refSlice != null &&
+            selected != null &&
+            reference != null &&
+            selected.number != reference.number)
+        ? compareLapSpeeds(
+            selDistances: selSlice.distances,
+            selSpeedsKmh: selSlice.points.map((p) => p.speed * 3.6).toList(),
+            refDistances: refSlice.distances,
+            refSpeedsKmh: refSlice.points.map((p) => p.speed * 3.6).toList(),
+          )
+        : null;
+
+    double? maxSpeedKmh;
+    double? avgSpeedKmh;
+    double? maxLateralG;
+    double? maxAccelG;
+    double? maxBrakeG;
+    if (selSlice != null && selSlice.points.isNotEmpty) {
+      var sum = 0.0;
+      var calibrated = false;
+      var accel = 0.0;
+      var brake = 0.0;
+      var lat = 0.0;
+      for (final p in selSlice.points) {
+        final kmh = p.speed * 3.6;
+        sum += kmh;
+        if (maxSpeedKmh == null || kmh > maxSpeedKmh) maxSpeedKmh = kmh;
+        if (!p.calibrated) continue;
+        calibrated = true;
+        if (p.longG > accel) accel = p.longG;
+        if (-p.longG > brake) brake = -p.longG;
+        if (p.latG.abs() > lat) lat = p.latG.abs();
+      }
+      avgSpeedKmh = sum / selSlice.points.length;
+      if (calibrated) {
+        maxLateralG = lat;
+        maxAccelG = accel;
+        maxBrakeG = brake;
+      }
+    }
+
+    final counted = widget.laps.where((l) => l.counted).toList();
+    final best = sessionBestLap(widget.laps);
+    final facts = <String, dynamic>{
+      'app': 'DriveTrack',
+      'mode': trip.mode.name,
+      'track': trip.trackName.isEmpty ? null : trip.trackName,
+      'session': {
+        'lapCount': counted.length,
+        'allLapCount': widget.laps.length,
+        'bestLapMs': best?.durationMs,
+        'laps': [
+          for (final l in counted)
+            {
+              'number': l.number,
+              'durationMs': l.durationMs,
+              'sectorsMs': l.sectorsMs,
+              'kind': l.kind.name,
+            },
+        ],
+      },
+      'analyzedLap': selected == null
+          ? null
+          : {
+              'number': selected.number,
+              'durationMs': selected.durationMs,
+              'sectorsMs': selected.sectorsMs,
+              'distanceM': selSlice?.totalDistance.round(),
+              'maxSpeedKmh': maxSpeedKmh == null ? null : maxSpeedKmh.round(),
+              'avgSpeedKmh': avgSpeedKmh == null ? null : avgSpeedKmh.round(),
+              'maxLateralG': maxLateralG == null
+                  ? null
+                  : double.parse(maxLateralG.toStringAsFixed(2)),
+              'maxAccelG': maxAccelG == null
+                  ? null
+                  : double.parse(maxAccelG.toStringAsFixed(2)),
+              'maxBrakeG': maxBrakeG == null
+                  ? null
+                  : double.parse(maxBrakeG.toStringAsFixed(2)),
+            },
+      'referenceLap': reference == null
+          ? null
+          : {'number': reference.number, 'durationMs': reference.durationMs},
+      'corners': [
+        for (final c in corners.take(20))
+          {
+            'index': c.index,
+            'direction': c.direction.name,
+            'entryKmh': double.parse(c.entryKmh.toStringAsFixed(0)),
+            'apexKmh': double.parse(c.apexKmh.toStringAsFixed(0)),
+            'exitKmh': double.parse(c.exitKmh.toStringAsFixed(0)),
+            'minKmh': double.parse(c.minKmh.toStringAsFixed(0)),
+            'lengthM': double.parse(c.lengthM.toStringAsFixed(0)),
+            'lineSpanM': double.parse(c.lineSpanM.toStringAsFixed(1)),
+            'maxLateralG': c.maxLateralG == null
+                ? null
+                : double.parse(c.maxLateralG!.toStringAsFixed(2)),
+          },
+      ],
+      'cornerCount': corners.length,
+      'speedDelta': speedDelta == null
+          ? null
+          : {
+              'avgDeltaKmh': double.parse(
+                speedDelta.avgDeltaKmh.toStringAsFixed(1),
+              ),
+              'maxGainKmh': double.parse(
+                speedDelta.maxGainKmh.toStringAsFixed(0),
+              ),
+              'maxGainAtPercent': (speedDelta.maxGainFraction * 100).round(),
+              'maxLossKmh': double.parse(
+                speedDelta.maxLossKmh.toStringAsFixed(0),
+              ),
+              'maxLossAtPercent': (speedDelta.maxLossFraction * 100).round(),
+            },
+      'unavailableChannels': const [
+        'steeringAngle',
+        'throttle',
+        'brakePedal',
+        'rpm',
+        'coolantTemp',
+        'tyreTemp',
+        'trackLimits',
+        'otherDrivers',
+      ],
+      'dataNote':
+          'Only fields present above are measured. Missing channels are unavailable '
+          'and must be reported as such, never estimated.',
+    };
+    return jsonEncode(facts);
+  }
+
+  Widget _aiAnalysisCard() {
+    final s = S.of(context);
+    final accent = Theme.of(context).colorScheme.primary;
+    final configured = _aiSettings.usable;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 18, color: accent),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'AI 分析',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              if (!configured)
+                const Text(
+                  '未配置',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '只把本页的实测摘要发给 AI（圈速、分段、速度/G 极值、弯角、速度差），不含账号与轨迹原始点。',
+            style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          if (!configured) ...[
+            const Text(
+              '尚未配置 AI 服务。配置 Base URL、API Key 与模型后即可在这里生成分析。',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _openAiSettings,
+              icon: const Icon(Icons.settings, size: 18),
+              label: Text(s.t('打开 AI 设置', 'Open AI settings')),
+            ),
+          ] else if (_aiBusy) ...[
+            Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  s.t('正在请求 AI…', 'Requesting AI…'),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ] else if (_aiResult != null) ...[
+            SelectableText(
+              _aiResult!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                height: 1.6,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => VoiceService.instance.speakText(_aiResult!),
+                  icon: const Icon(Icons.volume_up, size: 18),
+                  label: Text(s.t('朗读', 'Read aloud')),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _runAiAnalysis,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: Text(s.t('重新生成', 'Regenerate')),
+                ),
+              ],
+            ),
+          ] else
+            FilledButton.icon(
+              onPressed: _runAiAnalysis,
+              icon: const Icon(Icons.auto_awesome, size: 18),
+              label: Text(s.t('生成 AI 分析', 'Generate AI analysis')),
+            ),
+          if (_aiError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _aiError!,
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: _openAiSettings,
+              child: Text(s.t('检查 AI 设置', 'Check AI settings')),
+            ),
+          ],
+          const SizedBox(height: 8),
+          const Text(
+            'AI 只依据上面这些实测值回答；未接入的通道会标注“无数据”，不会编造。结果仅供参考。',
+            style: TextStyle(
+              color: Colors.white38,
+              fontSize: 10.5,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final laps = widget.laps;
     final best = sessionBestLap(laps);
@@ -637,27 +1051,23 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 _refElapsedAt(refSlice, selSlice.distances[i]),
         ];
       } else {
-        deltaCurve =
-            List<double>.filled(selSlice.points.length, 0);
+        deltaCurve = List<double>.filled(selSlice.points.length, 0);
       }
     }
     final fractions = selSlice == null || selSlice.totalDistance <= 0
         ? <double>[]
-        : selSlice.distances
-            .map((d) => d / selSlice!.totalDistance)
-            .toList();
+        : selSlice.distances.map((d) => d / selSlice!.totalDistance).toList();
     // v1.3.4：速度曲线参照圈第二条线——参照圈存在且不是当前分析圈
     // 且切片点数 >= 2 时才画；参照圈 = 分析圈时只画一条，不画假线。
-    final showRefSpeedLine = selected != null &&
+    final showRefSpeedLine =
+        selected != null &&
         reference != null &&
         reference.number != selected.number &&
         refSlice != null &&
         refSlice.points.length >= 2 &&
         selSlice != null;
     final refSpeedValues = showRefSpeedLine
-        ? [
-            for (final d in selSlice.distances) _refSpeedAt(refSlice, d),
-          ]
+        ? [for (final d in selSlice.distances) _refSpeedAt(refSlice, d)]
         : null;
     // scrub 最近点下标（联动读数与走线高亮）。
     var scrubIndex = 0;
@@ -671,17 +1081,39 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         }
       }
     }
+    // 弯角与速度差（v1.7.0）：只用分析圈的实测点，不补点、不猜值。
+    final corners = selSlice == null
+        ? const <CornerAnalysis>[]
+        : analyzeCorners(selSlice.points);
+    final speedDelta =
+        (selSlice != null &&
+            refSlice != null &&
+            selected != null &&
+            reference != null &&
+            selected.number != reference.number)
+        ? compareLapSpeeds(
+            selDistances: selSlice.distances,
+            selSpeedsKmh: selSlice.points.map((p) => p.speed * 3.6).toList(),
+            refDistances: refSlice.distances,
+            refSpeedsKmh: refSlice.points.map((p) => p.speed * 3.6).toList(),
+          )
+        : null;
 
     return Scaffold(
       backgroundColor: _kBg,
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
-        title: Text(widget.trip.trackName.isEmpty
-            ? '赛道分析'
-            : '${widget.trip.trackName} · 赛道分析'),
+        title: Text(
+          widget.trip.trackName.isEmpty
+              ? '赛道分析'
+              : '${widget.trip.trackName} · 赛道分析',
+        ),
       ),
       body: SingleChildScrollView(
-        padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
+        padding: withAppBarTopInset(
+          context,
+          const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -725,30 +1157,29 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       children: [
                         Expanded(
                           child: _stat(
-                              '最佳圈',
-                              best == null
-                                  ? '--:--.---'
-                                  : LapTimer.formatLapTime(
-                                      best.durationMs)),
+                            '最佳圈',
+                            best == null
+                                ? '--:--.---'
+                                : LapTimer.formatLapTime(best.durationMs),
+                          ),
                         ),
                         Expanded(
                           child: _stat(
-                              '理论最佳圈',
-                              theoretical == null
-                                  ? '--:--.---'
-                                  : LapTimer.formatLapTime(theoretical)),
+                            '理论最佳圈',
+                            theoretical == null
+                                ? '--:--.---'
+                                : LapTimer.formatLapTime(theoretical),
+                          ),
                         ),
                         Expanded(
-                          child: _stat('计入圈 / 全部',
-                              '$counted / ${laps.length}'),
+                          child: _stat('计入圈 / 全部', '$counted / ${laps.length}'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       '理论最佳圈 = 各分段最佳相加；无效圈不进统计',
-                      style: TextStyle(
-                          color: Colors.white54, fontSize: 11),
+                      style: TextStyle(color: Colors.white54, fontSize: 11),
                     ),
                   ],
                 ),
@@ -765,9 +1196,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     const Text(
                       '分析圈',
                       style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Wrap(
@@ -777,8 +1209,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                         for (final l in laps)
                           ChoiceChip(
                             label: Text(
-                                '第 ${l.number} 圈'
-                                '${lapInvalidReason(l) == null ? '' : ' · 无效'}'),
+                              '第 ${l.number} 圈'
+                              '${lapInvalidReason(l) == null ? '' : ' · 无效'}',
+                            ),
                             selected: selected.number == l.number,
                             onSelected: (_) => setState(() {
                               _selected = l;
@@ -791,22 +1224,23 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     const Text(
                       '参照圈（默认本节最佳圈）',
                       style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        for (final l in laps
-                            .where((x) => lapInvalidReason(x) == null))
+                        for (final l in laps.where(
+                          (x) => lapInvalidReason(x) == null,
+                        ))
                           ChoiceChip(
                             label: Text('第 ${l.number} 圈'),
                             selected: reference?.number == l.number,
-                            onSelected: (_) =>
-                                setState(() => _reference = l),
+                            onSelected: (_) => setState(() => _reference = l),
                           ),
                       ],
                     ),
@@ -832,16 +1266,24 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       sectorData == null
                           ? '扇区待核：未查到该赛道扇区数据，分段按计时分段显示'
                           : sectorData.sourceLabel == '扇区待核'
-                              ? '${sectorData.note}分段按计时分段显示，不标官方 S1/S2/S3'
-                              : '${sectorData.sourceLabel}：${sectorData.note}',
+                          ? '${sectorData.note}分段按计时分段显示，不标官方 S1/S2/S3'
+                          : '${sectorData.sourceLabel}：${sectorData.note}',
                       style: const TextStyle(
-                          color: Colors.white54, fontSize: 11),
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     ..._sectorRows(selected, reference, sectorData),
                   ],
                 ),
               ),
+              const SizedBox(height: 12),
+              _cornerAnalysisCard(corners),
+              const SizedBox(height: 12),
+              _speedDeltaCard(speedDelta, deltaCurve, selected, reference),
+              const SizedBox(height: 12),
+              _aiAnalysisCard(),
               const SizedBox(height: 12),
               // 图表区：捏合缩放 + 双击复位 + 单指 scrub 联动。
               _card(
@@ -868,12 +1310,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     ),
                     const Text(
                       '捏合缩放 · 双击复位整圈 · 横向拖动联动图表与走线 · 点分段缩放到该分段',
-                      style: TextStyle(
-                          color: Colors.white54, fontSize: 11),
+                      style: TextStyle(color: Colors.white54, fontSize: 11),
                     ),
                     const SizedBox(height: 6),
-                    if (sectorData != null &&
-                        sectorData.hasBoundaries) ...[
+                    if (sectorData != null && sectorData.hasBoundaries) ...[
                       Wrap(
                         spacing: 6,
                         children: [
@@ -894,13 +1334,13 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                             // 捏合缩放：以当前窗口中心缩放（手势区域宽度
                             // 未经布局确认时，不用 focalPoint 猜比例）。
                             final width = _viewEnd - _viewStart;
-                            final newWidth =
-                                (width / d.scale).clamp(0.05, 1.0);
+                            final newWidth = (width / d.scale).clamp(0.05, 1.0);
                             final center = (_viewStart + _viewEnd) / 2;
-                            _viewStart =
-                                (center - newWidth / 2).clamp(0.0, 1.0);
-                            _viewEnd =
-                                (_viewStart + newWidth).clamp(0.0, 1.0);
+                            _viewStart = (center - newWidth / 2).clamp(
+                              0.0,
+                              1.0,
+                            );
+                            _viewEnd = (_viewStart + newWidth).clamp(0.0, 1.0);
                             if (_viewEnd - _viewStart < newWidth) {
                               _viewStart = _viewEnd - newWidth;
                             }
@@ -913,11 +1353,12 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                         // 以拖动增量按当前窗口宽度换算 scrub 步进：
                         // 整屏宽对应一个窗口宽度，方向与拖动一致。
                         setState(() {
-                          _scrub = (_scrub +
-                                  d.delta.dx /
-                                      300 *
-                                      (_viewEnd - _viewStart))
-                              .clamp(0.0, 1.0);
+                          _scrub =
+                              (_scrub +
+                                      d.delta.dx /
+                                          300 *
+                                          (_viewEnd - _viewStart))
+                                  .clamp(0.0, 1.0);
                         });
                       },
                       child: Column(
@@ -931,8 +1372,8 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                                 values: selSlice == null
                                     ? const <double>[]
                                     : selSlice.points
-                                        .map((p) => p.speed * 3.6)
-                                        .toList(),
+                                          .map((p) => p.speed * 3.6)
+                                          .toList(),
                                 color: _kRed,
                               ),
                               // v1.3.4：参照圈速度线（青色虚线，按距离
@@ -959,7 +1400,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                               child: Text(
                                 '红色 = 第 ${selected.number} 圈 · 青色 = 参照圈（第 ${reference.number} 圈）',
                                 style: const TextStyle(
-                                    color: Colors.white70, fontSize: 11),
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           const SizedBox(height: 8),
@@ -987,16 +1430,16 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                                 values: selSlice == null
                                     ? const <double>[]
                                     : selSlice.points
-                                        .map((p) => p.latG)
-                                        .toList(),
+                                          .map((p) => p.latG)
+                                          .toList(),
                                 color: const Color(0xFF38BDF8),
                               ),
                               _Series(
                                 values: selSlice == null
                                     ? const <double>[]
                                     : selSlice.points
-                                        .map((p) => p.longG)
-                                        .toList(),
+                                          .map((p) => p.longG)
+                                          .toList(),
                                 color: const Color(0xFFF59E0B),
                               ),
                             ],
@@ -1021,13 +1464,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                         '横向 G ${selSlice.points[scrubIndex].latG.toStringAsFixed(2)} · '
                         '纵向 G ${selSlice.points[scrubIndex].longG.toStringAsFixed(2)}',
                         style: const TextStyle(
-                            color: Colors.white70, fontSize: 12),
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
                       )
                     else
                       const Text(
                         '该圈暂无轨迹点，曲线为空',
-                        style: TextStyle(
-                            color: Colors.white54, fontSize: 12),
+                        style: TextStyle(color: Colors.white54, fontSize: 12),
                       ),
                   ],
                 ),
@@ -1052,17 +1496,17 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       children: [
                         ChoiceChip(
                           label: const Text('按速度着色'),
-                          selected:
-                              _colorMode == TrackLineColorMode.speed,
-                          onSelected: (_) => setState(() =>
-                              _colorMode = TrackLineColorMode.speed),
+                          selected: _colorMode == TrackLineColorMode.speed,
+                          onSelected: (_) => setState(
+                            () => _colorMode = TrackLineColorMode.speed,
+                          ),
                         ),
                         ChoiceChip(
                           label: const Text('按 delta 着色'),
-                          selected:
-                              _colorMode == TrackLineColorMode.delta,
-                          onSelected: (_) => setState(() =>
-                              _colorMode = TrackLineColorMode.delta),
+                          selected: _colorMode == TrackLineColorMode.delta,
+                          onSelected: (_) => setState(
+                            () => _colorMode = TrackLineColorMode.delta,
+                          ),
                         ),
                       ],
                     ),
@@ -1070,8 +1514,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     if (selSlice == null || selSlice.points.length < 2)
                       const Text(
                         '该圈暂无轨迹点，走线为空',
-                        style: TextStyle(
-                            color: Colors.white54, fontSize: 12),
+                        style: TextStyle(color: Colors.white54, fontSize: 12),
                       )
                     else
                       _TrackLineDiagram(
@@ -1082,8 +1525,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       ),
                     const Text(
                       '仅作复盘示意，不用于计时判定',
-                      style: TextStyle(
-                          color: Colors.white54, fontSize: 11),
+                      style: TextStyle(color: Colors.white54, fontSize: 11),
                     ),
                   ],
                 ),
@@ -1112,7 +1554,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                               child: Text(
                                 '第 ${l.number} 圈',
                                 style: const TextStyle(
-                                    color: Colors.white, fontSize: 14),
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                ),
                               ),
                             ),
                             Text(
@@ -1130,13 +1574,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                               Text(
                                 lapInvalidReason(l)!,
                                 style: const TextStyle(
-                                    color: _kRed, fontSize: 12),
+                                  color: _kRed,
+                                  fontSize: 12,
+                                ),
                               )
                             else if (best?.number == l.number)
                               const Text(
                                 '最佳圈',
-                                style: TextStyle(
-                                    color: _kGreen, fontSize: 12),
+                                style: TextStyle(color: _kGreen, fontSize: 12),
                               ),
                           ],
                         ),
@@ -1152,6 +1597,221 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// v1.7.0 弯角分析卡：只用分析圈实测点；无弯或点数不足时明说，
+  /// 不补造弯角。OBD 转向角 / 油门 / 刹车尚未接入，卡内如实标注。
+  Widget _cornerAnalysisCard(List<CornerAnalysis> corners) {
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '弯角分析',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                corners.isEmpty ? '—' : '${corners.length} 个弯',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '按轨迹曲率与航向变化识别；速度为 GPS 实测，横向 G 仅在传感器标定后显示。',
+            style: TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+          const SizedBox(height: 8),
+          if (corners.isEmpty)
+            const Text(
+              '本圈未识别到弯角：轨迹点不足，或全程为直道。',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            )
+          else ...[
+            for (final c in corners.take(12)) _cornerRow(c),
+            if (corners.length > 12)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '仅显示前 12 个弯，共 ${corners.length} 个。',
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ),
+          ],
+          const SizedBox(height: 8),
+          const Text(
+            '弯中转向角 / 油门 / 刹车 / 转速 / 水温：当前数据源未提供，OBD 接入后在此显示，本卡不做推算。',
+            style: TextStyle(
+              color: Colors.white38,
+              fontSize: 10.5,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cornerRow(CornerAnalysis c) {
+    final dir = c.direction == CornerDirection.right ? '右弯' : '左弯';
+    final lat = c.maxLateralG == null
+        ? '横向 G —'
+        : '横向 G ${c.maxLateralG!.toStringAsFixed(2)}';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '${c.index}',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                dir,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${c.entryKmh.toStringAsFixed(0)} → '
+                '${c.apexKmh.toStringAsFixed(0)} → '
+                '${c.exitKmh.toStringAsFixed(0)} km/h',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '最短 ${c.minKmh.toStringAsFixed(0)} km/h · '
+            '弯长 ${c.lengthM.toStringAsFixed(0)} m · '
+            '走线跨度 ${c.lineSpanM.toStringAsFixed(1)} m · '
+            '$lat · ${(c.durationMs / 1000).toStringAsFixed(1)} s',
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 10.5,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// v1.7.0 速度差分析卡：分析圈相对参照圈，按距离对齐后的速度差，
+  /// 作为评估项展示。只统计两圈都有数据的区间。
+  Widget _speedDeltaCard(
+    LapSpeedDeltaSummary? summary,
+    List<double> deltaCurve,
+    Lap? selected,
+    Lap? reference,
+  ) {
+    final timeDeltaMs = deltaCurve.isEmpty
+        ? null
+        : deltaCurve.last; // 分析圈 − 参照圈
+    final hasBoth = selected != null && reference != null;
+    final sameLap = selected != null &&
+        reference != null &&
+        selected.number == reference.number;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '速度差分析',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            (selected != null && reference != null)
+                ? '第 ${selected.number} 圈 − 第 ${reference.number} 圈（按距离对齐，正值 = 分析圈更快）'
+                : '需要同时选中分析圈与参照圈才能比较。',
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+          const SizedBox(height: 10),
+          if (!hasBoth)
+            const Text(
+              '数据不足：没有可用的分析圈或参照圈。',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            )
+          else if (sameLap)
+            const Text(
+              '分析圈与参照圈相同：在上方选择另一圈作为参照后显示速度差。',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            )
+          else if (summary == null)
+            const Text(
+              '数据不足：两圈可对齐的距离区间太短，无法比较。',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            )
+          else ...[
+            Wrap(
+              spacing: 20,
+              runSpacing: 10,
+              children: [
+                _stat(
+                  '平均速度差',
+                  '${summary.avgDeltaKmh >= 0 ? '+' : ''}'
+                      '${summary.avgDeltaKmh.toStringAsFixed(1)} km/h',
+                ),
+                _stat(
+                  '最大领先',
+                  '+${summary.maxGainKmh.toStringAsFixed(0)} km/h'
+                      ' @ ${formatPercent(summary.maxGainFraction)}',
+                ),
+                _stat(
+                  '最大落后',
+                  '-${summary.maxLossKmh.toStringAsFixed(0)} km/h'
+                      ' @ ${formatPercent(summary.maxLossFraction)}',
+                ),
+                if (timeDeltaMs != null)
+                  _stat('时间差', formatDeltaSeconds(timeDeltaMs / 1000)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '评估：${speedDeltaVerdict(summary.avgDeltaKmh)}'
+              '${timeDeltaMs == null
+                  ? ''
+                  : timeDeltaMs <= 0
+                  ? '，本圈用时更短'
+                  : '，本圈用时更长'}。',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '有效对比点 ${summary.pointCount} 个；超出参照圈距离范围的点不参与比较。',
+              style: const TextStyle(color: Colors.white38, fontSize: 10.5),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1172,8 +1832,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 11),
+        ),
         const SizedBox(height: 2),
         Text(
           value,
@@ -1197,8 +1859,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     final fastest = durations.reduce(math.min);
     final mean = durations.reduce((a, b) => a + b) / durations.length;
     final sigma = math.sqrt(
-        durations.map((d) => (d - mean) * (d - mean)).reduce((a, b) => a + b) /
-            durations.length);
+      durations.map((d) => (d - mean) * (d - mean)).reduce((a, b) => a + b) /
+          durations.length,
+    );
     final spreadPct = mean > 0 ? sigma / mean * 100 : 0.0;
     return _card(
       child: Column(
@@ -1242,7 +1905,8 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                                         ? _kRed
                                         : Colors.white24,
                                     borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(3)),
+                                      top: Radius.circular(3),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1252,7 +1916,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                           Text(
                             '${l.number}',
                             style: const TextStyle(
-                                color: Colors.white54, fontSize: 10),
+                              color: Colors.white54,
+                              fontSize: 10,
+                            ),
                           ),
                         ],
                       ),
@@ -1266,11 +1932,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             children: [
               Expanded(child: _stat('计入圈数', '${counted.length}')),
               Expanded(
-                  child:
-                      _stat('平均圈', LapTimer.formatLapTime(mean.round()))),
+                child: _stat('平均圈', LapTimer.formatLapTime(mean.round())),
+              ),
               Expanded(
-                  child:
-                      _stat('标准差 σ', LapTimer.formatLapTime(sigma.round()))),
+                child: _stat('标准差 σ', LapTimer.formatLapTime(sigma.round())),
+              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -1296,25 +1962,25 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
   }
 
   List<Widget> _sectorRows(
-      Lap selected, Lap? reference, TrackSectorData? sectorData) {
+    Lap selected,
+    Lap? reference,
+    TrackSectorData? sectorData,
+  ) {
     final n = math.max(
-        selected.sectorsMs.length, reference?.sectorsMs.length ?? 0);
+      selected.sectorsMs.length,
+      reference?.sectorsMs.length ?? 0,
+    );
     if (n == 0) {
       return const [
-        Text('暂无分段数据',
-            style: TextStyle(color: Colors.white54, fontSize: 13)),
+        Text('暂无分段数据', style: TextStyle(color: Colors.white54, fontSize: 13)),
       ];
     }
     final rows = <Widget>[];
     for (var i = 0; i < n; i++) {
-      final label = sectorData != null &&
-              sectorData.hasBoundaries &&
-              n == 3
+      final label = sectorData != null && sectorData.hasBoundaries && n == 3
           ? sectorData.sectorLabels[i]
           : '第 ${i + 1} 段';
-      final sel = i < selected.sectorsMs.length
-          ? selected.sectorsMs[i]
-          : null;
+      final sel = i < selected.sectorsMs.length ? selected.sectorsMs[i] : null;
       final ref = reference != null && i < reference.sectorsMs.length
           ? reference.sectorsMs[i]
           : null;
@@ -1326,24 +1992,21 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             children: [
               SizedBox(
                 width: 56,
-                child: Text(label,
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 13)),
-              ),
-              Expanded(
                 child: Text(
-                  sel == null ? '--' : LapTimer.formatLapTime(sel),
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 13),
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ),
               Expanded(
                 child: Text(
-                  ref == null
-                      ? '--'
-                      : '参照 ${LapTimer.formatLapTime(ref)}',
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 12),
+                  sel == null ? '--' : LapTimer.formatLapTime(sel),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  ref == null ? '--' : '参照 ${LapTimer.formatLapTime(ref)}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ),
               SizedBox(
@@ -1374,8 +2037,11 @@ class _Series {
 
   /// v1.3.4：虚线（参照圈速度线用，与分析圈实线区分）。
   final bool dashed;
-  const _Series(
-      {required this.values, required this.color, this.dashed = false});
+  const _Series({
+    required this.values,
+    required this.color,
+    this.dashed = false,
+  });
 }
 
 /// 距离轴曲线：X 为圈距离分数（受 viewStart/viewEnd 窗口缩放），
@@ -1430,12 +2096,14 @@ class _SeriesChart extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('${fmt(maxY)} $unit',
-                style: const TextStyle(
-                    color: Colors.white38, fontSize: 10)),
-            Text('${fmt(minY)} $unit',
-                style: const TextStyle(
-                    color: Colors.white38, fontSize: 10)),
+            Text(
+              '${fmt(maxY)} $unit',
+              style: const TextStyle(color: Colors.white38, fontSize: 10),
+            ),
+            Text(
+              '${fmt(minY)} $unit',
+              style: const TextStyle(color: Colors.white38, fontSize: 10),
+            ),
           ],
         ),
         Container(
@@ -1665,9 +2333,9 @@ class _TrackLinePainter extends CustomPainter {
     final offX = pad + (w - spanLon * scale) / 2;
     final offY = pad + (h - spanLat * scale) / 2;
     Offset toOffset(TrackPoint p) => Offset(
-          offX + (p.lon - minLon) * scale,
-          offY + (maxLat - p.lat) * scale,
-        );
+      offX + (p.lon - minLon) * scale,
+      offY + (maxLat - p.lat) * scale,
+    );
     final offsets = pts.map(toOffset).toList();
 
     var minSpeed = double.infinity;
@@ -1684,13 +2352,17 @@ class _TrackLinePainter extends CustomPainter {
 
     for (var i = 1; i < offsets.length; i++) {
       final color = mode == TrackLineColorMode.speed
-          ? Color.lerp(Colors.white54, _kRed,
-                  (pts[i].speed - minSpeed) / (maxSpeed - minSpeed)) ??
-              Colors.white54
+          ? Color.lerp(
+                  Colors.white54,
+                  _kRed,
+                  (pts[i].speed - minSpeed) / (maxSpeed - minSpeed),
+                ) ??
+                Colors.white54
           : (i < deltaCurve.length
-              ? sectorDeltaColor(
-                  deltaCurve[i].abs() < 0.5 ? 0 : deltaCurve[i].round())
-              : Colors.white54);
+                ? sectorDeltaColor(
+                    deltaCurve[i].abs() < 0.5 ? 0 : deltaCurve[i].round(),
+                  )
+                : Colors.white54);
       canvas.drawLine(
         offsets[i - 1],
         offsets[i],
@@ -1718,7 +2390,10 @@ class _TrackLinePainter extends CustomPainter {
     if (scrubIndex >= 0 && scrubIndex < offsets.length) {
       canvas.drawCircle(offsets[scrubIndex], 7, Paint()..color = _kRed);
       canvas.drawCircle(
-          offsets[scrubIndex], 3.5, Paint()..color = Colors.white);
+        offsets[scrubIndex],
+        3.5,
+        Paint()..color = Colors.white,
+      );
     }
   }
 
@@ -1764,8 +2439,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
   /// 已失败过的瓦片 URL（去重计数；单张失败只计一次）。
   final Set<String> _failedTileUrls = {};
 
-  bool get _fallback =>
-      shouldFallbackToSchematic(_failedTileUrls.length);
+  bool get _fallback => shouldFallbackToSchematic(_failedTileUrls.length);
 
   void _onTileError(String url) {
     if (_failedTileUrls.contains(url)) return;
@@ -1781,14 +2455,17 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
   Widget build(BuildContext context) {
     final pts = widget.slice.points;
     if (pts.length < 2) {
-      return const Text('暂无轨迹点，走线为空',
-          style: TextStyle(color: Colors.white54, fontSize: 12));
+      return const Text(
+        '暂无轨迹点，走线为空',
+        style: TextStyle(color: Colors.white54, fontSize: 12),
+      );
     }
     if (_fallback) {
       // 回落示意图：复用现有归一化走线图，不画假线。
       // v1.3.4：回落时参考圈叠加同样保留（经 _TrackLineDiagram）。
       final refSlice = widget.referenceSlice;
-      final showRef = widget.showReferenceOverlay &&
+      final showRef =
+          widget.showReferenceOverlay &&
           refSlice != null &&
           refSlice.points.length >= 2;
       return Column(
@@ -1802,8 +2479,10 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
             referenceSlice: showRef ? refSlice : null,
           ),
           const SizedBox(height: 6),
-          const Text('卫星图未加载，已显示示意图',
-              style: TextStyle(color: Colors.white70, fontSize: 12)),
+          const Text(
+            '卫星图未加载，已显示示意图',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
         ],
       );
     }
@@ -1821,8 +2500,10 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
           pts.map((p) => (lat: p.lat, lon: p.lon)).toList(),
         );
         if (bounds == null) {
-          return const Text('暂无轨迹点，走线为空',
-              style: TextStyle(color: Colors.white54, fontSize: 12));
+          return const Text(
+            '暂无轨迹点，走线为空',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          );
         }
         final zoom = analysisGeoZoom(
           bounds: bounds,
@@ -1847,26 +2528,27 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
               clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                  for (var y = projector.tileRange.y0;
-                      y <= projector.tileRange.y1;
-                      y++)
-                    for (var x = projector.tileRange.x0;
-                        x <= projector.tileRange.x1;
-                        x++)
+                  for (
+                    var y = projector.tileRange.y0;
+                    y <= projector.tileRange.y1;
+                    y++
+                  )
+                    for (
+                      var x = projector.tileRange.x0;
+                      x <= projector.tileRange.x1;
+                      x++
+                    )
                       Positioned.fromRect(
                         rect: projector.tileScreenRect(x, y),
                         child: Image.network(
                           satelliteTileUrl(zoom, x, y),
                           key: ValueKey('analysis-sat-$zoom-$x-$y'),
-                          headers: const {
-                            'User-Agent': 'DriveTrack/1.5.9',
-                          },
+                          headers: const {'User-Agent': 'DriveTrack/1.5.9'},
                           fit: BoxFit.fill,
                           gaplessPlayback: true,
                           errorBuilder: (_, _, _) {
                             _onTileError(satelliteTileUrl(zoom, x, y));
-                            return Container(
-                                color: const Color(0xFF0A0A0A));
+                            return Container(color: const Color(0xFF0A0A0A));
                           },
                         ),
                       ),
@@ -1881,10 +2563,10 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                       // v1.3.4：参考圈叠加（青色单色线，画在彩虹轨迹之上）。
                       referencePoints:
                           (widget.showReferenceOverlay &&
-                                  widget.referenceSlice != null &&
-                                  widget.referenceSlice!.points.length >= 2)
-                              ? widget.referenceSlice!.points
-                              : null,
+                              widget.referenceSlice != null &&
+                              widget.referenceSlice!.points.length >= 2)
+                          ? widget.referenceSlice!.points
+                          : null,
                     ),
                   ),
                 ],
@@ -1912,7 +2594,9 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                       Text(
                         '${s.fromKmh.toStringAsFixed(0)}–${s.toKmh.toStringAsFixed(0)} km/h',
                         style: const TextStyle(
-                            color: Colors.white70, fontSize: 11),
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
@@ -1952,9 +2636,7 @@ class _GeoTrackPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (points.length < 2) return;
-    final offsets = points
-        .map((p) => projector.project(p.lat, p.lon))
-        .toList();
+    final offsets = points.map((p) => projector.project(p.lat, p.lon)).toList();
     for (var i = 1; i < offsets.length; i++) {
       canvas.drawLine(
         offsets[i - 1],
@@ -1967,8 +2649,9 @@ class _GeoTrackPainter extends CustomPainter {
     }
     final ref = referencePoints;
     if (ref != null && ref.length >= 2) {
-      final refOffsets =
-          ref.map((p) => projector.project(p.lat, p.lon)).toList();
+      final refOffsets = ref
+          .map((p) => projector.project(p.lat, p.lon))
+          .toList();
       for (var i = 1; i < refOffsets.length; i++) {
         canvas.drawLine(
           refOffsets[i - 1],

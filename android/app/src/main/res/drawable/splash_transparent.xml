@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.6.0 冷启动闪图标修复：
+     Android 12+ 系统强制在启动窗口画一个“启动图标”，而 Flutter 启动页
+     随后又画一次（用户所选图标，尺寸 112dp）。系统那张大图标一消失、
+     Flutter 图标再出现，肉眼就是“点开 App 闪过一帧图标”。
+     这里把系统启动图标换成全透明 drawable：系统只留纯黑底，图标统一
+     交给 Flutter 启动页按用户选择绘制，全程只出现一次、不闪。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+</shape>

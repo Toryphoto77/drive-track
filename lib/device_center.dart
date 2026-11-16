@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_locale.dart';
+import 'device_hardware_card.dart';
 import 'dt_page_route.dart';
 
 import 'app_bar_style.dart';
@@ -13,6 +14,7 @@ import 'blediy_gps.dart';
 import 'bt_gps_receiver.dart';
 import 'camera_connect_page.dart';
 import 'device_scan_card.dart';
+import 'firmware_update_service.dart';
 import 'gps_source.dart';
 import 'native.dart';
 import 'obd_service.dart';
@@ -28,11 +30,11 @@ enum DeviceLinkStatus { disconnected, connecting, connected, unavailable }
 
 extension DeviceLinkStatusLabel on DeviceLinkStatus {
   String get label => switch (this) {
-        DeviceLinkStatus.disconnected => '未连接',
-        DeviceLinkStatus.connecting => '连接中…',
-        DeviceLinkStatus.connected => '已连接',
-        DeviceLinkStatus.unavailable => '暂不可用',
-      };
+    DeviceLinkStatus.disconnected => '未连接',
+    DeviceLinkStatus.connecting => '连接中…',
+    DeviceLinkStatus.connected => '已连接',
+    DeviceLinkStatus.unavailable => '暂不可用',
+  };
 }
 
 /// 本机保存的一台通用传感器。地址可选：没填地址就无法下次重连，
@@ -53,22 +55,22 @@ class SavedDevice {
   final String? address;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'name': name,
-        'serviceUuid': serviceUuid,
-        'characteristicUuid': characteristicUuid,
-        'type': type,
-        if (address != null && address!.isNotEmpty) 'address': address,
-      };
+    'name': name,
+    'serviceUuid': serviceUuid,
+    'characteristicUuid': characteristicUuid,
+    'type': type,
+    if (address != null && address!.isNotEmpty) 'address': address,
+  };
 
   static SavedDevice fromJson(Map<String, dynamic> json) => SavedDevice(
-        name: (json['name'] ?? '').toString(),
-        serviceUuid: (json['serviceUuid'] ?? '').toString(),
-        characteristicUuid: (json['characteristicUuid'] ?? '').toString(),
-        type: (json['type'] ?? '其他').toString(),
-        address: (json['address'] as String?)?.isEmpty == true
-            ? null
-            : json['address'] as String?,
-      );
+    name: (json['name'] ?? '').toString(),
+    serviceUuid: (json['serviceUuid'] ?? '').toString(),
+    characteristicUuid: (json['characteristicUuid'] ?? '').toString(),
+    type: (json['type'] ?? '其他').toString(),
+    address: (json['address'] as String?)?.isEmpty == true
+        ? null
+        : json['address'] as String?,
+  );
 }
 
 /// UUID 校验与归一化：接受完整 128-bit，或 4/8 位短 UUID（按蓝牙
@@ -76,7 +78,8 @@ class SavedDevice {
 String? normalizeUuid(String input) {
   final v = input.trim().toLowerCase();
   final full = RegExp(
-      r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+  );
   if (full.hasMatch(v)) return v;
   if (RegExp(r'^[0-9a-f]{4}$').hasMatch(v)) {
     return '0000$v-0000-1000-8000-00805f9b34fb';
@@ -102,8 +105,7 @@ class DeviceCenterStore {
       if (raw is! List) return const [];
       return raw
           .whereType<Map>()
-          .map((e) =>
-              SavedDevice.fromJson(Map<String, dynamic>.from(e)))
+          .map((e) => SavedDevice.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     } catch (_) {
       return const [];
@@ -115,7 +117,8 @@ class DeviceCenterStore {
       final dir = await Native.getFilesDir();
       final file = File('$dir/$fileName');
       await file.writeAsString(
-          jsonEncode(devices.map((d) => d.toJson()).toList()));
+        jsonEncode(devices.map((d) => d.toJson()).toList()),
+      );
       return true;
     } catch (_) {
       return false;
@@ -192,9 +195,7 @@ class ExternalGpsProfile {
   /// 页面上的支持程度徽标文案。
   String get supportBadge {
     if (binaryProtocol) return '二进制协议（包格式待实测）';
-    return hasNmeaPath
-        ? '通用 NMEA 兼容'
-        : '协议未公开 / 未实测验证，仅通用 NMEA 兼容';
+    return hasNmeaPath ? '通用 NMEA 兼容' : '协议未公开 / 未实测验证，仅通用 NMEA 兼容';
   }
 }
 
@@ -303,8 +304,7 @@ const List<ExternalGpsProfile> externalGpsProfiles = [
 /// 命中即名称证据；模式未命中时短提示词兜底（见 btGpsNameMatches）。
 bool _profileNameMatches(ExternalGpsProfile p, String name) {
   final pattern = p.namePattern;
-  if (pattern != null &&
-      RegExp(pattern, caseSensitive: false).hasMatch(name)) {
+  if (pattern != null && RegExp(pattern, caseSensitive: false).hasMatch(name)) {
     return true;
   }
   return btGpsNameMatches(name, p.nameHints);
@@ -398,8 +398,7 @@ class ExternalGpsSection extends StatefulWidget {
 
 class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   ExternalGpsKind _kind = ExternalGpsKind.blediy;
-  final _customServiceCtrl =
-      TextEditingController(text: nordicUartServiceUuid);
+  final _customServiceCtrl = TextEditingController(text: nordicUartServiceUuid);
   final _customTxCtrl = TextEditingController(text: nordicUartTxUuid);
   final List<Map<String, dynamic>> _scanned = [];
   // 单入口主按钮的合并扫描状态；停任一 BLE 扫描即清零（stopBleScan
@@ -421,6 +420,11 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
   // connected 事件里再试一次（见 _dataSub）。
   ({String address, String service, String tx})? _pendingSubscribe;
 
+  /// v1.7.0：连上自研硬件后，本卡切换为硬件管理界面（电量、固件、
+  /// 实时状态、圈速导入、关机）。判定条件：设备热点 /api/info 可达，
+  /// 或广播名带 DriveTrack 前缀。第三方 GPS 不会误进管理界面。
+  bool _showHardwareCard = false;
+
   final BleDiyGpsFeed _feed = BleDiyGpsFeed();
   StreamSubscription<Map<String, dynamic>>? _devSub;
   StreamSubscription<Map<String, dynamic>>? _dataSub;
@@ -428,15 +432,17 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
 
   /// 全渠道扫描列表按地址合并：一设备一行，通道取并集；已配对标记
   /// 透传保留（主列表用它显示“已配对”，未配对的经典发现不冒充）。
-  void _mergeScanned(Map<String, dynamic> e, String channel,
-      {bool bonded = false}) {
+  void _mergeScanned(
+    Map<String, dynamic> e,
+    String channel, {
+    bool bonded = false,
+  }) {
     final addr = (e['address'] ?? '').toString();
     if (addr.isEmpty) return;
     final merged = <String, dynamic>{...e};
     final channels = <String>{channel};
     var wasBonded = bonded;
-    final oldIndex =
-        _scanned.indexWhere((d) => d['address'] == addr);
+    final oldIndex = _scanned.indexWhere((d) => d['address'] == addr);
     if (oldIndex >= 0) {
       final old = _scanned[oldIndex];
       for (final c in (old['channels'] as List? ?? <dynamic>[])) {
@@ -507,6 +513,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _connectingAddress = null;
         });
         _publishGpsStatus();
+        _detectHardware();
         final pending = _pendingSubscribe;
         if (pending != null && pending.address == addr) {
           await _doSubscribe(pending.address, pending.service, pending.tx);
@@ -519,6 +526,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _pendingSubscribe = null;
           _connectingAddress = null;
           _notice = '外接 GPS 已断开，行程定位已回落手机 GPS。';
+          _showHardwareCard = false;
         });
         _connectedName = null;
         _publishGpsStatus();
@@ -533,6 +541,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _notice = 'SPP 已连接，行程改用外接 GPS。';
         });
         _publishGpsStatus();
+        _detectHardware();
       } else if (type == 'sppDisconnected') {
         if (_connectedChannel != 'spp') return;
         setState(() {
@@ -541,6 +550,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _pendingSubscribe = null;
           _connectingAddress = null;
           _notice = 'SPP 已断开（${e['reason'] ?? ''}），行程定位回落手机 GPS。';
+          _showHardwareCard = false;
         });
         _connectedName = null;
         _publishGpsStatus();
@@ -562,9 +572,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         final isNmea =
             cu.contains('0003') || (tx.isNotEmpty && cu.contains(tx));
         if (!isNmea) return;
-        final bytes = (e['bytes'] as List?)
-                ?.map((v) => (v as num).toInt())
-                .toList() ??
+        final bytes =
+            (e['bytes'] as List?)?.map((v) => (v as num).toInt()).toList() ??
             <int>[];
         if (bytes.isEmpty) return;
         _feed.feedBytes(bytes);
@@ -580,6 +589,30 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     _customServiceCtrl.dispose();
     _customTxCtrl.dispose();
     super.dispose();
+  }
+
+  /// 判断刚连上的设备是否自研硬件：设备热点 /api/info 可达，
+  /// 或广播名以 DriveTrack 开头。命中才把扫描卡换成硬件管理卡；
+  /// 第三方 GPS（Garmin / RaceBox 等）保持原界面。
+  Future<void> _detectHardware() async {
+    final name = (_connectedName ?? '').toLowerCase();
+    final looksOwn =
+        name.startsWith('drivetrack') || name.contains('drivetrack');
+    FirmwareUpdateService? service;
+    try {
+      service = FirmwareUpdateService();
+      final info = await service.probeDevice(
+        timeout: const Duration(seconds: 2),
+      );
+      if (!mounted) return;
+      if (info != null || looksOwn) {
+        setState(() => _showHardwareCard = true);
+      }
+    } catch (_) {
+      if (mounted && looksOwn) setState(() => _showHardwareCard = true);
+    } finally {
+      service?.close();
+    }
   }
 
   /// 蓝牙 + 定位权限按系统流程申请（分步 requestStep），拒绝时
@@ -598,9 +631,11 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         locOk = r2['location'] == true;
       }
       if (!mounted) return false;
-      setState(() => _permNotice = (btOk && locOk)
-          ? null
-          : '蓝牙 GPS 需要蓝牙与定位权限，请在系统设置里打开后重试。');
+      setState(
+        () => _permNotice = (btOk && locOk)
+            ? null
+            : '蓝牙 GPS 需要蓝牙与定位权限，请在系统设置里打开后重试。',
+      );
       return btOk && locOk;
     } catch (e) {
       if (mounted) setState(() => _permNotice = '权限检查失败：$e');
@@ -618,12 +653,14 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       updateExternalGpsStatus(ExternalGpsStatus.disconnected);
       return;
     }
-    updateExternalGpsStatus(ExternalGpsStatus(
-      connected: true,
-      deviceName: _connectedName ?? addr,
-      channel: _connectedChannel ?? 'ble',
-      binaryOnly: _profile.binaryProtocol,
-    ));
+    updateExternalGpsStatus(
+      ExternalGpsStatus(
+        connected: true,
+        deviceName: _connectedName ?? addr,
+        channel: _connectedChannel ?? 'ble',
+        binaryOnly: _profile.binaryProtocol,
+      ),
+    );
   }
 
   /// 连新设备前若已连其它地址，先静默断开旧连接（单点状态）。
@@ -700,8 +737,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     try {
       // 服务过滤扫描同时带 NUS 与 DEXIAN D1 服务（00000003-…，官方 App
       // 拆包已验证）：D1 广播该服务即被过滤扫描直接命中，不靠名称猜。
-      await Native.scanBleWithServices(
-          [nordicUartServiceUuid, dexianServiceUuid]);
+      await Native.scanBleWithServices([
+        nordicUartServiceUuid,
+        dexianServiceUuid,
+      ]);
       await Native.scanBleUnfiltered();
       await Native.startClassicDiscovery();
       final bonded = await Native.listBondedSppDevices();
@@ -801,8 +840,11 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       setState(() {
         _notice = '正在连接“${dev['name']}”…';
         _connectingAddress = addr;
-        _pendingSubscribe =
-            (address: addr, service: uuids.service, tx: uuids.tx);
+        _pendingSubscribe = (
+          address: addr,
+          service: uuids.service,
+          tx: uuids.tx,
+        );
       });
       await Native.setBleAutoReconnect(true);
       await Native.connectBle(addr);
@@ -835,7 +877,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         if (_connectingAddress == addr && _connectedAddress != addr) {
           setState(() {
             _connectingAddress = null;
-            _notice = 'SPP 连接超时：请确认设备已开机、在系统蓝牙里已配对，'
+            _notice =
+                'SPP 连接超时：请确认设备已开机、在系统蓝牙里已配对，'
                 '且未被其它 App 占用。';
           });
         }
@@ -850,8 +893,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
 
   Future<void> _doSubscribe(String addr, String service, String tx) async {
     try {
-      final r =
-          await Native.subscribeBleCharacteristic(addr, service, tx);
+      final r = await Native.subscribeBleCharacteristic(addr, service, tx);
       final ok = (r['ok'] as bool?) == true;
       if (!mounted) return;
       setState(() {
@@ -877,7 +919,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         .map((e) => e.toString().toLowerCase())
         .toList();
     if (uuids.contains(dexianServiceUuid.toLowerCase())) {
-      return s.t('DEXIAN D1 服务：二进制，暂不解析定位。', 'DEXIAN D1 service: binary, no fix yet.');
+      return s.t(
+        'DEXIAN D1 服务：二进制，暂不解析定位。',
+        'DEXIAN D1 service: binary, no fix yet.',
+      );
     }
     if (uuids.any((u) => u.contains('6e400001'))) {
       return s.t('Nordic UART，可试 NMEA。', 'Nordic UART. NMEA may work.');
@@ -892,13 +937,20 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     for (final p in externalGpsProfiles) {
       if (_profileNameMatches(p, name)) {
         if (p.binaryProtocol) {
-          return s.t('名称匹配：${p.name}（二进制，暂不解析）。', 'Name match: ${p.name} (binary, no fix).');
+          return s.t(
+            '名称匹配：${p.name}（二进制，暂不解析）。',
+            'Name match: ${p.name} (binary, no fix).',
+          );
         }
-        return s.t('名称匹配：${p.name}（仅名称）。', 'Name match: ${p.name} (name only).');
+        return s.t(
+          '名称匹配：${p.name}（仅名称）。',
+          'Name match: ${p.name} (name only).',
+        );
       }
     }
-    final channels =
-        (dev['channels'] as List? ?? []).map((e) => e.toString()).toList();
+    final channels = (dev['channels'] as List? ?? [])
+        .map((e) => e.toString())
+        .toList();
     if (channels.contains('spp')) {
       return s.t('经典蓝牙，可试 SPP。', 'Classic Bluetooth. Try SPP.');
     }
@@ -918,38 +970,43 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
             'Scanning nearby GPS (BLE, classic, paired)…',
           )
         : _scanned.isEmpty
-            ? s.t('尚未扫描，点「扫描适配设备」。', 'Not scanned. Tap Scan devices.')
-            : adaptable.isEmpty
-                ? s.t(
-                    '已扫 ${_scanned.length} 台，没有可适配 GPS。',
-                    'Scanned ${_scanned.length}. No compatible GPS.',
-                  )
-                : s.t(
-                    '已扫 ${_scanned.length} 台，${adaptable.length} 台可连，点行即连。',
-                    'Scanned ${_scanned.length}. ${adaptable.length} ready. Tap a row.',
-                  );
+        ? s.t('尚未扫描，点「扫描适配设备」。', 'Not scanned. Tap Scan devices.')
+        : adaptable.isEmpty
+        ? s.t(
+            '已扫 ${_scanned.length} 台，没有可适配 GPS。',
+            'Scanned ${_scanned.length}. No compatible GPS.',
+          )
+        : s.t(
+            '已扫 ${_scanned.length} 台，${adaptable.length} 台可连，点行即连。',
+            'Scanned ${_scanned.length}. ${adaptable.length} ready. Tap a row.',
+          );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 动态匹配卡片：与相机页同一套共用组件（device_scan_card.dart），
         // 只换外衣——扫描 / 去重 / 连接逻辑一律不动（见 _toggleAdaptScan /
-        // _connectAdaptable）。
-        DeviceScanCard(
-          title: s.t('外接 GPS', 'External GPS'),
-          description: s.t(
-            '点扫描后点设备即连。SPP 须先在系统蓝牙配对。',
-            'Scan, then tap a device. Pair SPP in system Bluetooth first.',
+        // _connectAdaptable）。v1.7.0：连上自研硬件后本卡切换为硬件管理
+        // 界面（电量 / 固件 / 实时状态 / 圈速导入 / 关机），第三方 GPS
+        // 仍显示扫描卡。
+        if (_showHardwareCard)
+          const DeviceHardwareCard()
+        else
+          DeviceScanCard(
+            title: s.t('外接 GPS', 'External GPS'),
+            description: s.t(
+              '点扫描后点设备即连。SPP 须先在系统蓝牙配对。',
+              'Scan, then tap a device. Pair SPP in system Bluetooth first.',
+            ),
+            icon: Icons.satellite_alt,
+            scanning: _adaptScanning,
+            scanLabel: s.t('扫描适配设备', 'Scan devices'),
+            stopLabel: s.t('停止扫描', 'Stop'),
+            onScanToggle: _toggleAdaptScan,
+            statusLine: scanStatusLine,
+            scanButtonIcon: Icons.bluetooth_searching,
+            permNotice: _permNotice,
+            onOpenSettings: () => Native.openAppSettings(),
           ),
-          icon: Icons.satellite_alt,
-          scanning: _adaptScanning,
-          scanLabel: s.t('扫描适配设备', 'Scan devices'),
-          stopLabel: s.t('停止扫描', 'Stop'),
-          onScanToggle: _toggleAdaptScan,
-          statusLine: scanStatusLine,
-          scanButtonIcon: Icons.bluetooth_searching,
-          permNotice: _permNotice,
-          onOpenSettings: () => Native.openAppSettings(),
-        ),
         // 已连接状态行（v1.5.4）：绿点 + 已连设备名 + 断开连接按钮，
         // 只在已连外接 GPS 时出现；样式沿用 OBD 区状态行（绿点 +
         // 状态 + 断开按钮）。高级区删除后，这是页内唯一的 GPS
@@ -957,78 +1014,96 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         if (_connectedAddress != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Row(children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.green,
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.green,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  s.t('已连接：${_connectedName ?? _connectedAddress}', 'Connected: ${_connectedName ?? _connectedAddress}'),
-                  style: const TextStyle(
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    s.t(
+                      '已连接：${_connectedName ?? _connectedAddress}',
+                      'Connected: ${_connectedName ?? _connectedAddress}',
+                    ),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
-                      fontWeight: FontWeight.bold),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
-              TextButton(
+                TextButton(
                   onPressed: _disconnectGps,
-                  child: Text(s.t('断开连接', 'Disconnect'))),
-            ]),
+                  child: Text(s.t('断开连接', 'Disconnect')),
+                ),
+              ],
+            ),
           ),
         const SizedBox(height: 16),
-        Text(s.t('可适配设备', 'Compatible'),
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold)),
+        Text(
+          s.t('可适配设备', 'Compatible'),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 8),
         if (_scanned.isEmpty)
           Text(
-              s.t('还没有设备。点扫描；打开设备与蓝牙。SPP 须先配对。',
-                  'No devices yet. Tap Scan. Device and Bluetooth on. Pair SPP first.'),
-              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            s.t(
+              '还没有设备。点扫描；打开设备与蓝牙。SPP 须先配对。',
+              'No devices yet. Tap Scan. Device and Bluetooth on. Pair SPP first.',
+            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
         for (final dev in adaptable)
-          Builder(builder: (context) {
-            final channels = (dev['channels'] as List? ?? <dynamic>[])
-                .map((e) => e.toString())
-                .toList();
-            final hasBle = channels.isEmpty || channels.contains('ble');
-            final hasSpp = channels.contains('spp');
-            final channelLabel =
-                hasBle && hasSpp ? 'BLE+SPP' : hasSpp ? 'SPP' : 'BLE';
-            final addr = (dev['address'] ?? '').toString();
-            final isConnecting = _connectingAddress == addr;
-            final isConnected = _connectedAddress == addr;
-            final rssi = dev['rssi'];
-            final signal = rssi != null
-                ? '信号 $rssi'
-                : (dev['bonded'] == true ? '已配对' : '');
-            return DeviceScanRow(
-              title: (dev['name'] ?? '').toString().isEmpty
-                  ? '未命名设备'
-                  : (dev['name'] ?? '').toString(),
-              badgeLabel: channelLabel,
-              detail: _guessHint(dev),
-              meta: isConnected && fix != null
-                  ? '${btGpsFixStatusLabel(fix)} · '
-                      '卫星 ${fix.satellites ?? '—'} · '
-                      '更新率 ${fix.hz?.toStringAsFixed(0) ?? '—'} Hz'
-                      '${signal.isEmpty ? '' : ' · $signal'} · $addr'
-                  : (signal.isEmpty ? addr : '$signal · $addr'),
-              actionLabel: s.t('点按连接', 'Tap to connect'),
-              // GPS 页沿用旧文案“连接中”（无省略号），与单入口测试一致。
-              connectingLabel: s.t('连接中', 'Connecting'),
-              isConnecting: isConnecting,
-              isConnected: isConnected,
-              onTap: () => _connectAdaptable(dev),
-            );
-          }),
+          Builder(
+            builder: (context) {
+              final channels = (dev['channels'] as List? ?? <dynamic>[])
+                  .map((e) => e.toString())
+                  .toList();
+              final hasBle = channels.isEmpty || channels.contains('ble');
+              final hasSpp = channels.contains('spp');
+              final channelLabel = hasBle && hasSpp
+                  ? 'BLE+SPP'
+                  : hasSpp
+                  ? 'SPP'
+                  : 'BLE';
+              final addr = (dev['address'] ?? '').toString();
+              final isConnecting = _connectingAddress == addr;
+              final isConnected = _connectedAddress == addr;
+              final rssi = dev['rssi'];
+              final signal = rssi != null
+                  ? '信号 $rssi'
+                  : (dev['bonded'] == true ? '已配对' : '');
+              return DeviceScanRow(
+                title: (dev['name'] ?? '').toString().isEmpty
+                    ? '未命名设备'
+                    : (dev['name'] ?? '').toString(),
+                badgeLabel: channelLabel,
+                detail: _guessHint(dev),
+                meta: isConnected && fix != null
+                    ? '${btGpsFixStatusLabel(fix)} · '
+                          '卫星 ${fix.satellites ?? '—'} · '
+                          '更新率 ${fix.hz?.toStringAsFixed(0) ?? '—'} Hz'
+                          '${signal.isEmpty ? '' : ' · $signal'} · $addr'
+                    : (signal.isEmpty ? addr : '$signal · $addr'),
+                actionLabel: s.t('点按连接', 'Tap to connect'),
+                // GPS 页沿用旧文案“连接中”（无省略号），与单入口测试一致。
+                connectingLabel: s.t('连接中', 'Connecting'),
+                isConnecting: isConnecting,
+                isConnected: isConnected,
+                onTap: () => _connectAdaptable(dev),
+              );
+            },
+          ),
         const SizedBox(height: 8),
         // v1.5.4：高级 / 手动添加区已删（档案卡、自定义 UUID、分别
         // 扫描、全部扫描结果均不在此页；扫描只走上方「扫描适配设备」）。
@@ -1043,8 +1118,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         // 避免同一文案在页面上出现两处；其余提示（连接 / 断开 / 停止等）
         // 仍在这里显示。权限提示已收进卡片，不再另起一块。
         if (_notice != null && _notice != scanStatusLine)
-          Text(_notice!,
-              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(
+            _notice!,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
         const SizedBox(height: 8),
         // v1.5.4：「外接 GPS：未连接」状态卡已删（连接状态只看首页
         // 状态药丸与上方主列表，不在此页另起一块；「保存到本机清单」
@@ -1101,9 +1178,7 @@ class _ObdSectionState extends State<ObdSection> {
         btOk = r['bluetooth'] == true;
       }
       if (!mounted) return false;
-      setState(() => _permNotice = btOk
-          ? null
-          : 'OBD 需要蓝牙权限，请在系统设置里打开后重试。');
+      setState(() => _permNotice = btOk ? null : 'OBD 需要蓝牙权限，请在系统设置里打开后重试。');
       return btOk;
     } catch (e) {
       if (mounted) setState(() => _permNotice = '权限检查失败：$e');
@@ -1144,8 +1219,7 @@ class _ObdSectionState extends State<ObdSection> {
       _connectingAddress = addr;
       _notice = '正在连接“${name.isEmpty ? addr : name}”…';
     });
-    final ok =
-        await _service.connect(addr, deviceName: name);
+    final ok = await _service.connect(addr, deviceName: name);
     if (!mounted) return;
     setState(() {
       _connectingAddress = null;
@@ -1153,8 +1227,8 @@ class _ObdSectionState extends State<ObdSection> {
       _notice = ok
           ? 'OBD 已连接，行程记录时每秒存一条实测采样。'
           : (_service.status.error.isEmpty
-              ? '连接失败：请确认 ELM327 已开机且未被其它 App 占用。'
-              : _service.status.error);
+                ? '连接失败：请确认 ELM327 已开机且未被其它 App 占用。'
+                : _service.status.error);
     });
   }
 
@@ -1172,14 +1246,19 @@ class _ObdSectionState extends State<ObdSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
           const SizedBox(height: 2),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -1198,44 +1277,52 @@ class _ObdSectionState extends State<ObdSection> {
             if (_permNotice != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Row(children: [
-                  Expanded(
-                    child: Text(_permNotice!,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _permNotice!,
                         style: const TextStyle(
-                            color: Colors.orangeAccent, fontSize: 12)),
-                  ),
-                  TextButton(
-                    onPressed: () => Native.openAppSettings(),
-                    child: const Text('去设置'),
-                  ),
-                ]),
+                          color: Colors.orangeAccent,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Native.openAppSettings(),
+                      child: const Text('去设置'),
+                    ),
+                  ],
+                ),
               ),
             // 状态行：绿点 + 状态 + 断开按钮。
-            Row(children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: connected
-                      ? Colors.green
-                      : (connecting ? Colors.orange : Colors.white38),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: connected
+                        ? Colors.green
+                        : (connecting ? Colors.orange : Colors.white38),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  obdStatusLabel(st),
-                  style: const TextStyle(
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    obdStatusLabel(st),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
-                      fontWeight: FontWeight.bold),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
-              if (connected)
-                TextButton(
-                    onPressed: _disconnect, child: const Text('断开')),
-            ]),
+                if (connected)
+                  TextButton(onPressed: _disconnect, child: const Text('断开')),
+              ],
+            ),
             const SizedBox(height: 4),
             if (!connected && !connecting)
               const Text(
@@ -1249,94 +1336,134 @@ class _ObdSectionState extends State<ObdSection> {
                 style: TextStyle(color: Colors.white60, fontSize: 12),
               ),
               const SizedBox(height: 8),
-              Row(children: [
-                _reading('车速',
-                    st.speedKmh == null ? '—' : '${st.speedKmh!.toStringAsFixed(0)} km/h'),
-                _reading('转速',
-                    st.rpm == null ? '—' : '${st.rpm!.toStringAsFixed(0)} rpm'),
-              ]),
+              Row(
+                children: [
+                  _reading(
+                    '车速',
+                    st.speedKmh == null
+                        ? '—'
+                        : '${st.speedKmh!.toStringAsFixed(0)} km/h',
+                  ),
+                  _reading(
+                    '转速',
+                    st.rpm == null ? '—' : '${st.rpm!.toStringAsFixed(0)} rpm',
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
-              Row(children: [
-                _reading('油门',
-                    st.throttlePct == null ? '—' : '${st.throttlePct!.toStringAsFixed(0)} %'),
-                _reading('水温',
-                    st.coolantC == null ? '—' : '${st.coolantC!.toStringAsFixed(0)} ℃'),
-              ]),
+              Row(
+                children: [
+                  _reading(
+                    '油门',
+                    st.throttlePct == null
+                        ? '—'
+                        : '${st.throttlePct!.toStringAsFixed(0)} %',
+                  ),
+                  _reading(
+                    '水温',
+                    st.coolantC == null
+                        ? '—'
+                        : '${st.coolantC!.toStringAsFixed(0)} ℃',
+                  ),
+                ],
+              ),
             ],
             if (st.error.isNotEmpty && !connected)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text(st.error,
-                    style: const TextStyle(
-                        color: Colors.orangeAccent, fontSize: 12)),
+                child: Text(
+                  st.error,
+                  style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 12,
+                  ),
+                ),
               ),
             const SizedBox(height: 12),
-            Row(children: [
-              FilledButton.icon(
-                onPressed: _loadingPaired ? null : _loadPaired,
-                icon: const Icon(Icons.bluetooth_searching, size: 18),
-                label: Text(_loadingPaired ? '载入中…' : '载入已配对设备'),
-              ),
-            ]),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: _loadingPaired ? null : _loadPaired,
+                  icon: const Icon(Icons.bluetooth_searching, size: 18),
+                  label: Text(_loadingPaired ? '载入中…' : '载入已配对设备'),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             if (_paired.isEmpty)
-              const Text('尚未载入已配对设备：点上方按钮载入；ELM327 须开机、'
-                  '且先在系统蓝牙里配对。',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const Text(
+                '尚未载入已配对设备：点上方按钮载入；ELM327 须开机、'
+                '且先在系统蓝牙里配对。',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
             for (final dev in _paired)
-              Builder(builder: (context) {
-                final addr = (dev['address'] ?? '').toString();
-                final name = (dev['name'] ?? '').toString();
-                final isConnecting = _connectingAddress == addr;
-                final isThisConnected =
-                    connected && _connectedAddress == addr;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0B0E13),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isThisConnected
-                          ? Colors.green.withValues(alpha: 0.6)
-                          : Colors.white12,
+              Builder(
+                builder: (context) {
+                  final addr = (dev['address'] ?? '').toString();
+                  final name = (dev['name'] ?? '').toString();
+                  final isConnecting = _connectingAddress == addr;
+                  final isThisConnected =
+                      connected && _connectedAddress == addr;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0B0E13),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isThisConnected
+                            ? Colors.green.withValues(alpha: 0.6)
+                            : Colors.white12,
+                      ),
                     ),
-                  ),
-                  // ListTile 的墨水效果要画在 Material 祖先上：
-                  // 直接放带底色的 Container 里会触发 debug 断言。
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                    child: ListTile(
-                    title: Text(
-                      name.isEmpty ? '未命名设备' : name,
-                      style: const TextStyle(color: Colors.white),
+                    // ListTile 的墨水效果要画在 Material 祖先上：
+                    // 直接放带底色的 Container 里会触发 debug 断言。
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        title: Text(
+                          name.isEmpty ? '未命名设备' : name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          addr,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                        trailing: isThisConnected
+                            ? const Text(
+                                '已连接',
+                                style: TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : isConnecting
+                            ? const Text(
+                                '连接中…',
+                                style: TextStyle(color: Colors.orangeAccent),
+                              )
+                            : const Text(
+                                '点按连接',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                        onTap: (isThisConnected || isConnecting)
+                            ? null
+                            : () => _connect(dev),
+                      ),
                     ),
-                    subtitle: Text(addr,
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 12)),
-                    trailing: isThisConnected
-                        ? const Text('已连接',
-                            style: TextStyle(
-                                color: Colors.greenAccent,
-                                fontWeight: FontWeight.bold))
-                        : isConnecting
-                            ? const Text('连接中…',
-                                style: TextStyle(color: Colors.orangeAccent))
-                            : const Text('点按连接',
-                                style: TextStyle(color: Colors.white70)),
-                    onTap: (isThisConnected || isConnecting)
-                        ? null
-                        : () => _connect(dev),
-                    ),
-                  ),
-                );
-              }),
+                  );
+                },
+              ),
             if (_notice != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(_notice!,
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12)),
+                child: Text(
+                  _notice!,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
               ),
           ],
         );
@@ -1462,7 +1589,9 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       setState(() => _statusByAddress[addr] = DeviceLinkStatus.connecting);
       await Native.setBleAutoReconnect(true);
       await Native.connectBle(addr);
-      setState(() => _notice = '正在连接“${device.name}”…重连后仍需在外接 GPS 区订阅 NMEA 特征。');
+      setState(
+        () => _notice = '正在连接“${device.name}”…重连后仍需在外接 GPS 区订阅 NMEA 特征。',
+      );
     } catch (e) {
       setState(() {
         _statusByAddress[addr] = DeviceLinkStatus.disconnected;
@@ -1481,150 +1610,180 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     final list = ListView(
       padding: widget.embedded
           ? EdgeInsets.fromLTRB(16, 12 + appBarTopInset(context), 16, bottomPad)
-          : withAppBarTopInset(context, EdgeInsets.fromLTRB(16, 16, 16, bottomPad)),
+          : withAppBarTopInset(
+              context,
+              EdgeInsets.fromLTRB(16, 16, 16, bottomPad),
+            ),
       children: [
         if (widget.embedded) ...[
-          Text(s.t('设备中心', 'Devices'),
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            s.t('设备中心', 'Devices'),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 10),
         ],
-          if (_notice != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(_notice!,
-                  style: const TextStyle(color: Colors.white, fontSize: 13)),
-            ),
-          _sectionTitle(s.t('运动相机', 'Action cam')),
-          // v1.2.12：统一入口是「连接运动相机」新页（一个入口扫全部品牌，
-          // 品牌自动识别、点行即连）。旧的按品牌三张卡已删，只留一个入口。
-          // v1.5.4：本卡与外接 GPS 卡、OBD 卡同一套样式（#0B0E13 底、
-          // 圆角 16、白 12% 描边、16 内边距、全宽 FilledButton）；文案
-          // 只列支持的品牌，不讲各品牌连接方式（连接方式见连接页）。
+        if (_notice != null)
           Container(
             margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF0B0E13),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white12),
+              color: accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.videocam, color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(s.t('连接运动相机', 'Connect camera'),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold)),
+            child: Text(
+              _notice!,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+        _sectionTitle(s.t('运动相机', 'Action cam')),
+        // v1.2.12：统一入口是「连接运动相机」新页（一个入口扫全部品牌，
+        // 品牌自动识别、点行即连）。旧的按品牌三张卡已删，只留一个入口。
+        // v1.5.4：本卡与外接 GPS 卡、OBD 卡同一套样式（#0B0E13 底、
+        // 圆角 16、白 12% 描边、16 内边距、全宽 FilledButton）；文案
+        // 只列支持的品牌，不讲各品牌连接方式（连接方式见连接页）。
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0B0E13),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.videocam, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      s.t('连接运动相机', 'Connect camera'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(s.t('支持的运动相机：GoPro、Insta360、DJI。', 'Supported: GoPro, Insta360, DJI.'),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => Navigator.of(context).push(
-                      DtPageRoute(
-                          builder: (_) => const CameraConnectPage()),
-                    ),
-                    child: Text(s.t('打开连接运动相机', 'Open camera connect')),
                   ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                s.t(
+                  '支持的运动相机：GoPro、Insta360、DJI。',
+                  'Supported: GoPro, Insta360, DJI.',
                 ),
-              ],
-            ),
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).push(
+                    DtPageRoute(builder: (_) => const CameraConnectPage()),
+                  ),
+                  child: Text(s.t('打开连接运动相机', 'Open camera connect')),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          _sectionTitle(s.t('外接 GPS 模块', 'External GPS')),
+        ),
+        const SizedBox(height: 8),
+        // v1.7.0：原「自研设备固件升级」独立卡已删。固件升级、电量、
+        // 关机、圈速导入统一放进外接 GPS 卡片连上自研硬件后的
+        // 硬件管理界面（见 ExternalGpsSection / device_hardware_card）。
+        _sectionTitle(s.t('外接 GPS 模块', 'External GPS')),
+        Text(
+          s.t(
+            '外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。',
+            'If external GPS drops or is silent for 5s, phone GPS takes over.',
+          ),
+          style: const TextStyle(color: Colors.white60, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        const ExternalGpsSection(),
+        const SizedBox(height: 8),
+        // v1.5.4：OBD 入口与运动相机 / 外接 GPS 并列在顶部，同一样式
+        // （#0B0E13 底、圆角 16、白 12% 描边、16 内边距、全宽按钮）。
+        // 标题只在卡内出现一次（不再另起 _sectionTitle，避免重名）。
+        // 占位彩蛋：点卡即弹「敬请期待」，不走真实连接；ObdSection
+        // 与 obd_service / 原生 ObdManager 原样保留，硬件就绪后接回。
+        _obdComingSoonCard(),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.of(
+              context,
+            ).push(DtPageRoute(builder: (_) => const SatelliteSettingsPage())),
+            icon: const Icon(Icons.satellite_alt, size: 18),
+            label: Text(s.t('可视化外部 GPS 配置', 'External GPS setup')),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // v1.5.8：删除「传感器：自定义 BLE 设备」手动添加表单。
+        // 传感器统一走下方「附近扫描结果」直接连接，不再让用户手填 UUID。
+        _sectionTitle(
+          s.t('传感器：已保存设备（点重连）', 'Saved sensors (tap to reconnect)'),
+        ),
+        if (_saved.isEmpty)
           Text(
-            s.t('外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。', 'If external GPS drops or is silent for 5s, phone GPS takes over.'),
-            style: const TextStyle(color: Colors.white60, fontSize: 12),
+            s.t('还没有保存的设备。', 'No saved devices.'),
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
-          const SizedBox(height: 8),
-          const ExternalGpsSection(),
-          const SizedBox(height: 8),
-          // v1.5.4：OBD 入口与运动相机 / 外接 GPS 并列在顶部，同一样式
-          // （#0B0E13 底、圆角 16、白 12% 描边、16 内边距、全宽按钮）。
-          // 标题只在卡内出现一次（不再另起 _sectionTitle，避免重名）。
-          // 占位彩蛋：点卡即弹「敬请期待」，不走真实连接；ObdSection
-          // 与 obd_service / 原生 ObdManager 原样保留，硬件就绪后接回。
-          _obdComingSoonCard(),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                DtPageRoute(
-                    builder: (_) => const SatelliteSettingsPage()),
-              ),
-              icon: const Icon(Icons.satellite_alt, size: 18),
-              label: Text(s.t('可视化外部 GPS 配置', 'External GPS setup')),
+        for (final device in _saved) _savedRow(accent, device),
+        const SizedBox(height: 16),
+        _sectionTitle(s.t('传感器：附近扫描结果', 'Nearby scan')),
+        FilledButton.icon(
+          onPressed: _toggleScan,
+          icon: Icon(
+            _scanning ? Icons.stop : Icons.bluetooth_searching,
+            size: 18,
+          ),
+          label: Text(_scanning ? s.t('停止扫描', 'Stop') : s.t('开始扫描', 'Scan')),
+        ),
+        const SizedBox(height: 8),
+        if (_scanned.isEmpty)
+          Text(
+            s.t('暂无扫描结果。', 'No scan results.'),
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        for (final dev in _scanned)
+          ListTile(
+            title: Text(
+              (dev['name'] ?? '').toString(),
+              style: const TextStyle(color: Colors.white),
+            ),
+            subtitle: Text(
+              '${dev['address']} · ${dev['type']} · RSSI ${dev['rssi']}',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            trailing: TextButton(
+              onPressed: () async {
+                final addr = (dev['address'] ?? '').toString();
+                if (addr.isEmpty) return;
+                try {
+                  setState(
+                    () => _statusByAddress[addr] = DeviceLinkStatus.connecting,
+                  );
+                  await Native.connectBle(addr);
+                } catch (e) {
+                  setState(() => _notice = '连接失败：$e');
+                }
+              },
+              child: Text(s.t('连接', 'Connect')),
             ),
           ),
-          const SizedBox(height: 16),
-          // v1.5.8：删除「传感器：自定义 BLE 设备」手动添加表单。
-          // 传感器统一走下方「附近扫描结果」直接连接，不再让用户手填 UUID。
-          _sectionTitle(s.t('传感器：已保存设备（点重连）', 'Saved sensors (tap to reconnect)')),
-          if (_saved.isEmpty)
-            Text(s.t('还没有保存的设备。', 'No saved devices.'),
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          for (final device in _saved)
-            _savedRow(accent, device),
-          const SizedBox(height: 16),
-          _sectionTitle(s.t('传感器：附近扫描结果', 'Nearby scan')),
-          FilledButton.icon(
-            onPressed: _toggleScan,
-            icon: Icon(_scanning ? Icons.stop : Icons.bluetooth_searching,
-                size: 18),
-            label: Text(_scanning ? s.t('停止扫描', 'Stop') : s.t('开始扫描', 'Scan')),
-          ),
-          const SizedBox(height: 8),
-          if (_scanned.isEmpty)
-            Text(s.t('暂无扫描结果。', 'No scan results.'),
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          for (final dev in _scanned)
-            ListTile(
-              title: Text((dev['name'] ?? '').toString(),
-                  style: const TextStyle(color: Colors.white)),
-              subtitle: Text(
-                  '${dev['address']} · ${dev['type']} · RSSI ${dev['rssi']}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              trailing: TextButton(
-                onPressed: () async {
-                  final addr = (dev['address'] ?? '').toString();
-                  if (addr.isEmpty) return;
-                  try {
-                    setState(() => _statusByAddress[addr] =
-                        DeviceLinkStatus.connecting);
-                    await Native.connectBle(addr);
-                  } catch (e) {
-                    setState(() => _notice = '连接失败：$e');
-                  }
-                },
-                child: Text(s.t('连接', 'Connect')),
-              ),
-            ),
       ],
     );
     if (widget.embedded) {
       // Material 底色：与记录页同为 #121212，避免 ColoredBox 挡住 ListTile 水波纹。
-      return Material(
-        color: const Color(0xFF121212),
-        child: list,
-      );
+      return Material(color: const Color(0xFF121212), child: list);
     }
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -1634,7 +1793,10 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
         ),
-        title: Text(s.t('设备中心', 'Devices'), style: const TextStyle(color: Colors.white)),
+        title: Text(
+          s.t('设备中心', 'Devices'),
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
       body: list,
     );
@@ -1669,28 +1831,42 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                     const Icon(Icons.speed, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(s.t('OBD（ELM327）', 'OBD (ELM327)'),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold)),
+                      child: Text(
+                        s.t('OBD（ELM327）', 'OBD (ELM327)'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(s.t('敬请期待', 'Soon'),
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 12)),
+                      child: Text(
+                        s.t('敬请期待', 'Soon'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(s.t('行车电脑数据：车速 / 转速 / 油门 / 水温。', 'ECU: speed / rpm / throttle / coolant.'),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(
+                  s.t(
+                    '行车电脑数据：车速 / 转速 / 油门 / 水温。',
+                    'ECU: speed / rpm / throttle / coolant.',
+                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -1716,29 +1892,35 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       builder: (ctx) {
         final s = S.of(ctx);
         return AlertDialog(
-        title: Text(s.t('OBD · 敬请期待', 'OBD · Coming soon')),
-        content: Text(s.t(
-            '行车电脑数据（车速 / 转速 / 油门 / 水温）正在路上，等硬件就绪就和大家见面，敬请期待。',
-            'Speed, rpm, throttle, and coolant are on the way.')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(s.t('知道了', 'OK')),
+          title: Text(s.t('OBD · 敬请期待', 'OBD · Coming soon')),
+          content: Text(
+            s.t(
+              '行车电脑数据（车速 / 转速 / 油门 / 水温）正在路上，等硬件就绪就和大家见面，敬请期待。',
+              'Speed, rpm, throttle, and coolant are on the way.',
+            ),
           ),
-        ],
-      );
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(s.t('知道了', 'OK')),
+            ),
+          ],
+        );
       },
     );
   }
 
   Widget _sectionTitle(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(text,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold)),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      text,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 15,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+  );
 
   Widget _savedRow(Color accent, SavedDevice device) {
     final addr = device.address;
@@ -1759,19 +1941,29 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           Row(
             children: [
               Expanded(
-                child: Text(device.name,
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text(
+                  device.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-              Text(status.label,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text(
+                status.label,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
             ],
           ),
           const SizedBox(height: 4),
-          Text('${device.type} · 服务 ${device.serviceUuid} · 特征 ${device.characteristicUuid}',
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
-          Text(addr == null ? '未填地址：无法重连' : '地址 $addr',
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          Text(
+            '${device.type} · 服务 ${device.serviceUuid} · 特征 ${device.characteristicUuid}',
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+          Text(
+            addr == null ? '未填地址：无法重连' : '地址 $addr',
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -1782,8 +1974,9 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               const SizedBox(width: 8),
               TextButton(
                 onPressed: () async {
-                  setState(() => _saved =
-                      _saved.where((d) => d != device).toList());
+                  setState(
+                    () => _saved = _saved.where((d) => d != device).toList(),
+                  );
                   await _persist();
                 },
                 child: const Text('删除'),

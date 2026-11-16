@@ -40,20 +40,38 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('开始记录'), findsNothing);
     expect(find.text('手机号登录'), findsWidgets);
-    expect(find.text('手机号注册'), findsWidgets);
+    expect(find.text('邮箱登录'), findsWidgets);
     expect(find.text('使用微信登录'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('登录页默认是手机号，区号可选可填，没有微信入口', (tester) async {
+  testWidgets('手机号视图默认中国大陆区号，可进手机号输入', (tester) async {
     await tester.pumpWidget(const MaterialApp(
-      home: CloudAuthPage(gate: true),
+      home: CloudAuthPage(mode: CloudAuthMode.login),
     ));
     await tester.pump();
     expect(find.text('手机号登录'), findsWidgets);
     expect(find.text('中国大陆 +86'), findsOneWidget);
     expect(find.text('使用微信登录'), findsNothing);
-    expect(find.textContaining('AppID'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('云端未配置时点登录给出明确提示，不静默无反应', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const MaterialApp(
+      home: CloudAuthPage(gate: true),
+    ));
+    await tester.pump();
+    await tester.tap(find.text('我已阅读并同意《用户协议》和《隐私政策》'));
+    await tester.pump();
+    await tester.tap(find.text('手机号登录'));
+    await tester.pump();
+    expect(find.textContaining('请使用带云端配置的安装包'), findsOneWidget);
+    // 提示自身带自动消失定时器，跑完再结束，避免 pending timer 断言。
+    await tester.pump(const Duration(seconds: 4));
     expect(tester.takeException(), isNull);
   });
 }

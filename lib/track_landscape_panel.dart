@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'app_locale.dart';
 import 'gps_source_badge.dart';
 import 'lean_estimator.dart';
+import 'lean_gauge.dart';
 import 'live_lap_timer_text.dart';
 import 'track_live_g.dart';
 import 'track_session_display.dart';
@@ -175,6 +176,7 @@ class TrackLandscapeInstruments extends StatefulWidget {
     required this.leanDeg,
     required this.leanQuality,
     required this.leanCalibrated,
+    this.showLean = true,
     required this.autoPaused,
     required this.distanceKm,
     required this.elapsedLabel,
@@ -201,6 +203,9 @@ class TrackLandscapeInstruments extends StatefulWidget {
   final double leanDeg;
   final LeanQuality leanQuality;
   final bool leanCalibrated;
+
+  /// v1.6.0：倾角只服务摩托，汽车/卡丁车的赛道横屏不显示倾角。
+  final bool showLean;
   final bool autoPaused;
   final double distanceKm;
   final String elapsedLabel;
@@ -358,10 +363,24 @@ class _TrackLandscapeInstrumentsState extends State<TrackLandscapeInstruments> {
               calibrated: widget.gCalibrated,
             ),
             const SizedBox(height: 4),
-            Text(
-              _leanLabel(s),
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
+            // v1.6.0：摩托赛道横屏的倾角可视化加强——刻度条 + 读数，
+            // 不再只是一行文字。其他车型整块不显示。
+            if (widget.showLean) ...[
+              LeanBar(
+                leanDeg: widget.leanCalibrated &&
+                        widget.leanQuality != LeanQuality.unreliable
+                    ? widget.leanDeg
+                    : 0,
+                height: 22,
+                compact: true,
+              ),
+              const SizedBox(height: 2),
+            ],
+            if (widget.showLean)
+              Text(
+                _leanLabel(s),
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
             if (widget.autoPaused) ...[
               const SizedBox(height: 4),
               Container(

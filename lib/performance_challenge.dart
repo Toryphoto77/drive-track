@@ -33,17 +33,27 @@ const String performanceChallengeSafetyDetail =
     '测试前请确认场地空旷、无行人，系好安全带，遵守场地规则与法律法规；'
     '成绩仅供参考，不构成驾驶建议。本页不鼓励、不组织公开道路竞速。';
 
-enum ChallengeType { accel0100, brake1000 }
+enum ChallengeType { accel0100, accel0400, brake1000 }
 
 extension ChallengeTypeLabel on ChallengeType {
   String get label => switch (this) {
         ChallengeType.accel0100 => '0-100 加速',
+        ChallengeType.accel0400 => '0-400 加速',
         ChallengeType.brake1000 => '100-0 刹停',
       };
   String get shortLabel => switch (this) {
         ChallengeType.accel0100 => '0-100',
+        ChallengeType.accel0400 => '0-400',
         ChallengeType.brake1000 => '100-0',
       };
+
+  /// 目标速度（km/h）：0-100 与 100-0 用 100，0-400 用 400。
+  double get targetKmh => this == ChallengeType.accel0400 ? 400 : 100;
+
+  /// v1.6.0 硬性限制：0-400 必须使用驰迹自研硬件（BLE 外接 GNSS）。
+  /// 手机 GPS 在 300 km/h 以上误差过大，且没有可信的速度精度字段，
+  /// 用它计时等于给用户一个假成绩，所以直接不允许开测。
+  bool get requiresOwnHardware => this == ChallengeType.accel0400;
 }
 
 /// 一次 GPS 速度样本。时间用调用方给定的毫秒时间戳（Recorder 路径
@@ -124,7 +134,6 @@ class PerformanceChallengeEngine {
   PerformanceChallengeEngine(this.type);
 
   static const double startThresholdKmh = 3;
-  static const double targetKmh = 100;
   static const double stopThresholdKmh = 2;
   static const double maxHAccM = 20;
   static const double maxSpeedAccMps = 2.0;
@@ -132,6 +141,9 @@ class PerformanceChallengeEngine {
   static const double maxStepKmh = 50;
 
   final ChallengeType type;
+
+  /// 本项目的目标速度（100 或 400 km/h），由项目类型决定。
+  double get targetKmh => type.targetKmh;
   ChallengePhase phase = ChallengePhase.idle;
   int? startMs;
   int? finishMs;
@@ -218,7 +230,10 @@ class PerformanceChallengeEngine {
     _last = s;
 
     switch (type) {
+      // v1.6.0：0-100 与 0-400 计时逻辑一致，只有目标速度不同；
+      // 0-400 的硬件门槛在页面层拦截，引擎只看速度。
       case ChallengeType.accel0100:
+      case ChallengeType.accel0400:
         if (phase == ChallengePhase.armed &&
             s.speedKmh >= startThresholdKmh) {
           phase = ChallengePhase.running;
@@ -378,6 +393,7 @@ class PerformanceChallengePage extends StatefulWidget {
     this.onBack,
     this.recorder,
     this.speedSampleStream,
+    this.hardwareCheck,
   });
 
   /// 返回上一页的回调；不传则用 Navigator.maybePop。
@@ -392,6 +408,11 @@ class PerformanceChallengePage extends StatefulWidget {
   /// 调用方把已有定位流映射成的速度样本流（可带 hAcc / speedAcc）。
   /// 与 recorder 二选一；两者都传时以 speedSampleStream 为准。
   final Stream<SpeedSample>? speedSampleStream;
+
+  /// v1.6.0：0-400 的硬件门槛探针。返回 true 表示当前用的是驰迹自研硬件
+  /// （BLE 外接 GNSS 正在供数）。不传视为“没有硬件”，0-400 一律不可测。
+  /// 用回调而不是 bool：页面停留期间用户可能才把硬件连上。
+  final bool Function()? hardwareCheck;
 
   @override
   State<PerformanceChallengePage> createState() =>
@@ -414,6 +435,10 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
 
   bool get _hasSource =>
       widget.recorder != null || widget.speedSampleStream != null;
+
+  /// v1.6.0：0-400 必须判定为“自研硬件在供数”。每次调用都重新问一遍，
+  /// 页面停留期间插上硬件立刻生效。
+  bool get _hardwareReady => widget.hardwareCheck?.call() ?? false;
 
   @override
   void initState() {
@@ -506,11 +531,18 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
       setState(() => _notice = '计时进行中：请先取消当前计时再切换项目。');
       return;
     }
+    // v1.6.0 硬性限制：0-400 只允许用驰迹自研硬件测。
+    if (t.requiresOwnHardware && !_hardwareReady) {
+      setState(() => _notice = '0-400 加速必须接入驰迹自研硬件（BLE 外接 GNSS）后测试：'
+          '手机 GPS 在 300 km/h 以上的速度误差会让成绩不可信。');
+      return;
+    }
     setState(() {
       _type = t;
       _engine = PerformanceChallengeEngine(t);
       _lastOutcome = null;
       _badSamples = 0;
+      _notice = null;
     });
   }
 
@@ -523,13 +555,22 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
       setState(() => _notice = '未接入定位源，无法计时。');
       return;
     }
+    if (_type.requiresOwnHardware && !_hardwareReady) {
+      setState(() => _notice = '0-400 加速必须接入驰迹自研硬件（BLE 外接 GNSS）后测试。');
+      return;
+    }
     setState(() {
       _engine.arm();
       _lastOutcome = null;
       _badSamples = 0;
-      _notice = _type == ChallengeType.accel0100
-          ? '已待命：起步 ≥ 3 km/h 起表，到 100 km/h 停表。'
-          : '已待命：先加速到 100 km/h 以上，跌破 100 km/h 起表，到 ≤ 2 km/h 停表。';
+      _notice = switch (_type) {
+        ChallengeType.accel0100 =>
+          '已待命：起步 ≥ 3 km/h 起表，到 100 km/h 停表。',
+        ChallengeType.accel0400 =>
+          '已待命：起步 ≥ 3 km/h 起表，到 400 km/h 停表（需自研硬件持续供数）。',
+        ChallengeType.brake1000 =>
+          '已待命：先加速到 100 km/h 以上，跌破 100 km/h 起表，到 ≤ 2 km/h 停表。',
+      };
     });
   }
 
@@ -583,6 +624,8 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
         PerformanceChallengeStore.bestFor(_history, ChallengeType.accel0100);
     final bestBrake =
         PerformanceChallengeStore.bestFor(_history, ChallengeType.brake1000);
+    final bestAccel400 =
+        PerformanceChallengeStore.bestFor(_history, ChallengeType.accel0400);
     final busy = _engine.phase == ChallengePhase.armed ||
         _engine.phase == ChallengePhase.running;
     return Scaffold(
@@ -676,14 +719,48 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                   child: FilledButton(
                     onPressed: () => _selectType(t),
                     style: FilledButton.styleFrom(
-                      backgroundColor:
-                          _type == t ? accent : Colors.white12,
+                      backgroundColor: _type == t ? accent : Colors.white12,
+                      foregroundColor: Colors.white,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                      textStyle: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600),
                     ),
-                    child: Text(t.label),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // 没有自研硬件时 0-400 带锁标识（点按仍会给出原因）。
+                        if (t.requiresOwnHardware && !_hardwareReady) ...[
+                          const Icon(Icons.lock_outline,
+                              size: 12, color: Colors.white54),
+                          const SizedBox(width: 3),
+                        ],
+                        Flexible(
+                          child: Text(
+                            t.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
           ]),
+          if (_type.requiresOwnHardware) ...[
+            const SizedBox(height: 6),
+            Text(
+              _hardwareReady
+                  ? '0-400：自研硬件已就绪，可以测试。'
+                  : '0-400：必须接入驰迹自研硬件（BLE 外接 GNSS）。手机 GPS 在 300 km/h 以上'
+                      '误差过大，不提供手机 GPS 计时。',
+              style: TextStyle(
+                color: _hardwareReady ? Colors.greenAccent : Colors.orangeAccent,
+                fontSize: 12,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           // 实时速度与状态。
           Container(
@@ -721,9 +798,7 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                       onPressed: busy || !_safetyConfirmed || !_hasSource
                           ? null
                           : _arm,
-                      child: Text(_type == ChallengeType.accel0100
-                          ? '开始待命：0-100'
-                          : '开始待命：100-0'),
+                      child: Text('开始待命：${_type.shortLabel}'),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -776,6 +851,7 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           _bestRow('0-100 加速', bestAccel),
+          _bestRow('0-400 加速（自研硬件）', bestAccel400),
           _bestRow('100-0 刹停', bestBrake),
           const SizedBox(height: 12),
           Row(children: [
@@ -825,9 +901,11 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
             ),
           const SizedBox(height: 12),
           const Text(
-            '计时规则：0-100 自 ≥ 3 km/h 起表，到 100 km/h 停表；100-0 先达 100 km/h，'
-            '跌破 100 km/h 起表，到 ≤ 2 km/h 停表。无效判定：计时中精度超门槛（hAcc > 20 m '
-            '或速度精度 > 2.0 m/s）、采样中断超 2 秒、单步跳变 > 50 km/h、全程无精度信息。',
+            '计时规则：0-100 / 0-400 自 ≥ 3 km/h 起表，分别到 100 / 400 km/h 停表；'
+            '100-0 先达 100 km/h，跌破 100 km/h 起表，到 ≤ 2 km/h 停表。'
+            '0-400 必须使用驰迹自研硬件（BLE 外接 GNSS）计时，手机 GPS 不出成绩。'
+            '无效判定：计时中精度超门槛（hAcc > 20 m 或速度精度 > 2.0 m/s）、'
+            '采样中断超 2 秒、单步跳变 > 50 km/h、全程无精度信息。',
             style: TextStyle(color: Colors.white60, fontSize: 12),
           ),
         ],

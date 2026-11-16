@@ -669,6 +669,50 @@ String buildStaticMapUrl({
       '&markers=$markers';
 }
 
+/// v1.6.0：附近赛道静态地图——中心点 + 若干赛道标注（不含轨迹折线）。
+/// 入参全部是 WGS-84；内部统一转 GCJ-02。键值缺失或点不足时返回 null，
+/// 调用方回落成纯列表（不堵住“附近的赛道”功能）。
+Future<Uint8List?> fetchNearbyStaticMap(
+  (double lat, double lon) center, {
+  int zoom = 11,
+  List<(double lat, double lon)> marks = const [],
+  String? key,
+  AmapJsonFetcher? jsonFetcher,
+  AmapBytesFetcher? bytesFetcher,
+  HttpClient? httpClient,
+}) async {
+  final k = key ?? amapWebKey;
+  if (k.isEmpty) return null;
+  final fetch =
+      jsonFetcher ?? (Uri u) => _defaultJsonFetcher(u, client: httpClient);
+  // 最多 9 个标号（接口标注只支持 1-9 / A-Z 有限字符集，这里用数字）。
+  final marksWgs = marks.take(9).toList();
+  final all = <(double lat, double lon)>[center, ...marksWgs];
+  final gcj = await convertWgsToGcj(all,
+      key: k, jsonFetcher: fetch, httpClient: httpClient);
+  if (gcj == null || gcj.length != all.length) return null;
+  final c = gcj.first;
+  final markerParts = <String>[];
+  const colors = ['0xE10600', '0x38BDF8', '0xFFC400', '0x22C55E', '0xA855F7'];
+  for (var i = 1; i < gcj.length; i++) {
+    final p = gcj[i];
+    final color = colors[(i - 1) % colors.length];
+    markerParts.add(
+      'mid,$color,${i}:${p.$2.toStringAsFixed(6)},${p.$1.toStringAsFixed(6)}',
+    );
+  }
+  final centerMark =
+      'large,0xFFFFFF,A:${c.$2.toStringAsFixed(6)},${c.$1.toStringAsFixed(6)}';
+  final markers = [centerMark, ...markerParts].join('|');
+  final url = 'https://restapi.amap.com/v3/staticmap?key=$k'
+      '&location=${c.$2.toStringAsFixed(6)},${c.$1.toStringAsFixed(6)}'
+      '&zoom=$zoom&size=$kStaticMapSize&scale=$kStaticMapScale'
+      '&markers=$markers';
+  final bytesFetch =
+      bytesFetcher ?? (Uri u) => _defaultBytesFetcher(u, client: httpClient);
+  return bytesFetch(Uri.parse(url));
+}
+
 /// 静态地图图片全流程：WGS-84 原始点 → 抽稀 → 官方转换 →
 /// 建 URL（超长则对半缩点直至起终点）→ 取图。失败返回 null
 /// （调用方回落现有分享卡片轨迹，不堵住分享）。

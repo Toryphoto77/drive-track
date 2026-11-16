@@ -1,0 +1,10 @@
+# DriveTrack V4.6 分区表：ESP32-S3-WROOM-1U-N16R8 为 16 MB Flash。
+# 双 OTA 分区各 4 MB（当前固件约 1.2 MB，留足后续加 SD/FATFS、气压计与算法的空间），
+# 剩余 8 MB 做断线缓存，足够 10 Hz GPS + 20 Hz IMU 连续存 30 分钟以上。
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x6000,
+otadata,  data, ota,     0xf000,   0x2000,
+phy_init, data, phy,     0x11000,  0x1000,
+ota_0,    app,  ota_0,   0x20000,  0x400000,
+ota_1,    app,  ota_1,   0x420000, 0x400000,
+storage,  data, spiffs,  0x820000, 0x7E0000,

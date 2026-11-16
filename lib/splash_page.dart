@@ -38,11 +38,14 @@ class SplashPage extends StatefulWidget {
   final VoidCallback? onFinished;
 
   /// v1.0.3：启动图标选择（'steering' 默认，见 AppIconChoice），与桌面 alias 同步；
-  /// 由 DriveTrackApp 在 build 时传当前 appPrefs.appIcon，load 完成
-  /// 后 AnimatedBuilder 重建会同步刷新（动画 1.5 秒内通常已加载完）。
-  final String appIconKey;
+  /// 由 DriveTrackApp 在 build 时传当前 appPrefs.appIcon。
+  ///
+  /// v1.6.0 冷启动闪图标修复：偏好文件还没读出来时传 null，本页先不画图标
+  /// （占位同尺寸），读完后按用户选择淡入一次。此前默认值 'steering' 会先画
+  /// 一帧方向盘、再被用户所选图标替换，看起来就是“闪过一帧图标”。
+  final String? appIconKey;
 
-  const SplashPage({super.key, this.onFinished, this.appIconKey = AppIconChoice.steering});
+  const SplashPage({super.key, this.onFinished, this.appIconKey});
 
   @override
   State<SplashPage> createState() => _SplashPageState();
@@ -66,9 +69,10 @@ class _SplashPageState extends State<SplashPage>
       }
     });
 
-  // 图标首帧即满不透明：与系统 SplashScreen 的方向盘衔接，
-  // 避免“系统图标 → 空白炭灰 → 再淡入”的冷启动闪一下。
-  // 标题 / slogan 仍淡入；图标只做轻微缩放。
+  // v1.6.0：系统 SplashScreen（Android 12+）已改为纯黑无图标（见
+  // res/drawable/splash_transparent.xml），启动图标统一由本页画一次。
+  // 这里只对标题 / slogan 做淡入，图标本身由 TweenAnimationBuilder 单独淡入；
+  // 缩放只做轻微 0.98 → 1.0。
   late final Animation<double> _iconOpacity = const AlwaysStoppedAnimation(1.0);
   late final Animation<double> _iconScale = Tween<double>(begin: 0.98, end: 1.0)
       .animate(CurvedAnimation(
@@ -111,9 +115,27 @@ class _SplashPageState extends State<SplashPage>
                 opacity: _iconOpacity.value,
                 child: Transform.scale(scale: _iconScale.value, child: child),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: Image.asset(AppIconChoice.assetFor(widget.appIconKey), width: 112, height: 112),
+              // 图标占位固定 112×112：偏好未加载时先留空，避免布局跳动。
+              child: SizedBox(
+                width: 112,
+                height: 112,
+                child: widget.appIconKey == null
+                    ? null
+                    // 偏好读完后淡入一次（180ms），不出现“换图”那一帧。
+                    : TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                        builder: (_, v, child) => Opacity(opacity: v, child: child),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(28),
+                          child: Image.asset(
+                            AppIconChoice.assetFor(widget.appIconKey!),
+                            width: 112,
+                            height: 112,
+                          ),
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 20),

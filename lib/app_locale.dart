@@ -73,10 +73,16 @@ class S {
   String t(String zhText, String enText) => zh ? zhText : enText;
 }
 
-/// 设置里的语言开关（个人页不再放第二份）。两个标签固定写「中文 / English」，
-/// 不随当前语言改名，避免找不到切回去的入口。
+/// 语言开关。两个标签固定写「中文 / English」，不随当前语言改名，
+/// 避免找不到切回去的入口。
+///
+/// 默认是登录页用的独立卡片；[rowStyle] 为 true 时输出设置页标准分组行
+///（图标 + 标题/副标题 + 右侧两段式切换），供设置页嵌进分组卡片，
+/// 不再在设置页里另起一张风格不同的卡。
 class LanguageSwitch extends StatelessWidget {
-  const LanguageSwitch({super.key});
+  const LanguageSwitch({super.key, this.rowStyle = false});
+
+  final bool rowStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +90,7 @@ class LanguageSwitch extends StatelessWidget {
     final lang = LocaleScope.of(context).lang;
     final accent = CardStyle.accent(context);
 
-    Widget chip(String label, AppLang value) {
+    Widget chip(String label, AppLang value, {double height = 36}) {
       final selected = lang == value;
       return Expanded(
         child: Material(
@@ -93,7 +99,7 @@ class LanguageSwitch extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             onTap: () => LocaleController.instance.setLang(value),
             child: Container(
-              height: 36,
+              height: height,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: selected ? accent : Colors.black54,
@@ -116,6 +122,61 @@ class LanguageSwitch extends StatelessWidget {
       );
     }
 
+    if (rowStyle) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(Icons.translate, size: 18, color: accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.t('语言', 'Language'),
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    s.t('立即切换界面文字', 'Switches the interface immediately'),
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: Colors.white54,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 132,
+              child: Row(
+                children: [
+                  chip('中文', AppLang.zh, height: 30),
+                  const SizedBox(width: 6),
+                  chip('English', AppLang.en, height: 30),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return DriveTrackCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,11 +191,13 @@ class LanguageSwitch extends StatelessWidget {
             style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 10),
-          Row(children: [
-            chip('中文', AppLang.zh),
-            const SizedBox(width: 8),
-            chip('English', AppLang.en),
-          ]),
+          Row(
+            children: [
+              chip('中文', AppLang.zh),
+              const SizedBox(width: 8),
+              chip('English', AppLang.en),
+            ],
+          ),
         ],
       ),
     );

@@ -1,0 +1,29 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "dt_ble.c"
+        "dt_ota.c"
+        "dt_gnss.c"
+        "dt_imu.c"
+        "dt_can.c"
+        "dt_store.c"
+        "dt_session.c"
+        "dt_power.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        bt
+        driver
+        esp_adc
+        esp_http_server
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_timer
+        app_update
+        esp_partition
+        nvs_flash
+        spiffs
+        mbedtls
+        json
+)
