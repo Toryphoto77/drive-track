@@ -37,7 +37,9 @@ void main() {
         () {
       const c = UpdateConfig.domestic();
       expect(c.manifestUrl,
-          'https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json');
+          'https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/update-manifest.json');
+      expect(c.manifestMirrors,
+          const ['https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json']);
       expect(c.fallbackGithubUrl,
           'https://api.github.com/repos/Toryphoto77/drive-track/releases/latest');
       expect(c.githubReleases, isFalse);
@@ -57,14 +59,14 @@ void main() {
       final file = File('update-manifest.json');
       expect(file.existsSync(), isTrue);
       final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-      expect(json['versionName'], '1.6.3');
-      expect(json['versionCode'], 68);
+      expect(json['versionName'], '1.6.4');
+      expect(json['versionCode'], 69);
       final apkUrl = json['apkUrl'] as String;
-      expect(apkUrl, contains('/apk/1.6.3/'));
-      expect(apkUrl, endsWith('DriveTrack-v1.6.3-release-arm64-v8a.apk'));
+      expect(apkUrl, contains('/apk/1.6.4/'));
+      expect(apkUrl, endsWith('DriveTrack-v1.6.4-release-arm64-v8a.apk'));
       final apks = json['apks'] as Map<String, dynamic>;
       expect(apks['arm64-v8a']['url'],
-          'https://github.com/Toryphoto77/drive-track/releases/download/v1.6.3/DriveTrack-v1.6.3-release-arm64-v8a.apk');
+          'https://github.com/Toryphoto77/drive-track/releases/download/v1.6.4/DriveTrack-v1.6.4-release-arm64-v8a.apk');
       expect(json['notes'], isA<String>());
     });
   });
@@ -77,8 +79,8 @@ void main() {
         if (req.uri.path == '/manifest.json') {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'versionName': '1.6.4',
-            'versionCode': 69,
+            'versionName': '1.6.5',
+            'versionCode': 70,
             'apkUrl': 'https://example.invalid/app.apk',
             'notes': 'test',
           }));
@@ -97,10 +99,44 @@ void main() {
           ),
         );
         expect(r.status, UpdateCheckStatus.available);
-        expect(r.remoteVersionName, '1.6.4');
-        expect(r.remoteVersionCode, 69);
+        expect(r.remoteVersionName, '1.6.5');
+        expect(r.remoteVersionCode, 70);
         expect(r.downloadUrl, 'https://example.invalid/app.apk');
         expect(githubHits, 0);
+      } finally {
+        await server.close(force: true);
+      }
+    });
+
+    test('primary manifest failure falls through to the mirror', () async {
+      var mirrorHits = 0;
+      final server = await _server((req) async {
+        if (req.uri.path == '/primary.json') {
+          req.response.statusCode = 500;
+        } else if (req.uri.path == '/mirror.json') {
+          mirrorHits++;
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'versionName': '1.6.5',
+            'versionCode': 70,
+            'apkUrl': 'https://example.invalid/app.apk',
+          }));
+        } else {
+          req.response.statusCode = 404;
+        }
+        await req.response.close();
+      });
+      try {
+        final base = 'http://127.0.0.1:${server.port}';
+        final r = await UpdateService.check(
+          config: UpdateConfig(
+            manifestUrl: '$base/primary.json',
+            manifestMirrors: ['$base/mirror.json'],
+          ),
+        );
+        expect(r.status, UpdateCheckStatus.available);
+        expect(r.remoteVersionCode, 70);
+        expect(mirrorHits, 1);
       } finally {
         await server.close(force: true);
       }
@@ -112,8 +148,8 @@ void main() {
         if (req.uri.path == '/manifest.json') {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'versionName': '1.6.3',
-            'versionCode': 68,
+            'versionName': '1.6.4',
+            'versionCode': 69,
             'apkUrl': 'https://example.invalid/app.apk',
           }));
         } else {
@@ -144,11 +180,11 @@ void main() {
         } else {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'tag_name': 'v1.6.4',
+            'tag_name': 'v1.6.5',
             'body': 'fallback notes',
             'assets': [
               {
-                'name': 'DriveTrack-v1.6.4-release-arm64-v8a.apk',
+                'name': 'DriveTrack-v1.6.5-release-arm64-v8a.apk',
                 'browser_download_url': 'https://example.invalid/v163.apk',
               },
             ],
@@ -165,7 +201,7 @@ void main() {
           ),
         );
         expect(r.status, UpdateCheckStatus.available);
-        expect(r.remoteVersionName, '1.6.4');
+        expect(r.remoteVersionName, '1.6.5');
         expect(r.downloadUrl, 'https://example.invalid/v163.apk');
       } finally {
         await server.close(force: true);

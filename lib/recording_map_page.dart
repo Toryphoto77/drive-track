@@ -524,7 +524,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                               key: ValueKey(
                                 'recmap-${widget.isTrack ? 'satellite' : 'amap'}-$zoom-$x-$y',
                               ),
-                              headers: const {'User-Agent': 'DriveTrack/1.6.3'},
+                              headers: const {'User-Agent': 'DriveTrack/1.6.4'},
                               fit: BoxFit.fill,
                               gaplessPlayback: true,
                               errorBuilder: (_, _, _) {
