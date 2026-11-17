@@ -18,9 +18,12 @@ import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'models.dart';
 import 'native.dart';
+import 'nearby_tracks_map.dart';
 import 'store.dart';
 import 'track_library.dart';
 import 'track_package_editor.dart';
+import 'track_package_info_page.dart';
+import 'track_timing.dart';
 
 /// 策展模式 gate（纯逻辑，可单测）：2 秒内连点版本文本 7 次解锁。
 /// tap() 返回此次点击后是否达到解锁条件；页面负责在首次解锁时
@@ -89,9 +92,18 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   // v1.5.9：官方赛道包核对状态筛选（0=全部 1=已核对 2=待核）+ 按地区分组。
   int _verificationFilter = 0;
 
+  // 列表 / 地图视图切换。
+  bool _mapView = false;
+  // 地图内类型筛选：1=赛道 2=卡丁车。
+  int _mapTypeFilter = 1;
+  GeoPoint? _currentLocation;
+  StreamSubscription<Map<String, dynamic>>? _locSub;
+
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _locSub?.cancel();
+    try { Native.stopLocation(); } catch (_) {}
     super.dispose();
   }
 
@@ -99,6 +111,24 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   void initState() {
     super.initState();
     _refresh();
+    _initLocation();
+  }
+
+  /// 启动定位并订阅位置流；定位失败不影响列表展示。
+  Future<void> _initLocation() async {
+    try {
+      await Native.startLocation();
+    } catch (_) {}
+    _locSub = Native.locationStream.listen(
+      (e) {
+        final lat = (e['lat'] as num?)?.toDouble();
+        final lon = (e['lon'] as num?)?.toDouble();
+        if (lat == null || lon == null) return;
+        if (!mounted) return;
+        setState(() => _currentLocation = GeoPoint(lat, lon));
+      },
+      onError: (_) {},
+    );
   }
 
   Future<void> _refresh() async {
@@ -413,6 +443,108 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     );
   }
 
+  /// 点击地图标记：打开对应赛道包的详情/简介页。
+  void _onPoiTap(TrackPoi poi) {
+    final snap = _snap;
+    if (snap == null) return;
+    TrackPackage? pkg;
+    for (final p in snap.official) {
+      if (p.id == poi.id) { pkg = p; break; }
+    }
+    if (pkg == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TrackPackageInfoPage(package: pkg),
+      ),
+    );
+  }
+
+  /// 地图视图：全屏深色底图 + 顶部 赛道/卡丁车 分段控件。
+  Widget _mapViewBody(LibrarySnapshot snap) {
+    final filtered = snap.official.where((p) {
+      final isKart = p.id.startsWith('kart_');
+      if (_mapTypeFilter == 1) return !isKart;
+      if (_mapTypeFilter == 2) return isKart;
+      return true;
+    });
+    final pois = <TrackPoi>[
+      for (final p in filtered)
+        if (TrackPoi.fromPackage(p) case final poi?) poi,
+    ];
+    return Stack(
+      children: [
+        NearbyTracksMap(
+          pois: pois,
+          currentLocation: _currentLocation,
+          onPoiTap: _onPoiTap,
+        ),
+        Positioned(
+          top: 12,
+          left: 0,
+          right: 0,
+          child: Center(child: _mapTypeSegment()),
+        ),
+        if (pois.isEmpty)
+          const Positioned.fill(
+            child: IgnorePointer(
+              child: Center(
+                child: Text(
+                  '该类型下暂无赛道',
+                  style: TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 顶部 赛道/卡丁车 分段控件（截图同款深色胶囊，选中段为白色）。
+  Widget _mapTypeSegment() {
+    const opts = <(int, String)>[
+      (1, '赛道'),
+      (2, '卡丁车'),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (v, label) in opts)
+            GestureDetector(
+              onTap: () => setState(() => _mapTypeFilter = v),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _mapTypeFilter == v
+                      ? Colors.white
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(17),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: _mapTypeFilter == v
+                        ? const Color(0xFF111827)
+                        : Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final snap = _snap;
@@ -445,10 +577,20 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
         title: const Text('赛道库'),
+        actions: [
+          IconButton(
+            tooltip: _mapView ? '列表视图' : '地图视图',
+            icon: Icon(_mapView ? Icons.list : Icons.map_outlined,
+                color: Colors.white),
+            onPressed: () => setState(() => _mapView = !_mapView),
+          ),
+        ],
       ),
       body: snap == null
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
+          : _mapView
+              ? _mapViewBody(snap)
+              : ListView(
               padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
               children: [
                 // 顶部：赛道库版本卡片（标题 + 当前版本 + 状态行 + 两个主按钮）。
