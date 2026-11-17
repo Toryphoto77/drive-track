@@ -7,6 +7,7 @@ import 'dart:math' as math;
 class LapSpeedDeltaSummary {
   const LapSpeedDeltaSummary({
     required this.avgDeltaKmh,
+    required this.medianDeltaKmh,
     required this.maxGainKmh,
     required this.maxGainFraction,
     required this.maxLossKmh,
@@ -16,6 +17,10 @@ class LapSpeedDeltaSummary {
 
   /// 分析圈 − 参照圈的平均速度差（km/h，正 = 更快）。
   final double avgDeltaKmh;
+
+  /// 分析圈 − 参照圈的中位速度差（km/h，正 = 更快）。中位数不受
+  /// 个别异常点（如起步/停车段）拉偏，比平均值更能代表整体水平。
+  final double medianDeltaKmh;
 
   /// 分析圈领先最多的一段。
   final double maxGainKmh;
@@ -51,6 +56,7 @@ LapSpeedDeltaSummary? compareLapSpeeds({
   var maxGainAt = 0.0;
   var maxLoss = 0.0;
   var maxLossAt = 0.0;
+  final deltas = <double>[];
 
   for (var i = 0; i < selDistances.length; i++) {
     final d = selDistances[i];
@@ -59,6 +65,7 @@ LapSpeedDeltaSummary? compareLapSpeeds({
     final delta = selSpeedsKmh[i] - refKmh;
     sum += delta;
     count++;
+    deltas.add(delta);
     if (delta > maxGain) {
       maxGain = delta;
       maxGainAt = d / total;
@@ -69,8 +76,14 @@ LapSpeedDeltaSummary? compareLapSpeeds({
     }
   }
   if (count == 0) return null;
+  deltas.sort();
+  final mid = deltas.length ~/ 2;
+  final median = deltas.length.isOdd
+      ? deltas[mid]
+      : (deltas[mid - 1] + deltas[mid]) / 2;
   return LapSpeedDeltaSummary(
     avgDeltaKmh: sum / count,
+    medianDeltaKmh: median,
     maxGainKmh: maxGain,
     maxGainFraction: maxGainAt.clamp(0.0, 1.0),
     maxLossKmh: maxLoss,

@@ -61,13 +61,22 @@ AMAP_DEFINE=()
 if [ -f $HOME/.local/share/drive-track/secrets/.amap-key ]; then
   AMAP_DEFINE=(--dart-define="AMAP_KEY=$(cat $HOME/.local/share/drive-track/secrets/.amap-key)")
 fi
+# 可选：高德「Web端(JS API)」Key + 安全密钥，只给「附近的赛道」的深色
+# 交互地图用（WebView 承载 JS API）。缺失时该页回落静态图，其余页面不受影响。
+AMAPJS_DEFINE=()
+if [ -f $HOME/.local/share/drive-track/secrets/.amap-js-key ]; then
+  AMAPJS_DEFINE+=(--dart-define="AMAP_JS_KEY=$(cat $HOME/.local/share/drive-track/secrets/.amap-js-key)")
+fi
+if [ -f $HOME/.local/share/drive-track/secrets/.amap-js-security ]; then
+  AMAPJS_DEFINE+=(--dart-define="AMAP_JS_SECURITY_CODE=$(cat $HOME/.local/share/drive-track/secrets/.amap-js-security)")
+fi
 # 可选：云端环境标识，从本机文件读取后以 --dart-define 注入；
 # 无文件则不传，代码侧空值即云端未配置；内容不打印。
 CLOUDBASE_DEFINE=()
 if [ -f $HOME/.local/share/drive-track/secrets/.cloudbase-env ]; then
   CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat $HOME/.local/share/drive-track/secrets/.cloudbase-env)")
 fi
-flutter build apk --release --target-platform android-arm64 --no-android-gradle-daemon "${AMAP_DEFINE[@]}" "${CLOUDBASE_DEFINE[@]}"
-cp build/app/outputs/flutter-apk/app-release.apk "./DriveTrack-v${VERSION}-release-arm64-v8a.apk"
+flutter build apk --release --target-platform android-arm64 --split-per-abi --no-android-gradle-daemon "${AMAP_DEFINE[@]}" "${AMAPJS_DEFINE[@]}" "${CLOUDBASE_DEFINE[@]}"
+cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "./DriveTrack-v${VERSION}-release-arm64-v8a.apk"
 ls -la "./DriveTrack-v${VERSION}-release-arm64-v8a.apk"
 echo BUILD_DONE

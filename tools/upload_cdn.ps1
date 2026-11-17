@@ -306,7 +306,8 @@ foreach ($abi in $abis) {
 # ---- 写回清单 ----
 if ($WriteManifest) {
   $manifestPath = Join-Path $root "update-manifest.json"
-  $raw = Get-Content $manifestPath -Raw
+  # 清单含中文 notes：必须按 UTF-8 读，PS 5.1 默认 ANSI 会把中文读成乱码并让 ConvertFrom-Json 失败。
+  $raw = Get-Content $manifestPath -Raw -Encoding UTF8
   $mf = $raw | ConvertFrom-Json
 
   if ($mf.versionName -ne $Version) {

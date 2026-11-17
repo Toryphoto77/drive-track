@@ -1,7 +1,7 @@
 name: drive_track
 description: "驰迹 DriveTrack：极简风轨迹记录 App（汽车 / 摩托 / 卡丁车）"
 publish_to: 'none'
-version: 1.6.2+67
+version: 1.6.3+68
 
 environment:
   sdk: ^3.13.7
@@ -14,6 +14,7 @@ dependencies:
   # 不含 GPL 的 x264/x265（避免整包被 GPL 传染）。编码走 Android 硬件
   # MediaCodec（h264_mediacodec），不可用时回落 mpeg4。要求 Android API 24+。
   ffmpeg_kit_flutter_new_video: ^2.5.8
+  webview_flutter: ^4.14.1
 
 dev_dependencies:
   flutter_test:

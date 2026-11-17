@@ -65,9 +65,11 @@ import 'replay_3d.dart';
 import 'satellite_tiles.dart';
 import 'track_analysis_geo.dart';
 import 'trip_detail_modules.dart';
+import 'track_catalog.dart';
 import 'track_sector_data.dart';
 import 'track_session_display.dart';
 import 'track_timing.dart';
+import 'track_widgets.dart';
 import 'voice_service.dart';
 
 const Color _kBg = Color(0xFF121212);
@@ -193,13 +195,16 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
   // 不持久化、不影响任何统计口径）。
   bool _hideOverview = false;
   bool _hideSpeed = false;
-  bool _hideG = false;
   bool _hideAltitude = false;
   bool _hideTrackLine = false;
 
   // v1.3.1：全程走线图底图切换（默认卫星；只影响本页会话状态）。
   // true = 卫星地图，false = 归一化示意图（弱网与色弱用户兜底）。
   bool _satelliteMap = true;
+
+  // 赛道库轮廓视图：与赛道库/赛道详情页同一 TrackInfo.outline 数据源，
+  // 保证结算页看到的赛道形状与赛道库一致（轮廓为示意，非官方测绘）。
+  bool _catalogView = false;
 
   // v1.3.7：全程走线图 3D 回放模式（默认关，用户主动切过去；
   // 只影响本页会话状态；开时卫星/示意两 chip 均不选中，走线图
@@ -219,6 +224,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
   String? _aiError;
 
   TrackSectorData? get _sectorData => sectorDataFor(widget.trip.trackId);
+
+  /// 赛道库目录里的同名赛道（用于轮廓对齐；查不到返回 null，不编造）。
+  TrackInfo? get _catalogTrack => trackById(widget.trip.trackId);
 
   @override
   void initState() {
@@ -350,6 +358,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     final leanOver30 = trip.mode == TripMode.moto
         ? pts.where((p) => p.roll.abs() > 30).length
         : 0;
+    // 赛道库轮廓：与赛道库/赛道详情页同一 TrackInfo.outline 数据源。
+    final catalog = _catalogTrack;
+    final catalogOutline = (catalog != null && catalog.outline.length >= 3)
+        ? catalog.outline
+        : null;
     return [
       const Text(
         '本节行程总览 · 传感器实测',
@@ -423,16 +436,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         _hideSpeed,
         (v) => setState(() => _hideSpeed = v),
       ),
-      if (!_hideSpeed) TripSpeedChartCard(points: pts, events: trip.events),
+      // 结算页只画速度曲线，不再叠加事件标记（事件功能页已下线）。
+      if (!_hideSpeed) TripSpeedChartCard(points: pts),
       const SizedBox(height: 12),
-      _sectionHeader(
-        'G 值',
-        'hide-g',
-        _hideG,
-        (v) => setState(() => _hideG = v),
-      ),
-      if (!_hideG) TripGChartCard(points: pts),
-      const SizedBox(height: 12),
+      // G 值不再单开一页复盘：极值在“关键极值”里、纵向/横向 G 曲线
+      // 已在下方“曲线（距离轴）”中，重复的大卡去掉。
       _sectionHeader(
         '海拔',
         'hide-altitude',
@@ -459,33 +467,50 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                   ChoiceChip(
                     key: const ValueKey('analysis-map-satellite'),
                     label: const Text('卫星地图'),
-                    selected: _satelliteMap && !_replay3d,
+                    selected: _satelliteMap && !_replay3d && !_catalogView,
                     onSelected: (_) => setState(() {
                       _satelliteMap = true;
                       _replay3d = false;
+                      _catalogView = false;
                     }),
                   ),
                   ChoiceChip(
                     key: const ValueKey('analysis-map-schematic'),
                     label: const Text('示意地图'),
-                    selected: !_satelliteMap && !_replay3d,
+                    selected: !_satelliteMap && !_replay3d && !_catalogView,
                     onSelected: (_) => setState(() {
                       _satelliteMap = false;
                       _replay3d = false;
+                      _catalogView = false;
                     }),
                   ),
+                  // 结算页与赛道库对齐：直接复用赛道库同一个 TrackInfo.outline
+                  // 轮廓组件，保证两处看到的是同一形状。
+                  if (catalogOutline != null)
+                    ChoiceChip(
+                      key: const ValueKey('analysis-map-catalog'),
+                      label: const Text('赛道库轮廓'),
+                      selected: _catalogView && !_replay3d,
+                      onSelected: (_) => setState(() {
+                        _catalogView = true;
+                        _replay3d = false;
+                      }),
+                    ),
                   // v1.3.7：3D 回放模式（与卫星/示意并列的切换，
                   // 不取代原有内容；默认仍是现有视图）。
                   ChoiceChip(
                     key: const ValueKey('analysis-map-3d-replay'),
                     label: const Text('3D 回放'),
                     selected: _replay3d,
-                    onSelected: (_) => setState(() => _replay3d = true),
+                    onSelected: (_) => setState(() {
+                      _replay3d = true;
+                      _catalogView = false;
+                    }),
                   ),
                   // v1.3.4：参考圈叠加开关（默认开，只影响本页会话；
                   // 无参照圈时不出现，参照圈切片点数 < 2 时不画线；
-                  // 3D 回放模式下不出现，叠加只属于卫星/示意图）。
-                  if (_reference != null && !_replay3d)
+                  // 3D 回放 / 赛道库轮廓模式下不出现）。
+                  if (_reference != null && !_replay3d && !_catalogView)
                     ChoiceChip(
                       key: const ValueKey('reference-overlay-toggle'),
                       label: const Text('参考圈叠加'),
@@ -499,6 +524,13 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               const SizedBox(height: 8),
               if (_replay3d)
                 Replay3dView(points: pts)
+              else if (_catalogView && catalog != null)
+                TrackSchematicDiagram(
+                  track: catalog,
+                  height: 220,
+                  showCorners: true,
+                  showSectors: true,
+                )
               else if (wholeSlice == null)
                 const Text(
                   '暂无轨迹点，走线为空',
@@ -518,12 +550,26 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                   mode: TrackLineColorMode.speed,
                   scrubIndex: 0,
                   referenceSlice: showRefOverlay ? refSlice : null,
+                  catalogOutline: catalogOutline,
                 ),
               const SizedBox(height: 6),
               Text(
-                _replay3d ? '3D 透视回放：仅作复盘示意，不用于计时判定' : '走线按速度着色，仅作复盘示意，不用于计时判定',
+                _replay3d
+                    ? '3D 透视回放：仅作复盘示意，不用于计时判定'
+                    : _catalogView
+                    ? '与赛道库同一轮廓数据源（按公开布局重绘的示意图，非官网原图）'
+                    : '走线按速度着色，仅作复盘示意，不用于计时判定',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
+              // 示意地图叠加赛道库轮廓时说明灰线来源。
+              if (!_replay3d && !_catalogView && catalogOutline != null && !_satelliteMap)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    '灰色细线 = 赛道库轮廓（与赛道库同一数据源）',
+                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
+                ),
               // v1.3.4：参考圈叠加图例（开关关 / 无参照圈 / 点数 < 2
               // 时不出现；圈号取自 _reference，不冒充最佳圈；
               // 3D 回放模式下不出现）。
@@ -565,6 +611,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           ),
         ),
       ],
+      // 压弯只属于摩托；汽车 / 卡丁车换成弯道与横向 G 数据。
+      if (trip.mode == TripMode.car || trip.mode == TripMode.kart) ...[
+        const SizedBox(height: 12),
+        _carCornerCard(),
+      ],
       if (trip.mode == TripMode.bike) ...[
         const SizedBox(height: 12),
         _card(
@@ -596,6 +647,87 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         ),
       ],
     ];
+  }
+
+  /// 汽车 / 卡丁车的替代数据卡：压弯只对摩托有意义，这里用同一批
+  /// 实测点做弯道与横向 G 汇总，不补造摩托压弯数据。
+  Widget _carCornerCard() {
+    final pts = widget.trip.points;
+    final corners = analyzeCorners(pts);
+    final left = corners
+        .where((c) => c.direction == CornerDirection.left)
+        .length;
+    final right = corners.length - left;
+    final calibrated = pts.any((p) => p.calibrated);
+    final maxLat = !calibrated || pts.isEmpty
+        ? null
+        : pts.map((p) => p.latG.abs()).reduce(math.max);
+    final avgApex = corners.isEmpty
+        ? null
+        : corners.map((c) => c.apexKmh).reduce((a, b) => a + b) /
+              corners.length;
+    final slowest = [...corners]
+      ..sort((a, b) => a.apexKmh.compareTo(b.apexKmh));
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '弯道与横向 G',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (corners.isEmpty)
+            const Text(
+              '本趟未识别到弯道：轨迹点不足，或全程为直道。',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            )
+          else ...[
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                _stat('弯道数', '${corners.length}'),
+                _stat('左弯 / 右弯', '$left / $right'),
+                _stat(
+                  '最大横向 G',
+                  maxLat == null ? '—' : '${maxLat.toStringAsFixed(2)}g',
+                ),
+                if (avgApex != null)
+                  _stat('平均弯心速度', '${avgApex.toStringAsFixed(0)} km/h'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '最慢弯心（入弯 → 弯心 → 出弯）',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 2),
+            for (final c in slowest.take(3))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Text(
+                  '第 ${c.index} 弯 ${c.direction == CornerDirection.right ? '右' : '左'}：'
+                  '${c.entryKmh.toStringAsFixed(0)} → '
+                  '${c.apexKmh.toStringAsFixed(0)} → '
+                  '${c.exitKmh.toStringAsFixed(0)} km/h · '
+                  '弯长 ${c.lengthM.toStringAsFixed(0)} m',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+          ],
+          const SizedBox(height: 4),
+          const Text(
+            '弯道由轨迹曲率与航向变化识别；横向 G 仅在传感器标定后显示。',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+        ],
+      ),
+    );
   }
 
   /// OBD 通道：只读本趟 [Trip.obdSamples]（每秒一条实测采样）。
@@ -876,6 +1008,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               'avgDeltaKmh': double.parse(
                 speedDelta.avgDeltaKmh.toStringAsFixed(1),
               ),
+              'medianDeltaKmh': double.parse(
+                speedDelta.medianDeltaKmh.toStringAsFixed(1),
+              ),
               'maxGainKmh': double.parse(
                 speedDelta.maxGainKmh.toStringAsFixed(0),
               ),
@@ -1035,6 +1170,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     final theoretical = analysisTheoreticalBestLapMs(laps);
     final counted = laps.where((l) => lapInvalidReason(l) == null).length;
     final sectorData = _sectorData;
+    final catalog = _catalogTrack;
+    final catalogOutline = (catalog != null && catalog.outline.length >= 3)
+        ? catalog.outline
+        : null;
     final selected = _selected;
     final reference = _reference;
 
@@ -1522,6 +1661,18 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                         deltaCurve: deltaCurve,
                         mode: _colorMode,
                         scrubIndex: scrubIndex,
+                        catalogOutline: catalogOutline,
+                      ),
+                    if (catalogOutline != null)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          '灰色细线 = 赛道库轮廓（同一 TrackInfo 数据源）',
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        ),
                       ),
                     const Text(
                       '仅作复盘示意，不用于计时判定',
@@ -1778,6 +1929,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       '${summary.avgDeltaKmh.toStringAsFixed(1)} km/h',
                 ),
                 _stat(
+                  '中位速度差',
+                  '${summary.medianDeltaKmh >= 0 ? '+' : ''}'
+                      '${summary.medianDeltaKmh.toStringAsFixed(1)} km/h',
+                ),
+                _stat(
                   '最大领先',
                   '+${summary.maxGainKmh.toStringAsFixed(0)} km/h'
                       ' @ ${formatPercent(summary.maxGainFraction)}',
@@ -1849,9 +2005,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     );
   }
 
-  /// v1.5.7 完赛汇总：每圈一根条形（越高越快，个人最佳红）+ 圈数 /
-  /// 平均圈 / 圈速标准差 σ。只用计入圈：无效圈不参与一致性统计，
-  /// 避免维修区、出界把 σ 拉大。圈多时横向滚动，不挤压条形。
+  /// 完赛汇总：圈速折线图（越高越慢，个人最佳红点）+ 逐圈时间数据 +
+  /// 圈数 / 中位圈 / 平均圈 / 圈速标准差 σ。只用计入圈：无效圈不参与
+  /// 一致性统计，避免维修区、出界把 σ 拉大。
   Widget _sessionSummaryCard(List<Lap> laps) {
     final counted = laps.where((l) => lapInvalidReason(l) == null).toList();
     if (counted.isEmpty) return const SizedBox.shrink();
@@ -1863,6 +2019,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           durations.length,
     );
     final spreadPct = mean > 0 ? sigma / mean * 100 : 0.0;
+    final sorted = [...durations]..sort();
+    final mid = sorted.length ~/ 2;
+    final median = sorted.length.isOdd
+        ? sorted[mid].toDouble()
+        : (sorted[mid - 1] + sorted[mid]) / 2;
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1876,67 +2037,16 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             ),
           ),
           const SizedBox(height: 8),
-          SizedBox(
-            height: 96,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  for (final l in counted)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 70,
-                            child: Align(
-                              alignment: Alignment.bottomCenter,
-                              child: FractionallySizedBox(
-                                heightFactor:
-                                    (fastest / math.max(1, l.durationMs))
-                                        .clamp(0.08, 1.0)
-                                        .toDouble(),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: l.durationMs == fastest
-                                        ? _kRed
-                                        : Colors.white24,
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(3),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${l.number}',
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+          _LapTrendChart(laps: counted, fastestMs: fastest),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            spacing: 20,
+            runSpacing: 8,
             children: [
-              Expanded(child: _stat('计入圈数', '${counted.length}')),
-              Expanded(
-                child: _stat('平均圈', LapTimer.formatLapTime(mean.round())),
-              ),
-              Expanded(
-                child: _stat('标准差 σ', LapTimer.formatLapTime(sigma.round())),
-              ),
+              _stat('计入圈数', '${counted.length}'),
+              _stat('中位圈', LapTimer.formatLapTime(median.round())),
+              _stat('平均圈', LapTimer.formatLapTime(mean.round())),
+              _stat('标准差 σ', LapTimer.formatLapTime(sigma.round())),
             ],
           ),
           const SizedBox(height: 4),
@@ -1946,6 +2056,52 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 : '一致性 ${spreadPct.toStringAsFixed(1)}%（σ 越小越稳）',
             style: const TextStyle(color: Colors.white54, fontSize: 11),
           ),
+          const SizedBox(height: 8),
+          // 折线图下方给出逐圈数据，读数不用看图估。
+          for (final l in counted.take(20))
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '圈 ${l.number}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    LapTimer.formatLapTime(l.durationMs),
+                    style: TextStyle(
+                      color: l.durationMs == fastest ? _kGreen : Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 84,
+                    child: Text(
+                      l.durationMs == fastest
+                          ? '最佳'
+                          : LapTimer.formatDelta(l.durationMs - fastest),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (counted.length > 20)
+            Text(
+              '仅列前 20 圈，共 ${counted.length} 圈。',
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
         ],
       ),
     );
@@ -2028,6 +2184,147 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     }
     return rows;
   }
+}
+
+/// 圈速折线图：X 为圈序，Y 为圈速（越高越慢）；最佳圈红点 + 红色虚线，
+/// 其余白点连线。下方逐圈数据由调用方列出，本图只负责趋势。
+class _LapTrendChart extends StatelessWidget {
+  final List<Lap> laps;
+  final int fastestMs;
+
+  const _LapTrendChart({required this.laps, required this.fastestMs});
+
+  @override
+  Widget build(BuildContext context) {
+    final durations = laps.map((l) => l.durationMs).toList();
+    var minMs = durations.reduce(math.min).toDouble();
+    var maxMs = durations.reduce(math.max).toDouble();
+    if (maxMs <= minMs) maxMs = minMs + 1000;
+    final pad = (maxMs - minMs) * 0.15;
+    final lo = minMs - pad;
+    final hi = maxMs + pad;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '慢 ${LapTimer.formatLapTime(maxMs.round())}',
+              style: const TextStyle(color: Colors.white38, fontSize: 10),
+            ),
+            Text(
+              '快 ${LapTimer.formatLapTime(minMs.round())}',
+              style: const TextStyle(color: Colors.white38, fontSize: 10),
+            ),
+          ],
+        ),
+        Container(
+          height: 118,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0A0A0A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kBorder),
+          ),
+          child: CustomPaint(
+            painter: _LapTrendPainter(
+              laps: laps,
+              fastestMs: fastestMs,
+              minMs: lo,
+              maxMs: hi,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LapTrendPainter extends CustomPainter {
+  final List<Lap> laps;
+  final int fastestMs;
+  final double minMs;
+  final double maxMs;
+
+  _LapTrendPainter({
+    required this.laps,
+    required this.fastestMs,
+    required this.minMs,
+    required this.maxMs,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (laps.isEmpty) return;
+    const padL = 16.0;
+    const padR = 16.0;
+    const padT = 12.0;
+    const padB = 18.0;
+    final w = size.width - padL - padR;
+    final h = size.height - padT - padB;
+    double yOf(double ms) {
+      final frac = maxMs <= minMs ? 0.0 : (ms - minMs) / (maxMs - minMs);
+      return padT + (1 - frac.clamp(0.0, 1.0)) * h;
+    }
+
+    double xOf(int i) =>
+        laps.length == 1 ? padL + w / 2 : padL + w * i / (laps.length - 1);
+
+    // 网格 + 最佳圈基准虚线。
+    final grid = Paint()
+      ..color = Colors.white12
+      ..strokeWidth = 1;
+    for (var i = 0; i <= 2; i++) {
+      final y = padT + h * i / 2;
+      canvas.drawLine(Offset(padL, y), Offset(padL + w, y), grid);
+    }
+    final bestY = yOf(fastestMs.toDouble());
+    final dash = Paint()
+      ..color = _kRed.withValues(alpha: 0.65)
+      ..strokeWidth = 1;
+    for (var x = padL; x < padL + w; x += 8) {
+      canvas.drawLine(Offset(x, bestY), Offset(x + 4, bestY), dash);
+    }
+
+    // 折线。
+    if (laps.length >= 2) {
+      final path = Path()..moveTo(xOf(0), yOf(laps[0].durationMs.toDouble()));
+      for (var i = 1; i < laps.length; i++) {
+        path.lineTo(xOf(i), yOf(laps[i].durationMs.toDouble()));
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = Colors.white70
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
+
+    // 点 + 圈号。
+    for (var i = 0; i < laps.length; i++) {
+      final c = Offset(xOf(i), yOf(laps[i].durationMs.toDouble()));
+      final isBest = laps[i].durationMs == fastestMs;
+      canvas.drawCircle(
+        c,
+        isBest ? 4.5 : 3,
+        Paint()..color = isBest ? _kRed : Colors.white,
+      );
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '${laps[i].number}',
+          style: const TextStyle(color: Colors.white54, fontSize: 9),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(c.dx - tp.width / 2, size.height - 13));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LapTrendPainter old) =>
+      old.laps != laps || old.fastestMs != fastestMs;
 }
 
 /// 一条曲线序列。
@@ -2264,12 +2561,17 @@ class _TrackLineDiagram extends StatelessWidget {
   final int scrubIndex;
   final _LapSlice? referenceSlice;
 
+  /// 赛道库轮廓（TrackInfo.outline，归一化 0..1）；非空时以灰色细线
+  /// 叠在实测走线下方，让结算页与赛道库看到同一形状。
+  final List<OutlinePoint>? catalogOutline;
+
   const _TrackLineDiagram({
     required this.slice,
     required this.deltaCurve,
     required this.mode,
     required this.scrubIndex,
     this.referenceSlice,
+    this.catalogOutline,
   });
 
   @override
@@ -2288,6 +2590,7 @@ class _TrackLineDiagram extends StatelessWidget {
           mode: mode,
           scrubIndex: scrubIndex,
           referenceSlice: referenceSlice,
+          catalogOutline: catalogOutline,
         ),
       ),
     );
@@ -2300,6 +2603,7 @@ class _TrackLinePainter extends CustomPainter {
   final TrackLineColorMode mode;
   final int scrubIndex;
   final _LapSlice? referenceSlice;
+  final List<OutlinePoint>? catalogOutline;
 
   _TrackLinePainter({
     required this.slice,
@@ -2307,6 +2611,7 @@ class _TrackLinePainter extends CustomPainter {
     required this.mode,
     required this.scrubIndex,
     this.referenceSlice,
+    this.catalogOutline,
   });
 
   @override
@@ -2337,6 +2642,33 @@ class _TrackLinePainter extends CustomPainter {
       offY + (maxLat - p.lat) * scale,
     );
     final offsets = pts.map(toOffset).toList();
+
+    // 赛道库轮廓：按实测轨迹的包围盒等比铺开，灰色细线画在最底层。
+    // 轮廓与轨迹都是归一化/实测独立数据，此处只做形状对照示意。
+    final outline = catalogOutline;
+    if (outline != null && outline.length >= 3) {
+      final path = Path();
+      for (var i = 0; i < outline.length; i++) {
+        final p = Offset(
+          offX + outline[i].x * spanLon * scale,
+          offY + outline[i].y * spanLat * scale,
+        );
+        if (i == 0) {
+          path.moveTo(p.dx, p.dy);
+        } else {
+          path.lineTo(p.dx, p.dy);
+        }
+      }
+      path.close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = Colors.white38
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
 
     var minSpeed = double.infinity;
     var maxSpeed = double.negativeInfinity;
@@ -2543,7 +2875,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                         child: Image.network(
                           satelliteTileUrl(zoom, x, y),
                           key: ValueKey('analysis-sat-$zoom-$x-$y'),
-                          headers: const {'User-Agent': 'DriveTrack/1.5.9'},
+                          headers: const {'User-Agent': 'DriveTrack/1.6.3'},
                           fit: BoxFit.fill,
                           gaplessPlayback: true,
                           errorBuilder: (_, _, _) {

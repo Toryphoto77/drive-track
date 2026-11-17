@@ -1505,7 +1505,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.6.2',
+          versionName: '1.6.3',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -6792,7 +6792,8 @@ class _TripDetailPageState extends State<TripDetailPage> {
                         _attachToLatestUnphotographed,
                     photoPointsTruncated: photoPointsTruncated,
                   ),
-                  if (t.mode != TripMode.bike) ...[
+                  // 赛道模式不显示油耗费用：赛道复盘只看圈速与遥测。
+                  if (t.mode != TripMode.bike && !t.isTrackMode) ...[
                     const SizedBox(height: 12),
                     Builder(
                       builder: (_) {
@@ -6819,8 +6820,11 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       },
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  TripRoadTypeCard(points: t.points),
+                  // 赛道模式不显示道路类型：赛道内是赛道，不做道路估算。
+                  if (!t.isTrackMode) ...[
+                    const SizedBox(height: 12),
+                    TripRoadTypeCard(points: t.points),
+                  ],
                   // v0.1.3 赛道行程：赛道名 + 圈速表（由存入的 lapsJson 重建，不重算街道评分）。
                   // v0.1.7 统合接线：详情页赛道图与选择器共用同一 TrackInfo.outline
                   // 数据源（TrackDetailCard），不再是旧示意轮廓；按 trackId 查目录，

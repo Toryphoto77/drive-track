@@ -77,12 +77,16 @@ void main() {
     expect(legacy.cdnUrl, 'https://cdn.example/app.apk');
   });
 
-  test('committed manifest does not invent a CDN url', () {
+  test('committed manifest serves the CloudBase CDN, never a fake domain', () {
     final json = jsonDecodeFile();
-    expect(json.containsKey('cdnUrl'), isFalse);
+    final apkUrl = json['apkUrl'] as String?;
+    expect(apkUrl, isNotNull);
+    expect(apkUrl, contains('.tcb.qcloud.la/'));
     final apks = json['apks'] as Map;
     for (final entry in apks.values) {
-      expect((entry as Map).containsKey('cdnUrl'), isFalse);
+      final cdn = (entry as Map)['cdnUrl'] as String?;
+      expect(cdn, isNotNull);
+      expect(cdn, contains('.tcb.qcloud.la/'));
       expect(entry.containsKey('mirrors'), isFalse);
     }
   });
