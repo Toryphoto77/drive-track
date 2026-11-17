@@ -230,10 +230,12 @@ void main() {
       expect(source, contains('fixMode: _blediyFeed.latest?.fixMode'));
     });
 
-    test('卡丁车安全确认前和倒计时后都校验有效赛道', () {
-      expect(source, contains('_requireKartTrack(mode)'));
+    test('开录前（安全确认与倒计时后）都校验赛道就绪', () {
+      // v1.6.0：_requireKartTrack → _requireTrackReady，汽车/摩托没选赛道时
+      // 也走“实录建赛道 / 卫星图绘制 / 选已有”引导层，不再静默进街道页。
+      expect(source, contains('_requireTrackReady(mode)'));
       expect(
-        RegExp(r'_requireKartTrack\(mode\)').allMatches(source).length,
+        RegExp(r'_requireTrackReady\(mode\)').allMatches(source).length,
         greaterThanOrEqualTo(2),
       );
     });

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -27,6 +29,10 @@ class _PermissionGateState extends State<PermissionGate>
   bool _ready = false;
   bool _showSettings = false;
   bool _running = false;
+  /// v1.6.0：首次 checkPermissions 还没返回时为 true。
+  /// 这段时间不画权限引导页（只留纯黑底），因为绝大多数用户权限早就给过，
+  /// 引导页一闪而过就是“进主页面前闪过一帧权限页”。
+  bool _checking = true;
   String _status = '正在自动申请权限…';
 
   @override
@@ -100,9 +106,13 @@ class _PermissionGateState extends State<PermissionGate>
     try {
       var status = await Native.checkPermissions();
       if (!mounted) return;
+      // v1.6.0：check 返回后才允许出现权限引导页；已授权则直接进首页。
+      if (mounted) setState(() => _checking = false);
       if (_foregroundGranted(status)) {
-        await _runExtrasAndBackground();
+        // 已授权：立即淡入首页，extras / background 的补申请放后台跑，
+        // 不再等它们返回（等待期间会一直停在引导页上，就是那次“闪过”）。
         _markReady();
+        unawaited(_runExtrasAndBackground());
         return;
       }
       // 非永久拒绝自动重拉：首次请求 + 最多 2 次重拉（最多 3 次系统框）。
@@ -113,8 +123,8 @@ class _PermissionGateState extends State<PermissionGate>
         status = await Native.checkPermissions();
         if (!mounted) return;
         if (_foregroundGranted(status)) {
-          await _runExtrasAndBackground();
           _markReady();
+          unawaited(_runExtrasAndBackground());
           return;
         }
         if (_foregroundPermanentlyDenied(status)) {
@@ -132,7 +142,10 @@ class _PermissionGateState extends State<PermissionGate>
       // check / foreground 异常时不静默放行，也不自动反复弹框：
       // 保持引导页；用户重回前台时会触发 resumed 重新 check。
       if (mounted) {
-        setState(() => _status = '权限检查失败，返回前台后自动重试。');
+        setState(() {
+          _checking = false;
+          _status = '权限检查失败，返回前台后自动重试。';
+        });
       }
     } finally {
       _running = false;
@@ -248,9 +261,13 @@ class _PermissionGateState extends State<PermissionGate>
 
   @override
   Widget build(BuildContext context) {
+    // v1.6.0：还在自检权限时用一层纯黑遮罩盖住引导页——权限早就给过的用户
+    // 不会再看到权限页一闪而过；确实缺权限时才在 check 返回后显示引导页。
+    // 注意：这里不改写整棵子树（首页仍在 Stack 里，只是透明度 0），
+    // 否则自检期间首页会被摘掉，稳定的控件树被破坏（测试与热重载都受影响）。
     return Stack(
       children: [
-        _buildGuide(),
+        if (!_ready) _buildGuide(),
         IgnorePointer(
           ignoring: !_ready,
           child: AnimatedOpacity(
@@ -259,6 +276,11 @@ class _PermissionGateState extends State<PermissionGate>
             child: widget.child,
           ),
         ),
+        // 自检期间的纯黑遮罩：盖住引导页，避免“进主页面瞬间闪一下权限页”。
+        if (_checking && !_ready)
+          const Positioned.fill(
+            child: ColoredBox(color: Color(0xFF000000)),
+          ),
       ],
     );
   }

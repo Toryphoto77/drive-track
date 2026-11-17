@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
+import 'crash_log.dart';
 import 'lean_estimator.dart';
 import 'models.dart';
 import 'native.dart';
@@ -702,9 +703,25 @@ class Recorder extends ChangeNotifier {
     _gapTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _gapTick(nowProvider());
     });
-    await Native.startForeground();
-    await Native.startLocation();
-    await Native.startSensors();
+    try {
+      await Native.startForeground();
+      await Native.startLocation();
+      await Native.startSensors();
+    } catch (e, st) {
+      // v1.6.1：前台服务在某些机型/系统版本上会被拒（Android 12+ 后台启动
+      // 限制、Android 14+ 定位型 FGS 权限），原生已兜住不崩溃，这里必须
+      // 回滚成 idle，否则会出现「界面在录、实际没采点」的幽灵记录。
+      CrashLog.record(e, st, tag: 'recorder.start');
+      _gapTimer?.cancel();
+      _gapTimer = null;
+      state = RecState.idle;
+      calibrationNote = '启动记录失败：请检查「后台运行」与「定位」权限后重试';
+      try {
+        await Native.stopForeground();
+      } catch (_) {}
+      notifyListeners();
+      rethrow;
+    }
     notifyListeners();
   }
 

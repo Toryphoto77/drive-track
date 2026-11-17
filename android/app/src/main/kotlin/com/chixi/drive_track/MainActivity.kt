@@ -85,53 +85,110 @@ class TrackService : Service(), LocationListener {
     companion object {
         @Volatile var recordingActive: Boolean = false
         const val NATIVE_POINTS_FILE = "recording_native_points.ndjson"
+        private const val PREF = "track_service"
+        private const val PREF_RECORDING = "recording_active"
+        // 原生采点文件上限：1Hz 约 200B/点，8MB 足够 10 小时以上；
+        // 超出后只保留最近 2MB，防止长期不结束把存储写满。
+        private const val MAX_POINTS_BYTES = 8L * 1024 * 1024
+        private const val KEEP_POINTS_BYTES = 2L * 1024 * 1024
     }
 
     private var locationManager: LocationManager? = null
+    // 定位写盘放单线程队列：onLocationChanged 跑在主线程，每秒同步
+    // appendText 会在磁盘慢 / 存储紧张时卡 UI（甚至 ANR）。
+    private val ioExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private fun setRecordingFlag(active: Boolean) {
+        try {
+            getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+                .putBoolean(PREF_RECORDING, active).apply()
+        } catch (_: Exception) {}
+    }
+
+    private fun isRecordingFlag(): Boolean = try {
+        getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(PREF_RECORDING, false)
+    } catch (_: Exception) {
+        false
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel("drivetrack", "驰迹记录", NotificationManager.IMPORTANCE_LOW)
-            nm.createNotificationChannel(ch)
+        // START_STICKY 被系统重建（intent == null）且录制标志已清掉时，
+        // 说明上一次记录已结束（或 Dart 启动失败后清理过），不应再撑
+        // 一个「通知栏记录中但没有任何数据」的幽灵前台服务。
+        if (intent == null && !isRecordingFlag()) {
+            stopSelf()
+            return START_NOT_STICKY
         }
-        val pi = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val n: Notification = NotificationCompat.Builder(this, "drivetrack")
-            .setContentTitle("驰迹记录中")
-            .setContentText("Recording active. Force-stop may interrupt; unfinished trips can be recovered on next open.")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentIntent(pi)
-            .setOngoing(true)
-            .build()
-        startForeground(1, n)
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val n: Notification
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val ch = NotificationChannel(
+                    "drivetrack", "驰迹记录", NotificationManager.IMPORTANCE_LOW
+                )
+                nm.createNotificationChannel(ch)
+            }
+            val pi = PendingIntent.getActivity(
+                this, 0, Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            n = NotificationCompat.Builder(this, "drivetrack")
+                .setContentTitle("驰迹记录中")
+                .setContentText("Recording active. Force-stop may interrupt; unfinished trips can be recovered on next open.")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentIntent(pi)
+                .setOngoing(true)
+                .build()
+            startForeground(1, n)
+        } catch (e: Exception) {
+            // Android 12+ 后台启动 / Android 14+ 缺定位型 FGS 权限都会
+            // 在这里抛异常；服务内抛出的异常若不管同样是 FATAL。
+            CrashLogger.log("TrackService.startForeground", e)
+            recordingActive = false
+            setRecordingFlag(false)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         recordingActive = true
-        startServiceLocation()
+        setRecordingFlag(true)
+        if (!startServiceLocation()) {
+            // 没有定位权限时服务活着也采不到点，直接自停并清标志，
+            // 由 Dart 侧给用户「权限缺失」的明确提示。
+            CrashLogger.append("TrackService: location permission missing, stopSelf")
+            recordingActive = false
+            setRecordingFlag(false)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         return START_STICKY
     }
 
     override fun onDestroy() {
         recordingActive = false
+        setRecordingFlag(false)
         stopServiceLocation()
+        try {
+            ioExecutor.shutdown()
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 
-    private fun startServiceLocation() {
-        if (locationManager != null) return
+    /** @return 是否成功登记定位监听（无权限 / 无 provider 时为 false）。 */
+    private fun startServiceLocation(): Boolean {
+        if (locationManager != null) return true
+        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (fine != PackageManager.PERMISSION_GRANTED) return false
         val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         locationManager = lm
-        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-        if (fine != PackageManager.PERMISSION_GRANTED) return
         try {
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
         } catch (_: Exception) {}
         try {
             lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 0f, this, Looper.getMainLooper())
         } catch (_: Exception) {}
+        return true
     }
 
     private fun stopServiceLocation() {
@@ -142,7 +199,7 @@ class TrackService : Service(), LocationListener {
     override fun onLocationChanged(location: Location) {
         // 精简 NDJSON：够恢复轨迹即可；G/姿态仍依赖 Flutter 草稿。
         // 用 JSONObject 拼行，避免手写转义在脚本改写时被吃掉。
-        try {
+        val line = try {
             val o = JSONObject()
             o.put("t", location.time)
             o.put("lat", location.latitude)
@@ -159,8 +216,35 @@ class TrackService : Service(), LocationListener {
             o.put("cal", false)
             o.put("altOk", location.hasAltitude())
             o.put("locSrc", "native_service")
-            File(filesDir, NATIVE_POINTS_FILE).appendText(o.toString() + "\n")
-        } catch (_: Exception) {}
+            o.toString()
+        } catch (e: Exception) {
+            CrashLogger.log("TrackService.buildPoint", e)
+            return
+        }
+        try {
+            ioExecutor.execute { appendPoint(line) }
+        } catch (e: Exception) {
+            // executor 已 shutdown（服务正在销毁），丢掉这一条即可。
+            CrashLogger.log("TrackService.ioExecutor", e)
+        }
+    }
+
+    private fun appendPoint(line: String) {
+        try {
+            val f = File(filesDir, NATIVE_POINTS_FILE)
+            if (f.length() >= MAX_POINTS_BYTES) {
+                val bytes = f.readBytes()
+                val from = (bytes.size - KEEP_POINTS_BYTES).coerceAtLeast(0L).toInt()
+                var start = from
+                // 从裁剪点找到下一个换行，避免留下半行 JSON。
+                while (start < bytes.size && bytes[start].toInt() != '\n'.code) start++
+                if (start < bytes.size) start++
+                f.writeBytes(bytes.copyOfRange(start, bytes.size))
+            }
+            f.appendText(line + "\n")
+        } catch (e: Exception) {
+            CrashLogger.log("TrackService.appendPoint", e)
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -457,6 +541,8 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // 原生崩溃落盘：后台闪退后至少能在设置页导出堆栈。
+        CrashLogger.init(applicationContext)
         // v0.1.7 视频回顾：Flutter 内置 AndroidView + 原生 VideoView 应用内播放。
         // 零第三方插件、无 ffmpeg、无烧录重编码；HUD 由 Dart 层叠加在画面上。
         flutterEngine.platformViewsController.registry.registerViewFactory(
@@ -516,13 +602,27 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     // 在线更新按设备架构挑安装包（不再一律下 arm64 包）。
                     "getSupportedAbis" -> result.success(Build.SUPPORTED_ABIS.toList())
                     "startForeground" -> {
-                        val intent = Intent(this, TrackService::class.java)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            startForegroundService(intent)
-                        } else {
-                            startService(intent)
+                        // Android 12+ 后台启动前台服务会抛
+                        // ForegroundServiceStartNotAllowedException；Android 14+
+                        // 缺 FOREGROUND_SERVICE_LOCATION / 定位权限会抛
+                        // SecurityException。两者都会直接 FATAL 掉主线程，
+                        // 必须在这里兜住并回传给 Dart 走降级提示。
+                        try {
+                            val intent = Intent(this, TrackService::class.java)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                startForegroundService(intent)
+                            } else {
+                                startService(intent)
+                            }
+                            result.success(null)
+                        } catch (e: Exception) {
+                            CrashLogger.log("startForegroundService", e)
+                            result.error(
+                                "FOREGROUND_FAILED",
+                                e.message ?: e.javaClass.simpleName,
+                                null
+                            )
                         }
-                        result.success(null)
                     }
                     "stopForeground" -> {
                         stopService(Intent(this, TrackService::class.java))
@@ -1825,6 +1925,17 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             tts = null
             try { customAudioPlayer?.release() } catch (_: Exception) {}
             customAudioPlayer = null
+            // Flutter 引擎销毁后这些 sink 全部失效；必须置空，
+            // 否则残留的 BLE/OBD/定位回调会往死引擎里送事件。
+            locSink = null
+            senSink = null
+            bleDevSink = null
+            bleDataSink = null
+            btGpsDevSink = null
+            obdSink = null
+            pendingReadResult = null
+            pendingReadUuid = null
+            pendingPermResults.clear()
             if (!TrackService.recordingActive) {
                 try { stopService(Intent(this, TrackService::class.java)) } catch (_: Exception) {}
             }

@@ -27,7 +27,6 @@ void main() {
     VoidCallback? onVersionTap,
     VoidCallback? onCheck,
     VoidCallback? onUpdateAll,
-    VoidCallback? onImport,
   }) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -45,7 +44,6 @@ void main() {
               onVersionTap: onVersionTap ?? () {},
               onCheck: onCheck ?? () {},
               onUpdateAll: onUpdateAll ?? () {},
-              onImport: onImport ?? () {},
             ),
           ),
         ),
@@ -102,8 +100,7 @@ void main() {
       find.widgetWithText(FilledButton, '更新赛道库'),
     );
     expect(updateButton.onPressed, isNull);
-    // 从行程导入原样保留。
-    expect(find.text('从行程导入'), findsOneWidget);
+    // v1.6.0：从行程导入按钮已从版本卡片移到“我的赛道”标题行，这里不再断言。
   });
 
   testWidgets('已是最新：绿点文案 + 更新按钮仍置灰', (tester) async {

@@ -2,15 +2,16 @@
 <resources>
     <!-- API 31+ SplashScreen API。
          冷启动无进程时系统先画本主题，再交 Flutter 首帧。
-         根因（闪一下默认/白底图标）：① 系统图标底色未设时部分 ROM
-         用浅色圆底；② Flutter 启动页图标从透明度 0 淡入，首帧空白
-         与系统画面切换像“闪一下”。
-         修法：背景/图标圆底一律纯黑；动画图标固定方向盘；Flutter
-         SplashPage 首帧即满不透明图标（见 splash_page.dart）。 -->
+         v1.6.0 闪图标修复：系统启动图标改为全透明（splash_transparent），
+         背景与图标圆底保持纯黑。原因见 drawable/splash_transparent.xml：
+         系统那张图标（固定方向盘、尺寸更大）与 Flutter 启动页图标（按用户
+         选择、112dp）会接连出现两次，用户看到的就是“点开 App 闪过一帧图标”。
+         现在系统只留纯黑底，图标统一由 SplashPage 首帧满不透明绘制一次。 -->
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowSplashScreenBackground">@android:color/black</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_steering</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_transparent</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@android:color/black</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
     </style>
 </resources>

@@ -32,13 +32,21 @@ void main() {
     expect(manifest, isNot(contains('ic_launcher_red')));
   });
 
-  test('冷启动系统启动画面图标是方向盘，不是红赛车', () {
+  test('冷启动系统启动画面不再画图标（v1.6.0）', () {
+    // v1.6.0：系统 SplashScreen 的图标改为全透明 drawable，只留纯黑底。
+    // 原因：系统图标 + Flutter 启动页图标会连续出现两次，看起来就是
+    // “进 APP 闪过一帧图标”。启动图标现在只由 splash_page.dart 画一次。
     final styles = File('android/app/src/main/res/values-v31/styles.xml')
         .readAsStringSync();
     expect(
       styles,
       contains(
-          '<item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_steering</item>'),
+          '<item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_transparent</item>'),
+    );
+    expect(styles, contains('<item name="android:windowSplashScreenAnimationDuration">0</item>'));
+    expect(
+      File('android/app/src/main/res/drawable/splash_transparent.xml').existsSync(),
+      isTrue,
     );
     expect(styles, isNot(contains('ic_launcher_red')));
     expect(styles,

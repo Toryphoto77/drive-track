@@ -14,12 +14,16 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'amap_service.dart';
 import 'app_bar_style.dart';
 import 'app_notice.dart';
+import 'dt_page_route.dart';
 import 'models.dart';
 import 'native.dart';
+import 'nearby_tracks_page.dart';
 import 'store.dart';
 import 'track_library.dart';
+import 'track_timing.dart';
 import 'track_package_editor.dart';
 
 /// 策展模式 gate（纯逻辑，可单测）：2 秒内连点版本文本 7 次解锁。
@@ -462,8 +466,11 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                   onVersionTap: _onVersionTap,
                   onCheck: _checkUpdates,
                   onUpdateAll: _applyAll,
-                  onImport: _importFromTrip,
                 ),
+                const SizedBox(height: 16),
+                // v1.6.0：附近的赛道入口——用当前位置把赛道库按距离排序，
+                // 地图上标出来；不依赖网络也能用（本地库 + 直线距离）。
+                _nearbyEntry(snap),
                 if (check != null && check.updates.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   const Text(
@@ -559,13 +566,29 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                       ),
                   ],
                 const SizedBox(height: 20),
-                const Text(
-                  '我的赛道',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                // v1.6.0：「从行程导入」从版本卡底部移到「我的赛道」标题行右侧：
+                // 它是往“我的赛道”里加东西的动作，放在标题行更符合预期。
+                Row(
+                  children: [
+                    const Text(
+                      '我的赛道',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const Spacer(),
+                    OutlinedButton.icon(
+                      onPressed: _importFromTrip,
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      icon: const Icon(Icons.download_outlined, size: 16),
+                      label: const Text('从行程导入'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 if (snap.userTracks.isEmpty)
@@ -620,6 +643,13 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                     ),
                   ),
                 ],
+                // v1.6.0：OSM 署名固定放页尾（原来贴在“从行程导入”按钮下面，
+                // 用户反馈那行小字碍事）。ODbL 署名要求仍然满足。
+                const SizedBox(height: 24),
+                Text(
+                  '$kOsmAttribution；OSM 数据遵循 ODbL。',
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                ),
               ],
             ),
     );
@@ -690,6 +720,63 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     );
   }
 
+  /// v1.6.0：附近的赛道入口卡片。点开按当前位置排序并尝试在地图上标出。
+  Widget _nearbyEntry(LibrarySnapshot snap) {
+    final total = snap.official.length + snap.userTracks.length;
+    return Material(
+      color: const Color(0xFF1E1E1E),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.of(context).push(
+          DtPageRoute(
+            builder: (_) => NearbyTracksPage(
+              official: snap.official,
+              userTracks: snap.userTracks,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.my_location,
+                color: Color(0xFFE10600),
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '附近的赛道',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '按当前位置排序 · 地图查看卡丁车 / 摩托 / 汽车赛道（共 $total 条）',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white38),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _packageRow(
     TrackPackage p, {
     PackageUpdate? update,
@@ -730,6 +817,10 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
               ].join(' · '),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
+            const SizedBox(height: 3),
+            // v1.6.0：具体地点。同地区赛道很多，只显示地区分不清是哪一个；
+            // 这里补上区县/街道短地名（高德逆地理，失败回落经纬度）。
+            _TrackPlaceLine(track: p),
             if (update != null)
               Text(
                 update.isNew
@@ -830,7 +921,6 @@ class LibraryVersionCard extends StatelessWidget {
   final VoidCallback onVersionTap;
   final VoidCallback onCheck;
   final VoidCallback onUpdateAll;
-  final VoidCallback onImport;
 
   const LibraryVersionCard({
     super.key,
@@ -841,7 +931,6 @@ class LibraryVersionCard extends StatelessWidget {
     required this.onVersionTap,
     required this.onCheck,
     required this.onUpdateAll,
-    required this.onImport,
   });
 
   /// 状态行文案（三态：未检查 / 已是最新 / 有更新；检查失败时显示
@@ -965,14 +1054,94 @@ class LibraryVersionCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          OutlinedButton(onPressed: onImport, child: const Text('从行程导入')),
-          const SizedBox(height: 8),
-          Text(
-            '$kOsmAttribution；OSM 数据遵循 ODbL，署名见本页。',
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
+          // v1.6.0：“从行程导入”整颗按钮搬去「我的赛道」标题行右侧
+          // （见下方 build 里的 myTracksHeader），这张版本卡只留版本相关操作；
+          // 原来按钮下面那行 OSM 小字也一并移出，改成页面最底部的署名行，
+          // 不再挤在按钮下面。
         ],
       ),
+    );
+  }
+}
+
+/// v1.6.0：赛道行里的“具体地点”。
+///
+/// 优先显示高德逆地理得到的短地名（区县 + 乡镇/街道），拿不到就回落成
+/// 起终点经纬度；两者都没有时显示“地点待核”。同一地区的多条赛道靠这一行
+/// 区分。逆地理结果按坐标千分位缓存，滚动重建不会重复请求；失败的坐标
+/// 只尝试一次，避免无网络时反复打请求。
+class _TrackPlaceLine extends StatefulWidget {
+  const _TrackPlaceLine({required this.track});
+
+  final TrackPackage track;
+
+  static final Map<String, String> _cache = <String, String>{};
+  static final Set<String> _tried = <String>{};
+
+  @override
+  State<_TrackPlaceLine> createState() => _TrackPlaceLineState();
+}
+
+class _TrackPlaceLineState extends State<_TrackPlaceLine> {
+  String? _place;
+
+  GeoPoint? get _anchor {
+    final t = widget.track;
+    if (t.start != null) return t.start;
+    if (t.finish != null) return t.finish;
+    if (t.centerline.isNotEmpty) return t.centerline.first;
+    return null;
+  }
+
+  static String _keyFor(GeoPoint g) =>
+      '${g.lat.toStringAsFixed(3)},${g.lon.toStringAsFixed(3)}';
+
+  @override
+  void initState() {
+    super.initState();
+    final g = _anchor;
+    if (g == null) return;
+    final key = _keyFor(g);
+    final cached = _TrackPlaceLine._cache[key];
+    if (cached != null) {
+      // 首帧之前直接赋值，不走 setState。
+      _place = cached;
+      return;
+    }
+    _fetch(g, key);
+  }
+
+  Future<void> _fetch(GeoPoint g, String key) async {
+    if (!_TrackPlaceLine._tried.add(key)) return;
+    final r = await reverseGeocode(g.lat, g.lon);
+    if (!mounted || r == null) return;
+    _TrackPlaceLine._cache[key] = r.shortName;
+    setState(() => _place = r.shortName);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    final g = _anchor;
+    final parts = <String>[
+      if (t.region.isNotEmpty) t.region,
+      if (_place != null && _place!.isNotEmpty) _place!,
+      if (g != null)
+        '${g.lat.toStringAsFixed(4)}, ${g.lon.toStringAsFixed(4)}',
+    ];
+    return Row(
+      children: [
+        const Icon(Icons.place_outlined, size: 13, color: Colors.white38),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            parts.isEmpty ? '地点待核' : '地点：${parts.join(' · ')}',
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

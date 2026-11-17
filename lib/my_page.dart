@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import 'app_bar_style.dart';
 
 import 'app_locale.dart';
@@ -15,8 +16,10 @@ import 'home_layout.dart';
 /// 规则：
 /// - 数据全部由构造函数传入，不引用 main.dart 的任何类；
 /// - 社交数字只显示传入的真实本机数字：为 0 时显示“暂无”，不编数；
-/// - 全部卡片化：统一圆角 16、统一间距 12、按钮统一药丸、横条统一
-///   细圆角进度条（高 4）配主题色，不出现参差不齐的裸 Text 行；
+/// - 分组卡：资料 / 数据各一张大卡；行程、动态、收藏、成就按分区
+///   合并进一张列表卡，行间用细分隔线，不再每行一张小卡片堆叠；
+///   统一圆角 26、卡片间距 12、按钮统一药丸、横条统一细圆角进度条
+///   （高 4）配主题色，不出现参差不齐的裸 Text 行；
 /// - 本文件只提供 widget，不做任何存储、网络与删除旧文案的操作；
 ///   替换旧 _buildMyPage 与删除旧提示文案由总协调负责。
 ///
@@ -28,11 +31,11 @@ enum MyPageSection { trips, posts, favorites, achievements }
 
 extension MyPageSectionLabel on MyPageSection {
   String get label => switch (this) {
-        MyPageSection.trips => '行程',
-        MyPageSection.posts => '动态',
-        MyPageSection.favorites => '收藏',
-        MyPageSection.achievements => '成就',
-      };
+    MyPageSection.trips => '行程',
+    MyPageSection.posts => '动态',
+    MyPageSection.favorites => '收藏',
+    MyPageSection.achievements => '成就',
+  };
 }
 
 /// 一条统计：[progress] 为 0..1 的真实进度（例如里程相对目标），
@@ -72,7 +75,11 @@ class MyAchievement {
   final String title;
   final bool achieved;
   final double? progress;
-  const MyAchievement({required this.title, required this.achieved, this.progress});
+  const MyAchievement({
+    required this.title,
+    required this.achieved,
+    this.progress,
+  });
 }
 
 /// 编辑页回传的结果：用户名 / 简介 / 头像本机路径 / 扩展资料，由
@@ -107,6 +114,7 @@ class MyPage extends StatefulWidget {
   final String username;
   final String userId;
   final String bio;
+
   /// v1.0.7：邮箱（本机存储，见 ProfileEditResult 说明）。
   final String email;
 
@@ -203,6 +211,29 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
+  /// 列表分组卡：一张卡装多行，行间用细线分隔，替代每行一张小卡。
+  Widget _groupCard(List<Widget> children) {
+    return _card(
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: CardStyle.cardBorderRadius,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  /// 组内分隔线：左侧缩进 14，右侧贯通，和行内容对齐。
+  Widget _dividerLine() {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.only(left: 14),
+      color: Colors.white.withValues(alpha: 0.06),
+    );
+  }
+
   /// 细圆角进度条：高 4，底色白 12%，前景主题色，进度 clamp 到 0..1。
   Widget _thinBar(double progress) {
     final p = progress.clamp(0.0, 1.0);
@@ -225,7 +256,11 @@ class _MyPageState extends State<MyPage> {
   /// 药丸按钮：选中态红底黑字，未选中态黑底白字 + 白 12% 边框。
   /// 注意：本方法不包 Expanded（避免放进 SizedBox 等非 Flex 父级时
   /// 报错）；需要均分宽度的场景由调用方在外层包 Expanded。
-  Widget _pillButton({required String label, required bool selected, required VoidCallback? onTap}) {
+  Widget _pillButton({
+    required String label,
+    required bool selected,
+    required VoidCallback? onTap,
+  }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -235,24 +270,28 @@ class _MyPageState extends State<MyPage> {
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           alignment: Alignment.center,
-            decoration: BoxDecoration(
-              // v1.0.3：选中态用当前主题色（默认法拉利红），不再写死截图蓝；
-              // 未选中边框用统一细亮边框。
-              color: selected ? CardStyle.accent(context) : Colors.black54,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: selected ? CardStyle.accent(context) : CardStyle.borderColor),
+          decoration: BoxDecoration(
+            // v1.0.3：选中态用当前主题色（默认法拉利红），不再写死截图蓝；
+            // 未选中边框用统一细亮边框。
+            color: selected ? CardStyle.accent(context) : Colors.black54,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected
+                  ? CardStyle.accent(context)
+                  : CardStyle.borderColor,
             ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.white,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                fontSize: 13,
-              ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: selected ? Colors.white : Colors.white,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 13,
             ),
           ),
         ),
+      ),
     );
   }
 
@@ -263,10 +302,9 @@ class _MyPageState extends State<MyPage> {
     return Container(
       width: 64,
       height: 64,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: widget.accentColor, width: 2),
-      ),
+      // v1.7.0：去掉主题色描边——头像本身已是圆形照片/图标，外加一圈
+      // 红框在深色背景上显得突兀；未上传头像时靠黑色底区分边界。
+      decoration: const BoxDecoration(shape: BoxShape.circle),
       child: ClipOval(
         child: hasFile
             ? Image.file(file, fit: BoxFit.cover)
@@ -284,61 +322,95 @@ class _MyPageState extends State<MyPage> {
   /// 放旁边：36 圆角图标钮，与“编辑”并排在头行右侧。
   Widget _profileCard() {
     return _card(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          _avatar(),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.username, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              Text('ID · ${widget.userId}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _avatar(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.username,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'ID · ${widget.userId}',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (widget.onShareInvite != null) ...[
+                _iconButton(
+                  icon: Icons.share,
+                  onTap: widget.onShareInvite,
+                  tooltip: '分享',
+                ),
+                const SizedBox(width: 8),
+              ],
+              // v1.5.1：点“编辑”推全页编辑页，不再在卡片内展开编辑器。
+              _pillButton(
+                label: S.of(context).t('编辑', 'Edit'),
+                selected: false,
+                onTap: widget.onEditProfile,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          if (widget.onShareInvite != null) ...[
-            _iconButton(icon: Icons.share, onTap: widget.onShareInvite, tooltip: '分享'),
-            const SizedBox(width: 8),
-          ],
-          // v1.5.1：点“编辑”推全页编辑页，不再在卡片内展开编辑器。
-          _pillButton(
-            label: S.of(context).t('编辑', 'Edit'),
-            selected: false,
-            onTap: widget.onEditProfile,
-          ),
-        ]),
-        const SizedBox(height: 12),
-        Text(
-          widget.bio.isEmpty ? S.of(context).t('暂无简介，点“编辑”添加', 'No bio yet. Tap Edit.') : widget.bio,
-          style: TextStyle(color: widget.bio.isEmpty ? Colors.white38 : Colors.white70, fontSize: 13),
-        ),
-        if (widget.email.isNotEmpty) ...[
-          const SizedBox(height: 2),
+          const SizedBox(height: 12),
           Text(
-            widget.email,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            widget.bio.isEmpty
+                ? S.of(context).t('暂无简介，点“编辑”添加', 'No bio yet. Tap Edit.')
+                : widget.bio,
+            style: TextStyle(
+              color: widget.bio.isEmpty ? Colors.white38 : Colors.white70,
+              fontSize: 13,
+            ),
           ),
+          if (widget.email.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              widget.email,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ],
+          // v1.5.1：关注/粉丝/获赞并进资料卡（原独立社交卡已删）；
+          // 数字为调用方传入的真实本机数字，为 0 时显示“暂无”，不编数。
+          const SizedBox(height: 14),
+          Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _socialCell(S.of(context).t('关注', 'Following'), widget.following),
+              _socialCell(S.of(context).t('粉丝', 'Followers'), widget.followers),
+              _socialCell(S.of(context).t('获赞', 'Likes'), widget.likes),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          _cloudFooter(),
         ],
-        // v1.5.1：关注/粉丝/获赞并进资料卡（原独立社交卡已删）；
-        // 数字为调用方传入的真实本机数字，为 0 时显示“暂无”，不编数。
-        const SizedBox(height: 14),
-        Container(
-          height: 1,
-          color: Colors.white.withValues(alpha: 0.08),
-        ),
-        const SizedBox(height: 10),
-        Row(children: [
-          _socialCell(S.of(context).t('关注', 'Following'), widget.following),
-          _socialCell(S.of(context).t('粉丝', 'Followers'), widget.followers),
-          _socialCell(S.of(context).t('获赞', 'Likes'), widget.likes),
-        ]),
-      ]),
+      ),
     );
   }
 
   /// 小圆形图标钮（分享等）：36 高、黑底 + 细亮边框，与药丸按钮同风格。
-  Widget _iconButton(
-      {required IconData icon, required VoidCallback? onTap, String? tooltip}) {
+  Widget _iconButton({
+    required IconData icon,
+    required VoidCallback? onTap,
+    String? tooltip,
+  }) {
     final btn = Material(
       color: Colors.transparent,
       child: InkWell(
@@ -363,99 +435,150 @@ class _MyPageState extends State<MyPage> {
 
   /// 资料卡内的社交数字格：数字在上、标签在下，居中。
   Widget _socialCell(String label, int n) => Expanded(
-        child: Column(children: [
-          Text(n > 0 ? '$n' : S.of(context).t('暂无', 'None'),
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-        ]),
-      );
+    child: Column(
+      children: [
+        Text(
+          n > 0 ? '$n' : S.of(context).t('暂无', 'None'),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+      ],
+    ),
+  );
 
+  /// 数据卡：累计统计 + 本月汇总合并进同一张大卡，中间细线分隔；
+  /// 两张表都是调用方传入的真实数据，不在这里计算或补数。
   Widget _statsCard() {
-    if (widget.stats.isEmpty) return const SizedBox.shrink();
+    final hasMonthly = widget.monthlyStats.isNotEmpty;
+    if (widget.stats.isEmpty && !hasMonthly) return const SizedBox.shrink();
     return _card(
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var i = 0; i < widget.stats.length; i++) ...[
-            if (i > 0) const SizedBox(width: 12),
-            Expanded(
-              child: Column(children: [
-                // v0.1.9 总里程不换行：数字与单位同一行——maxLines 1 +
-                // softWrap false 禁止在空格处折行，FittedBox scaleDown
-                // 在栏宽内自适应缩小字号，不截断、不把单位挤到下一行。
-                // 千分位分组由调用方 formatDistanceKm 负责（如 123,456.7 km）。
-                SizedBox(
-                  width: double.infinity,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(widget.stats[i].value,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        softWrap: false,
-                        textAlign: TextAlign.center),
+          if (widget.stats.isNotEmpty)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < widget.stats.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        // v0.1.9 总里程不换行：数字与单位同一行——maxLines 1
+                        // + softWrap false 禁止在空格处折行，FittedBox
+                        // scaleDown 在栏宽内自适应缩小字号，不截断、不把
+                        // 单位挤到下一行。千分位分组由调用方负责。
+                        SizedBox(
+                          width: double.infinity,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              widget.stats[i].value,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              softWrap: false,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.stats[i].label,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (widget.stats[i].progress != null) ...[
+                          const SizedBox(height: 8),
+                          _thinBar(widget.stats[i].progress!),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(widget.stats[i].label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                if (widget.stats[i].progress != null) ...[
-                  const SizedBox(height: 8),
-                  _thinBar(widget.stats[i].progress!),
                 ],
-              ]),
+              ],
             ),
+          if (hasMonthly) ...[
+            if (widget.stats.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                height: 1,
+                color: Colors.white.withValues(alpha: 0.06),
+              ),
+              const SizedBox(height: 10),
+            ],
+            Text(
+              S.of(context).t('本月汇总', 'This month'),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Colors.white70,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < widget.monthlyStats.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              widget.monthlyStats[i].value,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              softWrap: false,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.monthlyStats[i].label,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (widget.monthlyNote.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                widget.monthlyNote,
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
           ],
         ],
       ),
     );
   }
 
-  /// v0.1.7 当月汇总卡：复用统计行的布局，标题写明“本月”，
-  /// 下方口径说明由调用方传入（总里程含全部模式、油耗/花费
-  /// 仅汽车/摩托、未填写时显示“未填写”）。
-  Widget _monthlyStatsCard() {
-    return _card(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(S.of(context).t('本月汇总', 'This month'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < widget.monthlyStats.length; i++) ...[
-              if (i > 0) const SizedBox(width: 12),
-              Expanded(
-                child: Column(children: [
-                  // v0.1.9：与统计卡同一不换行处理（见 _statsCard 注释）。
-                  SizedBox(
-                    width: double.infinity,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(widget.monthlyStats[i].value,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          softWrap: false,
-                          textAlign: TextAlign.center),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(widget.monthlyStats[i].label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                ]),
-              ),
-            ],
-          ],
-        ),
-        if (widget.monthlyNote.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(widget.monthlyNote, style: const TextStyle(color: Colors.white38, fontSize: 11)),
-        ],
-      ]),
-    );
-  }
-
   // 云端一期：个人页云端入口（账号状态 + 同步状态，点进云端页）。
-  // 本卡只读 CloudService 的同步状态、不发任何网络请求；
-  // 未配置时只显示“云端未配置”，点进去看说明。
-  Widget _cloudCard() {
+  // 收进资料卡底部做一行状态 + chevron，不再单占一张大卡。
+  // 只读 CloudService 的同步状态、不发任何网络请求。
+  Widget _cloudFooter() {
     final svc = CloudService.instance;
     return FutureBuilder<void>(
       future: svc.initialized,
@@ -463,42 +586,54 @@ class _MyPageState extends State<MyPage> {
         final subtitle = !svc.isConfigured
             ? '云端未配置'
             : svc.status == CloudStatus.uninitialized
-                ? '同步中…'
-                : svc.isAnonymous
-                    ? '未登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条'
-                    : '已登录 · 待上传 ${svc.pendingCount} 条 · 已上传 ${svc.doneCount} 条 · 失败 ${svc.failedCount} 条';
-        return _card(
-          child: InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CloudPage()),
-              );
-            },
-            child: Row(children: [
-              const Icon(Icons.cloud_outlined, size: 22),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('云端',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 12)),
-                    const SizedBox(height: 2),
-                    const Text('昵称、简介、头像会同步到云端公开资料，他人打开你的公开资料页可见；邮箱只存本机。',
-                        style: TextStyle(
-                            color: Colors.white38, fontSize: 11)),
-                  ],
+            ? '同步中…'
+            : svc.isAnonymous
+            ? '未登录 · 待上传 ${svc.pendingCount} 条 · 失败 ${svc.failedCount} 条'
+            : '已登录 · 待上传 ${svc.pendingCount} 条 · 失败 ${svc.failedCount} 条';
+        return InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CloudPage()),
+            );
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.cloud_outlined,
+                  size: 18,
+                  color: Colors.white70,
                 ),
-              ),
-              const Icon(Icons.chevron_right,
-                  size: 20, color: Colors.white54),
-            ]),
+                const SizedBox(width: 8),
+                const Text(
+                  '云端',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: Colors.white38,
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -513,15 +648,19 @@ class _MyPageState extends State<MyPage> {
   ///   双重居中。
   Widget _sectionBar() {
     final s = S.of(context);
-    final achieved =
-        widget.achievements.where((a) => a.achieved).length;
+    final achieved = widget.achievements.where((a) => a.achieved).length;
     (String, String) parts(MyPageSection section) => switch (section) {
-          MyPageSection.trips => (s.t('行程', 'Trips'), '${widget.trips.length}'),
-          MyPageSection.posts => (s.t('动态', 'Feed'), '${widget.posts.length}'),
-          MyPageSection.favorites => (s.t('收藏', 'Saved'), '${widget.favorites.length}'),
-          MyPageSection.achievements =>
-            (s.t('成就', 'Badges'), '$achieved/${widget.achievements.length}'),
-        };
+      MyPageSection.trips => (s.t('行程', 'Trips'), '${widget.trips.length}'),
+      MyPageSection.posts => (s.t('动态', 'Feed'), '${widget.posts.length}'),
+      MyPageSection.favorites => (
+        s.t('收藏', 'Saved'),
+        '${widget.favorites.length}',
+      ),
+      MyPageSection.achievements => (
+        s.t('成就', 'Badges'),
+        '$achieved/${widget.achievements.length}',
+      ),
+    };
     return Container(
       height: 40,
       decoration: BoxDecoration(
@@ -531,17 +670,19 @@ class _MyPageState extends State<MyPage> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(999),
-        child: Row(children: [
-          for (final section in MyPageSection.values)
-            Expanded(
-              child: _sectionSegment(
-                label: parts(section).$1,
-                count: parts(section).$2,
-                selected: _section == section,
-                onTap: () => _select(section),
+        child: Row(
+          children: [
+            for (final section in MyPageSection.values)
+              Expanded(
+                child: _sectionSegment(
+                  label: parts(section).$1,
+                  count: parts(section).$2,
+                  selected: _section == section,
+                  onTap: () => _select(section),
+                ),
               ),
-            ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -575,8 +716,7 @@ class _MyPageState extends State<MyPage> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight:
-                        selected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                     fontSize: 13,
                   ),
                 ),
@@ -586,8 +726,7 @@ class _MyPageState extends State<MyPage> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight:
-                        selected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                     fontSize: 13,
                   ),
                 ),
@@ -601,94 +740,181 @@ class _MyPageState extends State<MyPage> {
 
   Widget _tripRow(MyTripItem item, {bool showPublicToggle = false}) {
     final s = S.of(context);
-    return _card(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(children: [
-        Expanded(
-          child: InkWell(
-            // 公开管理列表不是第二套行程浏览器，行本身不进详情。
-            onTap: showPublicToggle ? null : item.onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 2),
-                Text(item.subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              ]),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              // 公开管理列表不是第二套行程浏览器，行本身不进详情。
+              onTap: showPublicToggle ? null : item.onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.subtitle,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-        if (!showPublicToggle) ...[
-          const SizedBox(width: 8),
-          Semantics(
-            label: s.t('收藏', 'Save'),
-            child: IconButton(
-              icon: Icon(item.isFavorite ? Icons.star : Icons.star_border,
-                  color: item.isFavorite ? widget.accentColor : Colors.white54),
-              onPressed: item.onToggleFavorite,
+          if (!showPublicToggle) ...[
+            const SizedBox(width: 8),
+            Semantics(
+              label: s.t('收藏', 'Save'),
+              child: IconButton(
+                icon: Icon(
+                  item.isFavorite ? Icons.star : Icons.star_border,
+                  color: item.isFavorite ? widget.accentColor : Colors.white54,
+                ),
+                onPressed: item.onToggleFavorite,
+              ),
             ),
-          ),
-          const Icon(Icons.chevron_right, color: Colors.white38),
-        ] else
-          _pillButton(
-            label: item.isPublic ? s.t('公开', 'Public') : s.t('仅自己', 'Private'),
-            selected: item.isPublic,
-            onTap: item.onTogglePublic,
-          ),
-      ]),
+            const Icon(Icons.chevron_right, color: Colors.white38),
+          ] else
+            _pillButton(
+              label: item.isPublic
+                  ? s.t('公开', 'Public')
+                  : s.t('仅自己', 'Private'),
+              selected: item.isPublic,
+              onTap: item.onTogglePublic,
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _openTripsCard() {
+  Widget _openTripsRow() {
     final s = S.of(context);
-    return DriveTrackCard(
+    return InkWell(
       onTap: widget.onOpenTripsTab,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(children: [
-        Icon(Icons.list_alt, color: CardStyle.accent(context)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(s.t('打开行程记录', 'Open trips'),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 2),
-            Text(s.t('完整行程在「记录」页', 'Full list is on the Trips tab'),
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          ]),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              Icons.list_alt,
+              size: 20,
+              color: CardStyle.accent(context),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.t('打开行程记录', 'Open trips'),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    s.t('完整行程在「记录」页', 'Full list is on the Trips tab'),
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18, color: Colors.white38),
+          ],
         ),
-        const Icon(Icons.chevron_right, color: Colors.white38),
-      ]),
+      ),
+    );
+  }
+
+  /// 组内小标题：公开范围说明，替代原来卡外的裸标题 + 提示两行。
+  Widget _visibilityHeader() {
+    final s = S.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            s.t('公开范围', 'Visibility'),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            s.t(
+              '只切换是否公开。完整行程在「记录」页。',
+              'Publish toggles only. Full trips are on the Trips tab.',
+            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _achievementRow(MyAchievement a) {
-    return _card(
-      padding: const EdgeInsets.all(12),
-      child: Row(children: [
-        Icon(a.achieved ? Icons.emoji_events : Icons.emoji_events_outlined,
-            color: a.achieved ? widget.accentColor : Colors.white24),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(a.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 2),
-            Text(a.achieved ? S.of(context).t('已达成', 'Done') : S.of(context).t('未达成', 'Not yet'),
-                style: TextStyle(color: a.achieved ? widget.accentColor : Colors.white38, fontSize: 12)),
-            if (a.progress != null) ...[
-              const SizedBox(height: 8),
-              _thinBar(a.progress!),
-            ],
-          ]),
-        ),
-      ]),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          Icon(
+            a.achieved ? Icons.emoji_events : Icons.emoji_events_outlined,
+            color: a.achieved ? widget.accentColor : Colors.white24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  a.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  a.achieved
+                      ? S.of(context).t('已达成', 'Done')
+                      : S.of(context).t('未达成', 'Not yet'),
+                  style: TextStyle(
+                    color: a.achieved ? widget.accentColor : Colors.white38,
+                    fontSize: 12,
+                  ),
+                ),
+                if (a.progress != null) ...[
+                  const SizedBox(height: 8),
+                  _thinBar(a.progress!),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _emptyHud({
-    required IconData icon,
-    required String status,
-  }) {
+  Widget _emptyHud({required IconData icon, required String status}) {
     final s = S.of(context);
     return EmptyHud(
       icon: icon,
@@ -702,72 +928,89 @@ class _MyPageState extends State<MyPage> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     // 底栏药丸盖住滚动末尾：留出药丸高 + 距底 12 + 系统底 inset + 间隙。
-    final bottomPad = kPillNavHeight + 12 + MediaQuery.paddingOf(context).bottom + 16;
+    final bottomPad =
+        kPillNavHeight + 12 + MediaQuery.paddingOf(context).bottom + 16;
     return SingleChildScrollView(
       // v1.4.2：顶栏改半透 + 主框架 extendBodyBehindAppBar，顶部再加
       // 顶栏高度，首张卡片静止时才不会藏进顶栏后。
-      padding: withAppBarTopInset(context, EdgeInsets.fromLTRB(16, 16, 16, bottomPad)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        _profileCard(),
-        const SizedBox(height: 12),
-        _statsCard(),
-        if (widget.monthlyStats.isNotEmpty) ...[
+      padding: withAppBarTopInset(
+        context,
+        EdgeInsets.fromLTRB(16, 16, 16, bottomPad),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _profileCard(),
           const SizedBox(height: 12),
-          _monthlyStatsCard(),
-        ],
-        const SizedBox(height: 12),
-        _cloudCard(),
-        const SizedBox(height: 12),
-        _sectionBar(),
-        const SizedBox(height: 12),
-        if (_section == MyPageSection.trips) ...[
-          _openTripsCard(),
-          const SizedBox(height: 8),
-          Text(s.t('公开范围', 'Visibility'),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          const SizedBox(height: 2),
-          Text(
-            s.t('只切换是否公开。完整行程在「记录」页。',
-                'Publish toggles only. Full trips are on the Trips tab.'),
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          if (widget.trips.isEmpty)
-            _emptyHud(icon: Icons.route, status: s.t('暂无行程', 'No trips yet'))
-          else
-            for (final t in widget.trips) ...[
-              _tripRow(t, showPublicToggle: true),
+          _statsCard(),
+          if (widget.stats.isNotEmpty || widget.monthlyStats.isNotEmpty)
+            const SizedBox(height: 12),
+          _sectionBar(),
+          const SizedBox(height: 12),
+          if (_section == MyPageSection.trips) ...[
+            if (widget.trips.isEmpty) ...[
+              _groupCard([
+                _openTripsRow(),
+                _dividerLine(),
+                _visibilityHeader(),
+              ]),
               const SizedBox(height: 8),
-            ],
+              _emptyHud(icon: Icons.route, status: s.t('暂无行程', 'No trips yet')),
+            ] else
+              _groupCard([
+                _openTripsRow(),
+                _dividerLine(),
+                _visibilityHeader(),
+                for (final t in widget.trips) ...[
+                  _dividerLine(),
+                  _tripRow(t, showPublicToggle: true),
+                ],
+              ]),
+          ],
+          if (_section == MyPageSection.posts) ...[
+            if (widget.posts.isEmpty)
+              _emptyHud(
+                icon: Icons.dynamic_feed,
+                status: s.t('暂无动态', 'No posts yet'),
+              )
+            else
+              _groupCard([
+                for (var i = 0; i < widget.posts.length; i++) ...[
+                  if (i > 0) _dividerLine(),
+                  _tripRow(widget.posts[i]),
+                ],
+              ]),
+          ],
+          if (_section == MyPageSection.favorites) ...[
+            if (widget.favorites.isEmpty)
+              _emptyHud(
+                icon: Icons.star_border,
+                status: s.t('暂无收藏', 'No saved trips'),
+              )
+            else
+              _groupCard([
+                for (var i = 0; i < widget.favorites.length; i++) ...[
+                  if (i > 0) _dividerLine(),
+                  _tripRow(widget.favorites[i]),
+                ],
+              ]),
+          ],
+          if (_section == MyPageSection.achievements) ...[
+            if (widget.achievements.isEmpty)
+              _emptyHud(
+                icon: Icons.emoji_events_outlined,
+                status: s.t('暂无成就', 'No badges yet'),
+              )
+            else
+              _groupCard([
+                for (var i = 0; i < widget.achievements.length; i++) ...[
+                  if (i > 0) _dividerLine(),
+                  _achievementRow(widget.achievements[i]),
+                ],
+              ]),
+          ],
         ],
-        if (_section == MyPageSection.posts) ...[
-          if (widget.posts.isEmpty)
-            _emptyHud(icon: Icons.dynamic_feed, status: s.t('暂无动态', 'No posts yet'))
-          else
-            for (final p in widget.posts) ...[
-              _tripRow(p),
-              const SizedBox(height: 8),
-            ],
-        ],
-        if (_section == MyPageSection.favorites) ...[
-          if (widget.favorites.isEmpty)
-            _emptyHud(icon: Icons.star_border, status: s.t('暂无收藏', 'No saved trips'))
-          else
-            for (final f in widget.favorites) ...[
-              _tripRow(f),
-              const SizedBox(height: 8),
-            ],
-        ],
-        if (_section == MyPageSection.achievements) ...[
-          if (widget.achievements.isEmpty)
-            _emptyHud(icon: Icons.emoji_events_outlined, status: s.t('暂无成就', 'No badges yet'))
-          else
-            for (final a in widget.achievements) ...[
-              _achievementRow(a),
-              const SizedBox(height: 8),
-            ],
-        ],
-      ]),
+      ),
     );
   }
 }

@@ -288,8 +288,12 @@ void main() {
       final kt = File(
               'android/app/src/main/kotlin/com/chixi/drive_track/MainActivity.kt')
           .readAsStringSync();
-      expect(kt.contains('START_STICKY'), isTrue);
-      expect(kt.contains('START_NOT_STICKY'), isFalse);
+      // v1.6.1：正常录制时仍然 START_STICKY（系统回收后继续采点）；
+      // 但系统重建时若录制标志已清掉、启动前台服务失败、无定位权限，
+      // 一律 START_NOT_STICKY + stopSelf，避免「通知栏记录中却没数据」。
+      expect(kt.contains('return START_STICKY'), isTrue);
+      expect(kt.contains('return START_NOT_STICKY'), isTrue);
+      expect(kt.contains('isRecordingFlag()'), isTrue);
       expect(kt.contains('recordingActive'), isTrue);
       expect(kt.contains('recording_native_points.ndjson'), isTrue);
       expect(kt.contains('Force-stop may interrupt'), isTrue);
@@ -297,6 +301,9 @@ void main() {
           kt.contains(
               'if (!TrackService.recordingActive)'),
           isTrue);
+      // 前台服务启动失败必须回传错误给 Dart，而不是 FATAL 掉主线程。
+      expect(kt.contains('FOREGROUND_FAILED'), isTrue);
+      expect(kt.contains('CrashLogger'), isTrue);
     });
 
     test('release pipeline script exists', () {

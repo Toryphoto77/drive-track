@@ -212,6 +212,28 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    /// 页面 extendBodyBehindAppBar=true，ensureVisible/scrollUntilVisible
+    /// 会把目标对齐到视口顶部（被 AppBar 挡住）。滚到目标后再回退一点，
+    /// 保证目标落在 AppBar 之下、可被真实点击。
+    Future<void> scrollUnderAppBarThenTap(
+      WidgetTester tester,
+      Finder finder,
+    ) async {
+      await tester.scrollUntilVisible(
+        finder,
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      final pos = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+      pos.jumpTo((pos.pixels - 120).clamp(0.0, pos.maxScrollExtent));
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('默认卫星地图；测试环境瓦片失败达阈值后回落示意图',
         (tester) async {
       await pumpPage(tester);
@@ -227,11 +249,10 @@ void main() {
 
     testWidgets('切到示意地图后显示归一化走线文案', (tester) async {
       await pumpPage(tester);
-      await tester.ensureVisible(
-          find.byKey(const ValueKey('analysis-map-schematic')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('analysis-map-schematic')));
-      await tester.pumpAndSettle();
+      await scrollUnderAppBarThenTap(
+        tester,
+        find.byKey(const ValueKey('analysis-map-schematic')),
+      );
       expect(
         find.textContaining('走线按速度着色，仅作复盘示意，不用于计时判定'),
         findsOneWidget,
@@ -255,10 +276,10 @@ void main() {
         find.byKey(const ValueKey('analysis-map-satellite')),
         findsOneWidget,
       );
-      await tester.ensureVisible(find.byKey(const ValueKey('hide-track-line')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('hide-track-line')));
-      await tester.pump();
+      await scrollUnderAppBarThenTap(
+        tester,
+        find.byKey(const ValueKey('hide-track-line')),
+      );
       expect(
         find.byKey(const ValueKey('analysis-map-satellite')),
         findsNothing,

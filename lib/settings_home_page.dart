@@ -1,8 +1,121 @@
 import 'package:flutter/material.dart';
+
+import 'account_page.dart';
+import 'ai_settings_page.dart';
 import 'app_bar_style.dart';
 import 'app_locale.dart';
 import 'card_style.dart';
+import 'cloud_service.dart';
+import 'dt_page_route.dart';
 import 'glass_button.dart';
+
+/// 设置页标准分组行：图标底色块 + 标题/副标题 + 右侧 chevron / 自定义控件。
+/// 抽成顶层函数，供本页分组与自包含的账号行复用，避免两套行样式。
+Widget settingsGroupRow(
+  BuildContext context, {
+  required IconData icon,
+  required String title,
+  String? subtitle,
+  VoidCallback? onTap,
+  Widget? trailing,
+}) {
+  final accent = Theme.of(context).colorScheme.primary;
+  final content = Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    child: Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, size: 18, color: accent),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: Colors.white54,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (trailing != null)
+          trailing
+        else if (onTap != null)
+          const Icon(Icons.chevron_right, size: 18, color: Colors.white24),
+      ],
+    ),
+  );
+  if (onTap == null) return content;
+  return InkWell(onTap: onTap, child: content);
+}
+
+/// 账号与云端分组里的账号行（v1.7.0）：自身读取 CloudService 状态，
+/// 从账号管理页返回后刷新副标题。
+class AccountSettingsRow extends StatefulWidget {
+  const AccountSettingsRow({super.key});
+
+  @override
+  State<AccountSettingsRow> createState() => _AccountSettingsRowState();
+}
+
+class _AccountSettingsRowState extends State<AccountSettingsRow> {
+  @override
+  void initState() {
+    super.initState();
+    CloudService.instance.initialized.then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  String _subtitle(S s) {
+    final svc = CloudService.instance;
+    if (!svc.isConfigured) return s.t('云端未配置', 'Cloud not configured');
+    if (svc.isAnonymous) return s.t('未登录', 'Not signed in');
+    final phone = svc.currentUserPhone;
+    if (phone != null && phone.isNotEmpty) return phone;
+    final email = svc.currentUserEmail;
+    if (email != null && email.isNotEmpty) return email;
+    return s.t('已登录', 'Signed in');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return settingsGroupRow(
+      context,
+      icon: Icons.account_circle,
+      title: s.t('账号管理', 'Account'),
+      subtitle: _subtitle(s),
+      onTap: () async {
+        await Navigator.of(context)
+            .push(DtPageRoute(builder: (_) => const AccountPage()));
+        if (mounted) setState(() {});
+      },
+    );
+  }
+}
 
 /// v1.5.8 设置首页重新设计：按「驾驶 / 设备 / 外观 / 记录 / 调试」分组，
 /// 每组一张圆角卡，组内行用细分隔线，不再一长串同权重入口。
@@ -36,6 +149,9 @@ class SettingsHomePage extends StatelessWidget {
   final bool trimPrivacy;
   final ValueChanged<bool> onTrimPrivacyChanged;
 
+  /// v1.6.1：导出崩溃日志（Dart + 原生合并）。null = 不渲染该入口。
+  final VoidCallback? onExportCrashLog;
+
   /// v1.5.8：自用调试模式开关。null = 不渲染调试分组（正式版）。
   final bool debugMode;
   final ValueChanged<bool>? onDebugModeChanged;
@@ -61,6 +177,7 @@ class SettingsHomePage extends StatelessWidget {
     required this.onVideoRecordingChanged,
     required this.trimPrivacy,
     required this.onTrimPrivacyChanged,
+    this.onExportCrashLog,
     this.debugMode = false,
     this.onDebugModeChanged,
   });
@@ -77,55 +194,14 @@ class SettingsHomePage extends StatelessWidget {
       VoidCallback? onTap,
       Widget? trailing,
     }) {
-      final content = Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(icon, size: 18, color: accent),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        color: Colors.white54,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (trailing != null)
-              trailing
-            else if (onTap != null)
-              const Icon(Icons.chevron_right, size: 18, color: Colors.white24),
-          ],
-        ),
+      return settingsGroupRow(
+        context,
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        onTap: onTap,
+        trailing: trailing,
       );
-      if (onTap == null) return content;
-      return InkWell(onTap: onTap, child: content);
     }
 
     Widget switchRow({
@@ -139,10 +215,7 @@ class SettingsHomePage extends StatelessWidget {
         icon: icon,
         title: title,
         subtitle: subtitle,
-        trailing: Switch(
-          value: value,
-          onChanged: onChanged,
-        ),
+        trailing: Switch(value: value, onChanged: onChanged),
       );
     }
 
@@ -250,7 +323,10 @@ class SettingsHomePage extends StatelessWidget {
       row(
         icon: Icons.map,
         title: s.t('地图资源导入', 'Map import'),
-        subtitle: s.t('离线瓦片包、GeoJSON/KML 叠加、底图样式', 'Offline tiles and overlays'),
+        subtitle: s.t(
+          '离线瓦片包、GeoJSON/KML 叠加、底图样式',
+          'Offline tiles and overlays',
+        ),
         onTap: onOpenMapImport,
       ),
     ];
@@ -275,7 +351,10 @@ class SettingsHomePage extends StatelessWidget {
         switchRow(
           icon: Icons.brightness_high,
           title: s.t('记录时保持屏幕常亮', 'Keep screen on while recording'),
-          subtitle: s.t('记录开始自动开启，结束自动关闭', 'On when recording starts, off when it ends'),
+          subtitle: s.t(
+            '记录开始自动开启，结束自动关闭',
+            'On when recording starts, off when it ends',
+          ),
           value: keepScreenOn,
           onChanged: onKeepScreenOnChanged,
         ),
@@ -283,7 +362,10 @@ class SettingsHomePage extends StatelessWidget {
         switchRow(
           icon: Icons.threed_rotation,
           title: s.t('记录地图 3D 透视', '3D recording map'),
-          subtitle: s.t('关闭为 2D 俯视，非真实建筑/路网', 'Off is a flat view, not real buildings'),
+          subtitle: s.t(
+            '关闭为 2D 俯视，非真实建筑/路网',
+            'Off is a flat view, not real buildings',
+          ),
           value: recordingMap3d,
           onChanged: onRecordingMap3dChanged,
         ),
@@ -297,7 +379,10 @@ class SettingsHomePage extends StatelessWidget {
       switchRow(
         icon: Icons.vibration,
         title: s.t('倒计时震动提醒', 'Countdown vibration'),
-        subtitle: s.t('3-2-1 每秒短震，GO 时长震', 'Short buzz each count, long buzz on GO'),
+        subtitle: s.t(
+          '3-2-1 每秒短震，GO 时长震',
+          'Short buzz each count, long buzz on GO',
+        ),
         value: countdownVibration,
         onChanged: onCountdownVibrationChanged,
       ),
@@ -317,44 +402,42 @@ class SettingsHomePage extends StatelessWidget {
         title: Text(s.t('设置', 'Settings')),
       ),
       body: ListView(
-        padding: withAppBarTopInset(
-            context, const EdgeInsets.only(bottom: 28)),
+        padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 28)),
         children: [
           const SizedBox(height: 8),
-          // 通用：语言卡片沿用同款分组标题，宽度与其他分组卡片对齐。
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 20, 22, 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 3,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  s.t('通用', 'General'),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white70,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-              ],
+          // v1.7.0：语言入口改为设置页标准分组行（不再单独一张风格
+          // 不同的卡），登录页仍用独立卡片（LanguageSwitch 默认样式）。
+          group(s.t('通用', 'General'), [
+            const LanguageSwitch(rowStyle: true),
+            const AccountSettingsRow(),
+            settingsGroupRow(
+              context,
+              icon: Icons.auto_awesome,
+              title: s.t('AI 分析', 'AI analysis'),
+              subtitle: s.t(
+                '配置 OpenAI 兼容接口，用于赛后与单圈分析',
+                'Configure an OpenAI-compatible API for race analysis',
+              ),
+              onTap: () => Navigator.of(context)
+                  .push(DtPageRoute(builder: (_) => const AiSettingsPage())),
             ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: LanguageSwitch(),
-          ),
+          ]),
           group(s.t('驾驶与赛道', 'Driving & track'), driveRows),
           group(s.t('设备与地图', 'Devices & maps'), deviceRows),
           group(s.t('外观与语音', 'Look & voice'), lookRows),
           group(s.t('记录偏好', 'Recording'), recordRows),
+          if (onExportCrashLog != null)
+            group(s.t('帮助与诊断', 'Help & diagnostics'), [
+              row(
+                icon: Icons.bug_report,
+                title: s.t('导出崩溃日志', 'Export crash log'),
+                subtitle: s.t(
+                  '闪退/异常记录（仅本机，200KB 上限，可分享给开发者）',
+                  'Local crash log only (200KB cap), share with the developer',
+                ),
+                onTap: onExportCrashLog,
+              ),
+            ]),
           if (onDebugModeChanged != null)
             group(s.t('调试（自用版）', 'Debug (personal build)'), [
               switchRow(

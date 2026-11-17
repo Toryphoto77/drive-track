@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
 import 'app_notice.dart';
+import 'crash_log.dart';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
@@ -99,6 +100,7 @@ import 'about_page.dart';
 import 'app_icon_choice.dart';
 import 'card_style.dart';
 import 'disclaimer_page.dart';
+import 'video_hud_page.dart';
 import 'video_review_page.dart';
 import 'data_export_page.dart';
 import 'fuel_page.dart';
@@ -113,14 +115,34 @@ import 'cloud_auth_page.dart';
 import 'cloud_service.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  // v1.5.1：全局默认只允许竖屏（用户要求：横屏只在记录页放开，
-  // 其他页一律竖屏）。记录页在进入/退出记录态时另行放开/收回，
-  // 见 _applyRecordingOrientation。
-  unawaited(
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
+  // v1.6.1：全局兜底。后台闪退最常见的两类原因——
+  // 1) 未捕获的异步异常（定位流 / 定时器 / 原生回调里抛出）；
+  // 2) 原生侧 startForeground 抛 ForegroundServiceStartNotAllowedException。
+  // 这里把 Dart 侧全部收口到 CrashLog（200KB 滚动、设置页可导出），
+  // 并返回 true 避免未捕获异步异常直接终止进程。
+  runZonedGuarded(
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        CrashLog.record(details.exception, details.stack, tag: 'flutter');
+      };
+      ui.PlatformDispatcher.instance.onError = (error, stack) {
+        CrashLog.record(error, stack, tag: 'platform');
+        return true;
+      };
+      // v1.5.1：全局默认只允许竖屏（用户要求：横屏只在记录页放开，
+      // 其他页一律竖屏）。记录页在进入/退出记录态时另行放开/收回，
+      // 见 _applyRecordingOrientation。
+      unawaited(
+        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
+      );
+      runApp(const DriveTrackApp());
+    },
+    (error, stack) {
+      CrashLog.record(error, stack, tag: 'zone');
+    },
   );
-  runApp(const DriveTrackApp());
 }
 
 // ---------- v0.1.2 本机偏好：主题色 / 个人资料 / 自带字体 ----------
@@ -190,6 +212,10 @@ class AppPrefs extends ChangeNotifier {
   );
   bool _loading = false;
   bool _loaded = false;
+
+  /// v1.6.0：偏好是否已从本机 profile.json 读出。
+  /// 启动页据此决定是否已经可以按用户选择画图标（见 splash_page.dart）。
+  bool get loaded => _loaded;
 
   String get fontFamily =>
       customFontLoaded ? 'DriveTrackCustom' : 'DriveTrackSans';
@@ -510,7 +536,8 @@ class _DriveTrackAppState extends State<DriveTrackApp> {
           // 本处 home 只放 SplashPage（不传任何首页 widget），
           // 首页 widget 对象只在 '/home' 路由 builder 里首次构造，
           // 即启动动画完成之后；原生启动背景保持纯黑（v1.0.0 已改黑）。
-          home: SplashPage(appIconKey: appPrefs.appIcon),
+          // v1.6.0：偏好未读完前传 null，启动页先不画图标（不闪一张默认图标）。
+          home: SplashPage(appIconKey: appPrefs.loaded ? appPrefs.appIcon : null),
           routes: {
             // 启动动画结束后先过账号门：没有邮箱 / 手机号 / 微信会话时
             // 只显示登录页，不构造记录首页。
@@ -788,6 +815,11 @@ class _HomePageState extends State<HomePage>
   /// 默认 true）。本字段在 _init 读盘、设置页 onChanged 回写；
   /// 开关本身早已存在但此前无人读取，属未接线开关，本轮接上。
   bool _showTrackDelta = true;
+
+  /// v1.6.0：模式图标点击的目标模式。翻页动画落位前，onPageChanged 途经的
+  /// 中间页一律忽略，避免“点了卡丁车先闪成摩托”“门槛回退退到中间页”。
+  TripMode? _pendingMode;
+  Timer? _pendingModeTimer;
 
   @override
   void initState() {
@@ -1203,21 +1235,45 @@ class _HomePageState extends State<HomePage>
   /// v1.5.7：骑行档在首页下线（历史行程仍可打开），第三档改为卡丁车；
   /// 卡丁车等价于进入赛道模式，进入前必须先通过硬件门槛。
   void _selectMode(TripMode m) {
-    if (rec.mode == m) return;
+    if (rec.mode == m) {
+      // 模式已经是它，但页面可能还没翻到位（例如动画被打断）：补一次翻页。
+      final i = kHomeModes.indexOf(m);
+      if (i >= 0 && _modeController.hasClients) {
+        final cur = (_modeController.page ?? i.toDouble()).round();
+        if (cur != i) {
+          _modeController.animateToPage(
+            i,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOut,
+          );
+        }
+      }
+      return;
+    }
     if (m == TripMode.kart && !_requireTrackHardware()) return;
     final i = kHomeModes.indexOf(m);
     if (i < 0) return;
-    if (m == TripMode.kart) {
-      setState(() {
+    // v1.6.0：点击即落状态（不再等 onPageChanged），并记录目标模式：
+    // 翻页动画途经的中间页不写回 rec.mode，避免 car→kart 时先闪成 moto。
+    setState(() {
+      _pendingMode = m;
+      if (m == TripMode.kart) {
         trackMode = true;
         rec.roadSnapEnabled = false;
-      });
+      }
+      rec.setMode(m);
+    });
+    _pendingModeTimer?.cancel();
+    _pendingModeTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted && _pendingMode == m) setState(() => _pendingMode = null);
+    });
+    if (_modeController.hasClients) {
+      _modeController.animateToPage(
+        i,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
     }
-    _modeController.animateToPage(
-      i,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeInOut,
-    );
   }
 
   /// 赛道 / 卡丁的硬件门槛：未就绪时弹说明并返回 false。
@@ -1230,16 +1286,110 @@ class _HomePageState extends State<HomePage>
     return false;
   }
 
-  /// 卡丁车没有完整赛道时只进入准备/建赛流程，不进入记录流程。
-  bool _requireKartTrack(TripMode mode) {
-    if (mode != TripMode.kart) return true;
+  /// 开录前的“赛道已选定”门槛（v1.6.0 起对三种模式统一）。
+  ///
+  /// - 街道模式（trackMode=false）：不拦。
+  /// - 已选到可用赛道包：放行。
+  /// - 卡丁车：没有可用赛道就进卡丁车准备页选择或创建（原有行为）。
+  /// - 汽车 / 摩托：选了赛道模式却没有选中赛道，说明多半是没搜到自己所在的
+  ///   赛道。此前会静默退回街道记录页，用户以为在跑赛道、其实没有起终点与
+  ///   圈速。现在改为拦下并引导“实录建赛道 / 卫星图绘制 / 选已有赛道”。
+  bool _requireTrackReady(TripMode mode) {
+    if (!trackMode) return true;
     final problem = kartTrackProblem(selectedPackage);
     if (problem == null) return true;
-    if (mounted) {
-      showAppNotice(context, '$problem。可在卡丁车准备页选择或创建赛道', AppNoticeKind.warning);
+    if (mode == TripMode.kart) {
+      if (mounted) {
+        showAppNotice(context, '$problem。可在卡丁车准备页选择或创建赛道', AppNoticeKind.warning);
+      }
+      _openKartPrep();
+      return false;
     }
-    _openKartPrep();
+    if (mounted) _showNoTrackSheet(mode);
     return false;
+  }
+
+  /// 汽车 / 摩托在赛道模式下没选赛道时的引导弹层。
+  /// 不提供“就这么录”的入口：没有起终点就没有圈速，录成街道行程会误导用户。
+  void _showNoTrackSheet(TripMode mode) {
+    final modeName = mode == TripMode.moto ? '摩托' : '汽车';
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF141414),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$modeName赛道模式：还没有选定赛道',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              '赛道库里没找到你所在的赛道时，可以直接实录自建：沿赛道跑完一圈，'
+              '系统会用这圈的轨迹闭合出中心线与起终点，之后就能计时。',
+              style: TextStyle(fontSize: 13, height: 1.5, color: Colors.white70),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  unawaited(_openCustomTrackCreator(CustomTrackMethod.measured));
+                },
+                icon: const Icon(Icons.route, size: 18),
+                label: const Text('实录建赛道（跑一圈自动闭合）'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      unawaited(
+                        _openCustomTrackCreator(CustomTrackMethod.satellite),
+                      );
+                    },
+                    child: const Text('卫星图绘制'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _openTrackCatalogSheet();
+                    },
+                    child: const Text('选已有赛道'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.center,
+              child: TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('取消'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showHardwareGateSheet(ExternalGpsStatus st) {
@@ -1355,7 +1505,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.5.9',
+          versionName: '1.6.3',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1399,6 +1549,7 @@ class _HomePageState extends State<HomePage>
     if (_keepScreenOnActual) Native.setKeepScreenOn(false);
     _menuAnim.dispose();
     _modeController.dispose();
+    _pendingModeTimer?.cancel();
     _recMapPageController.dispose();
     _lapFlashTimer?.cancel();
     _locSub?.cancel();
@@ -1611,7 +1762,7 @@ class _HomePageState extends State<HomePage>
     var goCalibrate = false;
     final mode = rec.mode;
     final isTrack = trackMode && mode != TripMode.bike;
-    if (!_requireKartTrack(mode)) return;
+    if (!_requireTrackReady(mode)) return;
     // 开始语音是否已触发过（本轮 _showSafety 只触发一次，防重复播报）。
     var safetySpoken = false;
     // v1.0.7：今日同一模式 + 同一档位已确认过，直接进倒计时，不再弹守则。
@@ -1783,7 +1934,7 @@ class _HomePageState extends State<HomePage>
   Future<void> _beginRecording(TripMode mode) async {
     // v1.5.7 硬闸：赛道/卡丁开录前再校验一次硬件，倒计时期间掉线也拦住。
     if (trackMode && !_requireTrackHardware()) return;
-    if (!_requireKartTrack(mode)) return;
+    if (!_requireTrackReady(mode)) return;
     videoActive = false;
     videoError = null;
     if (videoEnabled && mode != TripMode.bike) {
@@ -1806,7 +1957,22 @@ class _HomePageState extends State<HomePage>
     liveLapTimer = null;
     _lapFedCount = 0;
     livePhotoPoints = [];
-    await rec.start();
+    try {
+      await rec.start();
+    } catch (e) {
+      // 前台服务/定位启动被系统拒绝：recorder 已回滚为 idle，
+      // 这里同步停掉刚启动的视频，避免留下孤儿文件与「假记录」。
+      if (videoActive) {
+        try {
+          await Native.stopVideoRecording();
+        } catch (_) {}
+        videoActive = false;
+      }
+      if (mounted) {
+        showAppNotice(context, '启动记录失败：$e', AppNoticeKind.error);
+      }
+      return;
+    }
     await _startDraftTimer();
     // v1.4.x 街道语音：开录即启动 GPS 信号看门狗与起步 / 里程计数
     //（赛道模式只计圈，不跑街道提示）。
@@ -2793,8 +2959,13 @@ class _HomePageState extends State<HomePage>
       onPageChanged: (i) {
         if (i < 0 || i >= kHomeModes.length) return;
         final m = kHomeModes[i];
+        // v1.6.0：图标点击触发的翻页只认最终页，途经的中间页不改模式。
+        final pending = _pendingMode;
+        if (pending != null && m != pending) return;
         if (m == TripMode.kart && !_requireTrackHardware()) {
+          // 滑动绕过门槛：按“当前模式”退回原页（不是途经页）。
           final back = kHomeModes.indexOf(rec.mode);
+          if (mounted) setState(() => _pendingMode = null);
           _modeController.animateToPage(
             back < 0 ? 0 : back,
             duration: const Duration(milliseconds: 250),
@@ -2802,8 +2973,9 @@ class _HomePageState extends State<HomePage>
           );
           return;
         }
-        rec.setMode(m);
-        if (m == TripMode.kart) {
+        if (pending != null && mounted) setState(() => _pendingMode = null);
+        if (rec.mode != m) rec.setMode(m);
+        if (m == TripMode.kart && !trackMode) {
           setState(() {
             trackMode = true;
             rec.roadSnapEnabled = false;
@@ -3198,6 +3370,12 @@ class _HomePageState extends State<HomePage>
   /// 由 14 加到 20（图标间距 40），整行宽度 = 3 × 76 = 228（kModeRowWidth），
   /// 不再用 Expanded 三等分撑满屏宽；底部导航栏用同一宽度，
   /// 两行同长、按钮中心点重合。
+  ///
+  /// v1.6.0 点击不切页修复：此前可点区只有 36px 宽（Padding 在 RippleTap
+  /// 外面），选中图标又被放大到 1.25 倍（45px），点在图标的视觉边缘或图标
+  /// 之间的空隙都算没点中，表现就是“有概率点了不切页面”。现在每项是一整个
+  /// 76×48 的节距槽（节距与 kModeRowItemPitch 同值），槽内任意位置都可点，
+  /// 视觉尺寸与间距不变。
   Widget _buildModeSwitcher() {
     final accent = Theme.of(context).colorScheme.primary;
     final modeRow = Row(
@@ -3205,38 +3383,42 @@ class _HomePageState extends State<HomePage>
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         for (final m in kHomeModes)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+          SizedBox(
+            width: kModeRowItemPitch,
+            height: 48,
             child: RippleTap(
               circular: true,
               onTap: () => _selectMode(m),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                child: Column(
-                  children: [
-                    AnimatedScale(
-                      scale: rec.mode == m ? 1.25 : 1.0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: ModeVehicleIcon(
-                        mode: m,
-                        selected: rec.mode == m,
-                        color: rec.mode == m ? accent : Colors.white54,
-                        size: 36,
+              child: Center(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedScale(
+                        scale: rec.mode == m ? 1.25 : 1.0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        child: ModeVehicleIcon(
+                          mode: m,
+                          selected: rec.mode == m,
+                          color: rec.mode == m ? accent : Colors.white54,
+                          size: 36,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: rec.mode == m ? 18 : 6,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: rec.mode == m ? accent : Colors.white24,
-                        borderRadius: BorderRadius.circular(2),
+                      const SizedBox(height: 4),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: rec.mode == m ? 18 : 6,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: rec.mode == m ? accent : Colors.white24,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -3390,6 +3572,28 @@ class _HomePageState extends State<HomePage>
         '来驰迹 DriveTrack 看看我的行程：${appPrefs.username}（${appPrefs.userId}）。行程数据仅存本机，分享走系统分享。',
       );
     } catch (_) {}
+  }
+
+  /// v1.6.1：把 Dart + 原生崩溃日志合并成一个 txt，走系统分享导出。
+  /// 日志只在本机，不自动上传。
+  Future<void> _exportCrashLog() async {
+    try {
+      final log = await CrashLog.dump();
+      if (log.trim().isEmpty) {
+        if (mounted) {
+          showAppNotice(context, '暂无崩溃日志', AppNoticeKind.info);
+        }
+        return;
+      }
+      final dir = await Native.getCacheDir();
+      final f = File('$dir/drivetrack_crash_log.txt');
+      await f.writeAsString(log, flush: true);
+      await Native.shareFiles([f.path], 'text/plain', '驰迹崩溃日志');
+    } catch (e) {
+      if (mounted) {
+        showAppNotice(context, '导出失败：$e', AppNoticeKind.error);
+      }
+    }
   }
 
   // v0.1.3：我的页换新版 MyPage（卡片化、细圆角进度条、药丸按钮），
@@ -3565,6 +3769,8 @@ class _HomePageState extends State<HomePage>
             ),
             // v1.2.0 车辆档案入口（油耗费用之后）。
             onOpenVehicle: _openVehicleProfiles,
+            // v1.6.1 崩溃日志导出（Dart + 原生合并，仅本机）。
+            onExportCrashLog: _exportCrashLog,
             countdownVibration: appPrefs.countdownVibration,
             onCountdownVibrationChanged: (v) =>
                 appPrefs.setCountdownVibration(v),
@@ -3804,6 +4010,8 @@ class _HomePageState extends State<HomePage>
         builder: (_) => PerformanceChallengePage(
           onBack: () => Navigator.of(context).pop(),
           recorder: rec,
+          // v1.6.0：0-400 只认自研硬件供数（BLE 外接 GNSS 正在接管定位）。
+          hardwareCheck: () => rec.externalGpsActive,
         ),
       ),
     );
@@ -4164,18 +4372,10 @@ class _HomePageState extends State<HomePage>
         // 容器内，不再视觉挤在一起）；骑行模式无视频药丸时此间距
         // 不出现，卫星药丸直接接在实时行下方。
         if (rec.mode != TripMode.bike) const SizedBox(height: 10),
-        if (videoEnabled && rec.mode != TripMode.bike)
-          Center(
-            child: Text(
-              S
-                  .of(context)
-                  .t(
-                    '同步视频：已开启（开始后以后置摄像头录像）',
-                    'Sync video on. Rear camera starts with recording.',
-                  ),
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-          ),
+        // v1.6.0：删掉“同步视频：已开启（开始后以后置摄像头录像）”这一行。
+        // 它是夹在视频药丸和直连卫星药丸之间的一段说明文字，开启后多出一行，
+        // 直接把直连卫星按钮往下挤（用户反馈“文字侵占直连卫星按钮”）。
+        // 视频开关自身的开/关状态已经足够表达，不需要再占一行。
         if (videoError != null)
           Center(
             child: Text(
@@ -4830,11 +5030,13 @@ class _HomePageState extends State<HomePage>
                 ),
                 // v1.5.3 压弯倾角实时读数（融合估计器）：与 G 值显示并排，
                 // 街道面板内、G 圆下方；不改现有 G 值与姿态显示。
-                LeanAngleReadout(
-                  leanDeg: rec.leanDeg,
-                  quality: rec.leanQuality,
-                  calibrated: rec.calibrated,
-                ),
+                // v1.6.0：倾角只服务摩托——汽车/骑行/卡丁车不再显示倾角卡。
+                if (rec.mode == TripMode.moto)
+                  LeanAngleReadout(
+                    leanDeg: rec.leanDeg,
+                    quality: rec.leanQuality,
+                    calibrated: rec.calibrated,
+                  ),
                 const SizedBox(height: 10),
               ],
               // v1.2.0 标记事件：醒目全宽按钮，位于暂停/长按结束上方；
@@ -5042,6 +5244,8 @@ class _HomePageState extends State<HomePage>
                 leanDeg: rec.leanDeg,
                 leanQuality: rec.leanQuality,
                 leanCalibrated: rec.calibrated,
+                // v1.6.0：倾角只给摩托；汽车/卡丁车赛道横屏不显示倾角。
+                showLean: rec.mode == TripMode.moto,
                 autoPaused: rec.isAutoPaused || (timer?.isPaused ?? false),
                 distanceKm: rec.distanceM / 1000,
                 elapsedLabel: fmtDur(rec.elapsedMs),
@@ -6588,7 +6792,8 @@ class _TripDetailPageState extends State<TripDetailPage> {
                         _attachToLatestUnphotographed,
                     photoPointsTruncated: photoPointsTruncated,
                   ),
-                  if (t.mode != TripMode.bike) ...[
+                  // 赛道模式不显示油耗费用：赛道复盘只看圈速与遥测。
+                  if (t.mode != TripMode.bike && !t.isTrackMode) ...[
                     const SizedBox(height: 12),
                     Builder(
                       builder: (_) {
@@ -6615,8 +6820,11 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       },
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  TripRoadTypeCard(points: t.points),
+                  // 赛道模式不显示道路类型：赛道内是赛道，不做道路估算。
+                  if (!t.isTrackMode) ...[
+                    const SizedBox(height: 12),
+                    TripRoadTypeCard(points: t.points),
+                  ],
                   // v0.1.3 赛道行程：赛道名 + 圈速表（由存入的 lapsJson 重建，不重算街道评分）。
                   // v0.1.7 统合接线：详情页赛道图与选择器共用同一 TrackInfo.outline
                   // 数据源（TrackDetailCard），不再是旧示意轮廓；按 trackId 查目录，
@@ -6990,6 +7198,19 @@ class _TripDetailPageState extends State<TripDetailPage> {
                               child: IconButton(
                                 icon: const Icon(Icons.play_arrow),
                                 onPressed: () => Native.playVideo(vp),
+                              ),
+                            ),
+                            // v1.6.0：视频处理 / HUD 合成（对齐 → 预览 → 导出）。
+                            Semantics(
+                              label: '视频 HUD 合成',
+                              child: IconButton(
+                                icon: const Icon(Icons.movie_filter_outlined),
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  DtPageRoute(
+                                    builder: (_) => VideoHudPage(trip: t),
+                                  ),
+                                ),
                               ),
                             ),
                             Semantics(
