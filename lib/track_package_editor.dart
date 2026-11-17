@@ -2018,7 +2018,7 @@ class _SatelliteTiles extends StatelessWidget {
             child: Image.network(
               satelliteTileUrl(t.z, t.x, t.y),
               key: ValueKey('sat-${t.z}-${t.x}-${t.y}'),
-              headers: const {'User-Agent': 'DriveTrack/1.6.3'},
+              headers: const {'User-Agent': 'DriveTrack/1.6.4'},
               fit: BoxFit.fill,
               gaplessPlayback: true,
               errorBuilder: (_, _, _) {

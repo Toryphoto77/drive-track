@@ -35,14 +35,21 @@ class UpdateConfig {
   /// 仅 [domestic] 配置使用，null = 无回落。
   final String? fallbackGithubUrl;
 
+  /// v1.6.4：清单备用源，按顺序尝试（前一个拉取失败才轮下一个）。
+  final List<String> manifestMirrors;
+
   const UpdateConfig(
-      {this.manifestUrl, this.githubReleases = false, this.fallbackGithubUrl});
+      {this.manifestUrl,
+      this.githubReleases = false,
+      this.fallbackGithubUrl,
+      this.manifestMirrors = const []});
 
   /// 默认：未配置。
   const UpdateConfig.unconfigured()
       : manifestUrl = null,
         githubReleases = false,
-        fallbackGithubUrl = null;
+        fallbackGithubUrl = null,
+        manifestMirrors = const [];
 
   /// v1.0.7：指向 Toryphoto77/drive-track 的最新 Release。
   /// （2026-11-08 修正：此前误写旧账号仓库；正式 Release 在 Toryphoto77/drive-track。）
@@ -52,19 +59,24 @@ class UpdateConfig {
       : manifestUrl =
             'https://api.github.com/repos/Toryphoto77/drive-track/releases/latest',
         githubReleases = true,
-        fallbackGithubUrl = null;
+        fallbackGithubUrl = null,
+        manifestMirrors = const [];
 
-  /// 国内优先：先拉 jsDelivr 上的 update-manifest.json（国内可直连，
-  /// 不走 api.github.com），清单格式沿用旧的
-  /// versionName/versionCode/apkUrl；清单拉取失败时才回落到
-  /// GitHub Releases 接口（修正后的 Toryphoto77/drive-track）。
-  /// 清单里的 apkUrl 是下载间接层：发版流程可把它换成国内
-  /// 存储（如 CloudBase 公共 URL）而无需改 App。
+  /// 国内优先：先拉 CloudBase 上的 update-manifest.json（国内直连最稳），
+  /// 失败再试 jsDelivr 上的同名清单，最后才回落到 GitHub Releases 接口
+  /// （修正后的 Toryphoto77/drive-track）。清单格式沿用旧的
+  /// versionName/versionCode/apkUrl；清单里的 apkUrl 是下载间接层。
+  /// v1.6.4：此前只配 jsDelivr，国内部分网络拉不到就直接失败，
+  /// 导致 App 显示“检查失败”。
+  static const String cloudbaseManifestUrl =
+      'https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/update-manifest.json';
+
   static const String domesticManifestUrl =
       'https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json';
 
   const UpdateConfig.domestic()
-      : manifestUrl = domesticManifestUrl,
+      : manifestUrl = cloudbaseManifestUrl,
+        manifestMirrors = const [domesticManifestUrl],
         githubReleases = false,
         fallbackGithubUrl =
             'https://api.github.com/repos/Toryphoto77/drive-track/releases/latest';
@@ -411,8 +423,8 @@ class UpdateInstallResult {
 }
 
 class UpdateService {
-  static const String currentVersionName = '1.6.3';
-  static const int currentVersionCode = 68;
+  static const String currentVersionName = '1.6.4';
+  static const int currentVersionCode = 69;
   static const String packageName = 'com.chixi.drive_track';
   static const String channelLabel = '正式版';
 
@@ -531,8 +543,8 @@ class UpdateService {
   }
 
   /// 比对清单与当前版。未配置时不发任何网络请求，直接返回未配置。
-  /// 国内配置（[UpdateConfig.domestic]）：先拉 jsDelivr 清单，
-  /// 失败才回落 GitHub Releases 接口；两路都失败时返回 error，
+  /// 国内配置（[UpdateConfig.domestic]）：先拉 CloudBase 清单，失败再试
+  /// jsDelivr，最后回落 GitHub Releases 接口；全部失败时返回 error，
   /// 不谎称最新。
   static const Duration _requestTimeout = Duration(seconds: 15);
 
@@ -566,14 +578,20 @@ class UpdateService {
       if (config.githubReleases) {
         return await _checkGithub(client, config.manifestUrl!.trim(), deviceAbiList);
       }
-      UpdateCheckResult? manifestResult;
-      try {
-        manifestResult =
-            await _checkManifest(client, config.manifestUrl!.trim(), deviceAbiList);
-      } catch (_) {
-        manifestResult = null;
+      final manifestUrls = <String>[
+        config.manifestUrl!.trim(),
+        ...config.manifestMirrors
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty),
+      ];
+      for (final url in manifestUrls) {
+        try {
+          final result = await _checkManifest(client, url, deviceAbiList);
+          if (result != null) return result;
+        } catch (_) {
+          // 这个源不可用，继续试下一个。
+        }
       }
-      if (manifestResult != null) return manifestResult;
       final fallback = config.fallbackGithubUrl;
       if (fallback != null && fallback.trim().isNotEmpty) {
         try {

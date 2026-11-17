@@ -199,7 +199,7 @@ Write-Host "环境：$Bucket / $Region / 版本 $Version" -ForegroundColor Cyan
 if ($CdnDomain) { Write-Host "对外域名：$publicBase（CDN）" -ForegroundColor Cyan }
 
 # ---- 上传 ----
-function Send-CosObject([string]$localPath, [string]$objectKey) {
+function Send-CosObject([string]$localPath, [string]$objectKey, [string]$contentType = "application/vnd.android.package-archive") {
   $uriPath = "/" + $objectKey
   $uri = "https://$hostName$uriPath"
   $canonicalHeaders = "host=$hostName&x-cos-acl=public-read"
@@ -208,7 +208,7 @@ function Send-CosObject([string]$localPath, [string]$objectKey) {
   [System.Net.ServicePointManager]::Expect100Continue = $false
   $req = [System.Net.HttpWebRequest]::Create($uri)
   $req.Method = "PUT"
-  $req.ContentType = "application/vnd.android.package-archive"
+  $req.ContentType = $contentType
   $req.Timeout = 1800000
   $req.ReadWriteTimeout = 1800000
   $req.AllowWriteStreamBuffering = $false
@@ -325,6 +325,14 @@ if ($WriteManifest) {
   $json = $mf | ConvertTo-Json -Depth 8
   [System.IO.File]::WriteAllText($manifestPath, $json, (New-Object System.Text.UTF8Encoding($false)))
   Write-Host "已写回 update-manifest.json（apkUrl → 国内 CDN，GitHub 保留在 apks.url）" -ForegroundColor Green
+
+  # v1.6.4：清单同时放到存储桶根，App 检查更新优先读这里
+  # （https://<bucket>.tcb.qcloud.la/update-manifest.json），国内直连最稳。
+  $mfUrl = Send-CosObject $manifestPath "update-manifest.json" "application/json"
+  if (!$mfUrl) { Fail "清单上传失败，App 将无法通过 CloudBase 检查更新。" }
+  $mfCode = Test-Url $mfUrl
+  if ($mfCode -ne 200) { Fail "清单地址返回 $mfCode（期望 200）。" }
+  Write-Host "清单已上传：$mfUrl" -ForegroundColor Green
 }
 
 # ---- 刷新 jsDelivr ----
