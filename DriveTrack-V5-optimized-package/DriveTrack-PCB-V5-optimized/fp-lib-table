@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "DriveTrack")(type "KiCad")(uri "${KIPRJMOD}/DriveTrack.pretty")(options "")(descr "DriveTrack custom footprints"))
+)
