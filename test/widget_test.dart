@@ -59,9 +59,11 @@ void main() {
     // 旧“工具”/“设置快捷”分组已删，断言同步更新。
     // v1.5.4：设备中心已移出菜单（改走底部导航第 4 项），菜单不再有该项。
     // v1.0.3：关于从设置页移入左拉菜单，菜单新增“关于”一项。
-    expect(find.text('首页'), findsNothing);
-    expect(find.text('记录'), findsNothing);
-    expect(find.text('我的'), findsNothing);
+    // v1.7.4：底栏导航项改成「图标 + 文字」，首页/记录/我的作为底栏标签
+    // 一直存在；菜单文本入口仍然没有重复项。
+    expect(find.text('首页'), findsOneWidget);
+    expect(find.text('记录'), findsOneWidget);
+    expect(find.text('我的'), findsOneWidget);
     expect(find.text('工具'), findsNothing);
     expect(find.text('设置快捷'), findsNothing);
     expect(find.text('赛道库'), findsOneWidget);

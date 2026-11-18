@@ -262,7 +262,10 @@ void main() {
   group('device center as bottom tab', () {
     test('main shell uses 4-way tab including embedded DeviceCenterPage', () {
       final main = File('lib/main.dart').readAsStringSync();
-      expect(main, contains("ValueKey('devices')"));
+      // v1.7.4：四页改成 PageView（可左右滑动），外壳 key 变为 tabs。
+      expect(main, contains("ValueKey('tabs')"));
+      expect(main, contains('PageView('));
+      expect(main, contains('dragProgress: _tabDrag'));
       expect(main, contains('DeviceCenterPage(embedded: true)'));
       expect(main, contains('void _goTab(int i)'));
       expect(main, contains('底部导航四页同壳'));

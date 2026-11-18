@@ -26,8 +26,9 @@ const double kModeRowWidth = 3 * kModeRowItemPitch; // 228.0
 /// v1.7.3：实际宽度改为「屏幕宽 - 32」，此值退化为最小宽度保底。
 const double kPillNavWidth = 288.0;
 
-/// 底部导航栏药丸高度 56：图标可点区 48 + 上下 padding 4 × 2。
-const double kPillNavHeight = 56.0;
+/// 底部导航栏药丸高度：v1.7.4 起导航项改为「图标 + 文字」，
+/// 由 56 加到 68（图标 21 + 间距 2 + 文字 12 + 上下 padding 8 × 2）。
+const double kPillNavHeight = 68.0;
 
 /// 三颗按钮的中心点 x（相对屏幕左边缘），行本身在屏幕内居中。
 List<double> tripleCenters(double width) {

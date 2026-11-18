@@ -23,6 +23,7 @@
 ///   （主题色 22% 底 + 主题色光晕，图标变主题色）。
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_haptics.dart';
@@ -53,10 +54,17 @@ class FrostedGlassNavBar extends StatefulWidget {
     super.key,
     required this.selectedIndex,
     required this.onTap,
+    this.dragProgress,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onTap;
+
+  /// 左右拖拽切页时的连续页码（0.0～3.0）。
+  ///
+  /// 非 null 时选中药丸直接跟随页码移动、不做隐式动画（跟手）；
+  /// 松手后回到 null，改用 320ms easeOutBack 收到 [selectedIndex]。
+  final ValueListenable<double?>? dragProgress;
 
   static const _tabs = [
     (Icons.home, '首页'),
@@ -90,10 +98,10 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
         'shaders/liquid_glass.frag',
       );
       final shader = program.fragmentShader()
-        ..setFloat(2, 14.0) // u_strength：边缘折射位移（px）
-        ..setFloat(3, 9.0) // u_blur：模糊半径（shader 内 9 抽样）
-        ..setFloat(4, 1.8) // u_chroma：边缘色散（px）
-        ..setFloat(5, 24.0); // u_edge：折射生效带宽（px）
+        ..setFloat(2, 24.0) // u_strength：边缘折射位移（px）
+        ..setFloat(3, 14.0) // u_blur：模糊半径（shader 内 9 抽样）
+        ..setFloat(4, 2.4) // u_chroma：边缘色散（px）
+        ..setFloat(5, 34.0); // u_edge：折射生效带宽（px）
       if (!mounted) {
         shader.dispose();
         return;
@@ -172,8 +180,8 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          const Color(0xFF3C3C40).withValues(alpha: 0.42),
-                          const Color(0xFF1E1E22).withValues(alpha: 0.34),
+                          const Color(0xFF4A4A50).withValues(alpha: 0.52),
+                          const Color(0xFF26262B).withValues(alpha: 0.48),
                         ],
                       ),
                     ),
@@ -207,51 +215,70 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: SizedBox(
-                    height: 48,
-                    width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  child: SizedBox.expand(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final left = navSelectionLeft(
-                          barWidth: constraints.maxWidth,
-                          index: index,
-                          count: n,
-                        );
-                        return Stack(
-                          children: [
-                            // 选中圆只做水平滑动，圆心与槽位中心重合。
-                            AnimatedPositioned(
-                              key: const Key('nav-selection-indicator'),
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutCubic,
-                              left: left,
-                              top: 0,
-                              width: 48,
-                              height: 48,
-                              child: IgnorePointer(
-                                child: DecoratedBox(
-                                  // 选中态也是一块小玻璃：主题色径向渐变
-                                  // + 柔光晕，而不是一块实心圆。
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: RadialGradient(
-                                      colors: [
-                                        accent.withValues(alpha: 0.40),
-                                        accent.withValues(alpha: 0.14),
-                                      ],
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: accent.withValues(alpha: 0.32),
-                                        blurRadius: 16,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
+                        final slotWidth = constraints.maxWidth / n;
+                        final pillWidth = (slotWidth - 12).clamp(40.0, 132.0);
+                        // 参考视频的选中态：偏亮的深灰玻璃药丸（不带主题色），
+                        // 主题色只用在图标和文字上；只做水平滑动。
+                        final pillBase = const Color(0xFF313138);
+                        final pillTop = const Color(0xFF3B3B44);
+                        // 拖拽切页时由 PageView 的连续页码驱动；松手回到
+                        // selectedIndex，用 320ms easeOutBack 收尾（Q 弹）。
+                        final drag = widget.dragProgress;
+                        Widget indicator(double? dragPos) {
+                          final pos = (dragPos ?? index.toDouble())
+                              .clamp(0.0, n - 1.0)
+                              .toDouble();
+                          return AnimatedPositioned(
+                            key: const Key('nav-selection-indicator'),
+                            duration: dragPos != null
+                                ? Duration.zero
+                                : const Duration(milliseconds: 320),
+                            // Q 弹滑动：easeOutBack 先冲过头再回弹，接近
+                            // 参考视频里液态玻璃被“推”过去的手感。
+                            curve: Curves.easeOutBack,
+                            left: pos * slotWidth + (slotWidth - pillWidth) / 2,
+                            top: 0,
+                            bottom: 0,
+                            width: pillWidth,
+                            child: IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(26),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [pillTop, pillBase],
                                   ),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.16),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.30),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
+                          );
+                        }
+
+                        return Stack(
+                          children: [
+                            if (drag == null)
+                              indicator(null)
+                            else
+                              ValueListenableBuilder<double?>(
+                                valueListenable: drag,
+                                builder: (context, value, _) =>
+                                    indicator(value),
+                              ),
                             Row(
                               children: [
                                 for (
@@ -260,7 +287,7 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                                   i++
                                 )
                                   Expanded(
-                                    // 整槽可点，图标在槽中心，与选中圆同一中心。
+                                    // 整槽可点，图标 + 文字在槽中心。
                                     child: Semantics(
                                       label: labels[i],
                                       button: true,
@@ -280,11 +307,32 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                                           hoverColor: Colors.transparent,
                                           focusColor: Colors.transparent,
                                           child: Center(
-                                            child: Icon(
-                                              FrostedGlassNavBar._tabs[i].$1,
-                                              color: index == i
-                                                  ? accent
-                                                  : Colors.white70,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  FrostedGlassNavBar._tabs[i].$1,
+                                                  size: 21,
+                                                  color: index == i
+                                                      ? accent
+                                                      : Colors.white
+                                                          .withValues(alpha: 0.72),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  labels[i],
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    height: 1.15,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: index == i
+                                                        ? accent
+                                                        : Colors.white
+                                                            .withValues(
+                                                                alpha: 0.72),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ),
@@ -321,14 +369,14 @@ class _GlassRimPainter extends CustomPainter {
     final shader = ui.Gradient.linear(
       Offset.zero,
       Offset(size.width, size.height),
-      const [Color(0x8CFFFFFF), Color(0x1FFFFFFF), Color(0x47FFFFFF)],
+      const [Color(0x73FFFFFF), Color(0x1AFFFFFF), Color(0x4DFFFFFF)],
       const [0.0, 0.55, 1.0],
     );
     canvas.drawRRect(
       rrect,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
+        ..strokeWidth = 1.5
         ..shader = shader,
     );
   }
