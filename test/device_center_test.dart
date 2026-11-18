@@ -67,7 +67,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('v1.7.1 扫描设备面板：点“扫描设备”拉起，空态可关闭',
+  testWidgets('v1.7.2 GPS 行拉起底部面板：标题为 GPS，可关闭',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1.0;
@@ -82,16 +82,15 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.tap(find.widgetWithText(OutlinedButton, '扫描设备'));
+    await tester.tap(find.text('外接 GPS 模块'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    // 无原生通道时扫描失败只提示，不抛异常；空态文案仍在。
-    expect(find.text('尚未发现设备'), findsOneWidget);
+    expect(find.text('GPS'), findsOneWidget);
     expect(find.text('取消'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('尚未发现设备'), findsNothing);
+    expect(find.text('取消'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -142,8 +141,9 @@ void main() {
     expect(find.text('设备中心'), findsOneWidget);
     expect(find.byIcon(Icons.arrow_back), findsNothing);
     expect(find.text('运动相机'), findsOneWidget);
-    // 页内 + 号是扫描入口（不再需要滚动到页面底部找“开始扫描”）。
-    expect(find.byIcon(Icons.add), findsOneWidget);
+    // v1.7.2：页内不再有右上角 + 号，卡片里也不再放“扫描设备”按钮。
+    expect(find.byIcon(Icons.add), findsNothing);
+    expect(find.text('扫描设备'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

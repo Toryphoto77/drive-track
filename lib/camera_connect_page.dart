@@ -126,10 +126,13 @@ class ScannedCamera {
 ///相机页与外接 GPS 页共用一套，动画节奏、卡片尺寸、字号层级一致。
 ///本页只保留扫描 / 连接逻辑，样式不再自留一份。
 class CameraConnectPage extends StatefulWidget {
-  const CameraConnectPage({super.key, this.onBack});
+  const CameraConnectPage({super.key, this.onBack, this.compact = false});
 
   /// 返回上一页的回调；不传则用 Navigator.maybePop。
   final VoidCallback? onBack;
+
+  /// 紧凑模式：去掉 Scaffold / AppBar，供设备中心底部扫描面板内嵌。
+  final bool compact;
 
   @override
   State<CameraConnectPage> createState() => _CameraConnectPageState();
@@ -237,6 +240,12 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         }
       }
     }, onError: (_) {});
+    // 紧凑模式（设备中心底部面板）：打开即开始扫描，省掉再点一次。
+    if (widget.compact) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_scanning) _toggleScan();
+      });
+    }
   }
 
   @override
@@ -489,19 +498,11 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         : const Iterable<ScannedCamera>.empty();
     final connectedCam = connected.isEmpty ? null : connected.first;
     final s = S.of(context);
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      extendBodyBehindAppBar: true,
-      appBar: DtAppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
-        ),
-        title: Text(s.t('连接运动相机', 'Connect camera'), style: const TextStyle(color: Colors.white)),
-      ),
-      body: ListView(
-        padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
-        children: [
+    final body = ListView(
+      padding: widget.compact
+          ? const EdgeInsets.fromLTRB(16, 0, 16, 24)
+          : withAppBarTopInset(context, const EdgeInsets.all(16)),
+      children: [
           // 大卡片：扫描入口 + 扫描动画（转圈 + 波纹），共用组件，
           // 与外接 GPS 页同一套样式。
           DeviceScanCard(
@@ -616,8 +617,23 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
             'Insta360 / DJI 是否连上以系统 Wi-Fi 与品牌 App 显示为准。',
             style: TextStyle(color: Colors.white54, fontSize: 11),
           ),
-        ],
+      ],
+    );
+    if (widget.compact) return body;
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
+        ),
+        title: Text(
+          s.t('连接运动相机', 'Connect camera'),
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
+      body: body,
     );
   }
 
