@@ -1,0 +1,22 @@
+Ref,Value,Package,X_mm,Y_mm,Rotation_deg,Side,Keepout_Zone,Notes
+ANT1,GPS_Patch_25x25,DriveTrack:GPS_Patch_25x25,14.50,20.50,0,top,GNSS_ANTENNA,25x25 ceramic antenna; full no-battery keepout below and around
+U2,NEO-M9N,RF_GPS:ublox_NEO,14.50,42.00,-90,top,GNSS_ANTENNA,place immediately below antenna for shortest RF feed
+U3,BMI088,DriveTrack:BMI088_LGA-16_3.0x4.5mm,10.00,54.00,0,top,IMU_STRESS_FREE,outside battery projection and away from mounting screws
+U4,BMP390,DriveTrack:BMP390_LGA-10_2.0x2.0mm,4.00,54.00,0,top,PRESSURE_VENT,near left vent; keep away from IP5306/TPS/inductors
+U1,ESP32-S3-WROOM-1U-N16R8,RF_Module:ESP32-S3-WROOM-1U,48.00,15.00,0,top,DIGITAL_RF,2.4GHz IPEX routed to lid FPC; keep away from GNSS patch
+J1,microSD push-push,Connector_Card:microSD_HC_Hirose_DM3AT-SF-PEJM5,48.00,52.00,180,top,CARD_SLOT,eject inward; reserve 4.5mm stroke and anti-short guide
+J2,USB-C 16P,Connector_USB:USB_C_Receptacle_Amphenol_12401610E4-2A,33.50,65.50,0,top,POWER_EDGE,bottom edge; ESD diodes close to connector
+J3,JST-PH 2.0mm,Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal,60.00,58.00,-90,top,BATTERY_CONNECTOR,right edge; keep away from GNSS/IMU/BMP
+U5,IP5306,DriveTrack:IP5306_eSOP-8_3.9x4.9mm_EP2.21x3.10,27.00,60.00,0,top,POWER_HOT,USB end; not under BMP/BMI; solid thermal ground
+U6,TPS563201,Package_TO_SOT_SMD:SOT-23-6,37.00,60.00,0,top,POWER_HOT,USB end; keep switching node away from sensors
+L1,1u,Inductor_SMD:L_7.3x7.3_H4.5,31.00,57.00,0,top,POWER_HOT,shielded inductor; keep >8mm from BMP390 and >10mm from BMI088
+L2,2.2u,Inductor_SMD:L_1210_3225Metric,43.00,57.00,0,top,POWER_HOT,buck inductor; route SW short and away from RF/sensors
+DS1..DS5,LED 0805,LED_0805_2012Metric,6.00..26.00,3.20,0,top,LED_STRIP,top edge status/battery LEDs; light pipe in lid
+SW1,BOOT,SW_SPST_EVQP7A,33.60,23.00,0,top,DEBUG,internal only; not through shell
+SW2,RST,SW_SPST_EVQP7A,40.00,23.00,0,top,DEBUG,internal only; not through shell
+J4,U.FL DNI,Connector_Coaxial:U.FL_Hirose_U.FL-R-SMT-1_Vertical,60.00,15.00,0,top,RF_TEST,optional GNSS alternate path; DNI by default
+R8,0R RF jumper,Resistor_SMD:R_0603_1608Metric,14.50,31.50,90,top,GNSS_ANTENNA,prefer remove and direct 50R trace in production
+MH1,MH 2.2mm NPTH,MountingHole_2.2mm,5.00,3.50,0,top,MECHANICAL,top strip; outside battery and antenna active area
+MH2,MH 2.2mm NPTH,MountingHole_2.2mm,62.00,3.50,0,top,MECHANICAL,top strip; outside battery
+MH3,MH 2.2mm NPTH,MountingHole_2.2mm,5.00,66.50,0,top,MECHANICAL,bottom strip; outside battery and USB keepout
+MH4,MH 2.2mm NPTH,MountingHole_2.2mm,62.00,66.50,0,top,MECHANICAL,bottom strip; outside battery

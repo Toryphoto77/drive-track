@@ -1,0 +1,14 @@
+Zone,X0_mm,Y0_mm,X1_mm,Y1_mm,Rule,Reason
+BOARD_OUTLINE,0.00,0.00,67.00,70.00,board size 67x70 mm,4-layer FR4 1.6mm; rounded corners R2.0
+BATTERY_104060,27.00,5.00,67.00,65.00,battery projection only,40x60 pouch; no posts through cell; no BMI/BMP/GNSS above
+NO_BATTERY_LEFT,0.00,0.00,27.00,70.00,no battery foil/battery pack,sensor safe zone for GNSS/IMU/BMP and vent
+GNSS_ANTENNA_KEEPOUT,1.00,2.00,28.00,34.00,no battery,metal,screws,high-speed traces,switching nodes,ceramic antenna ground plane
+GNSS_FEED_KEEPOUT,12.00,28.00,17.00,43.00,50R trace with ground guard,ANT1 to NEO-M9N feed; minimize vias; avoid parallel digital traces
+IMU_STRESS_FREE,5.00,47.00,15.50,59.00,no battery,connectors,screws,large copper pour cuts,BMI088 mechanical/thermal isolation
+PRESSURE_VENT,1.00,47.00,7.00,59.00,vent/membrane access; keep >10mm from IP5306/L1/L2,BMP390 pressure accuracy and thermal isolation
+POWER_HOT,24.00,54.00,52.00,68.00,power devices and thermal relief,USB charging/buck area; keep away from BMP390 and BMI088
+USB_KEEPOUT,22.00,63.00,45.00,70.00,USB connector + ESD + test pads,avoid battery connector and SD ejection path
+SD_EJECT,32.00,47.00,56.00,56.00,reserve 4.5mm ejection stroke,microSD card must not touch battery/connectors/devices
+WIFI_FPC_KEEPOUT,42.00,1.00,67.00,12.00,lid 2.4GHz FPC net area,away from GNSS patch and battery foil; no metal screws inside
+MOUNTING_TOP_BOTTOM,0.00,0.00,67.00,6.00,top strip for screws,outside battery and antenna
+MOUNTING_BOTTOM,0.00,64.00,67.00,70.00,bottom strip for screws/USB,outside battery and antenna
