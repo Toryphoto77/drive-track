@@ -3,7 +3,7 @@
 /// 覆盖：
 /// - 配置值：jsDelivr 清单地址、回落 GitHub 地址均指向
 ///   Toryphoto77/drive-track（旧账号链接已清掉）；
-/// - 仓库根 update-manifest.json：当前版 1.7.1+70、apkUrl 指向 CloudBase
+/// - 仓库根 update-manifest.json：当前版 1.7.2+71、apkUrl 指向 CloudBase
 ///   国内 CDN（GitHub Release 地址保留在 apks.&lt;abi&gt;.url 兜底）；
 /// - 本地 HttpServer 编排：清单成功时不走回落；清单失败时回落
 ///   GitHub 接口；两路都失败时返回 error、绝不谎称最新。
@@ -59,14 +59,14 @@ void main() {
       final file = File('update-manifest.json');
       expect(file.existsSync(), isTrue);
       final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-      expect(json['versionName'], '1.7.1');
-      expect(json['versionCode'], 70);
+      expect(json['versionName'], '1.7.2');
+      expect(json['versionCode'], 71);
       final apkUrl = json['apkUrl'] as String;
-      expect(apkUrl, contains('/apk/1.7.1/'));
-      expect(apkUrl, endsWith('DriveTrack-v1.7.1-release-arm64-v8a.apk'));
+      expect(apkUrl, contains('/apk/1.7.2/'));
+      expect(apkUrl, endsWith('DriveTrack-v1.7.2-release-arm64-v8a.apk'));
       final apks = json['apks'] as Map<String, dynamic>;
       expect(apks['arm64-v8a']['url'],
-          'https://github.com/Toryphoto77/drive-track/releases/download/v1.7.1/DriveTrack-v1.7.1-release-arm64-v8a.apk');
+          'https://github.com/Toryphoto77/drive-track/releases/download/v1.7.2/DriveTrack-v1.7.2-release-arm64-v8a.apk');
       expect(json['notes'], isA<String>());
     });
   });
@@ -79,8 +79,8 @@ void main() {
         if (req.uri.path == '/manifest.json') {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'versionName': '1.7.2',
-            'versionCode': 71,
+            'versionName': '1.7.3',
+            'versionCode': 72,
             'apkUrl': 'https://example.invalid/app.apk',
             'notes': 'test',
           }));
@@ -99,8 +99,8 @@ void main() {
           ),
         );
         expect(r.status, UpdateCheckStatus.available);
-        expect(r.remoteVersionName, '1.7.2');
-        expect(r.remoteVersionCode, 71);
+        expect(r.remoteVersionName, '1.7.3');
+        expect(r.remoteVersionCode, 72);
         expect(r.downloadUrl, 'https://example.invalid/app.apk');
         expect(githubHits, 0);
       } finally {
@@ -117,8 +117,8 @@ void main() {
           mirrorHits++;
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'versionName': '1.7.2',
-            'versionCode': 71,
+            'versionName': '1.7.3',
+            'versionCode': 72,
             'apkUrl': 'https://example.invalid/app.apk',
           }));
         } else {
@@ -135,7 +135,7 @@ void main() {
           ),
         );
         expect(r.status, UpdateCheckStatus.available);
-        expect(r.remoteVersionCode, 71);
+        expect(r.remoteVersionCode, 72);
         expect(mirrorHits, 1);
       } finally {
         await server.close(force: true);
@@ -148,8 +148,8 @@ void main() {
         if (req.uri.path == '/manifest.json') {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'versionName': '1.7.1',
-            'versionCode': 70,
+            'versionName': '1.7.2',
+            'versionCode': 71,
             'apkUrl': 'https://example.invalid/app.apk',
           }));
         } else {
@@ -180,11 +180,11 @@ void main() {
         } else {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
-            'tag_name': 'v1.7.2',
+            'tag_name': 'v1.7.3',
             'body': 'fallback notes',
             'assets': [
               {
-                'name': 'DriveTrack-v1.7.2-release-arm64-v8a.apk',
+                'name': 'DriveTrack-v1.7.3-release-arm64-v8a.apk',
                 'browser_download_url': 'https://example.invalid/v163.apk',
               },
             ],
@@ -201,7 +201,7 @@ void main() {
           ),
         );
         expect(r.status, UpdateCheckStatus.available);
-        expect(r.remoteVersionName, '1.7.2');
+        expect(r.remoteVersionName, '1.7.3');
         expect(r.downloadUrl, 'https://example.invalid/v163.apk');
       } finally {
         await server.close(force: true);

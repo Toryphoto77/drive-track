@@ -39,6 +39,15 @@ void main() {
     // 选中弹簧放大 AnimatedScale 均已删除。
     expect(find.byType(AnimatedScale), findsNothing);
     expect(find.byType(TweenAnimationBuilder), findsNothing);
+    // v1.7.2：药丸是自绘玻璃、不在 Material 上，点击区若沿用默认水波/
+    // 高光会画到页面 Material 上，透过玻璃看就是一圈灰白底框。
+    // 每个槽必须用透明 Material + 全透明高光色。
+    final inks = tester.widgetList<InkWell>(find.byType(InkWell)).toList();
+    expect(inks, hasLength(4));
+    for (final ink in inks) {
+      expect(ink.splashColor, Colors.transparent);
+      expect(ink.highlightColor, Colors.transparent);
+    }
     // 点记录图标触发切换回调（记录是第 3 项，下标 2）。
     await tester.tap(find.byIcon(Icons.list_alt));
     await tester.pump();

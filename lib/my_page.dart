@@ -29,6 +29,17 @@ import 'home_layout.dart';
 /// 个人页分区：行程 / 动态 / 收藏 / 成就。
 enum MyPageSection { trips, posts, favorites, achievements }
 
+/// 个人页数据视图：赛道模式 / 日常驾驶。
+/// v1.7.2：两种模式的数据不再摊在同一页，用顶部按钮切换后分别展示。
+enum MyDriveMode { track, street }
+
+extension MyDriveModeLabel on MyDriveMode {
+  String label(S s) => switch (this) {
+    MyDriveMode.track => s.t('赛道模式', 'Track'),
+    MyDriveMode.street => s.t('日常驾驶', 'Daily'),
+  };
+}
+
 extension MyPageSectionLabel on MyPageSection {
   String get label => switch (this) {
     MyPageSection.trips => '行程',
@@ -183,10 +194,9 @@ class MyPage extends StatefulWidget {
   /// 本机真实行程总数（用于算“待上传”条数，不编数）。
   final int cloudTotal;
 
-  /// 社交数字：调用方传入的真实本机数字（关注 / 粉丝 / 获赞）。
-  final int following;
-  final int followers;
-  final int likes;
+  /// 赛道模式统计（赛道行程数 / 赛道里程 / 赛道用时 / 最快圈速），
+  /// 由调用方按 isTrackMode 过滤后传入；空列表时不显示统计卡。
+  final List<MyStat> trackStats;
 
   final List<MyTripItem> trips;
   final List<MyTripItem> posts;
@@ -216,9 +226,7 @@ class MyPage extends StatefulWidget {
     this.onUploadAll,
     this.uploading = false,
     this.cloudTotal = 0,
-    required this.following,
-    required this.followers,
-    required this.likes,
+    this.trackStats = const [],
     required this.trips,
     required this.posts,
     required this.favorites,
@@ -234,6 +242,16 @@ class MyPage extends StatefulWidget {
 
 class _MyPageState extends State<MyPage> {
   late MyPageSection _section = widget.initialSection;
+
+  /// 默认视图：有真实赛道圈速时先看赛道，否则先看日常驾驶。
+  late MyDriveMode _mode = widget.bestLap == null
+      ? MyDriveMode.street
+      : MyDriveMode.track;
+
+  void _selectMode(MyDriveMode mode) {
+    if (_mode == mode) return;
+    setState(() => _mode = mode);
+  }
 
   @override
   void didUpdateWidget(covariant MyPage oldWidget) {
@@ -434,19 +452,6 @@ class _MyPageState extends State<MyPage> {
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ],
-          // v1.5.1：关注/粉丝/获赞并进资料卡（原独立社交卡已删）；
-          // 数字为调用方传入的真实本机数字，为 0 时显示“暂无”，不编数。
-          const SizedBox(height: 14),
-          Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _socialCell(S.of(context).t('关注', 'Following'), widget.following),
-              _socialCell(S.of(context).t('粉丝', 'Followers'), widget.followers),
-              _socialCell(S.of(context).t('获赞', 'Likes'), widget.likes),
-            ],
-          ),
-          const SizedBox(height: 8),
         ],
       ),
     );
@@ -479,23 +484,6 @@ class _MyPageState extends State<MyPage> {
     if (tooltip == null) return btn;
     return Tooltip(message: tooltip, child: btn);
   }
-
-  /// 资料卡内的社交数字格：数字在上、标签在下，居中。
-  Widget _socialCell(String label, int n) => Expanded(
-    child: Column(
-      children: [
-        Text(
-          n > 0 ? '$n' : S.of(context).t('暂无', 'None'),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white54, fontSize: 12),
-        ),
-      ],
-    ),
-  );
 
   /// 数据卡：累计统计 + 本月汇总合并进同一张大卡，中间细线分隔；
   /// 两张表都是调用方传入的真实数据，不在这里计算或补数。
@@ -1129,6 +1117,102 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
+  /// 赛道模式 / 日常驾驶切换：两段药丸，选中态主题色。
+  /// 两个视图的数据各自成组，不混在同一屏里。
+  Widget _driveModeBar() {
+    final s = S.of(context);
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: CardStyle.borderColor),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: Row(
+          children: [
+            for (final mode in MyDriveMode.values)
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _selectMode(mode),
+                    borderRadius: BorderRadius.circular(999),
+                    child: Container(
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: _mode == mode
+                            ? CardStyle.accent(context)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        mode.label(s),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: _mode == mode
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 赛道模式统计卡：赛道行程 / 里程 / 用时 / 最快圈，全部来自调用方。
+  Widget _trackStatsCard() {
+    if (widget.trackStats.isEmpty) return const SizedBox.shrink();
+    return _card(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < widget.trackStats.length; i++) ...[
+            if (i > 0) const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        widget.trackStats[i].value,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        softWrap: false,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.trackStats[i].label,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _tripRow(MyTripItem item, {bool showPublicToggle = false}) {
     final s = S.of(context);
     return Padding(
@@ -1333,16 +1417,24 @@ class _MyPageState extends State<MyPage> {
         children: [
           _profileCard(),
           const SizedBox(height: 12),
-          // 先给“战果”：最佳圈速 + 各赛道最佳圈速；没有真实圈速时是空态卡。
-          _bestLapCard(),
+          // 赛道模式 / 日常驾驶各看各的数据，不再全部摊在一页。
+          _driveModeBar(),
           const SizedBox(height: 12),
-          if (widget.trackBests.isNotEmpty) ...[
-            _trackBestCard(),
+          if (_mode == MyDriveMode.track) ...[
+            // 先给“战果”：最佳圈速 + 各赛道最佳圈速；没有真实圈速时是空态卡。
+            _bestLapCard(),
             const SizedBox(height: 12),
+            if (widget.trackBests.isNotEmpty) ...[
+              _trackBestCard(),
+              const SizedBox(height: 12),
+            ],
+            _trackStatsCard(),
+            if (widget.trackStats.isNotEmpty) const SizedBox(height: 12),
+          ] else ...[
+            _statsCard(),
+            if (widget.stats.isNotEmpty || widget.monthlyStats.isNotEmpty)
+              const SizedBox(height: 12),
           ],
-          _statsCard(),
-          if (widget.stats.isNotEmpty || widget.monthlyStats.isNotEmpty)
-            const SizedBox(height: 12),
           // 云端上传：真实计数 + 一键上传，点卡片进云端管理页。
           _cloudCard(),
           const SizedBox(height: 12),

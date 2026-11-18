@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'amap_service.dart';
 import 'app_bar_style.dart';
 import 'app_notice.dart';
+import 'card_style.dart';
 import 'dt_page_route.dart';
 import 'models.dart';
 import 'native.dart';
@@ -1048,26 +1049,21 @@ class LibraryVersionCard extends StatelessWidget {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF16181C),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
+    return DriveTrackCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(Icons.map_outlined, color: accent, size: 22),
+                child: Icon(Icons.map_outlined, color: accent, size: 20),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -1077,7 +1073,7 @@ class LibraryVersionCard extends StatelessWidget {
                     Text(
                       '赛道库',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -1109,7 +1105,7 @@ class LibraryVersionCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Row(
             children: [
               if (checking)
@@ -1173,7 +1169,7 @@ class LibraryVersionCard extends StatelessWidget {
         foregroundColor: Colors.white,
         disabledBackgroundColor: const Color(0xFF2A2D33),
         disabledForegroundColor: Colors.white38,
-        minimumSize: const Size.fromHeight(46),
+        minimumSize: const Size.fromHeight(42),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       );
@@ -1181,7 +1177,7 @@ class LibraryVersionCard extends StatelessWidget {
   ButtonStyle _outlineStyle() => OutlinedButton.styleFrom(
         foregroundColor: Colors.white,
         side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
-        minimumSize: const Size.fromHeight(46),
+        minimumSize: const Size.fromHeight(42),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       );
