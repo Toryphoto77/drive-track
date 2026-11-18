@@ -4,7 +4,7 @@ import 'package:drive_track/bt_gps_receiver.dart';
 import 'package:drive_track/device_center.dart';
 
 void main() {
-  testWidgets('v1.1.0 device center groups: camera / GPS / sensor',
+  testWidgets('v1.7.1 device center: 我的设备 + 可添加设备两张卡',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
@@ -20,48 +20,28 @@ void main() {
     );
     await tester.pump();
     expect(find.text('设备中心'), findsOneWidget);
-    // 三组标题（不再有重复的 BleDIY 说明区）。
+    // 两段：我的设备（空态）+ 可添加设备（三行）。
+    expect(find.text('我的设备'), findsOneWidget);
+    expect(find.text('尚未连接设备'), findsOneWidget);
+    expect(find.text('连接传感器或外接 GPS 后在这里管理'), findsOneWidget);
+    expect(find.text('可添加设备'), findsOneWidget);
     expect(find.text('运动相机'), findsOneWidget);
+    expect(find.text('GoPro · Insta360 · DJI'), findsOneWidget);
     expect(find.text('外接 GPS 模块'), findsOneWidget);
-    expect(find.text('BleDIY 外部 GPS'), findsNothing);
-    // 档案卡扩至兼容清单后页面变长，传感器区需滚动才进入
-    // 懒加载 ListView 的视口；功能仍在，只是测试要按页顺序滚动断言。
-    await tester.scrollUntilVisible(
-      find.text('传感器：已保存设备（点重连）'),
-      300,
-    );
-    await tester.pump();
-    expect(find.text('传感器：已保存设备（点重连）'), findsOneWidget);
-    // v1.5.8：自定义 BLE 手动添加表单已移除，标题与表单都不在树里。
-    expect(find.text('传感器：自定义 BLE 设备'), findsNothing);
-    expect(find.text('添加自定义传感器'), findsNothing);
-    // 旧的按品牌三张卡已删：设备中心里「高级 / 按品牌」整个区不在，
-    // 相机唯一入口是「打开连接运动相机」。先断言主入口，再断言旧区与旧操作全不在树里。
-    expect(find.text('打开连接运动相机'), findsOneWidget);
-    expect(find.text('高级 / 按品牌'), findsNothing);
-    expect(find.text('扫描 GoPro 设备'), findsNothing);
-    expect(find.text('连接（需原生支持）'), findsNothing);
-    // v1.5.4：相机卡只列支持品牌，不讲各品牌连接方式。
-    expect(find.text('支持的运动相机：GoPro、Insta360、DJI。'), findsOneWidget);
-    expect(find.textContaining('走 BLE 直连'), findsNothing);
-    expect(find.textContaining('走 Wi-Fi 热点'), findsNothing);
-    // v1.5.4：「高级 / 手动添加」区与「外接 GPS：未连接」状态卡均已删。
-    expect(find.text('高级 / 手动添加'), findsNothing);
-    expect(find.text('外接 GPS：未连接'), findsNothing);
-    expect(find.text('保存到本机清单'), findsNothing);
-    expect(find.text('暂无定位：尚未收到有效定位。'), findsNothing);
-    // v1.5.4：OBD 入口与相机 / GPS 并列在顶部，点卡弹「敬请期待」。
     expect(find.text('OBD（ELM327）'), findsOneWidget);
-    // 单入口主按钮在顶部；档案卡已随高级区删除，不在树里。
-    expect(find.text('扫描适配设备'), findsOneWidget);
-    expect(find.text('BleDIY'), findsNothing);
-    // v1.5.8：自定义表单整体移除，字段不再出现在树里。
-    expect(find.text('名称，如：我的功率计'), findsNothing);
-    expect(find.text('保存到本机'), findsNothing);
+    expect(find.text('敬请期待'), findsOneWidget);
+    // 相机入口就在行内，不再有旧的整卡按钮。
+    expect(find.text('打开连接运动相机'), findsNothing);
+    // 扫描长列表与手动表单已收进扫描面板，不在页面里。
+    expect(find.text('传感器：附近扫描结果'), findsNothing);
+    expect(find.text('开始扫描'), findsNothing);
+    expect(find.text('传感器：已保存设备（点重连）'), findsNothing);
+    expect(find.text('传感器：自定义 BLE 设备'), findsNothing);
+    expect(find.text('扫描适配设备'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('v1.5.4 OBD 占位卡：点按弹「敬请期待」，不走真实连接',
+  testWidgets('v1.5.4 OBD 占位行：点按弹「敬请期待」，不走真实连接',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
@@ -76,17 +56,42 @@ void main() {
       ),
     );
     await tester.pump();
-    // OBD 卡在顶部三区之内：标题 + 敬请期待徽标 + 按钮都在。
     expect(find.text('OBD（ELM327）'), findsOneWidget);
-    expect(find.text('行车电脑数据：车速 / 转速 / 油门 / 水温。'),
-        findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, '敬请期待'));
+    await tester.tap(find.text('OBD（ELM327）'));
     await tester.pump();
     expect(find.text('OBD · 敬请期待'), findsOneWidget);
     expect(find.textContaining('正在路上'), findsOneWidget);
     await tester.tap(find.text('知道了'));
     await tester.pump();
     expect(find.text('OBD · 敬请期待'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('v1.7.1 扫描设备面板：点“扫描设备”拉起，空态可关闭',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          colorScheme: const ColorScheme.dark(primary: Color(0xFFE10600)),
+        ),
+        home: const DeviceCenterPage(),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(OutlinedButton, '扫描设备'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    // 无原生通道时扫描失败只提示，不抛异常；空态文案仍在。
+    expect(find.text('尚未发现设备'), findsOneWidget);
+    expect(find.text('取消'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('尚未发现设备'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -115,7 +120,8 @@ void main() {
     );
   });
 
-  testWidgets('embedded tab chrome: no back AppBar, in-page title, matches list page pattern',
+  testWidgets(
+      'embedded tab chrome: no back AppBar, in-page title, matches list page pattern',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
@@ -136,6 +142,8 @@ void main() {
     expect(find.text('设备中心'), findsOneWidget);
     expect(find.byIcon(Icons.arrow_back), findsNothing);
     expect(find.text('运动相机'), findsOneWidget);
+    // 页内 + 号是扫描入口（不再需要滚动到页面底部找“开始扫描”）。
+    expect(find.byIcon(Icons.add), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

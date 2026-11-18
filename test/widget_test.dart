@@ -34,8 +34,8 @@ void main() {
     expect(find.byIcon(Icons.home), findsWidgets);
     expect(find.byIcon(Icons.list_alt), findsWidgets);
     expect(find.byIcon(Icons.person), findsWidgets);
-    // v1.5.4：设备中心移到第 4 个导航图标（设备），菜单里不再有该项。
-    expect(find.byIcon(Icons.devices), findsWidgets);
+    // v1.7.1：底栏设备中心图标改为 Icons.sensors（不再是 Icons.devices）。
+    expect(find.byIcon(Icons.sensors), findsWidgets);
     // 首页不再有可见权限按钮
     expect(find.text('请求权限'), findsNothing);
     // v0.1.2：首页天气实体按钮、大标定卡、演示入口全部移走/删除

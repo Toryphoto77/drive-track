@@ -933,15 +933,32 @@ class LibraryVersionCard extends StatelessWidget {
     required this.onUpdateAll,
   });
 
-  /// 状态行文案（三态：未检查 / 已是最新 / 有更新；检查失败时显示
-  /// 错误信息原文）。
-  String get statusText {
+  /// 状态标题：未检测 / 检测中 / 已是最新 / 发现新版本 / 检测失败。
+  /// 版本号降级成右上角标签，状态与主操作才是这张卡的主体。
+  String get statusTitle {
     if (checking) return '正在检测…';
     final c = check;
     if (c == null) return '尚未检测';
     switch (c.status) {
       case UpdateCheckStatus.upToDate:
-        return '赛道库已是最新版本';
+        return '已是最新版本';
+      case UpdateCheckStatus.available:
+        return c.remoteDataVersion.isEmpty
+            ? '发现新版本'
+            : '发现新版本 ${c.remoteDataVersion}';
+      case UpdateCheckStatus.error:
+        return '检测失败';
+    }
+  }
+
+  /// 状态副文案：说明这次检测在做什么或结果含义，失败时是错误原文。
+  String get statusDetail {
+    if (checking) return '正在连接服务器';
+    final c = check;
+    if (c == null) return '获取最新赛道数据与修复';
+    switch (c.status) {
+      case UpdateCheckStatus.upToDate:
+        return '本地赛道数据已与服务器一致';
       case UpdateCheckStatus.available:
         return '${c.updates.length} 个包可更新';
       case UpdateCheckStatus.error:
@@ -949,20 +966,20 @@ class LibraryVersionCard extends StatelessWidget {
     }
   }
 
-  /// 状态行圆点颜色：已是最新为绿、有更新为橙、其余为灰。
+  /// 状态圆点：已是最新绿、有更新琥珀、其余灰。
   Color get statusDotColor {
     final c = check;
     if (!checking && c != null) {
       switch (c.status) {
         case UpdateCheckStatus.upToDate:
-          return Colors.green;
+          return const Color(0xFF34C759);
         case UpdateCheckStatus.available:
-          return Colors.orange;
+          return const Color(0xFFFFB020);
         case UpdateCheckStatus.error:
-          return Colors.white54;
+          return Colors.white38;
       }
     }
-    return Colors.white54;
+    return Colors.white38;
   }
 
   /// [更新赛道库] 按钮可用条件：检查出可更新包且不在检测/更新中。
@@ -977,91 +994,197 @@ class LibraryVersionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     final c = check;
+    final available = c != null && c.status == UpdateCheckStatus.available;
+    final upToDate = c != null && c.status == UpdateCheckStatus.upToDate;
+    final failed = c != null && c.status == UpdateCheckStatus.error;
+    final busy = checking || applying;
+
+    // 一张卡一个主操作：检测中/更新中置灰；有更新→实心更新；
+    // 已是最新→描边重检；未检测或失败→实心检测。
+    final Widget action;
+    if (busy) {
+      action = FilledButton(
+        onPressed: null,
+        style: _actionStyle(accent),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white54,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(applying ? '更新中…' : '检测中…'),
+          ],
+        ),
+      );
+    } else if (available) {
+      action = FilledButton(
+        onPressed: updateButtonEnabled ? onUpdateAll : null,
+        style: _actionStyle(accent),
+        child: Text(
+          c.remoteDataVersion.isEmpty
+              ? '更新赛道库'
+              : '更新到 ${c.remoteDataVersion}',
+        ),
+      );
+    } else if (upToDate) {
+      action = OutlinedButton(
+        onPressed: onCheck,
+        style: _outlineStyle(),
+        child: const Text('重新检测'),
+      );
+    } else {
+      action = FilledButton(
+        onPressed: onCheck,
+        style: _actionStyle(accent),
+        child: Text(failed ? '重新检测' : '检测更新'),
+      );
+    }
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: const Color(0xFF16181C),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.map_outlined, color: Colors.white70, size: 22),
-              SizedBox(width: 8),
-              Text(
-                '赛道库',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: onVersionTap,
-            child: Text(
-              '当前版本：$dataVersion',
-              style: const TextStyle(fontSize: 16, color: Colors.white),
-            ),
-          ),
-          const SizedBox(height: 6),
           Row(
             children: [
               Container(
-                width: 8,
-                height: 8,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: statusDotColor,
-                  shape: BoxShape.circle,
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.map_outlined, color: accent, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '赛道库',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '赛道数据与版本管理',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  statusText,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+              // 版本号降级为标签；仍可点，策展 gate 的入口不变。
+              GestureDetector(
+                onTap: onVersionTap,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    dataVersion,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              if (checking)
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: accent,
+                  ),
+                )
+              else
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: statusDotColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  statusTitle,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(
+              statusDetail,
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ),
           if (c != null && c.skippedUserModified.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(
-              '${c.skippedUserModified.length} 个包因本地改动未列入更新',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: Text(
+                '${c.skippedUserModified.length} 个包因本地改动未列入更新',
+                style: const TextStyle(color: Colors.white30, fontSize: 11),
+              ),
             ),
           ],
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: checking ? null : onCheck,
-              child: Text(checking ? '检测中…' : '赛道库版本检测'),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: updateButtonEnabled ? onUpdateAll : null,
-              child: Text(applying ? '更新中…' : '更新赛道库'),
-            ),
-          ),
-          const SizedBox(height: 10),
-          // v1.6.0：“从行程导入”整颗按钮搬去「我的赛道」标题行右侧
-          // （见下方 build 里的 myTracksHeader），这张版本卡只留版本相关操作；
-          // 原来按钮下面那行 OSM 小字也一并移出，改成页面最底部的署名行，
-          // 不再挤在按钮下面。
+          const SizedBox(height: 16),
+          SizedBox(width: double.infinity, child: action),
         ],
       ),
     );
   }
+
+  ButtonStyle _actionStyle(Color accent) => FilledButton.styleFrom(
+        backgroundColor: accent,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: const Color(0xFF2A2D33),
+        disabledForegroundColor: Colors.white38,
+        minimumSize: const Size.fromHeight(46),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      );
+
+  ButtonStyle _outlineStyle() => OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
+        minimumSize: const Size.fromHeight(46),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      );
 }
 
 /// v1.6.0：赛道行里的“具体地点”。

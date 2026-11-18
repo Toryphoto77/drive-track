@@ -82,6 +82,35 @@ class MyAchievement {
   });
 }
 
+/// 我的页顶部的“最佳圈速”摘要：赛道名 / 时间 / 副信息（日期、车型）。
+/// 只展示调用方传入的真实最佳圈，没有就不显示这张卡，不编圈速。
+class MyBestLap {
+  final String trackName;
+  final String time;
+  final String meta;
+  final VoidCallback? onTap;
+  const MyBestLap({
+    required this.trackName,
+    required this.time,
+    required this.meta,
+    this.onTap,
+  });
+}
+
+/// “各赛道最佳圈速”列表里的一行：赛道名 / 最快圈 / 副信息（次数、日期）。
+class MyTrackBest {
+  final String trackName;
+  final String time;
+  final String meta;
+  final VoidCallback? onTap;
+  const MyTrackBest({
+    required this.trackName,
+    required this.time,
+    required this.meta,
+    this.onTap,
+  });
+}
+
 /// 编辑页回传的结果：用户名 / 简介 / 头像本机路径 / 扩展资料，由
 /// 总协调持久化（写回 profile.json 的同名字段）并同步云端公开资料。
 /// 邮箱仅存本机，不发服务器。
@@ -139,6 +168,21 @@ class MyPage extends StatefulWidget {
   final List<MyStat> monthlyStats;
   final String monthlyNote;
 
+  /// 最佳圈速摘要（null = 没有真实赛道圈速，不显示这张卡）。
+  final MyBestLap? bestLap;
+
+  /// 各赛道最佳圈速（调用方已排序、截断）。
+  final List<MyTrackBest> trackBests;
+
+  /// 一键上传本机行程到云端；null = 未提供入口。
+  final VoidCallback? onUploadAll;
+
+  /// 上传进行中：按钮置灰并显示“上传中…”。
+  final bool uploading;
+
+  /// 本机真实行程总数（用于算“待上传”条数，不编数）。
+  final int cloudTotal;
+
   /// 社交数字：调用方传入的真实本机数字（关注 / 粉丝 / 获赞）。
   final int following;
   final int followers;
@@ -167,6 +211,11 @@ class MyPage extends StatefulWidget {
     required this.stats,
     this.monthlyStats = const [],
     this.monthlyNote = '',
+    this.bestLap,
+    this.trackBests = const [],
+    this.onUploadAll,
+    this.uploading = false,
+    this.cloudTotal = 0,
     required this.following,
     required this.followers,
     required this.likes,
@@ -398,8 +447,6 @@ class _MyPageState extends State<MyPage> {
             ],
           ),
           const SizedBox(height: 8),
-          Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
-          _cloudFooter(),
         ],
       ),
     );
@@ -575,65 +622,409 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
-  // 云端一期：个人页云端入口（账号状态 + 同步状态，点进云端页）。
-  // 收进资料卡底部做一行状态 + chevron，不再单占一张大卡。
-  // 只读 CloudService 的同步状态、不发任何网络请求。
-  Widget _cloudFooter() {
-    final svc = CloudService.instance;
-    return FutureBuilder<void>(
-      future: svc.initialized,
-      builder: (context, snap) {
-        final subtitle = !svc.isConfigured
-            ? '云端未配置'
-            : svc.status == CloudStatus.uninitialized
-            ? '同步中…'
-            : svc.isAnonymous
-            ? '未登录 · 待上传 ${svc.pendingCount} 条 · 失败 ${svc.failedCount} 条'
-            : '已登录 · 待上传 ${svc.pendingCount} 条 · 失败 ${svc.failedCount} 条';
-        return InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CloudPage()),
-            );
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
+  /// 最佳圈速卡（赛道模式的“战果”）：赛道名 + 大号圈速 + 日期/车型。
+  /// 没有真实圈速时给一张空态卡，引导去赛道记录一圈，不编数字。
+  Widget _bestLapCard() {
+    final s = S.of(context);
+    final b = widget.bestLap;
+    final accent = CardStyle.accent(context);
+    if (b == null) {
+      return _card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                const Icon(
-                  Icons.cloud_outlined,
-                  size: 18,
-                  color: Colors.white70,
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.timer_outlined, size: 20, color: accent),
                 ),
-                const SizedBox(width: 8),
-                const Text(
-                  '云端',
-                  style: TextStyle(
-                    fontSize: 13,
+                const SizedBox(width: 12),
+                Text(
+                  s.t('最佳圈速', 'Best lap'),
+                  style: const TextStyle(
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              s.t('还没有赛道圈速', 'No lap times yet'),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              s.t(
+                '在赛道模式下跑完一圈，这里会自动记录你的最快圈。',
+                'Run a lap in track mode and your best lap shows up here.',
+              ),
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+            if (widget.onStartRecording != null) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: widget.onStartRecording,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(color: accent.withValues(alpha: 0.6)),
+                    minimumSize: const Size.fromHeight(42),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(s.t('去赛道跑一圈', 'Record a lap')),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+    final body = Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CardStyle.cardColor,
+        borderRadius: CardStyle.cardBorderRadius,
+        border: Border.all(color: accent.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.flag_outlined, size: 20, color: accent),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                s.t('最佳圈速', 'Best lap'),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  b.trackName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                b.time,
+                style: const TextStyle(
+                  fontSize: 38,
+                  height: 1,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -1,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Text(
+                  'BEST',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            b.meta,
+            style: const TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+    if (b.onTap == null) return body;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: b.onTap,
+        borderRadius: CardStyle.cardBorderRadius,
+        child: body,
+      ),
+    );
+  }
+
+  /// 各赛道最佳圈速：一行一条，名次用序号，时间为右对齐等宽数字。
+  Widget _trackBestCard() {
+    if (widget.trackBests.isEmpty) return const SizedBox.shrink();
+    final s = S.of(context);
+    final accent = CardStyle.accent(context);
+    return _groupCard([
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+        child: Row(
+          children: [
+            Text(
+              s.t('各赛道最佳圈速', 'Best laps by track'),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${widget.trackBests.length}',
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+      for (var i = 0; i < widget.trackBests.length; i++) ...[
+        _dividerLine(),
+        InkWell(
+          onTap: widget.trackBests[i].onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 22,
                   child: Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 11,
+                    '${i + 1}',
+                    style: TextStyle(
+                      color: i < 3 ? accent : Colors.white38,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: Colors.white38,
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.trackBests[i].trackName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.trackBests[i].meta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  widget.trackBests[i].time,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
               ],
             ),
+          ),
+        ),
+      ],
+    ]);
+  }
+
+  /// 云端上传卡：真实的上传/待上传/失败计数 + 一键上传入口。
+  /// 只读 CloudService 的本机队列状态；上传动作由调用方执行。
+  Widget _cloudCard() {
+    final s = S.of(context);
+    final svc = CloudService.instance;
+    final accent = CardStyle.accent(context);
+    return FutureBuilder<void>(
+      future: svc.initialized,
+      builder: (context, snap) {
+        final done = svc.doneCount;
+        final pending = svc.pendingCount;
+        final failed = svc.failedCount;
+        // 本机还没进队列的行程也算“待上传”，这样首装后按钮就能用。
+        final unsynced =
+            (widget.cloudTotal - done - pending).clamp(0, widget.cloudTotal);
+        final waiting = pending + unsynced;
+        final configured = svc.isConfigured;
+        final subtitle = !configured
+            ? s.t('云端未配置 · 登录后可上传', 'Cloud not configured')
+            : waiting == 0 && failed == 0
+            ? s.t(
+                '已上传 $done 条 · 全部同步',
+                '$done uploaded · all synced',
+              )
+            : s.t(
+                '已上传 $done 条 · 待上传 $waiting 条 · 失败 $failed 条',
+                '$done uploaded · $waiting waiting · $failed failed',
+              );
+        final canUpload = configured && !widget.uploading && waiting > 0;
+        return _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CloudPage()),
+                  );
+                },
+                borderRadius: BorderRadius.circular(14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.cloud_upload_outlined,
+                        size: 20,
+                        color: accent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.t('云端上传', 'Cloud upload'),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: Colors.white38,
+                    ),
+                  ],
+                ),
+              ),
+              if (widget.onUploadAll != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: canUpload ? widget.onUploadAll : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFF2A2D33),
+                          disabledForegroundColor: Colors.white38,
+                          minimumSize: const Size.fromHeight(42),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (widget.uploading) ...[
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white54,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ] else
+                              const Icon(Icons.cloud_upload, size: 16),
+                            if (!widget.uploading) const SizedBox(width: 8),
+                            Text(
+                              widget.uploading
+                                  ? s.t('上传中…', 'Uploading…')
+                                  : waiting == 0
+                                  ? s.t('全部已上传', 'All uploaded')
+                                  : s.t(
+                                      '上传 $waiting 条行程',
+                                      'Upload $waiting trips',
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const CloudPage()),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0x33FFFFFF)),
+                        minimumSize: const Size(88, 42),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(s.t('管理', 'Manage')),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ),
         );
       },
@@ -942,9 +1333,19 @@ class _MyPageState extends State<MyPage> {
         children: [
           _profileCard(),
           const SizedBox(height: 12),
+          // 先给“战果”：最佳圈速 + 各赛道最佳圈速；没有真实圈速时是空态卡。
+          _bestLapCard(),
+          const SizedBox(height: 12),
+          if (widget.trackBests.isNotEmpty) ...[
+            _trackBestCard(),
+            const SizedBox(height: 12),
+          ],
           _statsCard(),
           if (widget.stats.isNotEmpty || widget.monthlyStats.isNotEmpty)
             const SizedBox(height: 12),
+          // 云端上传：真实计数 + 一键上传，点卡片进云端管理页。
+          _cloudCard(),
+          const SizedBox(height: 12),
           _sectionBar(),
           const SizedBox(height: 12),
           if (_section == MyPageSection.trips) ...[

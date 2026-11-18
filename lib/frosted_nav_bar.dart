@@ -63,7 +63,9 @@ class FrostedGlassNavBar extends StatelessWidget {
   static const _tabs = [
     (Icons.home, '首页'),
     // 第 2 项：设备中心（与首页/记录/我的同为底栏页，选中态与切换动画一致）。
-    (Icons.devices, '设备'),
+    // v1.7.1：图标由 Icons.devices 换成 Icons.sensors，和“外接传感器 / GPS”
+    // 的语义更贴切，也不会和首页的设备类图标撞脸。
+    (Icons.sensors, '设备'),
     (Icons.list_alt, '记录'),
     (Icons.person, '我的'),
   ];

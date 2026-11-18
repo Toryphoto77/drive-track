@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'app_bar_style.dart';
 import 'app_locale.dart';
 import 'app_notice.dart';
-import 'dt_page_route.dart';
 
 import 'app_icon_choice.dart';
 import 'card_style.dart';
@@ -343,28 +342,6 @@ class _AboutPageState extends State<AboutPage> {
             ),
           ),
           const SizedBox(height: 12),
-          // v1.0.7：库链接 / 源码 / 作者 ID（点按用系统浏览器打开）。
-          _linkCard(
-            icon: Icons.code,
-            title: s.t('GitHub 仓库', 'GitHub repo'),
-            subtitle: kDriveTrackRepoUrl,
-            onTap: () => Native.openUrl(kDriveTrackRepoUrl),
-          ),
-          const SizedBox(height: 12),
-          _linkCard(
-            icon: Icons.source,
-            title: s.t('源码', 'Source'),
-            subtitle: kDriveTrackRepoUrl,
-            onTap: () => Native.openUrl(kDriveTrackRepoUrl),
-          ),
-          const SizedBox(height: 12),
-          _linkCard(
-            icon: Icons.person,
-            title: s.t('作者 ID', 'Author'),
-            subtitle: 'Toryphoto77',
-            onTap: () => Native.openUrl(kDriveTrackAuthorUrl),
-          ),
-          const SizedBox(height: 12),
           // 免责声明入口：关于页本身不再放免责正文，只留入口。
           DriveTrackCard(
             onTap: () => Navigator.pushNamed(context, DisclaimerPage.routeName),
@@ -416,19 +393,6 @@ class _AboutPageState extends State<AboutPage> {
             subtitle: s.t('导出 / 恢复本机行程与设置备份', 'Export or restore trips and settings'),
             onTap: widget.onOpenBackup,
           ),
-          const SizedBox(height: 16),
-          // v1.0.7：打赏支持（打赏码待作者提供，不编造二维码或收款账号）。
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              icon: const Icon(Icons.volunteer_activism),
-              label: Text(s.t('打赏支持', 'Support')),
-              onPressed: () => Navigator.push(
-                context,
-                DtPageRoute(builder: (_) => const DonationPage()),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -459,27 +423,3 @@ class _AboutPageState extends State<AboutPage> {
   }
 }
 
-/// v1.0.7 打赏页：workspace/user/files 里未找到用户给的收款码图，
-/// 因此只写“感谢支持，打赏码由作者后续添加”，绝不编造二维码或收款账号。
-class DonationPage extends StatelessWidget {
-  const DonationPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: DtAppBar(
-        leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
-        title: const Text('打赏支持'),
-      ),
-      body: Padding(
-        padding: EdgeInsets.fromLTRB(24, 24 + appBarTopInset(context), 24, 24),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('感谢支持', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          SizedBox(height: 12),
-          Text('打赏码由作者后续添加。', style: TextStyle(color: Colors.white70, fontSize: 15)),
-        ]),
-      ),
-    );
-  }
-}

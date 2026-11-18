@@ -32,7 +32,7 @@ void main() {
     expect(find.byIcon(Icons.home), findsOneWidget);
     expect(find.byIcon(Icons.list_alt), findsOneWidget);
     expect(find.byIcon(Icons.person), findsOneWidget);
-    expect(find.byIcon(Icons.devices), findsOneWidget);
+    expect(find.byIcon(Icons.sensors), findsOneWidget);
     expect(find.text('首页'), findsNothing);
     expect(find.text('设备'), findsNothing);
     // 无任何放大动画组件：滚动放大 AnimatedScale、切换拉伸 TweenAnimationBuilder、
@@ -44,7 +44,7 @@ void main() {
     await tester.pump();
     expect(selected, 2);
     // 点设备图标触发第 2 项回调（下标 1，main 侧打开设备中心）。
-    await tester.tap(find.byIcon(Icons.devices));
+    await tester.tap(find.byIcon(Icons.sensors));
     await tester.pump();
     expect(selected, 1);
   });
@@ -62,7 +62,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    const icons = [Icons.home, Icons.devices, Icons.list_alt, Icons.person];
+    const icons = [Icons.home, Icons.sensors, Icons.list_alt, Icons.person];
     for (var i = 0; i < icons.length; i++) {
       await tester.pumpWidget(
         MaterialApp(

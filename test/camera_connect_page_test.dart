@@ -161,10 +161,10 @@ void main() {
       ),
     );
     await tester.pump();
-    // 主入口在顶部；旧的按品牌卡片已删，设备中心里只有一个相机入口。
-    expect(find.text('打开连接运动相机'), findsOneWidget);
+    // v1.7.1：相机入口收进「可添加设备」行，点“运动相机”整行进连接页。
+    expect(find.text('运动相机'), findsOneWidget);
     expect(find.text('扫描 GoPro 设备'), findsNothing);
-    await tester.tap(find.text('打开连接运动相机'));
+    await tester.tap(find.text('运动相机'));
     await tester.pumpAndSettle();
     expect(find.text('扫描相机'), findsOneWidget);
     expect(tester.takeException(), isNull);

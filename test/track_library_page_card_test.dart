@@ -1,4 +1,4 @@
-/// 赛道库顶部版本卡片（截图样式）测试。
+/// 赛道库顶部版本卡片（卡片重构样式）测试。
 ///
 /// 背景：TrackLibraryPage 在 initState 里调 TrackLibraryService.loadAll，
 /// 其 _loadLocal 走 dart:io（File.exists）。实测 widget 测试的 FakeAsync
@@ -6,8 +6,8 @@
 /// 仅含 Directory.createTemp 的 testWidgets 即挂起；同逻辑的普通 test
 /// 则通过；runAsync 也救不回已在 FakeAsync 区创建的 Future）。因此本文件
 /// 不整页泵 TrackLibraryPage，改为两层覆盖：
-/// ① 直接泵纯渲染的 LibraryVersionCard（不碰服务与磁盘）：版本显示、
-/// 三态文案、按钮置灰/可用与回调转发；
+/// ① 直接泵纯渲染的 LibraryVersionCard（不碰服务与磁盘）：版本标签、
+/// 四态文案、主操作按钮与回调转发；
 /// ② 单测纯逻辑 VersionTapGate：2 秒内连点 7 次解锁。
 /// 页面接线（卡片 onVersionTap → _onVersionTap → gate → 策展态）为三行
 /// 直连代码，与旧版逐行一致，已人工核对。
@@ -34,6 +34,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(
+          colorScheme: const ColorScheme.dark(primary: Color(0xFFE10600)),
+        ),
         home: Scaffold(
           body: SingleChildScrollView(
             child: LibraryVersionCard(
@@ -84,35 +87,37 @@ void main() {
     skippedUserModified: const [],
   );
 
-  testWidgets('初始版式：标题 + 真实版本 + 未检查状态 + 更新按钮置灰', (tester) async {
+  testWidgets('初始版式：标题 + 副标题 + 版本标签 + 未检测状态 + 检测按钮', (tester) async {
     await pumpCard(tester, dataVersion: 'V1.0.1');
-    // 标题仍为“赛道库”，不改成截图的“支持赛道”。
+    // 标题仍为“赛道库”，副标题说明这张卡管什么。
     expect(find.text('赛道库'), findsOneWidget);
-    // 真实数据总版本取打包 manifest 的 dataVersion（当前 V1.0.1），
-    // 绝不是截图里对方 App 的 2026.11.02.2。
-    expect(find.text('当前版本：V1.0.1'), findsOneWidget);
+    expect(find.text('赛道数据与版本管理'), findsOneWidget);
+    // 版本号降级为右上角标签，不再是正文行。
+    expect(find.text('V1.0.1'), findsOneWidget);
     expect(find.text('尚未检测'), findsOneWidget);
-    final checkButton = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, '赛道库版本检测'),
+    expect(find.text('获取最新赛道数据与修复'), findsOneWidget);
+    final checkButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '检测更新'),
     );
     expect(checkButton.onPressed, isNotNull);
-    final updateButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, '更新赛道库'),
-    );
-    expect(updateButton.onPressed, isNull);
-    // v1.6.0：从行程导入按钮已从版本卡片移到“我的赛道”标题行，这里不再断言。
+    // 一卡一个主操作：不再同时出现“更新赛道库”。
+    expect(find.text('更新赛道库'), findsNothing);
+    expect(find.text('更新到 V1.0.2'), findsNothing);
   });
 
-  testWidgets('已是最新：绿点文案 + 更新按钮仍置灰', (tester) async {
+  testWidgets('已是最新：绿点文案 + 主操作变成描边“重新检测”', (tester) async {
     await pumpCard(tester, dataVersion: 'V1.0.1', check: upToDateCheck());
-    expect(find.text('赛道库已是最新版本'), findsOneWidget);
-    final updateButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, '更新赛道库'),
+    expect(find.text('已是最新版本'), findsOneWidget);
+    expect(find.text('本地赛道数据已与服务器一致'), findsOneWidget);
+    final again = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '重新检测'),
     );
-    expect(updateButton.onPressed, isNull);
+    expect(again.onPressed, isNotNull);
+    // 已是最新时没有实心主按钮。
+    expect(find.byType(FilledButton), findsNothing);
   });
 
-  testWidgets('有更新：包数文案 + 更新按钮可用 + 点按走回调', (tester) async {
+  testWidgets('有更新：版本文案 + 主按钮直接更新到远端版本 + 点按走回调', (tester) async {
     var updateTapped = false;
     await pumpCard(
       tester,
@@ -120,25 +125,27 @@ void main() {
       check: availableCheck(),
       onUpdateAll: () => updateTapped = true,
     );
+    expect(find.text('发现新版本 V1.0.2'), findsOneWidget);
     expect(find.text('1 个包可更新'), findsOneWidget);
     final updateButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, '更新赛道库'),
+      find.widgetWithText(FilledButton, '更新到 V1.0.2'),
     );
     expect(updateButton.onPressed, isNotNull);
-    await tester.tap(find.text('更新赛道库'));
+    await tester.tap(find.text('更新到 V1.0.2'));
     expect(updateTapped, isTrue);
   });
 
-  testWidgets('检查失败：显示错误原文 + 更新按钮置灰', (tester) async {
+  testWidgets('检查失败：显示错误原文 + 主操作重试', (tester) async {
     await pumpCard(tester, dataVersion: 'V1.0.1', check: errorCheck());
+    expect(find.text('检测失败'), findsOneWidget);
     expect(find.text('网络不通，请检查网络或代理后重试'), findsOneWidget);
-    final updateButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, '更新赛道库'),
+    final retry = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '重新检测'),
     );
-    expect(updateButton.onPressed, isNull);
+    expect(retry.onPressed, isNotNull);
   });
 
-  testWidgets('检测中与更新中：按钮置灰并改文案', (tester) async {
+  testWidgets('检测中与更新中：按钮置灰、文案切换并带进度圈', (tester) async {
     await pumpCard(
       tester,
       dataVersion: 'V1.0.1',
@@ -146,11 +153,13 @@ void main() {
       checking: true,
     );
     expect(find.text('正在检测…'), findsOneWidget);
+    expect(find.text('正在连接服务器'), findsOneWidget);
     expect(find.text('检测中…'), findsOneWidget);
-    final updateButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, '更新赛道库'),
+    expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
+    final busyButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '检测中…'),
     );
-    expect(updateButton.onPressed, isNull);
+    expect(busyButton.onPressed, isNull);
 
     await pumpCard(
       tester,
@@ -159,23 +168,23 @@ void main() {
       applying: true,
     );
     expect(find.text('更新中…'), findsOneWidget);
-    final updateButton2 = tester.widget<FilledButton>(
+    final applyingButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, '更新中…'),
     );
-    expect(updateButton2.onPressed, isNull);
+    expect(applyingButton.onPressed, isNull);
   });
 
-  testWidgets('版本文本点按转发给 onVersionTap（策展 gate 的入口）', (tester) async {
+  testWidgets('版本标签点按转发给 onVersionTap（策展 gate 的入口）', (tester) async {
     var taps = 0;
     await pumpCard(tester, dataVersion: 'V1.0.1', onVersionTap: () => taps++);
-    await tester.tap(find.text('当前版本：V1.0.1'));
+    await tester.tap(find.text('V1.0.1'));
     expect(taps, 1);
   });
 
   testWidgets('检测按钮点按转发给 onCheck', (tester) async {
     var tapped = false;
     await pumpCard(tester, dataVersion: 'V1.0.1', onCheck: () => tapped = true);
-    await tester.tap(find.text('赛道库版本检测'));
+    await tester.tap(find.text('检测更新'));
     expect(tapped, isTrue);
   });
 
