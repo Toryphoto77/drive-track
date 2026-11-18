@@ -2875,7 +2875,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                         child: Image.network(
                           satelliteTileUrl(zoom, x, y),
                           key: ValueKey('analysis-sat-$zoom-$x-$y'),
-                          headers: const {'User-Agent': 'DriveTrack/1.6.4'},
+                          headers: const {'User-Agent': 'DriveTrack/1.7.1'},
                           fit: BoxFit.fill,
                           gaplessPlayback: true,
                           errorBuilder: (_, _, _) {

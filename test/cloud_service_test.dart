@@ -324,9 +324,9 @@ Future<Directory> _tempDir() =>
 
 void main() {
   group('CloudBase 配置与版本', () {
-    test('pubspec 版本仍是 1.6.4+69，且不含 supabase / cloudbase_flutter', () {
+    test('pubspec 版本仍是 1.7.1+70，且不含 supabase / cloudbase_flutter', () {
       final content = File('pubspec.yaml').readAsStringSync();
-      expect(content, contains('version: 1.6.4+69'));
+      expect(content, contains('version: 1.7.1+70'));
       expect(content.toLowerCase(), isNot(contains('supabase')));
       // HTTP API 路由：零新增 pub 依赖，SDK 不进 pubspec。
       expect(content, isNot(contains('cloudbase_flutter')));

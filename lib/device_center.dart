@@ -1497,12 +1497,9 @@ class DeviceCenterPage extends StatefulWidget {
 
 class _DeviceCenterPageState extends State<DeviceCenterPage> {
   List<SavedDevice> _saved = [];
-  final List<Map<String, dynamic>> _scanned = [];
   final Map<String, DeviceLinkStatus> _statusByAddress = {};
-  bool _scanning = false;
   String? _notice;
 
-  StreamSubscription<Map<String, dynamic>>? _devSub;
   StreamSubscription<Map<String, dynamic>>? _dataSub;
 
   final BleDiyGpsFeed _gpsFeed = BleDiyGpsFeed();
@@ -1511,14 +1508,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   void initState() {
     super.initState();
     _loadSaved();
-    _devSub = Native.bleDeviceStream.listen((e) {
-      final addr = (e['address'] ?? '').toString();
-      if (addr.isEmpty) return;
-      setState(() {
-        _scanned.removeWhere((d) => d['address'] == addr);
-        _scanned.insert(0, e);
-      });
-    }, onError: (_) {});
     _dataSub = Native.bleDataStream.listen((e) {
       final type = (e['type'] ?? '').toString();
       final addr = (e['address'] ?? '').toString();
@@ -1539,7 +1528,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
 
   @override
   void dispose() {
-    _devSub?.cancel();
     _dataSub?.cancel();
     super.dispose();
   }
@@ -1554,29 +1542,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     final ok = await DeviceCenterStore.save(_saved);
     if (!mounted) return;
     setState(() => _notice = ok ? '已保存到本机。' : '保存失败：本机文件写入失败。');
-  }
-
-  Future<void> _toggleScan() async {
-    try {
-      if (_scanning) {
-        await Native.stopBleScan();
-        setState(() {
-          _scanning = false;
-          _notice = '已停止扫描。';
-        });
-      } else {
-        await Native.startBleScan();
-        setState(() {
-          _scanning = true;
-          _notice = S.current.t(
-            '正在扫描功率、踏频、心率。',
-            'Scanning power, cadence, and heart rate.',
-          );
-        });
-      }
-    } catch (e) {
-      setState(() => _notice = '扫描失败：$e');
-    }
   }
 
   Future<void> _connectSaved(SavedDevice device) async {
@@ -1616,15 +1581,25 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             ),
       children: [
         if (widget.embedded) ...[
-          Text(
-            s.t('设备中心', 'Devices'),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              Text(
+                s.t('设备中心', 'Devices'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: _openScanSheet,
+                tooltip: s.t('扫描设备', 'Scan devices'),
+                icon: const Icon(Icons.add, color: Colors.white, size: 22),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 2),
         ],
         if (_notice != null)
           Container(
@@ -1639,82 +1614,14 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               style: const TextStyle(color: Colors.white, fontSize: 13),
             ),
           ),
-        _sectionTitle(s.t('运动相机', 'Action cam')),
-        // v1.2.12：统一入口是「连接运动相机」新页（一个入口扫全部品牌，
-        // 品牌自动识别、点行即连）。旧的按品牌三张卡已删，只留一个入口。
-        // v1.5.4：本卡与外接 GPS 卡、OBD 卡同一套样式（#0B0E13 底、
-        // 圆角 16、白 12% 描边、16 内边距、全宽 FilledButton）；文案
-        // 只列支持的品牌，不讲各品牌连接方式（连接方式见连接页）。
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0B0E13),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.videocam, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      s.t('连接运动相机', 'Connect camera'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                s.t(
-                  '支持的运动相机：GoPro、Insta360、DJI。',
-                  'Supported: GoPro, Insta360, DJI.',
-                ),
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).push(
-                    DtPageRoute(builder: (_) => const CameraConnectPage()),
-                  ),
-                  child: Text(s.t('打开连接运动相机', 'Open camera connect')),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // v1.7.0：原「自研设备固件升级」独立卡已删。固件升级、电量、
-        // 关机、圈速导入统一放进外接 GPS 卡片连上自研硬件后的
-        // 硬件管理界面（见 ExternalGpsSection / device_hardware_card）。
-        _sectionTitle(s.t('外接 GPS 模块', 'External GPS')),
-        Text(
-          s.t(
-            '外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。',
-            'If external GPS drops or is silent for 5s, phone GPS takes over.',
-          ),
-          style: const TextStyle(color: Colors.white60, fontSize: 12),
-        ),
-        const SizedBox(height: 8),
-        const ExternalGpsSection(),
-        const SizedBox(height: 8),
-        // v1.5.4：OBD 入口与运动相机 / 外接 GPS 并列在顶部，同一样式
-        // （#0B0E13 底、圆角 16、白 12% 描边、16 内边距、全宽按钮）。
-        // 标题只在卡内出现一次（不再另起 _sectionTitle，避免重名）。
-        // 占位彩蛋：点卡即弹「敬请期待」，不走真实连接；ObdSection
-        // 与 obd_service / 原生 ObdManager 原样保留，硬件就绪后接回。
-        _obdComingSoonCard(),
-        const SizedBox(height: 8),
+        // 两张卡：我的设备（已连/已保存）+ 可添加设备（三行入口）。
+        // 扫描不再是页面里的长列表，改成右上角 + 弹出的扫描面板。
+        _sectionTitle(s.t('我的设备', 'My devices')),
+        _myDevicesCard(accent),
+        const SizedBox(height: 18),
+        _sectionTitle(s.t('可添加设备', 'Add devices')),
+        _addDevicesCard(accent),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
@@ -1725,60 +1632,14 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             label: Text(s.t('可视化外部 GPS 配置', 'External GPS setup')),
           ),
         ),
-        const SizedBox(height: 16),
-        // v1.5.8：删除「传感器：自定义 BLE 设备」手动添加表单。
-        // 传感器统一走下方「附近扫描结果」直接连接，不再让用户手填 UUID。
-        _sectionTitle(
-          s.t('传感器：已保存设备（点重连）', 'Saved sensors (tap to reconnect)'),
+        const SizedBox(height: 12),
+        Text(
+          s.t(
+            '外接 GPS 断线或 5 秒无新定位时，自动回落手机 GPS。',
+            'If external GPS drops or is silent for 5s, phone GPS takes over.',
+          ),
+          style: const TextStyle(color: Colors.white38, fontSize: 11),
         ),
-        if (_saved.isEmpty)
-          Text(
-            s.t('还没有保存的设备。', 'No saved devices.'),
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-        for (final device in _saved) _savedRow(accent, device),
-        const SizedBox(height: 16),
-        _sectionTitle(s.t('传感器：附近扫描结果', 'Nearby scan')),
-        FilledButton.icon(
-          onPressed: _toggleScan,
-          icon: Icon(
-            _scanning ? Icons.stop : Icons.bluetooth_searching,
-            size: 18,
-          ),
-          label: Text(_scanning ? s.t('停止扫描', 'Stop') : s.t('开始扫描', 'Scan')),
-        ),
-        const SizedBox(height: 8),
-        if (_scanned.isEmpty)
-          Text(
-            s.t('暂无扫描结果。', 'No scan results.'),
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-        for (final dev in _scanned)
-          ListTile(
-            title: Text(
-              (dev['name'] ?? '').toString(),
-              style: const TextStyle(color: Colors.white),
-            ),
-            subtitle: Text(
-              '${dev['address']} · ${dev['type']} · RSSI ${dev['rssi']}',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-            trailing: TextButton(
-              onPressed: () async {
-                final addr = (dev['address'] ?? '').toString();
-                if (addr.isEmpty) return;
-                try {
-                  setState(
-                    () => _statusByAddress[addr] = DeviceLinkStatus.connecting,
-                  );
-                  await Native.connectBle(addr);
-                } catch (e) {
-                  setState(() => _notice = '连接失败：$e');
-                }
-              },
-              child: Text(s.t('连接', 'Connect')),
-            ),
-          ),
       ],
     );
     if (widget.embedded) {
@@ -1797,92 +1658,298 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           s.t('设备中心', 'Devices'),
           style: const TextStyle(color: Colors.white),
         ),
+        actions: [
+          IconButton(
+            onPressed: _openScanSheet,
+            tooltip: s.t('扫描设备', 'Scan devices'),
+            icon: const Icon(Icons.add, color: Colors.white),
+          ),
+        ],
       ),
       body: list,
     );
   }
 
-  /// OBD 占位卡（v1.5.4）：与运动相机 / 外接 GPS 卡同一样式。
-  /// 点卡或点按钮只弹「敬请期待」彩蛋，不发起任何连接；真实 OBD
-  /// 流程（ObdSection / obd_service / 原生 ObdManager）原样保留，
-  /// 硬件就绪后把本卡换回 ObdSection 即可。
-  Widget _obdComingSoonCard() {
+  /// “我的设备”卡：已保存的 BLE 设备（传感器 / GPS），空态引导扫描。
+  Widget _myDevicesCard(Color accent) {
     final s = S.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0E13),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: _showObdComingSoon,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    if (_saved.isEmpty) {
+      return _panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.speed, color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        s.t('OBD（ELM327）', 'OBD (ELM327)'),
+                _iconTile(Icons.bluetooth_disabled, accent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.t('尚未连接设备', 'No devices yet'),
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        s.t('敬请期待', 'Soon'),
+                      const SizedBox(height: 2),
+                      Text(
+                        s.t(
+                          '连接传感器或外接 GPS 后在这里管理',
+                          'Connected sensors and GPS show up here',
+                        ),
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                          color: Colors.white38,
+                          fontSize: 11,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  s.t(
-                    '行车电脑数据：车速 / 转速 / 油门 / 水温。',
-                    'ECU: speed / rpm / throttle / coolant.',
-                  ),
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _showObdComingSoon,
-                    icon: const Icon(Icons.hourglass_top, size: 18),
-                    label: Text(s.t('敬请期待', 'Soon')),
+                    ],
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _openScanSheet,
+                icon: const Icon(Icons.search, size: 16),
+                label: Text(s.t('扫描设备', 'Scan devices')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0x33FFFFFF)),
+                  minimumSize: const Size.fromHeight(42),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return _panel(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          for (var i = 0; i < _saved.length; i++) ...[
+            if (i > 0) _dividerLine(),
+            _savedDeviceTile(accent, _saved[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 可添加设备：相机 / 外接 GPS / OBD 三行，点行进入各自的连接流程。
+  Widget _addDevicesCard(Color accent) {
+    final s = S.of(context);
+    return _panel(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _deviceEntry(
+            accent: accent,
+            icon: Icons.videocam_outlined,
+            title: s.t('运动相机', 'Action cam'),
+            subtitle: 'GoPro · Insta360 · DJI',
+            trailing: s.t('连接', 'Connect'),
+            onTap: () => Navigator.of(
+              context,
+            ).push(DtPageRoute(builder: (_) => const CameraConnectPage())),
+          ),
+          _dividerLine(),
+          _deviceEntry(
+            accent: accent,
+            icon: Icons.gps_fixed,
+            title: s.t('外接 GPS 模块', 'External GPS'),
+            subtitle: s.t(
+              '断线自动回落手机 GPS',
+              'Falls back to phone GPS on disconnect',
+            ),
+            trailing: s.t('扫描', 'Scan'),
+            onTap: _openGpsSheet,
+          ),
+          _dividerLine(),
+          _deviceEntry(
+            accent: accent,
+            icon: Icons.speed,
+            title: s.t('OBD（ELM327）', 'OBD (ELM327)'),
+            subtitle: s.t('车速 / 转速 / 油门 / 水温', 'Speed / rpm / throttle'),
+            trailing: s.t('敬请期待', 'Soon'),
+            enabled: false,
+            onTap: _showObdComingSoon,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _deviceEntry({
+    required Color accent,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String trailing,
+    required VoidCallback onTap,
+    bool enabled = true,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          child: Row(
+            children: [
+              _iconTile(icon, enabled ? accent : Colors.white24, size: 38),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: enabled ? Colors.white : Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                trailing,
+                style: TextStyle(
+                  color: enabled ? Colors.white54 : Colors.white30,
+                  fontSize: 12,
+                ),
+              ),
+              if (enabled)
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: Colors.white30,
+                ),
+            ],
           ),
         ),
       ),
     );
   }
+
+  /// 扫描设备底部面板：打开即扫描，关闭即停止；结果直接可连。
+  Future<void> _openScanSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF121212),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _SensorScanSheet(),
+    );
+  }
+
+  /// 外接 GPS 面板：保留完整的 ExternalGpsSection（扫描 / 配对 /
+  /// 硬件管理都在里面），只是从页面内嵌改成点“扫描”拉起。
+  Future<void> _openGpsSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF121212),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (ctx, controller) {
+          final s = S.of(ctx);
+          return Column(
+            children: [
+              const _SheetHandle(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        s.t('外接 GPS 模块', 'External GPS'),
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: Text(s.t('取消', 'Cancel')),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: controller,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  child: const ExternalGpsSection(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _panel({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(14),
+  }) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: const Color(0xFF16181C),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _iconTile(IconData icon, Color color, {double size = 40}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, size: size * 0.5, color: color),
+    );
+  }
+
+  Widget _dividerLine() =>
+      Container(height: 1, color: Colors.white.withValues(alpha: 0.06));
 
   /// OBD「敬请期待」彩蛋弹窗：App 通用 AlertDialog 样式（见
   /// gps_source_badge.dart 的来源详情弹窗），点「知道了」关闭。
@@ -1922,67 +1989,375 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     ),
   );
 
-  Widget _savedRow(Color accent, SavedDevice device) {
+  Widget _savedDeviceTile(Color accent, SavedDevice device) {
+    final s = S.of(context);
     final addr = device.address;
     final status = addr == null
         ? DeviceLinkStatus.disconnected
         : (_statusByAddress[addr] ?? DeviceLinkStatus.disconnected);
+    final connected = status == DeviceLinkStatus.connected;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      child: Row(
+        children: [
+          _iconTile(Icons.sensors, accent, size: 36),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: connected
+                            ? const Color(0xFF34C759)
+                            : Colors.white24,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        device.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${device.type} · ${status.label}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: addr == null ? null : () => _connectSaved(device),
+            child: Text(
+              connected
+                  ? s.t('重连', 'Reconnect')
+                  : s.t('连接', 'Connect'),
+            ),
+          ),
+          IconButton(
+            tooltip: s.t('删除', 'Delete'),
+            onPressed: () async {
+              setState(
+                () => _saved = _saved.where((d) => d != device).toList(),
+              );
+              await _persist();
+            },
+            icon: const Icon(Icons.close, size: 16, color: Colors.white30),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 底部面板顶部的拖拽提示条（两张面板共用）。
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      width: 36,
+      height: 4,
+      margin: const EdgeInsets.only(top: 8, bottom: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B0E13),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
+        color: const Color(0x33FFFFFF),
+        borderRadius: BorderRadius.circular(999),
+      ),
+    );
+  }
+}
+
+/// 扫描设备面板：打开即扫描、关闭即停止；结果留在面板内直接连接。
+/// 与页面共用 Native 的 BLE 流，但自己维护扫描开关，避免页面重建时
+/// 扫描状态串台。
+class _SensorScanSheet extends StatefulWidget {
+  const _SensorScanSheet();
+
+  @override
+  State<_SensorScanSheet> createState() => _SensorScanSheetState();
+}
+
+class _SensorScanSheetState extends State<_SensorScanSheet> {
+  final List<Map<String, dynamic>> _devices = [];
+  final Map<String, DeviceLinkStatus> _status = {};
+  StreamSubscription<Map<String, dynamic>>? _sub;
+  bool _scanning = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = Native.bleDeviceStream.listen((e) {
+      final addr = (e['address'] ?? '').toString();
+      if (addr.isEmpty || !mounted) return;
+      setState(() {
+        _devices.removeWhere((d) => d['address'] == addr);
+        _devices.insert(0, e);
+      });
+    }, onError: (_) {});
+    _startScan();
+  }
+
+  Future<void> _startScan() async {
+    try {
+      await Native.startBleScan();
+      if (!mounted) return;
+      setState(() {
+        _scanning = true;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+    }
+  }
+
+  Future<void> _stopScan() async {
+    try {
+      await Native.stopBleScan();
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _stopScan();
+    super.dispose();
+  }
+
+  Future<void> _connect(String addr) async {
+    if (addr.isEmpty) return;
+    setState(() => _status[addr] = DeviceLinkStatus.connecting);
+    try {
+      await Native.connectBle(addr);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _status[addr] = DeviceLinkStatus.disconnected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final accent = Theme.of(context).colorScheme.primary;
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(context).bottom,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  device.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+          const _SheetHandle(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    s.t('扫描设备', 'Scan devices'),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-              Text(
-                status.label,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ],
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: Text(s.t('取消', 'Cancel')),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${device.type} · 服务 ${device.serviceUuid} · 特征 ${device.characteristicUuid}',
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
-          ),
-          Text(
-            addr == null ? '未填地址：无法重连' : '地址 $addr',
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                if (_scanning)
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: accent,
+                    ),
+                  )
+                else
+                  const Icon(
+                    Icons.bluetooth_searching,
+                    size: 14,
+                    color: Colors.white38,
+                  ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _error != null
+                        ? s.t('扫描失败：$_error', 'Scan failed: $_error')
+                        : _scanning
+                        ? s.t(
+                            '正在扫描附近设备…',
+                            'Scanning nearby devices…',
+                          )
+                        : s.t('扫描已停止', 'Scan stopped'),
+                    maxLines: 2,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                if (!_scanning && _error == null)
+                  TextButton(
+                    onPressed: _startScan,
+                    child: Text(s.t('重新扫描', 'Rescan')),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              FilledButton(
-                onPressed: addr == null ? null : () => _connectSaved(device),
-                child: const Text('重连'),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () async {
-                  setState(
-                    () => _saved = _saved.where((d) => d != device).toList(),
-                  );
-                  await _persist();
-                },
-                child: const Text('删除'),
-              ),
-            ],
+          Flexible(
+            child: _devices.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.bluetooth_searching,
+                          size: 34,
+                          color: Colors.white24,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          s.t('尚未发现设备', 'No devices found'),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          s.t(
+                            '确认设备已开机并处于可发现状态。',
+                            'Make sure the device is on and discoverable.',
+                          ),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                    shrinkWrap: true,
+                    itemCount: _devices.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) => _deviceRow(accent, _devices[i]),
+                  ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _deviceRow(Color accent, Map<String, dynamic> dev) {
+    final s = S.of(context);
+    final addr = (dev['address'] ?? '').toString();
+    final name = (dev['name'] ?? '').toString();
+    final status = _status[addr] ?? DeviceLinkStatus.disconnected;
+    final connecting = status == DeviceLinkStatus.connecting;
+    final connected = status == DeviceLinkStatus.connected;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF16181C),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.bluetooth, size: 18, color: accent),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.isEmpty ? addr : name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${dev['type'] ?? 'BLE'} · 信号 ${dev['rssi'] ?? '--'} dBm',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (connected)
+            Text(
+              s.t('已连接', 'Connected'),
+              style: const TextStyle(
+                color: Color(0xFF34C759),
+                fontSize: 12,
+              ),
+            )
+          else
+            FilledButton(
+              onPressed: connecting ? null : () => _connect(addr),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(64, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                backgroundColor: accent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(
+                connecting
+                    ? s.t('连接中…', 'Connecting…')
+                    : s.t('连接', 'Connect'),
+              ),
+            ),
         ],
       ),
     );

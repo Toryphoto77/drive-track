@@ -808,6 +808,8 @@ class _HomePageState extends State<HomePage>
   // 列表多选删除 / 油耗分组区间状态。
   VehicleLibrary? vehicleLibrary;
   Map<String, int?> trackBestLapMs = {};
+  // 我的页“一键上传”进行中：按钮置灰并显示进度，避免重复触发。
+  bool _uploadingAll = false;
   bool _listSelecting = false;
   final Set<String> _selectedTripIds = {};
 
@@ -1505,7 +1507,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.6.4',
+          versionName: '1.7.1',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -3596,8 +3598,46 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // v0.1.3：我的页换新版 MyPage（卡片化、细圆角进度条、药丸按钮），
-  // 数据全部来自真实行程；关注/粉丝本机为 0 时新页显示“暂无”，不造假。
+  /// 我的页“上传 N 条行程”：把本机还没上传成功的行程逐条加入云端队列。
+  /// 已完成的不重复上传；单条失败只计数，不中断其余行程。
+  Future<void> _uploadAllToCloud() async {
+    if (_uploadingAll) return;
+    final svc = CloudService.instance;
+    if (!svc.isConfigured) {
+      showAppNotice(context, '云端未配置：请先在云端页登录后再上传。',
+          AppNoticeKind.error);
+      return;
+    }
+    setState(() => _uploadingAll = true);
+    var uploaded = 0;
+    var failed = 0;
+    for (final m in _realTrips) {
+      if (svc.queueStatusFor(m.id) == CloudUploadStatus.done) continue;
+      try {
+        final trip = await store.loadTrip(m.id);
+        if (trip == null) {
+          failed++;
+          continue;
+        }
+        final r = await svc.enqueueUpload(trip);
+        if (r.ok) {
+          uploaded++;
+        } else {
+          failed++;
+        }
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _uploadingAll = false);
+    showAppNotice(
+      context,
+      failed == 0 ? '已上传 $uploaded 条行程' : '已上传 $uploaded 条，失败 $failed 条',
+      failed == 0 ? AppNoticeKind.success : AppNoticeKind.error,
+    );
+  }
+
   Widget _buildMyPage() {
     final s = S.of(context);
     final real = _realTrips;
@@ -3654,6 +3694,67 @@ class _HomePageState extends State<HomePage>
         }
       },
     );
+    String modeText(TripMode m) => switch (m) {
+      TripMode.car => s.t('汽车', 'Car'),
+      TripMode.moto => s.t('摩托', 'Moto'),
+      TripMode.kart => s.t('卡丁车', 'Kart'),
+      TripMode.bike => s.t('骑行', 'Ride'),
+    };
+    String trackNameOf(TripMeta m) =>
+        m.trackName.isEmpty ? s.t('赛道行程', 'Track trip') : m.trackName;
+    // 只统计已拿到真实最佳圈的赛道行程：加载中/无计入圈的一律不补数。
+    final trackLaps = real
+        .where((m) => m.isTrackMode && trackBestLapMs[m.id] != null)
+        .toList()
+      ..sort((a, b) => trackBestLapMs[a.id]!.compareTo(trackBestLapMs[b.id]!));
+    MyBestLap? bestLap;
+    if (trackLaps.isNotEmpty) {
+      final m = trackLaps.first;
+      bestLap = MyBestLap(
+        trackName: trackNameOf(m),
+        time: LapTimer.formatLapTime(trackBestLapMs[m.id]),
+        meta: '${fmtDate(m.startMs)} · ${modeText(m.mode)}',
+        onTap: () => Navigator.push(
+          context,
+          DtPageRoute(
+            builder: (_) => TripDetailPage(store: store, tripId: m.id),
+          ),
+        ),
+      );
+    }
+    // 每个赛道取最快的一次；副信息给下场次数和日期，不编名次。
+    final bestByTrack = <String, TripMeta>{};
+    final sessionsByTrack = <String, int>{};
+    for (final m in trackLaps) {
+      final key = (m.trackId ?? '').isEmpty ? m.trackName : m.trackId!;
+      sessionsByTrack[key] = (sessionsByTrack[key] ?? 0) + 1;
+      final cur = bestByTrack[key];
+      if (cur == null || trackBestLapMs[m.id]! < trackBestLapMs[cur.id]!) {
+        bestByTrack[key] = m;
+      }
+    }
+    final bestTrackEntries = bestByTrack.entries.toList()
+      ..sort(
+        (a, b) =>
+            trackBestLapMs[a.value.id]!.compareTo(trackBestLapMs[b.value.id]!),
+      );
+    final trackBests = [
+      for (final e in bestTrackEntries.take(5))
+        MyTrackBest(
+          trackName: trackNameOf(e.value),
+          time: LapTimer.formatLapTime(trackBestLapMs[e.value.id]),
+          meta: s.t(
+            '${sessionsByTrack[e.key] ?? 1} 次 · ${fmtDate(e.value.startMs)}',
+            '${sessionsByTrack[e.key] ?? 1} sessions · ${fmtDate(e.value.startMs)}',
+          ),
+          onTap: () => Navigator.push(
+            context,
+            DtPageRoute(
+              builder: (_) => TripDetailPage(store: store, tripId: e.value.id),
+            ),
+          ),
+        ),
+    ];
     return MyPage(
       avatarPath: appPrefs.avatarPath,
       username: appPrefs.username,
@@ -3723,6 +3824,11 @@ class _HomePageState extends State<HomePage>
       initialSection: MyPageSection.values[myTab.clamp(0, 3)],
       onSectionChanged: (sec) =>
           setState(() => myTab = MyPageSection.values.indexOf(sec)),
+      bestLap: bestLap,
+      trackBests: trackBests,
+      onUploadAll: _uploadAllToCloud,
+      uploading: _uploadingAll,
+      cloudTotal: real.length,
       accentColor: Theme.of(context).colorScheme.primary,
     );
   }
