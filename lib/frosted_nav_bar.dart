@@ -3,17 +3,15 @@
 /// 内容还会跟深色图标打架；176 宽塞 3 图标也显挤）。
 ///
 /// 规格：
-/// - 独立悬浮药丸：288px 宽、56px 高、全圆角（圆角 = 高 / 2）；
-///   v1.5.4：4 项（首页 / 设备 / 记录 / 我的），216 宽塞 4 图标
-///   显挤，加宽到 288（每项 72 节距，与 3 项时的 216 同口径）；
-/// - BackdropFilter 高斯模糊 28 + 深色炭灰渐变（#2A2A2A，顶部
-///   alpha 0.68、底部 alpha 0.62，约 0.65——比 #121212 背景亮一档，
-///   是深色玻璃，不是白玻璃也不是纯黑块）+ 白色细边框
-///   （透明度 0.14、宽 1px）与弱化顶部高光；
-/// - 图标随玻璃改色：未选中白色 70%（深色玻璃上可读，v1.0.8 的
-///   黑 87% 已删——在深色玻璃上看不见），选中主题色法拉利红，
-///   选中圆底主题色 22% + 主题色光晕；
-/// - 绝无液态玻璃行为：无滚动放大、无切换拉伸、无选中放大；
+/// - 独立悬浮药丸：高度 56、全圆角（圆角 = 高 / 2）；
+///   v1.7.3 起宽度跟随屏幕（左右各 16 留白，最小 288、最大 560），
+///   与首页内容卡两侧对齐；4 项（首页 / 设备 / 记录 / 我的）等分；
+/// - v1.7.3 液态玻璃：32px 高斯模糊 + 低透明度灰玻璃染色（透出下方
+///   内容）、左上斜向液面反光、上亮下暗的 1px 渐变描边、悬浮投影；
+///   选中态为主题色径向渐变小玻璃 + 柔光晕；
+/// - 图标随玻璃改色：未选中白色 70%，选中主题色，
+///   选中圆底为主题色径向渐变（40% → 14%）+ 柔光晕；
+/// - 静态玻璃：无滚动放大、无切换拉伸、无选中放大；
 /// - 图标只留图标无文字；悬浮位置由调用方 Positioned 直接定
 ///   （底部 12px + 系统底部 inset），本组件内不再用 SafeArea，
 ///   不在药丸下方垫出空底色区；
@@ -50,7 +48,7 @@ double navSelectionLeft({
   return i * slot + (slot - indicatorSize) / 2;
 }
 
-class FrostedGlassNavBar extends StatelessWidget {
+class FrostedGlassNavBar extends StatefulWidget {
   const FrostedGlassNavBar({
     super.key,
     required this.selectedIndex,
@@ -71,6 +69,61 @@ class FrostedGlassNavBar extends StatelessWidget {
   ];
 
   @override
+  State<FrostedGlassNavBar> createState() => _FrostedGlassNavBarState();
+}
+
+class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
+  /// 液态玻璃折射 shader；仅 Impeller 可用，加载失败/不支持时为 null，
+  /// 回退到纯高斯模糊（视觉不变，只是没有边缘折射）。
+  ui.FragmentShader? _shader;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadShader();
+  }
+
+  Future<void> _loadShader() async {
+    if (!ui.ImageFilter.isShaderFilterSupported) return;
+    try {
+      final program = await ui.FragmentProgram.fromAsset(
+        'shaders/liquid_glass.frag',
+      );
+      final shader = program.fragmentShader()
+        ..setFloat(2, 14.0) // u_strength：边缘折射位移（px）
+        ..setFloat(3, 9.0) // u_blur：模糊半径（shader 内 9 抽样）
+        ..setFloat(4, 1.8) // u_chroma：边缘色散（px）
+        ..setFloat(5, 24.0); // u_edge：折射生效带宽（px）
+      if (!mounted) {
+        shader.dispose();
+        return;
+      }
+      setState(() => _shader = shader);
+    } catch (_) {
+      // 测试环境或非 Impeller 后端：静默回退纯模糊。
+    }
+  }
+
+  @override
+  void dispose() {
+    _shader?.dispose();
+    super.dispose();
+  }
+
+  /// 背景滤镜：模糊与折射都在 shader 内完成；不可用时回退纯高斯模糊。
+  ui.ImageFilter _backdropFilter() {
+    final shader = _shader;
+    if (shader == null) {
+      return ui.ImageFilter.blur(sigmaX: 32, sigmaY: 32);
+    }
+    try {
+      return ui.ImageFilter.shader(shader);
+    } catch (_) {
+      return ui.ImageFilter.blur(sigmaX: 32, sigmaY: 32);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final accent = Theme.of(context).colorScheme.primary;
@@ -80,49 +133,77 @@ class FrostedGlassNavBar extends StatelessWidget {
       s.t('记录', 'Trips'),
       s.t('我的', 'Me'),
     ];
-    final n = _tabs.length;
-    final index = selectedIndex.clamp(0, n - 1);
+    final n = FrostedGlassNavBar._tabs.length;
+    final index = widget.selectedIndex.clamp(0, n - 1);
+    // v1.7.3：药丸宽度跟随页面左右各 16 的留白，两侧与首页的
+    // “标定 / 开始记录”卡片对齐；窄于原 288 时保底，平板最宽 560。
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final barWidth = (screenWidth - 32).clamp(kPillNavWidth, 560.0);
     // v1.0.5：删掉 SafeArea，底部位置由调用方 Positioned 直接算，
     // 本组件只输出药丸本身，不带任何背景容器。
     return Center(
       child: SizedBox(
-          width: kPillNavWidth,
+          width: barWidth,
           height: kPillNavHeight,
-          child: ClipRRect(
+          // 悬浮投影放在裁剪之外，让药丸像“浮”在内容上。
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(kPillNavHeight / 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.38),
+                  blurRadius: 26,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: ClipRRect(
             borderRadius: BorderRadius.circular(kPillNavHeight / 2),
             child: Stack(
               children: [
+                // 1) 底色：大半径高斯模糊 + 液态玻璃折射 shader
+                //    （仅 Impeller）+ 低透明度灰玻璃染色；不支持 shader
+                //    时自动回退纯模糊。
                 BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                  filter: _backdropFilter(),
                   child: Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                         colors: [
-                          const Color(0xFF2A2A2A).withValues(alpha: 0.68),
-                          const Color(0xFF2A2A2A).withValues(alpha: 0.62),
+                          const Color(0xFF3C3C40).withValues(alpha: 0.42),
+                          const Color(0xFF1E1E22).withValues(alpha: 0.34),
                         ],
-                      ),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        width: 1,
                       ),
                     ),
                   ),
                 ),
-                // 顶部高光：弱化到与深色玻璃协调（v1.0.8 的 0x33 过亮
-                // 显硬边，改 0x14），静态装饰，无动画。
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.center,
-                      colors: [
-                        Color(0x14FFFFFF),
-                        Color(0x00FFFFFF),
-                      ],
+                // 2) 液面反光：左上斜向白色高光 + 右下微反光，
+                //    模拟玻璃受光后的连续质感。
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          stops: [0.0, 0.38, 0.72, 1.0],
+                          colors: [
+                            Color(0x2EFFFFFF),
+                            Color(0x0AFFFFFF),
+                            Color(0x00FFFFFF),
+                            Color(0x14FFFFFF),
+                          ],
+                        ),
+                      ),
                     ),
+                  ),
+                ),
+                // 3) 渐变描边：上沿亮、下沿暗，比单色 1px 边框更像玻璃边缘。
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(painter: _GlassRimPainter()),
                   ),
                 ),
                 Padding(
@@ -150,13 +231,20 @@ class FrostedGlassNavBar extends StatelessWidget {
                               height: 48,
                               child: IgnorePointer(
                                 child: DecoratedBox(
+                                  // 选中态也是一块小玻璃：主题色径向渐变
+                                  // + 柔光晕，而不是一块实心圆。
                                   decoration: BoxDecoration(
-                                    color: accent.withValues(alpha: 0.22),
                                     shape: BoxShape.circle,
+                                    gradient: RadialGradient(
+                                      colors: [
+                                        accent.withValues(alpha: 0.40),
+                                        accent.withValues(alpha: 0.14),
+                                      ],
+                                    ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: accent.withValues(alpha: 0.35),
-                                        blurRadius: 12,
+                                        color: accent.withValues(alpha: 0.32),
+                                        blurRadius: 16,
                                         spreadRadius: 1,
                                       ),
                                     ],
@@ -166,7 +254,11 @@ class FrostedGlassNavBar extends StatelessWidget {
                             ),
                             Row(
                               children: [
-                                for (var i = 0; i < _tabs.length; i++)
+                                for (
+                                  var i = 0;
+                                  i < FrostedGlassNavBar._tabs.length;
+                                  i++
+                                )
                                   Expanded(
                                     // 整槽可点，图标在槽中心，与选中圆同一中心。
                                     child: Semantics(
@@ -181,7 +273,7 @@ class FrostedGlassNavBar extends StatelessWidget {
                                         child: InkWell(
                                           onTap: () {
                                             AppHaptics.tap();
-                                            onTap(i);
+                                            widget.onTap(i);
                                           },
                                           splashColor: Colors.transparent,
                                           highlightColor: Colors.transparent,
@@ -189,7 +281,7 @@ class FrostedGlassNavBar extends StatelessWidget {
                                           focusColor: Colors.transparent,
                                           child: Center(
                                             child: Icon(
-                                              _tabs[i].$1,
+                                              FrostedGlassNavBar._tabs[i].$1,
                                               color: index == i
                                                   ? accent
                                                   : Colors.white70,
@@ -211,6 +303,36 @@ class FrostedGlassNavBar extends StatelessWidget {
             ),
           ),
         ),
+        ),
     );
   }
+}
+
+/// 玻璃边缘描边：上沿亮白、右侧过渡、下沿偏暗，1px 渐变圆角框。
+class _GlassRimPainter extends CustomPainter {
+  const _GlassRimPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+      (Offset.zero & size).deflate(0.5),
+      const Radius.circular(kPillNavHeight / 2),
+    );
+    final shader = ui.Gradient.linear(
+      Offset.zero,
+      Offset(size.width, size.height),
+      const [Color(0x8CFFFFFF), Color(0x1FFFFFFF), Color(0x47FFFFFF)],
+      const [0.0, 0.55, 1.0],
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..shader = shader,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlassRimPainter oldDelegate) => false;
 }

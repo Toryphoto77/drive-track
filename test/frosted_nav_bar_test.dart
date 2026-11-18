@@ -82,6 +82,11 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
+      // v1.7.3：药丸宽度 = 屏幕宽 - 32（左右与内容卡 16 留白对齐）。
+      expect(
+        tester.getSize(find.byType(ClipRRect)).width,
+        closeTo(360 - 32, 0.1),
+      );
       final icon = tester.getCenter(find.byIcon(icons[i]));
       final circle = tester.getCenter(find.byKey(const Key('nav-selection-indicator')));
       expect((icon.dx - circle.dx).abs(), lessThan(1.0), reason: 'tab $i dx');

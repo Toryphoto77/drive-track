@@ -1,7 +1,7 @@
 name: drive_track
 description: "驰迹 DriveTrack：极简风轨迹记录 App（汽车 / 摩托 / 卡丁车）"
 publish_to: 'none'
-version: 1.7.2+71
+version: 1.7.3+72
 
 environment:
   sdk: ^3.13.7
@@ -31,6 +31,10 @@ flutter:
     # 赛道库种子数据（manifest + 包 JSON，随仓库走；缺失时库页回落内置迁移包）。
     - data/tracks-manifest.json
     - data/packages/
+  # v1.7.3：底栏液态玻璃折射（ImageFilter.shader，仅 Impeller 生效；
+  # 不支持时自动回退纯高斯模糊）。
+  shaders:
+    - shaders/liquid_glass.frag
   fonts:
     - family: DriveTrackDisplay
       fonts:

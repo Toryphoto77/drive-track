@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'app_locale.dart';
 import 'card_style.dart';
 import 'device_hardware_card.dart';
-import 'dt_page_route.dart';
 
 import 'app_bar_style.dart';
 import 'home_layout.dart';
@@ -1574,32 +1573,23 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         : 16.0;
     final list = ListView(
       padding: widget.embedded
-          ? EdgeInsets.fromLTRB(16, 12 + appBarTopInset(context), 16, bottomPad)
+          ? EdgeInsets.fromLTRB(16, appBarTopInset(context) + 8, 16, bottomPad)
           : withAppBarTopInset(
               context,
               EdgeInsets.fromLTRB(16, 16, 16, bottomPad),
             ),
       children: [
         if (widget.embedded) ...[
-          Row(
-            children: [
-              Text(
-                s.t('设备中心', 'Devices'),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: _openScanSheet,
-                tooltip: s.t('扫描设备', 'Scan devices'),
-                icon: const Icon(Icons.add, color: Colors.white, size: 22),
-              ),
-            ],
+          Text(
+            s.t('设备中心', 'Devices'),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          const SizedBox(height: 2),
+          // 与下面的“我的设备”拉开距离，避免两行标题贴在一起。
+          const SizedBox(height: 20),
         ],
         if (_notice != null)
           Container(
@@ -1615,7 +1605,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             ),
           ),
         // 两张卡：我的设备（已连/已保存）+ 可添加设备（三行入口）。
-        // 扫描不再是页面里的长列表，改成右上角 + 弹出的扫描面板。
         _sectionTitle(s.t('我的设备', 'My devices')),
         _myDevicesCard(),
         const SizedBox(height: 18),
@@ -1647,72 +1636,43 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           s.t('设备中心', 'Devices'),
           style: const TextStyle(color: Colors.white),
         ),
-        actions: [
-          IconButton(
-            onPressed: _openScanSheet,
-            tooltip: s.t('扫描设备', 'Scan devices'),
-            icon: const Icon(Icons.add, color: Colors.white),
-          ),
-        ],
       ),
       body: list,
     );
   }
 
-  /// “我的设备”卡：已保存的 BLE 设备（传感器 / GPS），空态引导扫描。
+  /// “我的设备”卡：已保存的 BLE 设备（传感器 / GPS）。
   Widget _myDevicesCard() {
     final s = S.of(context);
     if (_saved.isEmpty) {
       return _panel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                _iconTile(Icons.bluetooth_disabled),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s.t('尚未连接设备', 'No devices yet'),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        s.t(
-                          '连接传感器或外接 GPS 后在这里管理',
-                          'Connected sensors and GPS show up here',
-                        ),
-                        style: const TextStyle(
-                          color: Colors.white38,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
+            _iconTile(Icons.bluetooth_disabled),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.t('尚未连接设备', 'No devices yet'),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _openScanSheet,
-                icon: const Icon(Icons.search, size: 16),
-                label: Text(s.t('扫描设备', 'Scan devices')),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0x33FFFFFF)),
-                  minimumSize: const Size.fromHeight(42),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                  const SizedBox(height: 2),
+                  Text(
+                    s.t(
+                      '连接传感器或外接 GPS 后在这里管理',
+                      'Connected sensors and GPS show up here',
+                    ),
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ],
@@ -1724,7 +1684,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       child: Column(
         children: [
           for (var i = 0; i < _saved.length; i++) ...[
-            if (i > 0) _dividerLine(),
+            if (i > 0) _dividerLine(left: 62),
             _savedDeviceTile(_saved[i]),
           ],
         ],
@@ -1744,9 +1704,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             title: s.t('运动相机', 'Action cam'),
             subtitle: 'GoPro · Insta360 · DJI',
             trailing: s.t('连接', 'Connect'),
-            onTap: () => Navigator.of(
-              context,
-            ).push(DtPageRoute(builder: (_) => const CameraConnectPage())),
+            onTap: _openCameraSheet,
           ),
           _dividerLine(),
           _deviceEntry(
@@ -1800,7 +1758,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: enabled ? Colors.white : Colors.white70,
                       ),
@@ -1812,7 +1770,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white38,
-                        fontSize: 11,
+                        fontSize: 12,
                       ),
                     ),
                   ],
@@ -1823,7 +1781,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                 trailing,
                 style: TextStyle(
                   color: enabled ? Colors.white54 : Colors.white30,
-                  fontSize: 12,
+                  fontSize: 13,
                 ),
               ),
               if (enabled)
@@ -1839,8 +1797,9 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     );
   }
 
-  /// 扫描设备底部面板：打开即扫描，关闭即停止；结果直接可连。
-  Future<void> _openScanSheet() async {
+  /// 扫描底部面板：打开即扫描，关闭即停止；结果直接可连。
+  /// 运动相机按 GoPro BLE 直连（紧凑版相机页内嵌），外接 GPS 打开配对面板。
+  Future<void> _openCameraSheet() async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1848,7 +1807,44 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => const _SensorScanSheet(),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (ctx, controller) {
+          final s = S.of(ctx);
+          return Column(
+            children: [
+              const _SheetHandle(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        s.t(
+                          '扫描附近的运动相机',
+                          'Scanning for action cams',
+                        ),
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: Text(s.t('取消', 'Cancel')),
+                    ),
+                  ],
+                ),
+              ),
+              const Expanded(child: CameraConnectPage(compact: true)),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -1878,7 +1874,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        s.t('外接 GPS 模块', 'External GPS'),
+                        s.t('GPS', 'GPS'),
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -1927,8 +1923,11 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     );
   }
 
-  Widget _dividerLine() =>
-      Container(height: 1, color: Colors.white.withValues(alpha: 0.06));
+  /// 行间分隔线：不划到头，左边与文字起始对齐（附图样式）。
+  Widget _dividerLine({double left = 64}) => Padding(
+    padding: EdgeInsets.only(left: left, right: 16),
+    child: Container(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+  );
 
   /// OBD「敬请期待」彩蛋弹窗：App 通用 AlertDialog 样式（见
   /// gps_source_badge.dart 的来源详情弹窗），点「知道了」关闭。
@@ -1961,9 +1960,9 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     child: Text(
       text,
       style: const TextStyle(
-        color: Colors.white,
-        fontSize: 15,
-        fontWeight: FontWeight.bold,
+        color: Colors.white54,
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
       ),
     ),
   );
@@ -2004,7 +2003,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 13.5,
+                          fontSize: 14.5,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -2016,7 +2015,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                   '${device.type} · ${status.label}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
                 ),
               ],
             ),
@@ -2058,286 +2057,6 @@ class _SheetHandle extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0x33FFFFFF),
         borderRadius: BorderRadius.circular(999),
-      ),
-    );
-  }
-}
-
-/// 扫描设备面板：打开即扫描、关闭即停止；结果留在面板内直接连接。
-/// 与页面共用 Native 的 BLE 流，但自己维护扫描开关，避免页面重建时
-/// 扫描状态串台。
-class _SensorScanSheet extends StatefulWidget {
-  const _SensorScanSheet();
-
-  @override
-  State<_SensorScanSheet> createState() => _SensorScanSheetState();
-}
-
-class _SensorScanSheetState extends State<_SensorScanSheet> {
-  final List<Map<String, dynamic>> _devices = [];
-  final Map<String, DeviceLinkStatus> _status = {};
-  StreamSubscription<Map<String, dynamic>>? _sub;
-  bool _scanning = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _sub = Native.bleDeviceStream.listen((e) {
-      final addr = (e['address'] ?? '').toString();
-      if (addr.isEmpty || !mounted) return;
-      setState(() {
-        _devices.removeWhere((d) => d['address'] == addr);
-        _devices.insert(0, e);
-      });
-    }, onError: (_) {});
-    _startScan();
-  }
-
-  Future<void> _startScan() async {
-    try {
-      await Native.startBleScan();
-      if (!mounted) return;
-      setState(() {
-        _scanning = true;
-        _error = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = '$e');
-    }
-  }
-
-  Future<void> _stopScan() async {
-    try {
-      await Native.stopBleScan();
-    } catch (_) {}
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    _stopScan();
-    super.dispose();
-  }
-
-  Future<void> _connect(String addr) async {
-    if (addr.isEmpty) return;
-    setState(() => _status[addr] = DeviceLinkStatus.connecting);
-    try {
-      await Native.connectBle(addr);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _status[addr] = DeviceLinkStatus.disconnected);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final accent = Theme.of(context).colorScheme.primary;
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const _SheetHandle(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    s.t('扫描设备', 'Scan devices'),
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  child: Text(s.t('取消', 'Cancel')),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                if (_scanning)
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: accent,
-                    ),
-                  )
-                else
-                  const Icon(
-                    Icons.bluetooth_searching,
-                    size: 14,
-                    color: Colors.white38,
-                  ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _error != null
-                        ? s.t('扫描失败：$_error', 'Scan failed: $_error')
-                        : _scanning
-                        ? s.t(
-                            '正在扫描附近设备…',
-                            'Scanning nearby devices…',
-                          )
-                        : s.t('扫描已停止', 'Scan stopped'),
-                    maxLines: 2,
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                if (!_scanning && _error == null)
-                  TextButton(
-                    onPressed: _startScan,
-                    child: Text(s.t('重新扫描', 'Rescan')),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Flexible(
-            child: _devices.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.bluetooth_searching,
-                          size: 34,
-                          color: Colors.white24,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          s.t('尚未发现设备', 'No devices found'),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          s.t(
-                            '确认设备已开机并处于可发现状态。',
-                            'Make sure the device is on and discoverable.',
-                          ),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white38,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                    shrinkWrap: true,
-                    itemCount: _devices.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) => _deviceRow(accent, _devices[i]),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _deviceRow(Color accent, Map<String, dynamic> dev) {
-    final s = S.of(context);
-    final addr = (dev['address'] ?? '').toString();
-    final name = (dev['name'] ?? '').toString();
-    final status = _status[addr] ?? DeviceLinkStatus.disconnected;
-    final connecting = status == DeviceLinkStatus.connecting;
-    final connected = status == DeviceLinkStatus.connected;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: CardStyle.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.bluetooth, size: 18, color: Colors.white70),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name.isEmpty ? addr : name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${dev['type'] ?? 'BLE'} · 信号 ${dev['rssi'] ?? '--'} dBm',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (connected)
-            Text(
-              s.t('已连接', 'Connected'),
-              style: const TextStyle(
-                color: Color(0xFF34C759),
-                fontSize: 12,
-              ),
-            )
-          else
-            FilledButton(
-              onPressed: connecting ? null : () => _connect(addr),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(64, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                backgroundColor: accent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: Text(
-                connecting
-                    ? s.t('连接中…', 'Connecting…')
-                    : s.t('连接', 'Connect'),
-              ),
-            ),
-        ],
       ),
     );
   }
