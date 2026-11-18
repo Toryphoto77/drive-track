@@ -120,7 +120,7 @@ void main() {
   });
 
   testWidgets(
-      'embedded tab chrome: no back AppBar, in-page title, matches list page pattern',
+      'embedded tab chrome: no back AppBar, no in-page title, matches list page pattern',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
@@ -138,7 +138,8 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('设备中心'), findsOneWidget);
+    // v1.7.4：左上角不再画“设备中心”大标题，直接进卡片。
+    expect(find.text('设备中心'), findsNothing);
     expect(find.byIcon(Icons.arrow_back), findsNothing);
     expect(find.text('运动相机'), findsOneWidget);
     // v1.7.2：页内不再有右上角 + 号，卡片里也不再放“扫描设备”按钮。

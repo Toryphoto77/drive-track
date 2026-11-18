@@ -5,15 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('v1.0.9 nav alignment: mode row, pill nav is 288x56', () {
+  test('v1.7.4 nav alignment: mode row 228, pill nav 288x68', () {
     // v1.5.8：模式行图标间距由 28 加到 40，节距 64 → 76，整行 228。
     // v1.0.9 方案 A 导航栏与模式行解耦、加宽：216x56（旧 176x52
     // 已作废，断言同步改为新规格）。
     // v1.5.4：4 项（加设备中心）再加宽到 288x56，仍是每项 72 节距。
+    // v1.7.4：导航项加文字标签，药丸高度 56 → 68。
     expect(kModeRowWidth, 228.0);
     expect(kPillNavWidth, 288.0);
     expect(kModeRowItemPitch, 76.0);
-    expect(kPillNavHeight, 56.0);
+    expect(kPillNavHeight, 68.0);
     for (final w in [320.0, 360.0, 390.0, 412.0, 768.0]) {
       final centers = tripleCenters(w);
       expect(centers.length, 3);

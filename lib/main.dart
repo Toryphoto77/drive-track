@@ -728,6 +728,10 @@ class _HomePageState extends State<HomePage>
         ? kHomeModes.indexOf(rec.mode)
         : 0,
   );
+  // v1.7.4：底栏四页改为 PageView，可以左右滑动切换；拖拽中的连续
+  // 页码写进 _tabDrag，让选中药丸跟手，松手再 Q 弹收位。
+  late final PageController _tabController = PageController();
+  final ValueNotifier<double?> _tabDrag = ValueNotifier<double?>(null);
   // v1.3.2：记录页实时 Map 分页（计时页 / 地图页左右滑）。
   late final PageController _recMapPageController = PageController();
   int _recMapPageIndex = 0;
@@ -1464,10 +1468,31 @@ class _HomePageState extends State<HomePage>
   }
 
   /// 底部导航四页同壳：0 首页 / 1 设备 / 2 记录 / 3 我的。
-  /// 设备中心不再 push 独立路由，切 tab 走与其它页相同的 AnimatedSwitcher。
+  /// 设备中心不再 push 独立路由，切 tab 走同一个 PageView。
+  /// 点导航时页面滑过去，药丸由 _tabDrag 跟手 + 松手 Q 弹收位。
   void _goTab(int i) {
-    if (i < 0 || i > 3) return;
+    if (i < 0 || i > 3 || i == tab) return;
     setState(() => tab = i);
+    if (_tabController.hasClients) {
+      _tabController.animateToPage(
+        i,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  /// 只处理 PageView 自己的横向滚动（depth 0），页内的纵向列表忽略。
+  bool _onTabScroll(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    if (n is ScrollStartNotification && n.dragDetails != null) {
+      _tabDrag.value = _tabController.page ?? tab.toDouble();
+    } else if (n is ScrollUpdateNotification && _tabDrag.value != null) {
+      _tabDrag.value = _tabController.page ?? tab.toDouble();
+    } else if (n is ScrollEndNotification && _tabDrag.value != null) {
+      _tabDrag.value = null;
+    }
+    return false;
   }
 
   void _toggleMenu() {
@@ -1507,7 +1532,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.3',
+          versionName: '1.7.4',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1551,6 +1576,8 @@ class _HomePageState extends State<HomePage>
     if (_keepScreenOnActual) Native.setKeepScreenOn(false);
     _menuAnim.dispose();
     _modeController.dispose();
+    _tabController.dispose();
+    _tabDrag.dispose();
     _pendingModeTimer?.cancel();
     _recMapPageController.dispose();
     _lapFlashTimer?.cancel();
@@ -2606,39 +2633,29 @@ class _HomePageState extends State<HomePage>
                 duration: const Duration(milliseconds: 350),
                 switchInCurve: Curves.easeInOut,
                 switchOutCurve: Curves.easeInOut,
-                transitionBuilder: (child, anim) => FadeTransition(
-                  opacity: anim,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.04),
-                      end: Offset.zero,
-                    ).animate(anim),
-                    child: child,
-                  ),
-                ),
                 child: recording
                     ? KeyedSubtree(
                         key: const ValueKey('recording'),
                         child: _buildRecording(),
                       )
-                    : tab == 0
-                    ? KeyedSubtree(
-                        key: const ValueKey('home'),
-                        child: _buildModePages(),
-                      )
-                    : tab == 1
-                    ? KeyedSubtree(
-                        key: const ValueKey('devices'),
-                        child: const DeviceCenterPage(embedded: true),
-                      )
-                    : tab == 2
-                    ? KeyedSubtree(
-                        key: const ValueKey('list'),
-                        child: _buildList(),
-                      )
+                    // v1.7.4：四页放进 PageView，左右滑动切页；
+                    // 药丸跟手（_tabDrag），松手 Q 弹收位。
                     : KeyedSubtree(
-                        key: const ValueKey('my'),
-                        child: _buildMyPage(),
+                        key: const ValueKey('tabs'),
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: _onTabScroll,
+                          child: PageView(
+                            controller: _tabController,
+                            onPageChanged: (i) =>
+                                setState(() => tab = i.clamp(0, 3)),
+                            children: [
+                              _buildModePages(),
+                              const DeviceCenterPage(embedded: true),
+                              _buildList(),
+                              _buildMyPage(),
+                            ],
+                          ),
+                        ),
                       ),
               ),
             ),
@@ -2651,6 +2668,7 @@ class _HomePageState extends State<HomePage>
                   child: FrostedGlassNavBar(
                     // 页 tab 与导航栏一一对应：0 首页 / 1 设备 / 2 记录 / 3 我的。
                     selectedIndex: tab.clamp(0, 3),
+                    dragProgress: _tabDrag,
                     onTap: _goTab,
                   ),
                 ),
@@ -4324,7 +4342,7 @@ class _HomePageState extends State<HomePage>
     final route = ModalRoute.of(context);
     final onRoot = route?.isFirst ?? true;
     if (onRoot) {
-      setState(() => tab = 1);
+      _goTab(1);
       return;
     }
     Navigator.push(
@@ -5762,15 +5780,6 @@ class _HomePageState extends State<HomePage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  s.t('行程记录', 'Trips'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   height: 46,

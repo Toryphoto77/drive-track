@@ -39,7 +39,7 @@ void main() {
     expect((inside! - (40 + 2 * kToolbarHeight)).abs(), greaterThan(20));
   });
 
-  testWidgets('embedded device title sits just under the shell app bar', (tester) async {
+  testWidgets('embedded device content sits just under the shell app bar', (tester) async {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1.0;
     tester.view.padding = const FakeViewPadding(top: 40, bottom: 16);
@@ -60,8 +60,9 @@ void main() {
     await tester.pump();
 
     final bar = tester.getRect(find.byType(DtAppBar));
-    final title = tester.getTopLeft(find.text('设备中心'));
+    // v1.7.4：嵌入页不再画“设备中心”大标题，首屏内容直接是“我的设备”。
+    final title = tester.getTopLeft(find.text('我的设备'));
     expect(title.dy, greaterThanOrEqualTo(bar.bottom + 8));
-    expect(title.dy, lessThan(bar.bottom + 24));
+    expect(title.dy, lessThan(bar.bottom + 40));
   });
 }

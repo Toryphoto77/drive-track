@@ -1579,18 +1579,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               EdgeInsets.fromLTRB(16, 16, 16, bottomPad),
             ),
       children: [
-        if (widget.embedded) ...[
-          Text(
-            s.t('设备中心', 'Devices'),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          // 与下面的“我的设备”拉开距离，避免两行标题贴在一起。
-          const SizedBox(height: 20),
-        ],
         if (_notice != null)
           Container(
             margin: const EdgeInsets.only(bottom: 12),

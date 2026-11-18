@@ -5,10 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('v1.0.9 frosted nav: 288x56, tap switches, icons only, no scale animation widgets, no SafeArea inside pill', (tester) async {
-    // v1.5.4：4 项（首页 / 设备 / 记录 / 我的），288x56，每项 72 节距。
+  testWidgets('v1.7.4 frosted nav: 4 tabs with icon + label, tap switches, no scale animation widgets, no SafeArea inside pill', (tester) async {
+    // v1.5.4：4 项（首页 / 设备 / 记录 / 我的），每项 72 节距。
+    // v1.7.4：加文字标签，药丸高度 56 → 68。
     expect(kPillNavWidth, 288.0);
-    expect(kPillNavHeight, 56.0);
+    expect(kPillNavHeight, 68.0);
     var selected = 0;
     await tester.pumpWidget(
       MaterialApp(
@@ -24,7 +25,7 @@ void main() {
         ),
       ),
     );
-    // 288 宽药丸存在、四个图标都在、只留图标无文字。
+    // 288 宽药丸存在、四个图标都在，图标下方带文字标签。
     expect(find.byType(FrostedGlassNavBar), findsOneWidget);
     // v1.0.5：药丸内不再用 SafeArea垫空底色区，底部位置由调用方 Positioned 直接算。
     expect(find.byType(SafeArea), findsNothing);
@@ -33,8 +34,10 @@ void main() {
     expect(find.byIcon(Icons.list_alt), findsOneWidget);
     expect(find.byIcon(Icons.person), findsOneWidget);
     expect(find.byIcon(Icons.sensors), findsOneWidget);
-    expect(find.text('首页'), findsNothing);
-    expect(find.text('设备'), findsNothing);
+    expect(find.text('首页'), findsOneWidget);
+    expect(find.text('设备'), findsOneWidget);
+    expect(find.text('记录'), findsOneWidget);
+    expect(find.text('我的'), findsOneWidget);
     // 无任何放大动画组件：滚动放大 AnimatedScale、切换拉伸 TweenAnimationBuilder、
     // 选中弹簧放大 AnimatedScale 均已删除。
     expect(find.byType(AnimatedScale), findsNothing);
@@ -81,16 +84,20 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
+      // v1.7.4：Q 弹缓动 320ms，等动画完全结束再测同心。
+      await tester.pump(const Duration(milliseconds: 400));
       // v1.7.3：药丸宽度 = 屏幕宽 - 32（左右与内容卡 16 留白对齐）。
       expect(
         tester.getSize(find.byType(ClipRRect)).width,
         closeTo(360 - 32, 0.1),
       );
       final icon = tester.getCenter(find.byIcon(icons[i]));
+      // v1.7.4：图标 + 文字整列居中，选中药丸与整槽（InkWell）同心。
+      final slot = tester.getCenter(find.byType(InkWell).at(i));
       final circle = tester.getCenter(find.byKey(const Key('nav-selection-indicator')));
-      expect((icon.dx - circle.dx).abs(), lessThan(1.0), reason: 'tab $i dx');
-      expect((icon.dy - circle.dy).abs(), lessThan(1.0), reason: 'tab $i dy');
+      expect((slot.dx - circle.dx).abs(), lessThan(1.0), reason: 'tab $i dx');
+      expect((slot.dy - circle.dy).abs(), lessThan(1.0), reason: 'tab $i dy');
+      expect((icon.dx - slot.dx).abs(), lessThan(1.0), reason: 'tab $i icon dx');
     }
   });
 
