@@ -56,7 +56,7 @@
 
 ## 下载
 
-最新版见 [Releases](https://github.com/Toryphoto77/drive-track/releases/latest)（当前 v1.7.1）。按手机架构选一个，大多数手机用 arm64-v8a：
+最新版见 [Releases](https://github.com/Toryphoto77/drive-track/releases/latest)（当前 v1.7.2）。按手机架构选一个，大多数手机用 arm64-v8a：
 
 | 安装包 | 适用机型 |
 | --- | --- |

@@ -1,6 +1,6 @@
 /// 首页外接 GPS 状态小药丸测试（v1.5.2，v1.5.4 改纯状态显示）。
 ///
-/// 覆盖：未连接时显示“手机 GPS · 外接未连接”；设备中心写入
+/// 覆盖：未连接时显示“未连接外接 GPS”（v1.7.2 起不再显示手机 GPS）；
 /// 已连接状态后药丸显示设备名；断开后恢复未连接态。
 /// v1.5.4：药丸不可点、不跳转，不再有“去连接 ›”文案；
 /// 状态只看圆点颜色（绿 = 已连接，灰 = 未连接）。
@@ -34,7 +34,7 @@ void main() {
 
     testWidgets('未连接时显示未连接态，无“去连接”文案', (tester) async {
       await pumpHome(tester);
-      expect(find.text('手机 GPS · 外接未连接'), findsOneWidget);
+      expect(find.text('未连接外接 GPS'), findsOneWidget);
       // v1.5.4：两颗药丸都不再带“去连接 ›”，也不再可点跳转。
       expect(find.text('去连接 ›'), findsNothing);
       expect(find.text('开始记录'), findsWidgets);
@@ -43,8 +43,8 @@ void main() {
 
     testWidgets('药丸不可点：点按不进设备中心', (tester) async {
       await pumpHome(tester);
-      expect(find.text('手机 GPS · 外接未连接'), findsOneWidget);
-      await tester.tap(find.text('手机 GPS · 外接未连接'));
+      expect(find.text('未连接外接 GPS'), findsOneWidget);
+      await tester.tap(find.text('未连接外接 GPS'));
       await tester.pump();
       expect(find.text('外接设备中心'), findsNothing);
       expect(find.text('开始记录'), findsWidgets);
@@ -64,10 +64,10 @@ void main() {
       ));
       await tester.pump();
       expect(find.text('外接 GPS · DEXIAN D1 · BLE · 定位中'), findsOneWidget);
-      expect(find.text('手机 GPS · 外接未连接'), findsNothing);
+      expect(find.text('未连接外接 GPS'), findsNothing);
       updateExternalGpsStatus(ExternalGpsStatus.disconnected);
       await tester.pump();
-      expect(find.text('手机 GPS · 外接未连接'), findsOneWidget);
+      expect(find.text('未连接外接 GPS'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
@@ -91,7 +91,7 @@ void main() {
     testWidgets('未连接时显示未连接态', (tester) async {
       await pumpHome(tester);
       expect(find.text('未连接运动相机'), findsOneWidget);
-      expect(find.text('手机 GPS · 外接未连接'), findsOneWidget);
+      expect(find.text('未连接外接 GPS'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

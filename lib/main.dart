@@ -1507,7 +1507,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.1',
+          versionName: '1.7.2',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -3074,7 +3074,7 @@ class _HomePageState extends State<HomePage>
                       ? (name.isEmpty
                             ? '$gpsWord$chLabel$activeNote'
                             : '$gpsWord · $name$chLabel$activeNote')
-                      : s.t('手机 GPS · 外接未连接', 'Phone GPS · external off'),
+                      : s.t('未连接外接 GPS', 'External GPS off'),
                   style: TextStyle(
                     color: connected ? Colors.white : Colors.white70,
                     fontSize: 12,
@@ -3641,14 +3641,16 @@ class _HomePageState extends State<HomePage>
   Widget _buildMyPage() {
     final s = S.of(context);
     final real = _realTrips;
-    final totalDist = real.fold(0.0, (a, m) => a + m.distanceM);
-    final totalDur = real.fold(0, (a, m) => a + (m.endMs - m.startMs));
-    final avgScore = real.isEmpty
+    // v1.7.2：个人页按模式分开看数据，统计只算各自模式的行程。
+    final streetReal = real.where((m) => !m.isTrackMode).toList();
+    final trackReal = real.where((m) => m.isTrackMode).toList();
+    final totalDist = streetReal.fold(0.0, (a, m) => a + m.distanceM);
+    final totalDur = streetReal.fold(0, (a, m) => a + (m.endMs - m.startMs));
+    final avgScore = streetReal.isEmpty
         ? 0.0
-        : real.fold(0.0, (a, m) => a + m.score) / real.length;
-    final totalLikes = real
-        .where((m) => m.isPublic)
-        .fold(0, (a, m) => a + m.likes);
+        : streetReal.fold(0.0, (a, m) => a + m.score) / streetReal.length;
+    final trackDist = trackReal.fold(0.0, (a, m) => a + m.distanceM);
+    final trackDur = trackReal.fold(0, (a, m) => a + (m.endMs - m.startMs));
     MyTripItem item(TripMeta m) => MyTripItem(
       id: m.id,
       title:
@@ -3766,7 +3768,7 @@ class _HomePageState extends State<HomePage>
       onStartRecording: () => _goTab(0),
       onOpenTripsTab: () => _goTab(2),
       stats: [
-        MyStat(label: s.t('行程', 'Trips'), value: '${real.length}'),
+        MyStat(label: s.t('行程', 'Trips'), value: '${streetReal.length}'),
         // v0.1.9：千分位 + 自适应字号（my_page.dart 内 FittedBox 不换行），
         // 如 123456.7 km → “123,456.7 km”，不截断、不折行。
         MyStat(
@@ -3777,6 +3779,20 @@ class _HomePageState extends State<HomePage>
         MyStat(
           label: s.t('平均评分', 'Avg score'),
           value: avgScore.toStringAsFixed(0),
+        ),
+      ],
+      trackStats: [
+        MyStat(label: s.t('赛道行程', 'Sessions'), value: '${trackReal.length}'),
+        MyStat(
+          label: s.t('赛道里程', 'Track km'),
+          value: formatDistanceKm(trackDist / 1000),
+        ),
+        MyStat(label: s.t('赛道用时', 'Track time'), value: fmtDur(trackDur)),
+        MyStat(
+          label: s.t('最快圈速', 'Best lap'),
+          value: trackLaps.isEmpty
+              ? s.t('暂无', 'None')
+              : LapTimer.formatLapTime(trackBestLapMs[trackLaps.first.id]),
         ),
       ],
       // v0.1.7 当月汇总：与记录页同一函数、同一口径；未填写时
@@ -3806,9 +3822,6 @@ class _HomePageState extends State<HomePage>
         '里程含全部模式。油耗与花费仅汽车/摩托估算，演示不计。',
         'Distance includes all modes. Fuel cost is a car/moto estimate.',
       ),
-      following: 0,
-      followers: 0,
-      likes: totalLikes,
       trips: real.map(item).toList(),
       posts: real.where((m) => m.isPublic).map(item).toList(),
       favorites: real.where((m) => favorites.contains(m.id)).map(item).toList(),

@@ -1,8 +1,8 @@
-/// 个人页分段控件与资料卡合并测试（v1.5.1）。
+/// 个人页分段控件与资料卡测试（v1.5.1 / v1.7.2）。
 ///
 /// 覆盖：行程/动态/收藏/成就四段均渲染，标签与数字分开显示
-/// （居中、无混排错位）；关注/粉丝/获赞已并进资料卡（不再是
-/// 独立卡片）；点“动态”切换分区。
+/// （居中、无混排错位）；关注/粉丝/获赞已删除；赛道模式与日常驾驶
+/// 用按钮切换，各自只展示本模式的数据；点“动态”切换分区。
 
 import 'package:drive_track/app_locale.dart';
 import 'package:drive_track/home_layout.dart';
@@ -18,9 +18,6 @@ Widget _page({List<MyTripItem> trips = const [], VoidCallback? onShareInvite}) {
         userId: 'DT-1234',
         bio: 'hello',
         stats: const [],
-        following: 0,
-        followers: 0,
-        likes: 0,
         trips: trips,
         posts: const [],
         favorites: const [],
@@ -33,21 +30,25 @@ Widget _page({List<MyTripItem> trips = const [], VoidCallback? onShareInvite}) {
 
 void main() {
   group('MyPage 分段控件与资料卡', () {
-    testWidgets('四段 + 数字分开渲染，社交数字在资料卡内', (tester) async {
+    testWidgets('四段 + 赛道/日常切换，社交数字已移除', (tester) async {
       await tester.pumpWidget(_page());
       await tester.pump();
       expect(find.text('行程'), findsOneWidget);
       expect(find.text('动态'), findsOneWidget);
       expect(find.text('收藏'), findsOneWidget);
       expect(find.text('成就'), findsOneWidget);
-      // 数字与标签分开两个 Text：行程 0 段的 '0' 至少出现一次。
-      expect(find.text('0'), findsWidgets);
-      // 社交行已并进资料卡：关注/粉丝/获赞与用户名同页。
+      // v1.7.2：关注/粉丝/获赞已从资料卡删除。
       expect(find.text('柴西'), findsOneWidget);
-      expect(find.text('关注'), findsOneWidget);
-      expect(find.text('粉丝'), findsOneWidget);
-      expect(find.text('获赞'), findsOneWidget);
-      expect(find.text('暂无'), findsWidgets);
+      expect(find.text('关注'), findsNothing);
+      expect(find.text('粉丝'), findsNothing);
+      expect(find.text('获赞'), findsNothing);
+      // 赛道模式 / 日常驾驶用按钮切换，默认（无圈速）在日常驾驶。
+      expect(find.text('赛道模式'), findsOneWidget);
+      expect(find.text('日常驾驶'), findsOneWidget);
+      expect(find.text('还没有赛道圈速'), findsNothing);
+      await tester.tap(find.text('赛道模式'));
+      await tester.pump();
+      expect(find.text('还没有赛道圈速'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -74,9 +75,6 @@ void main() {
             userId: 'DT-1234',
             bio: 'hello',
             stats: const [],
-            following: 0,
-            followers: 0,
-            likes: 0,
             trips: [
               MyTripItem(
                 id: 't1',

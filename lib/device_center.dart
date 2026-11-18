@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_locale.dart';
+import 'card_style.dart';
 import 'device_hardware_card.dart';
 import 'dt_page_route.dart';
 
@@ -18,7 +19,6 @@ import 'firmware_update_service.dart';
 import 'gps_source.dart';
 import 'native.dart';
 import 'obd_service.dart';
-import 'satellite_settings_page.dart';
 
 /// 外接设备中心：运动相机 + 其他传感器 + BleDIY GPS。
 ///
@@ -1617,21 +1617,10 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         // 两张卡：我的设备（已连/已保存）+ 可添加设备（三行入口）。
         // 扫描不再是页面里的长列表，改成右上角 + 弹出的扫描面板。
         _sectionTitle(s.t('我的设备', 'My devices')),
-        _myDevicesCard(accent),
+        _myDevicesCard(),
         const SizedBox(height: 18),
         _sectionTitle(s.t('可添加设备', 'Add devices')),
-        _addDevicesCard(accent),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.of(
-              context,
-            ).push(DtPageRoute(builder: (_) => const SatelliteSettingsPage())),
-            icon: const Icon(Icons.satellite_alt, size: 18),
-            label: Text(s.t('可视化外部 GPS 配置', 'External GPS setup')),
-          ),
-        ),
+        _addDevicesCard(),
         const SizedBox(height: 12),
         Text(
           s.t(
@@ -1671,7 +1660,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   }
 
   /// “我的设备”卡：已保存的 BLE 设备（传感器 / GPS），空态引导扫描。
-  Widget _myDevicesCard(Color accent) {
+  Widget _myDevicesCard() {
     final s = S.of(context);
     if (_saved.isEmpty) {
       return _panel(
@@ -1680,7 +1669,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           children: [
             Row(
               children: [
-                _iconTile(Icons.bluetooth_disabled, accent),
+                _iconTile(Icons.bluetooth_disabled),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1736,7 +1725,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         children: [
           for (var i = 0; i < _saved.length; i++) ...[
             if (i > 0) _dividerLine(),
-            _savedDeviceTile(accent, _saved[i]),
+            _savedDeviceTile(_saved[i]),
           ],
         ],
       ),
@@ -1744,14 +1733,13 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   }
 
   /// 可添加设备：相机 / 外接 GPS / OBD 三行，点行进入各自的连接流程。
-  Widget _addDevicesCard(Color accent) {
+  Widget _addDevicesCard() {
     final s = S.of(context);
     return _panel(
       padding: EdgeInsets.zero,
       child: Column(
         children: [
           _deviceEntry(
-            accent: accent,
             icon: Icons.videocam_outlined,
             title: s.t('运动相机', 'Action cam'),
             subtitle: 'GoPro · Insta360 · DJI',
@@ -1762,7 +1750,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           ),
           _dividerLine(),
           _deviceEntry(
-            accent: accent,
             icon: Icons.gps_fixed,
             title: s.t('外接 GPS 模块', 'External GPS'),
             subtitle: s.t(
@@ -1774,7 +1761,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           ),
           _dividerLine(),
           _deviceEntry(
-            accent: accent,
             icon: Icons.speed,
             title: s.t('OBD（ELM327）', 'OBD (ELM327)'),
             subtitle: s.t('车速 / 转速 / 油门 / 水温', 'Speed / rpm / throttle'),
@@ -1788,7 +1774,6 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   }
 
   Widget _deviceEntry({
-    required Color accent,
     required IconData icon,
     required String title,
     required String subtitle,
@@ -1804,7 +1789,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
           child: Row(
             children: [
-              _iconTile(icon, enabled ? accent : Colors.white24, size: 38),
+              _iconTile(icon, size: 38, dimmed: !enabled),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1925,26 +1910,20 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     required Widget child,
     EdgeInsetsGeometry padding = const EdgeInsets.all(14),
   }) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: const Color(0xFF16181C),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: child,
-    );
+    return DriveTrackCard(padding: padding, child: child);
   }
 
-  Widget _iconTile(IconData icon, Color color, {double size = 40}) {
+  /// 设备图标：统一单色线性图标，不跟主题色着色。
+  Widget _iconTile(IconData icon, {double size = 40, bool dimmed = false}) {
+    final tint = dimmed ? Colors.white24 : Colors.white70;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Icon(icon, size: size * 0.5, color: color),
+      child: Icon(icon, size: size * 0.5, color: tint),
     );
   }
 
@@ -1989,7 +1968,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     ),
   );
 
-  Widget _savedDeviceTile(Color accent, SavedDevice device) {
+  Widget _savedDeviceTile(SavedDevice device) {
     final s = S.of(context);
     final addr = device.address;
     final status = addr == null
@@ -2000,7 +1979,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
       child: Row(
         children: [
-          _iconTile(Icons.sensors, accent, size: 36),
+          _iconTile(Icons.sensors, size: 36),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -2291,7 +2270,7 @@ class _SensorScanSheetState extends State<_SensorScanSheet> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF16181C),
+        color: CardStyle.cardColor,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
@@ -2301,10 +2280,10 @@ class _SensorScanSheetState extends State<_SensorScanSheet> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.14),
+              color: Colors.white.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(Icons.bluetooth, size: 18, color: accent),
+            child: const Icon(Icons.bluetooth, size: 18, color: Colors.white70),
           ),
           const SizedBox(width: 10),
           Expanded(

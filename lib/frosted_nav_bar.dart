@@ -172,17 +172,28 @@ class FrostedGlassNavBar extends StatelessWidget {
                                     child: Semantics(
                                       label: labels[i],
                                       button: true,
-                                      child: InkWell(
-                                        onTap: () {
-                                          AppHaptics.tap();
-                                          onTap(i);
-                                        },
-                                        child: Center(
-                                          child: Icon(
-                                            _tabs[i].$1,
-                                            color: index == i
-                                                ? accent
-                                                : Colors.white70,
+                                      // 药丸是自绘半透明玻璃，不在 Material 上：
+                                      // InkWell 的水波/按压高光会画到外层页面的
+                                      // Material 上，透出来就是一圈灰白底框。
+                                      // 这里用透明 Material 包住并关掉所有高光色。
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: () {
+                                            AppHaptics.tap();
+                                            onTap(i);
+                                          },
+                                          splashColor: Colors.transparent,
+                                          highlightColor: Colors.transparent,
+                                          hoverColor: Colors.transparent,
+                                          focusColor: Colors.transparent,
+                                          child: Center(
+                                            child: Icon(
+                                              _tabs[i].$1,
+                                              color: index == i
+                                                  ? accent
+                                                  : Colors.white70,
+                                            ),
                                           ),
                                         ),
                                       ),
