@@ -266,7 +266,8 @@ void main() {
       expect(main, contains("ValueKey('tabs')"));
       expect(main, contains('PageView('));
       expect(main, contains('dragProgress: _tabDrag'));
-      expect(main, contains('DeviceCenterPage(embedded: true)'));
+      // v1.7.x：嵌入页需要拿到行程库以支持“视频同步”入口。
+      expect(main, contains('DeviceCenterPage(embedded: true, store: store)'));
       expect(main, contains('void _goTab(int i)'));
       expect(main, contains('底部导航四页同壳'));
       expect(main, isNot(contains('直接打开设备中心')));

@@ -19,6 +19,8 @@ import 'firmware_update_service.dart';
 import 'gps_source.dart';
 import 'native.dart';
 import 'obd_service.dart';
+import 'store.dart';
+import 'video_import_match.dart';
 
 /// 外接设备中心：运动相机 + 其他传感器 + BleDIY GPS。
 ///
@@ -1484,6 +1486,7 @@ class DeviceCenterPage extends StatefulWidget {
     this.onBack,
     this.onSavedDeviceConnected,
     this.embedded = false,
+    this.store,
   });
 
   /// 返回上一页的回调；不传则用 Navigator.maybePop。
@@ -1496,6 +1499,9 @@ class DeviceCenterPage extends StatefulWidget {
 
   /// 已保存设备通过现有 BLE 通道连上时通知调用方（仅通知，不回传轨迹）。
   final void Function(SavedDevice device)? onSavedDeviceConnected;
+
+  /// 行程库（视频同步入口需要读写行程）。不传时本页自行创建一个。
+  final Store? store;
 
   @override
   State<DeviceCenterPage> createState() => _DeviceCenterPageState();
@@ -1599,9 +1605,12 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
               style: const TextStyle(color: Colors.white, fontSize: 13),
             ),
           ),
-        // 两张卡：我的设备（已连/已保存）+ 可添加设备（三行入口）。
+        // 三张卡：我的设备（已连/已保存）+ 视频与赛道记录 + 可添加设备。
         _sectionTitle(s.t('我的设备', 'My devices')),
         _myDevicesCard(),
+        const SizedBox(height: 18),
+        _sectionTitle(s.t('视频与赛道记录', 'Video & trips')),
+        _videoSyncCard(),
         const SizedBox(height: 18),
         _sectionTitle(s.t('可添加设备', 'Add devices')),
         _addDevicesCard(),
@@ -1685,6 +1694,33 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         ],
       ),
     );
+  }
+
+  /// 视频与赛道记录：选视频 → 选行程 → 进视频编辑页（画面对齐 / HUD / 圈）。
+  /// 相机 / GPS 是否已连接不影响入口：素材可在相册里，连上相机只决定
+  /// 后续录像来源；这里不伪造“已从相机下载”。
+  Widget _videoSyncCard() {
+    final s = S.of(context);
+    return _panel(
+      padding: EdgeInsets.zero,
+      child: _deviceEntry(
+        glyph: DeviceGlyphKind.video,
+        title: s.t('视频同步', 'Video sync'),
+        subtitle: s.t(
+          '读取相册视频，关联赛道记录并添加 HUD',
+          'Link gallery clips to a trip and add HUD',
+        ),
+        trailing: s.t('进入', 'Open'),
+        onTap: _openVideoSync,
+      ),
+    );
+  }
+
+  Future<void> _openVideoSync() async {
+    final store = widget.store ?? Store();
+    if (widget.store == null) await store.init();
+    if (!mounted) return;
+    await openVideoSyncFlow(context, store: store);
   }
 
   /// 可添加设备：相机 / 外接 GPS / OBD 三行，点行进入各自的连接流程。
