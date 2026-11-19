@@ -155,3 +155,41 @@ int dt_power_batt_mv(void)
 {
     return s_batt_mv;
 }
+
+int dt_power_batt_percent(void)
+{
+    // 单节锂电的近似放电曲线：空载电压 4.20 V 满、3.30 V 空。
+    // 只做展示用途，不参与保护逻辑（低电保护仍看 mV 回差）。
+    static const struct {
+        int mv;
+        int pct;
+    } curve[] = {
+        {4200, 100}, {4100, 90}, {4000, 78}, {3900, 64}, {3800, 50},
+        {3700, 36},  {3600, 24}, {3500, 14}, {3400, 7},  {3300, 0},
+    };
+    const int mv = s_batt_mv;
+    if (mv <= 0) {
+        return -1;
+    }
+    const int n = (int)(sizeof(curve) / sizeof(curve[0]));
+    if (mv >= curve[0].mv) {
+        return 100;
+    }
+    if (mv <= curve[n - 1].mv) {
+        return 0;
+    }
+    for (int i = 1; i < n; i++) {
+        if (mv >= curve[i].mv) {
+            const int hi_mv = curve[i - 1].mv;
+            const int lo_mv = curve[i].mv;
+            const int hi_pct = curve[i - 1].pct;
+            const int lo_pct = curve[i].pct;
+            const int span = hi_mv - lo_mv;
+            if (span <= 0) {
+                return lo_pct;
+            }
+            return lo_pct + (mv - lo_mv) * (hi_pct - lo_pct) / span;
+        }
+    }
+    return 0;
+}

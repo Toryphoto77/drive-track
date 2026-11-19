@@ -14,6 +14,7 @@
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
+#include "esp_sleep.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
@@ -22,7 +23,9 @@
 #include "mbedtls/sha256.h"
 
 #include "dt_config.h"
+#include "dt_gnss.h"
 #include "dt_power.h"
+#include "dt_session.h"
 
 static const char *TAG = "dt_ota";
 
@@ -61,10 +64,11 @@ static esp_err_t info_get(httpd_req_t *req)
     char body[288];
     int n = snprintf(body, sizeof(body),
                      "{\"model\":\"%s\",\"board\":\"%s\",\"fw\":\"%s\","
-                     "\"build\":%d,\"battMv\":%d,\"freeHeap\":%u,"
-                     "\"uptimeMs\":%lld}",
+                     "\"build\":%d,\"battMv\":%d,\"battery\":%d,"
+                     "\"freeHeap\":%u,\"uptimeMs\":%lld}",
                      DT_DEVICE_MODEL, DT_BOARD_NAME, DT_FW_VERSION,
                      DT_FW_BUILD, dt_power_batt_mv(),
+                     dt_power_batt_percent(),
                      (unsigned)esp_get_free_heap_size(),
                      (long long)(esp_timer_get_time() / 1000));
     if (n < 0 || n >= (int)sizeof(body)) {
@@ -73,6 +77,60 @@ static esp_err_t info_get(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_send(req, body, n);
+}
+
+// App 的硬件管理卡每 3 秒轮询一次，字段缺失时界面显示“—”。
+static esp_err_t status_get(httpd_req_t *req)
+{
+    char body[288];
+    int n = snprintf(body, sizeof(body),
+                     "{\"model\":\"%s\",\"fw\":\"%s\",\"build\":%d,"
+                     "\"battery\":%d,\"battMv\":%d,\"recording\":%d,"
+                     "\"fix\":%d,\"sats\":%d,\"uptimeMs\":%lld,"
+                     "\"freeHeap\":%u,\"caps\":[\"shutdown\"]}",
+                     DT_DEVICE_MODEL, DT_FW_VERSION, DT_FW_BUILD,
+                     dt_power_batt_percent(), dt_power_batt_mv(),
+                     dt_session_active() ? 1 : 0, dt_gnss_last_fix() ? 1 : 0,
+                     dt_gnss_last_sats(),
+                     (long long)(esp_timer_get_time() / 1000),
+                     (unsigned)esp_get_free_heap_size());
+    if (n < 0 || n >= (int)sizeof(body)) {
+        return httpd_resp_send_500(req);
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, body, n);
+}
+
+// 圈速在 App 侧计算，设备端没有赛道信息，返回空列表让界面走“无圈速”分支。
+static esp_err_t laps_get(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(req, "{\"laps\":[]}");
+}
+
+static void shutdown_task(void *arg)
+{
+    // 先把 HTTP 响应发回手机，再停会话、进入深度睡眠。
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    dt_session_stop();
+    ESP_LOGW(TAG, "收到 App 关机指令，进入深度睡眠");
+    esp_deep_sleep_start();
+}
+
+static esp_err_t shutdown_post(httpd_req_t *req)
+{
+    static bool s_shutting_down;
+    if (s_shutting_down) {
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_sendstr(req, "{\"ok\":true}");
+    }
+    s_shutting_down = true;
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t err = httpd_resp_sendstr(req, "{\"ok\":true}");
+    xTaskCreate(shutdown_task, "dt_shutdown", 2048, NULL, 5, NULL);
+    return err;
 }
 
 static void ota_reboot_task(void *arg)
@@ -247,7 +305,7 @@ void dt_ota_start(void)
 
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.stack_size = 8192;
-    cfg.max_uri_handlers = 6;
+    cfg.max_uri_handlers = 8;
     cfg.lru_purge_enable = true;
     cfg.recv_wait_timeout = 30;
     cfg.send_wait_timeout = 30;
@@ -269,8 +327,26 @@ void dt_ota_start(void)
         .method = HTTP_POST,
         .handler = ota_post,
     };
+    httpd_uri_t status_uri = {
+        .uri = "/api/status",
+        .method = HTTP_GET,
+        .handler = status_get,
+    };
+    httpd_uri_t laps_uri = {
+        .uri = "/api/laps",
+        .method = HTTP_GET,
+        .handler = laps_get,
+    };
+    httpd_uri_t shutdown_uri = {
+        .uri = "/api/shutdown",
+        .method = HTTP_POST,
+        .handler = shutdown_post,
+    };
     httpd_register_uri_handler(server, &info_uri);
     httpd_register_uri_handler(server, &ota_uri);
+    httpd_register_uri_handler(server, &status_uri);
+    httpd_register_uri_handler(server, &laps_uri);
+    httpd_register_uri_handler(server, &shutdown_uri);
 
     ESP_LOGI(TAG, "OTA 服务已就绪 http://192.168.4.1/api/info");
 }

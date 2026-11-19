@@ -11,8 +11,8 @@
 
 // ---------------- 固件身份 ----------------
 // 改功能就同时抬高版本号；App 按 build 判断是否需要升级。
-#define DT_FW_VERSION "0.2.0"
-#define DT_FW_BUILD 2
+#define DT_FW_VERSION "0.3.0"
+#define DT_FW_BUILD 3
 #define DT_DEVICE_MODEL "DT-BOX-1"
 #define DT_BOARD_NAME "DriveTrack V4.6"
 
@@ -31,6 +31,9 @@
 // 代码保留在 dt_can.c，换板后把该项置 1 并填好下面的引脚即可。
 #define DT_ENABLE_CAN 0
 #define DT_ENABLE_BLE 1
+// App 的蓝牙 GPS 通道按 NMEA 0183 文本解析，因此把模块原始 GGA/RMC
+// 原样转发一份；NDJSON 仍然保留，方便串口工具与后续功能直接读结构化数据。
+#define DT_BLE_NMEA_PASSTHROUGH 1
 
 // ---------------- GNSS（u-blox NEO-M9N，UART1） ----------------
 // U2 pin21 TXD1 → 网络 GPS_TX → U1 pad10(IO17)：这是 ESP32 的接收脚；

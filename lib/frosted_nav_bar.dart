@@ -55,10 +55,17 @@ class FrostedGlassNavBar extends StatefulWidget {
     required this.selectedIndex,
     required this.onTap,
     this.dragProgress,
+    this.onDragProgress,
+    this.onDragEnd,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onTap;
+
+  /// 直接拖动底栏时的连续页码与松手吸附回调。
+  /// 调用方可借此让 PageView 与药丸一起跟手，而不是松手后才跳页。
+  final ValueChanged<double>? onDragProgress;
+  final ValueChanged<int>? onDragEnd;
 
   /// 左右拖拽切页时的连续页码（0.0～3.0）。
   ///
@@ -84,6 +91,49 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
   /// 液态玻璃折射 shader；仅 Impeller 可用，加载失败/不支持时为 null，
   /// 回退到纯高斯模糊（视觉不变，只是没有边缘折射）。
   ui.FragmentShader? _shader;
+
+  // 底栏自身的长按/横拖手势。位置以连续页码表示，拖动期间不经过
+  // AnimatedPositioned 的缓动，保证药丸和调用方 PageView 都能逐帧跟手。
+  double? _directDragPos;
+  double _directDragOrigin = 0;
+  double _directDragStartDx = 0;
+
+  void _beginDirectDrag(double dx, bool haptic) {
+    final n = FrostedGlassNavBar._tabs.length;
+    final origin = widget.selectedIndex.clamp(0, n - 1).toDouble();
+    _directDragOrigin = origin;
+    _directDragStartDx = dx;
+    setState(() => _directDragPos = origin);
+    if (haptic) AppHaptics.tap();
+    widget.onDragProgress?.call(origin);
+  }
+
+  void _updateDirectDrag(double dx, double slotWidth) {
+    final current = _directDragPos;
+    if (current == null || slotWidth <= 0) return;
+    final n = FrostedGlassNavBar._tabs.length;
+    final next = (_directDragOrigin + (dx - _directDragStartDx) / slotWidth)
+        .clamp(0.0, n - 1.0)
+        .toDouble();
+    if ((next - current).abs() < 0.0001) return;
+    setState(() => _directDragPos = next);
+    widget.onDragProgress?.call(next);
+  }
+
+  void _endDirectDrag() {
+    final current = _directDragPos;
+    if (current == null) return;
+    final n = FrostedGlassNavBar._tabs.length;
+    final target = current.round().clamp(0, n - 1);
+    setState(() => _directDragPos = null);
+    if (target != widget.selectedIndex) AppHaptics.tap();
+    final onDragEnd = widget.onDragEnd;
+    if (onDragEnd != null) {
+      onDragEnd(target);
+    } else {
+      widget.onTap(target);
+    }
+  }
 
   @override
   void initState() {
@@ -151,21 +201,21 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
     // 本组件只输出药丸本身，不带任何背景容器。
     return Center(
       child: SizedBox(
-          width: barWidth,
-          height: kPillNavHeight,
-          // 悬浮投影放在裁剪之外，让药丸像“浮”在内容上。
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(kPillNavHeight / 2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.38),
-                  blurRadius: 26,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: ClipRRect(
+        width: barWidth,
+        height: kPillNavHeight,
+        // 悬浮投影放在裁剪之外，让药丸像“浮”在内容上。
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(kPillNavHeight / 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.38),
+                blurRadius: 26,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
             borderRadius: BorderRadius.circular(kPillNavHeight / 2),
             child: Stack(
               children: [
@@ -225,13 +275,15 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                         // 主题色只用在图标和文字上；只做水平滑动。
                         final pillBase = const Color(0xFF313138);
                         final pillTop = const Color(0xFF3B3B44);
-                        // 拖拽切页时由 PageView 的连续页码驱动；松手回到
+                        // 页面滑动和底栏直接拖动共用连续页码；松手回到
                         // selectedIndex，用 320ms easeOutBack 收尾（Q 弹）。
                         final drag = widget.dragProgress;
+                        final directDrag = _directDragPos;
                         Widget indicator(double? dragPos) {
                           final pos = (dragPos ?? index.toDouble())
                               .clamp(0.0, n - 1.0)
                               .toDouble();
+                          final dragging = dragPos != null;
                           return AnimatedPositioned(
                             key: const Key('nav-selection-indicator'),
                             duration: dragPos != null
@@ -245,7 +297,17 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                             bottom: 0,
                             width: pillWidth,
                             child: IgnorePointer(
-                              child: DecoratedBox(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOutBack,
+                                transformAlignment: Alignment.center,
+                                // 拖动时轻微横向拉伸、纵向压扁；松手后弹性恢复，
+                                // 位置本身不做插值，避免“跟手”变成“追赶手指”。
+                                transform: Matrix4.diagonal3Values(
+                                  dragging ? 1.06 : 1.0,
+                                  dragging ? 0.96 : 1.0,
+                                  1.0,
+                                ),
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(26),
                                   gradient: LinearGradient(
@@ -258,7 +320,9 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.30),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.30,
+                                      ),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -269,79 +333,103 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                           );
                         }
 
-                        return Stack(
-                          children: [
-                            if (drag == null)
-                              indicator(null)
-                            else
-                              ValueListenableBuilder<double?>(
-                                valueListenable: drag,
-                                builder: (context, value, _) =>
-                                    indicator(value),
-                              ),
-                            Row(
-                              children: [
-                                for (
-                                  var i = 0;
-                                  i < FrostedGlassNavBar._tabs.length;
-                                  i++
-                                )
-                                  Expanded(
-                                    // 整槽可点，图标 + 文字在槽中心。
-                                    child: Semantics(
-                                      label: labels[i],
-                                      button: true,
-                                      // 药丸是自绘半透明玻璃，不在 Material 上：
-                                      // InkWell 的水波/按压高光会画到外层页面的
-                                      // Material 上，透出来就是一圈灰白底框。
-                                      // 这里用透明 Material 包住并关掉所有高光色。
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: () {
-                                            AppHaptics.tap();
-                                            widget.onTap(i);
-                                          },
-                                          splashColor: Colors.transparent,
-                                          highlightColor: Colors.transparent,
-                                          hoverColor: Colors.transparent,
-                                          focusColor: Colors.transparent,
-                                          child: Center(
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  FrostedGlassNavBar._tabs[i].$1,
-                                                  size: 21,
-                                                  color: index == i
-                                                      ? accent
-                                                      : Colors.white
-                                                          .withValues(alpha: 0.72),
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  labels[i],
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    height: 1.15,
-                                                    fontWeight: FontWeight.w500,
+                        return GestureDetector(
+                          key: const Key('nav-drag-gesture'),
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragStart: (d) =>
+                              _beginDirectDrag(d.localPosition.dx, false),
+                          onHorizontalDragUpdate: (d) =>
+                              _updateDirectDrag(d.localPosition.dx, slotWidth),
+                          onHorizontalDragEnd: (_) => _endDirectDrag(),
+                          onHorizontalDragCancel: _endDirectDrag,
+                          onLongPressStart: (d) =>
+                              _beginDirectDrag(d.localPosition.dx, true),
+                          onLongPressMoveUpdate: (d) =>
+                              _updateDirectDrag(d.localPosition.dx, slotWidth),
+                          onLongPressEnd: (_) => _endDirectDrag(),
+                          onLongPressCancel: _endDirectDrag,
+                          child: Stack(
+                            children: [
+                              if (directDrag != null)
+                                indicator(directDrag)
+                              else if (drag == null)
+                                indicator(null)
+                              else
+                                ValueListenableBuilder<double?>(
+                                  valueListenable: drag,
+                                  builder: (context, value, _) =>
+                                      indicator(value),
+                                ),
+                              Row(
+                                children: [
+                                  for (
+                                    var i = 0;
+                                    i < FrostedGlassNavBar._tabs.length;
+                                    i++
+                                  )
+                                    Expanded(
+                                      // 整槽可点，图标 + 文字在槽中心。
+                                      child: Semantics(
+                                        label: labels[i],
+                                        button: true,
+                                        // 药丸是自绘半透明玻璃，不在 Material 上：
+                                        // InkWell 的水波/按压高光会画到外层页面的
+                                        // Material 上，透出来就是一圈灰白底框。
+                                        // 这里用透明 Material 包住并关掉所有高光色。
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap: () {
+                                              AppHaptics.tap();
+                                              widget.onTap(i);
+                                            },
+                                            splashColor: Colors.transparent,
+                                            highlightColor: Colors.transparent,
+                                            hoverColor: Colors.transparent,
+                                            focusColor: Colors.transparent,
+                                            child: Center(
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    FrostedGlassNavBar
+                                                        ._tabs[i]
+                                                        .$1,
+                                                    size: 21,
                                                     color: index == i
                                                         ? accent
                                                         : Colors.white
-                                                            .withValues(
-                                                                alpha: 0.72),
+                                                              .withValues(
+                                                                alpha: 0.72,
+                                                              ),
                                                   ),
-                                                ),
-                                              ],
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    labels[i],
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      height: 1.15,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: index == i
+                                                          ? accent
+                                                          : Colors.white
+                                                                .withValues(
+                                                                  alpha: 0.72,
+                                                                ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -351,7 +439,7 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
             ),
           ),
         ),
-        ),
+      ),
     );
   }
 }

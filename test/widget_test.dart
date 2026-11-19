@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drive_track/cloud_service.dart';
 import 'package:drive_track/main.dart';
+import 'package:drive_track/frosted_nav_bar.dart';
 import 'package:drive_track/widgets.dart';
 
 void main() {
@@ -72,4 +76,57 @@ void main() {
     expect(find.text('免责声明'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
   });
+
+  testWidgets(
+    'long-pressing and dragging the nav also moves the outer tab PageView',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const channel = MethodChannel('drivetrack/native');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'checkPermissions' || call.method == 'requestStep') {
+          return <String, dynamic>{'foreground': true};
+        }
+        if (call.method == 'getFilesDir' || call.method == 'getCacheDir') {
+          return Directory.systemTemp.path;
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      await tester.pumpWidget(const DriveTrackApp());
+      await tester.pump(const Duration(milliseconds: 1600));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final nav = find.byType(FrostedGlassNavBar);
+      final firstSlot = find
+          .descendant(of: nav, matching: find.byType(InkWell))
+          .first;
+      final outerPageView = tester.widget<PageView>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('tabs')),
+              matching: find.byType(PageView),
+            )
+            .first,
+      );
+      expect(outerPageView.controller!.page, closeTo(0, 0.01));
+
+      final gesture = await tester.startGesture(tester.getCenter(firstSlot));
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(140, 0));
+      await tester.pump();
+      expect(outerPageView.controller!.page, greaterThan(0.4));
+
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(outerPageView.controller!.page, closeTo(1, 0.05));
+    },
+  );
 }

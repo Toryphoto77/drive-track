@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DriveTrack V4.6 固件烧录与首次适配指南</title>
+<style>
+  :root {
+    --bg: #0b0e13;
+    --panel: #141922;
+    --panel-2: #1a2029;
+    --line: rgba(255,255,255,.09);
+    --text: #eef2f7;
+    --muted: #9aa6b6;
+    --accent: #ff4d5e;
+    --accent-2: #5b7cff;
+    --ok: #3ddc97;
+    --warn: #ffb545;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 700px at 85% -10%, #232a3c 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    line-height: 1.75;
+    padding: 36px 20px 80px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  header { margin-bottom: 34px; }
+  .kicker {
+    display: inline-block; font-size: 12px; letter-spacing: .18em;
+    color: var(--accent); text-transform: uppercase; margin-bottom: 10px;
+  }
+  h1 { font-size: 34px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.5px; }
+  .sub { color: var(--muted); font-size: 15px; margin: 0; }
+  .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .chip {
+    font-size: 12px; padding: 5px 12px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  section {
+    background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.01));
+    border: 1px solid var(--line); border-radius: 20px;
+    padding: 26px 28px; margin-bottom: 20px;
+  }
+  h2 { font-size: 20px; margin: 0 0 16px; display: flex; align-items: center; gap: 10px; }
+  h2 .no {
+    width: 28px; height: 28px; border-radius: 9px; flex: 0 0 28px;
+    display: grid; place-items: center; font-size: 13px;
+    background: rgba(255,77,94,.14); color: var(--accent); font-weight: 700;
+  }
+  h3 { font-size: 15px; margin: 22px 0 10px; color: #cfd8e6; }
+  p, li { font-size: 14.5px; color: #c8d2e0; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 13px;
+    background: rgba(255,255,255,.07); padding: 2px 6px; border-radius: 6px;
+    color: #ffd9de;
+  }
+  pre {
+    background: #0a0d12; border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.65;
+    color: #cfe3ff;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; letter-spacing: .04em; }
+  .tip, .warn, .ok {
+    border-radius: 12px; padding: 12px 16px; margin: 14px 0; font-size: 14px;
+    border: 1px solid var(--line);
+  }
+  .tip { background: rgba(91,124,255,.10); border-color: rgba(91,124,255,.28); }
+  .warn { background: rgba(255,181,69,.09); border-color: rgba(255,181,69,.30); }
+  .ok { background: rgba(61,220,151,.08); border-color: rgba(61,220,151,.26); }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    counter-increment: step; position: relative; padding-left: 40px; margin: 14px 0;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 2px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--accent); font-size: 12px; font-weight: 700;
+    display: grid; place-items: center;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 26px; } }
+  .file {
+    display: flex; gap: 10px; align-items: baseline;
+    font-family: Consolas, monospace; font-size: 13px; color: #bcd0ec;
+  }
+  .file span { color: var(--muted); font-family: inherit; font-size: 12px; }
+  footer { text-align: center; color: #6b7688; font-size: 12.5px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">DriveTrack Hardware · V4.6</div>
+    <h1>固件烧录与首次适配指南</h1>
+    <p class="sub">从插上 USB 到 App 里看到定位、电量与固件版本，按顺序做完即可。第一次烧录需要数据线，之后升级全部在 App 内完成。</p>
+    <div class="meta">
+      <span class="chip">主控 <b>ESP32-S3-WROOM-1U-N16R8</b></span>
+      <span class="chip">固件 <b>0.3.0 / build 3</b></span>
+      <span class="chip">Flash <b>16 MB</b></span>
+      <span class="chip">App <b>1.7.5+74</b></span>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="no">1</span>先确认你手上有这些</h2>
+    <h3>硬件</h3>
+    <table>
+      <tr><th>物品</th><th>说明</th></tr>
+      <tr><td>DriveTrack V4.6 主板</td><td>已焊好 ESP32-S3、NEO-M9N、BMI088、IP5306</td></tr>
+      <tr><td>GNSS 天线</td><td>接到模块的 u.FL / SMA 座，天线尽量朝上、远离金属</td></tr>
+      <tr><td>电池</td><td>单节锂电接到 BAT，注意正负极</td></tr>
+      <tr><td>USB-C 数据线</td><td>必须能传数据；很多充电线只有电源线，会导致电脑看不到串口</td></tr>
+      <tr><td>Windows 电脑</td><td>Win10 / Win11 均可，原生 USB 串口免装驱动</td></tr>
+    </table>
+    <div class="warn">
+      <b>上电前检查：</b>确认电池极性、GNSS 天线已接、板上没有明显短路。首次上电建议先只插 USB，不接电池，看串口是否正常。
+    </div>
+
+    <h3>软件（只需装一次）</h3>
+    <table>
+      <tr><th>工具</th><th>用途</th><th>安装方式</th></tr>
+      <tr><td>Python 3.8+</td><td>运行 esptool</td><td>python.org 下载安装，勾选 Add python.exe to PATH</td></tr>
+      <tr><td>esptool</td><td>串口烧录</td><td><code>pip install esptool</code></td></tr>
+      <tr><td>pyserial（可选）</td><td>看串口日志</td><td><code>pip install pyserial</code></td></tr>
+      <tr><td>ESP-IDF v5.3（可选）</td><td>自己改固件时编译</td><td>乐鑫官方 idf-installer</td></tr>
+    </table>
+    <div class="tip">
+      只烧录、不改代码，<b>不需要装 ESP-IDF</b>。固件包里的 <code>bin/</code> 已经包含编好的镜像。
+    </div>
+
+    <h3>固件包里有什么</h3>
+    <div class="file">bin/drivetrack-box-0.3.0.bin <span>应用镜像，App OTA 也用这个</span></div>
+    <div class="file">bin/bootloader.bin <span>引导程序，首次串口烧录</span></div>
+    <div class="file">bin/partition-table.bin <span>分区表，首次串口烧录</span></div>
+    <div class="file">bin/ota_data_initial.bin <span>OTA 启动信息，首次串口烧录</span></div>
+    <div class="file">tools/flash_firmware.ps1 <span>一键烧录脚本</span></div>
+    <div class="file">tools/build_firmware.ps1 <span>改代码后重新编译</span></div>
+    <div class="file">main/ <span>完整固件源码（含 CMakeLists.txt / partitions.csv / sdkconfig.defaults），可用 ESP-IDF 打开</span></div>
+    <div class="file">README.md <span>接口、协议与二次开发说明</span></div>
+  </section>
+
+  <section>
+    <h2><span class="no">2</span>第一次串口烧录</h2>
+    <ol class="steps">
+      <li>把 USB-C 插到主板，另一端插电脑。打开「设备管理器 → 端口 (COM 和 LPT)」，应出现一个新的 USB 串行设备，例如 <code>COM5</code>。记下这个编号。</li>
+      <li>如果没出现串口：换一根确定能传数据的线；拔掉再插；仍然没有就按住 <code>BOOT</code>（IO0）再插 USB，进入下载模式后松手。</li>
+      <li>解压固件包，在 <code>tools</code> 目录打开 PowerShell，执行：
+        <pre><code>powershell -ExecutionPolicy Bypass -File .\flash_firmware.ps1 -Port COM5</code></pre>
+        <code>COM5</code> 换成你上一步看到的端口。</li>
+      <li>看到 <code>Hash of data verified.</code> 和 <code>Hard resetting via RTS pin...</code> 就是烧录成功。整片新板第一次烧录可以加 <code>-Erase</code>，会先清空再写。</li>
+      <li>设备自动重启，状态灯 IO7 每 2 秒短闪一次。</li>
+    </ol>
+
+    <h3>不想用脚本？等价的手动命令</h3>
+    <pre><code>python -m esptool -p COM5 -b 460800 --before default_reset --after hard_reset write_flash ^
+  --flash_mode dio --flash_freq 80m --flash_size 16MB ^
+  0x0     bin\bootloader.bin ^
+  0x8000  bin\partition-table.bin ^
+  0xf000  bin\ota_data_initial.bin ^
+  0x20000 bin\drivetrack-box-0.3.0.bin</code></pre>
+    <div class="warn">
+      ESP32-S3 的 bootloader 偏移是 <b>0x0</b>；只有老款 ESP32 才是 0x1000，别照抄旧教程。<br />
+      烧录中如果报 <code>Failed to connect</code> 或 <code>MD5 of file does not match</code>：先确认串口没被串口助手占用，再把 <code>-Baud</code> 降到 115200 重试。
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">3</span>烧完之后怎么验证</h2>
+    <h3>串口日志</h3>
+    <pre><code>python -m serial.tools.miniterm COM5 115200</code></pre>
+    <p>正常应依次看到：</p>
+    <pre><code>DriveTrack V4.6 fw=0.3.0 build=3
+GNSS 波特率探测命中 38400 bps
+BMI088 已启动 20 Hz
+WiFi 热点已启动 SSID=DriveTrack-XXXX
+BLE 已启动，等待 App 连接</code></pre>
+
+    <h3>WiFi 与 HTTP</h3>
+    <ol>
+      <li>手机 WiFi 列表里连 <code>DriveTrack-XXXX</code>，密码 <code>drivetrack123</code>。</li>
+      <li>浏览器打开 <code>http://192.168.4.1/api/info</code>，应返回：
+        <pre><code>{"model":"DT-BOX-1","board":"DriveTrack V4.6","fw":"0.3.0","build":3,
+ "battMv":4020,"battery":90,"freeHeap":142336,"uptimeMs":35000}</code></pre>
+      </li>
+      <li><code>battery</code> 是 App 上显示的电量百分比；<code>battMv</code> 与万用表测的电池电压相差应在 ±100 mV 内。</li>
+      <li><code>http://192.168.4.1/api/status</code> 应返回 <code>recording / fix / sats / caps</code>，App 的硬件卡就靠它刷新。</li>
+    </ol>
+
+    <h3>蓝牙</h3>
+    <p>手机蓝牙列表里能看到同名 <code>DriveTrack-XXXX</code>。不需要在系统设置里配对，直接回 App 里连接。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">4</span>App 首次适配（按这个顺序）</h2>
+    <ol class="steps">
+      <li>安装新版 <code>DriveTrack 1.7.5+74</code>（本次更新包含底栏跟手与硬件适配）。</li>
+      <li>首次启动按引导授权：定位、通知、蓝牙。蓝牙权限拒绝会导致搜不到设备。</li>
+      <li>打开「设备中心 → 扫描设备」，列表里会出现 <code>DriveTrack-XXXX</code>，点它连接。
+        <div class="tip">连接成功后，回到首页，外接 GPS 状态药丸会变成绿色并显示设备名。定位数据通过蓝牙 NMEA 实时进来。</div>
+      </li>
+      <li>要看电量 / 固件版本 / 关机这些硬件信息，需要手机连上设备热点：
+        <ol>
+          <li>手机 WiFi 连 <code>DriveTrack-XXXX</code>；</li>
+          <li>回到 App「设备中心」，硬件卡会自动刷新电量和版本。</li>
+        </ol>
+      </li>
+      <li>如果要升级固件：保持连在设备热点上，进入「设备中心 → 固件升级」，App 会检测版本、下载镜像并通过 WiFi 写入，设备自动重启，全程不用插线。</li>
+    </ol>
+    <div class="warn">
+      Android 连上设备热点后会提示「此 WLAN 无法访问互联网」，选择<b>保持连接</b>。否则系统会自动切回移动网络，App 就访问不到 <code>192.168.4.1</code>。
+    </div>
+    <div class="ok">
+      <b>首次适配完成的标志：</b>首页 GPS 药丸绿色显示设备名；骑行时能看到实时速度与轨迹；设备中心硬件卡显示电量、固件 0.3.0、定位卫星数。
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">5</span>之后怎么升级固件</h2>
+    <p>不用再插线。发布新固件后，App 的固件升级页会提示新版本：</p>
+    <ol>
+      <li>手机连设备热点。</li>
+      <li>设备中心 → 固件升级 → 检查更新。</li>
+      <li>下载并升级，等待设备重启（约 10 秒）。</li>
+    </ol>
+    <p>升级写入的是另一块 4 MB 分区，校验 SHA-256 后才切换启动分区；新固件跑满 10 秒未崩溃才取消回滚，失败会留在旧固件，不会变砖。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">6</span>常见问题</h2>
+    <table>
+      <tr><th>现象</th><th>处理</th></tr>
+      <tr><td>设备管理器没有 COM 口</td><td>换数据线；按住 BOOT 再插 USB；换一个 USB 口（避免前置面板 / Hub）</td></tr>
+      <tr><td>烧录卡在 Connecting...</td><td>按住 BOOT（IO0），点一下复位或重新插 USB，看到 Connecting 后松手</td></tr>
+      <tr><td>WiFi 里搜不到热点</td><td>看串口日志是否有 WiFi 启动报错；确认天线接好；断电重启</td></tr>
+      <tr><td>连上热点但打不开 192.168.4.1</td><td>安卓提示无互联网时选“保持连接”；关闭手机流量助手 / 智能切换网络</td></tr>
+      <tr><td>App 搜不到蓝牙设备</td><td>检查系统蓝牙已开、App 蓝牙权限已给；设备串口日志应有 BLE 已启动</td></tr>
+      <tr><td>定位一直不 fix</td><td>GNSS 天线放到窗边或室外，首次冷启动搜星可能要 1~3 分钟</td></tr>
+      <tr><td>App 显示未连接外接 GPS</td><td>先在设备中心连接 BLE；确认固件 0.3.0，旧固件只发 JSON，App 读不到 NMEA</td></tr>
+      <tr><td>App 电量显示 “—”</td><td>确认连的是设备热点、固件 0.3.0；用浏览器打开 /api/status 看是否有 battery 字段</td></tr>
+      <tr><td>升级中途断电</td><td>重新上电仍跑旧固件，再次升级即可；实在异常用串口重烧</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="no">7</span>引脚速查</h2>
+    <table>
+      <tr><th>功能</th><th>信号</th><th>ESP32-S3</th></tr>
+      <tr><td>GNSS NEO-M9N</td><td>UART1 TX / RX</td><td>IO17 / IO18</td></tr>
+      <tr><td>IMU BMI088</td><td>SPI2 SCK / MOSI / MISO</td><td>IO14 / IO15 / IO16</td></tr>
+      <tr><td>IMU 片选</td><td>CS 加速度 / 陀螺</td><td>IO10 / IO11</td></tr>
+      <tr><td>电源检测</td><td>VBAT 分压 → ADC1_CH0</td><td>IO1</td></tr>
+      <tr><td>状态灯</td><td>IO7 高 → R25 → Q2</td><td>IO7</td></tr>
+      <tr><td>第 4 颗电量灯</td><td>IO2 高电平点亮</td><td>IO2</td></tr>
+      <tr><td>USB</td><td>原生 USB-Serial-JTAG</td><td>IO19 / IO20</td></tr>
+      <tr><td>BOOT</td><td>下载模式</td><td>IO0</td></tr>
+    </table>
+    <div class="warn">IO33~IO37 被八线 PSRAM 占用，板上留空，不要复用。Φ12 自锁按钮串在电池正极，是硬开关，固件不读。</div>
+  </section>
+
+  <footer>DriveTrack V4.6 · 固件 0.3.0 / build 3 · 本指南随固件包一起分发</footer>
+</div>
+</body>
+</html>
