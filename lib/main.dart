@@ -102,6 +102,7 @@ import 'card_style.dart';
 import 'disclaimer_page.dart';
 import 'video_hud_page.dart';
 import 'video_review_page.dart';
+import 'video_import_match.dart';
 import 'data_export_page.dart';
 import 'fuel_page.dart';
 import 'update_service.dart';
@@ -147,7 +148,7 @@ void main() {
 
 // ---------- v0.1.2 本机偏好：主题色 / 个人资料 / 自带字体 ----------
 // 全部只存本机 profile.json，不登录、不上传。用户名默认“柴西”（用户自报），
-// ID 首次启动时本机生成 DT-xxxx，不编造任何真实身份信息。
+// ID 首次启动时本机生成纯数字（旧版 DT- 前缀会自动迁移），不编造任何真实身份信息。
 class AppPrefs extends ChangeNotifier {
   Color themeColor = const Color(0xFFE10600); // 法拉利赛车红（默认）
   String username = '柴西';
@@ -275,8 +276,12 @@ class AppPrefs extends ChangeNotifier {
         avatarPath = j['avatarPath'] as String?;
         customFontPath = j['customFontPath'] as String?;
       }
-      if (userId.isEmpty) {
-        userId = 'DT-${1000 + DateTime.now().millisecondsSinceEpoch % 9000}';
+      // 用户 ID 改为纯数字（旧版前缀 DT-）。空或仍是旧 DT- 格式的，
+      // 都重新生成纯数字 ID 并持久化；ID 仅本机展示，无云端绑定。
+      if (userId.isEmpty || userId.startsWith('DT-')) {
+        final secs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final rand = math.Random().nextInt(900000) + 100000; // 6 位随机尾号
+        userId = '$secs$rand';
         await save();
       }
       if (customFontPath != null && await File(customFontPath!).exists()) {
@@ -1579,7 +1584,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.5',
+          versionName: '1.7.6',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -2747,6 +2752,20 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  /// 菜单分组标题：白 54、11px、左对齐，与列表项左边距对齐。
+  Widget _menuGroupHeader(String label) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          ),
+        ),
+      );
+
   Widget _buildMenuPanel() {
     final s = S.of(context);
     // v1.1.0 菜单底部描述溢出根因与修法：
@@ -2806,34 +2825,23 @@ class _HomePageState extends State<HomePage>
                   ),
                 ),
                 const Divider(color: Colors.white12),
-                // v0.1.7 菜单简化去重 + v1.0.3 关于移入菜单 + v1.0.4 性能测试
-                // 移入菜单（红字加粗）：赛道库 / 赛道知识库 / 性能测试 /
-                // 数据导出/备份 / 免责声明 / 关于六项。设备中心已移到
-                // 底部导航第 4 项（v1.5.4），不再占菜单一项。
-                // 首页与记录页入口已删，性能测试只剩这一处入口，仍进同一
-                // performance_challenge.dart。关闭动画仍为 200ms easeOutCubic
-                // 主界面右移（build 里的 _menuAnim，不动）。
+                // 菜单分三组：赛道/驾驶、知识/数据、系统。性能测试仍是
+                // 唯一入口（红字加粗），仍进 performance_challenge.dart；
+                // 关闭动画 / 主界面右移（build 里的 _menuAnim）不动。
                 Expanded(
                   child: ListView(
                     children: [
+                      _menuGroupHeader('赛道 / 驾驶'),
                       ListTile(
                         leading: const Icon(Icons.flag),
                         title: Text(s.t('赛道库', 'Track library')),
                         subtitle: Text(
-                          s.t('赛道数据包、版本与更新', 'Track packages and updates'),
+                          s.t('赛道数据包 · 附近的赛道',
+                              'Track packages · nearby tracks'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         onTap: () => _menuAction(_openTrackLibrary),
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.menu_book),
-                        title: Text(s.t('赛道知识库', 'Track guide')),
-                        subtitle: Text(
-                          s.t(
-                            '旗语 · 规则 · 赛事架构 · 驾驶技术',
-                            'Flags, rules, and driving',
-                          ),
-                        ),
-                        onTap: () => _menuAction(_openTrackKnowledge),
                       ),
                       ListTile(
                         leading: const Icon(
@@ -2852,22 +2860,46 @@ class _HomePageState extends State<HomePage>
                             '0-100 加速 / 100-0 刹停 · 仅封闭场地测试',
                             '0-100 / 100-0 · closed course only',
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         onTap: () => _menuAction(_openPerformanceChallenge),
                       ),
+                      _menuGroupHeader('知识 / 数据'),
+                      ListTile(
+                        leading: const Icon(Icons.menu_book),
+                        title: Text(s.t('赛道知识库', 'Track guide')),
+                        subtitle: Text(
+                          s.t(
+                            '旗语 · 规则 · 驾驶技术',
+                            'Flags, rules, and driving',
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _menuAction(_openTrackKnowledge),
+                      ),
                       ListTile(
                         leading: const Icon(Icons.file_download),
-                        title: Text(s.t('数据导出/备份', 'Export / backup')),
+                        title:
+                            Text(s.t('数据导出和备份', 'Export / backup')),
                         subtitle: Text(
-                          s.t('按行程分享 GPX / CSV', 'Share a trip as GPX / CSV'),
+                          s.t('导出 GPX / CSV / VBO · 本地备份',
+                              'Export GPX / CSV / VBO · local backup'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         onTap: () => _menuAction(_openDataExport),
                       ),
+                      _menuGroupHeader('系统'),
                       ListTile(
                         leading: const Icon(Icons.warning_amber_rounded),
                         title: Text(s.t('免责声明', 'Disclaimer')),
                         subtitle: Text(
-                          s.t('使用前必读：安全须知与责任说明', 'Read before use'),
+                          s.t('使用前必读：安全须知与责任说明',
+                              'Read before use'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         onTap: () => _menuAction(_openSafetySection),
                       ),
@@ -2879,6 +2911,8 @@ class _HomePageState extends State<HomePage>
                             '版本号、在线更新、反馈与备份',
                             'Version, updates, feedback, backup',
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         onTap: () => _menuAction(_showAbout),
                       ),
@@ -3251,9 +3285,17 @@ class _HomePageState extends State<HomePage>
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
+          // GPS 药丸靠左；相机药丸用 Align 推到自己半槽的最右侧，
+          // 与下方“赛道”模式卡的右边框对齐（之前 mainAxisSize.min 让它
+          // 在半槽内左对齐，整体看起来偏左）。
           Flexible(child: _buildGpsStatusPill()),
           const SizedBox(width: 8),
-          Flexible(child: _buildCameraStatusPill()),
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _buildCameraStatusPill(),
+            ),
+          ),
         ],
       ),
     );
@@ -6322,6 +6364,45 @@ class _TripDetailPageState extends State<TripDetailPage> {
         : Theme.of(context).colorScheme.primary;
   }
 
+  /// v1.7.x 导入运动相机视频并关联到当前行程（选视频 → 匹配面板 → 落盘）。
+  Future<void> _importActionCameraVideo() async {
+    final t = trip;
+    if (t == null) return;
+    final updated = await pickAndImportVideo(
+      context,
+      store: widget.store,
+      preselectedTrip: t,
+    );
+    if (updated != null && mounted) setState(() => trip = updated);
+  }
+
+  /// 解除某段视频与行程的关联（仅移除链接，不删文件，避免误删素材）。
+  Future<void> _removeVideoLink(String vp) async {
+    final t = trip;
+    if (t == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('移除关联视频？'),
+        content: const Text('只会解除这条行程与该视频的关联，视频文件本身不会被删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final paths = t.videoPaths.where((p) => p != vp).toList();
+    final updated = await widget.store.updateTripVideoPaths(t.id, paths);
+    if (updated != null && mounted) setState(() => trip = updated);
+  }
+
   Widget _pillButton(
     String label,
     IconData icon,
@@ -7387,7 +7468,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                                 onPressed: () => Navigator.push(
                                   context,
                                   DtPageRoute(
-                                    builder: (_) => VideoHudPage(trip: t),
+                                    builder: (_) => VideoHudPage(trip: t, store: widget.store),
                                   ),
                                 ),
                               ),
@@ -7403,10 +7484,25 @@ class _TripDetailPageState extends State<TripDetailPage> {
                                 ),
                               ),
                             ),
+                            // v1.7.x：解除关联（不删文件），导入错配可重选。
+                            Semantics(
+                              label: '移除关联',
+                              child: IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () => _removeVideoLink(vp),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                   ],
+                  // v1.7.x：导入运动相机素材并关联，进入 HUD 合成页对齐/烧录/分享。
+                  _pillButton(
+                    '导入运动相机视频',
+                    Icons.video_library_outlined,
+                    _importActionCameraVideo,
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       _pillButton(

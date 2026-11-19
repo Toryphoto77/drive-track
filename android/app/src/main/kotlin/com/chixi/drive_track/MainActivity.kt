@@ -326,6 +326,8 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     // v0.1.2 同步视频：Camera2 无预览录制 + MediaRecorder，10 分钟一段。
     private var pickResult: MethodChannel.Result? = null
     private var pickKind: String = ""
+    // v1.7.x 导入运动相机视频：独立 result，避免与 pickFile 并发互相覆盖。
+    private var videoPickResult: MethodChannel.Result? = null
     // v0.1.7 拍照打点：与 pickFile 分开的 result/file，避免两者并发互相覆盖。
     private var photoResult: MethodChannel.Result? = null
     private var photoFile: File? = null
@@ -1115,6 +1117,26 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             result.error("PICK_FAILED", e.message, null)
                         }
                     }
+                    "pickVideo" -> {
+                        // 选一段系统里的视频（运动相机素材等），拷贝到
+                        // filesDir/videos/imported_<ts>.mp4，返回真实路径 +
+                        // 拍摄时间（DATE_TAKEN，回落文件 lastModified）。
+                        // 走 ACTION_GET_CONTENT，Android 13+ 无需新存储权限。
+                        videoPickResult = result
+                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "video/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                        }
+                        try {
+                            startActivityForResult(
+                                Intent.createChooser(intent, "选择运动相机视频"),
+                                2004
+                            )
+                        } catch (e: Exception) {
+                            videoPickResult = null
+                            result.error("PICK_FAILED", e.message, null)
+                        }
+                    }
                     // v0.1.7 拍照打点（新增，原先只有 Camera2 视频录制，
                     // 没有静态照片通道）：系统相机 ACTION_IMAGE_CAPTURE，
                     // FileProvider 输出到 filesDir/photo_points/ 唯一文件；
@@ -1695,6 +1717,46 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             } else {
                 try { if (file != null && file.exists()) file.delete() } catch (_: Exception) {}
                 res.success(null)
+            }
+            return
+        }
+        // v1.7.x 导入运动相机视频：拷贝到 filesDir/videos，返回路径+拍摄时间。
+        if (requestCode == 2004) {
+            val res = videoPickResult
+            videoPickResult = null
+            if (res == null) return
+            if (resultCode != Activity.RESULT_OK || data?.data == null) {
+                res.success(null)
+                return
+            }
+            try {
+                val uri = data.data!!
+                val dir = File(filesDir, "videos")
+                if (!dir.exists()) dir.mkdirs()
+                val out = File(dir, "imported_${System.currentTimeMillis()}.mp4")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    out.outputStream().use { output -> input.copyTo(output) }
+                }
+                var createdMs: Long = out.lastModified()
+                try {
+                    val proj =
+                        arrayOf(android.provider.MediaStore.Video.Media.DATE_TAKEN)
+                    contentResolver.query(uri, proj, null, null, null)?.use { c ->
+                        if (c.moveToFirst()) {
+                            val idx = c.getColumnIndex(
+                                android.provider.MediaStore.Video.Media.DATE_TAKEN
+                            )
+                            if (idx >= 0 && !c.isNull(idx)) createdMs = c.getLong(idx)
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+                val map = HashMap<String, Any>()
+                map["path"] = out.absolutePath
+                map["createdMs"] = createdMs
+                res.success(map)
+            } catch (e: Exception) {
+                res.error("COPY_FAILED", e.message, null)
             }
             return
         }

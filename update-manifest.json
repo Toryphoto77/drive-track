@@ -1,25 +1,26 @@
 {
-    "_comment":  "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：1.6.2 起指向 CloudBase 存储国内 CDN，GitHub Release 地址保留在 apks.url 作兜底。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要。可选字段（旧客户端忽略）：每个 apks.\u003cabi\u003e 或顶层可加 cdnUrl（字符串）和 mirrors（字符串数组），国内优先下载，失败再回落 url/apkUrl。githubProxyFallback 缺省 true，false 时不再试内置 GitHub 代理；githubProxies 可替换代理前缀列表。1.7.5 三 ABI：GitHub Release 地址保留在 apks.\u003cabi\u003e.url 作兜底，cdnUrl 与顶层 apkUrl 指向 CloudBase 存储（国内 CDN，apk/1.7.5/ 前缀），由 tools/upload_cdn.ps1 上传并写入。",
-    "versionName":  "1.7.5",
-    "versionCode":  74,
-    "apkUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.5/DriveTrack-v1.7.5-release-arm64-v8a.apk",
-    "sha256":  "322ef4a7493b41fef9fc7f6d6f64a74a71ea0dbf3f7a7c73733b6742f9a2f9eb",
+    "_comment":  "DriveTrack 在线更新清单（国内优先通道）。发版流程每次发新版必须同步更新本文件（versionName / versionCode / apkUrl / notes），推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json（jsDelivr 会缓存分支文件，不刷新则 App 拉到旧清单）。apkUrl 是下载间接层：1.6.2 起指向 CloudBase 存储国内 CDN，GitHub Release 地址保留在 apks.url 作兜底。 v1.5.4 起支持 apks 字段（按设备架构选包，可带 sha256）；旧版 App 只读 apkUrl（arm64 包）。发版时用 tools/gen_update_manifest.py 按实际 APK 生成摘要。可选字段（旧客户端忽略）：每个 apks.\u003cabi\u003e 或顶层可加 cdnUrl（字符串）和 mirrors（字符串数组），国内优先下载，失败再回落 url/apkUrl。githubProxyFallback 缺省 true，false 时不再试内置 GitHub 代理；githubProxies 可替换代理前缀列表。1.7.6 三 ABI：GitHub Release 地址保留在 apks.\u003cabi\u003e.url 作兜底，cdnUrl 与顶层 apkUrl 指向 CloudBase 存储（国内 CDN，apk/1.7.6/ 前缀），由 tools/upload_cdn.ps1 上传并写入。",
+    "versionName":  "1.7.6",
+    "versionCode":  75,
+    "apkUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.6/DriveTrack-v1.7.6-release-arm64-v8a.apk",
+    "sha256":  "5563ca4e601d1f90697be277d1e03c91b00424e46f95f544ff576f5d8ee9f7a4",
     "apks":  {
                  "arm64-v8a":  {
-                                   "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.5/DriveTrack-v1.7.5-release-arm64-v8a.apk",
-                                   "sha256":  "322ef4a7493b41fef9fc7f6d6f64a74a71ea0dbf3f7a7c73733b6742f9a2f9eb",
-                                   "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.5/DriveTrack-v1.7.5-release-arm64-v8a.apk"
+                                   "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.6/DriveTrack-v1.7.6-release-arm64-v8a.apk",
+                                   "sha256":  "5563ca4e601d1f90697be277d1e03c91b00424e46f95f544ff576f5d8ee9f7a4",
+                                   "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.6/DriveTrack-v1.7.6-release-arm64-v8a.apk"
                                },
                  "armeabi-v7a":  {
-                                     "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.5/DriveTrack-v1.7.5-release-armeabi-v7a.apk",
-                                     "sha256":  "9884001d488a620519777de8e5eea2016c92f35c8d609cfc30fe2297dd7baaa3",
-                                     "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.5/DriveTrack-v1.7.5-release-armeabi-v7a.apk"
+                                     "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.6/DriveTrack-v1.7.6-release-armeabi-v7a.apk",
+                                     "sha256":  "56cd35df874c5471ddd88e264525c38f8cb606608087e34fee6cb2b45e79a6b3",
+                                     "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.6/DriveTrack-v1.7.6-release-armeabi-v7a.apk"
                                  },
                  "x86_64":  {
-                                "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.5/DriveTrack-v1.7.5-release-x86_64.apk",
-                                "sha256":  "eb6bf2bc77d9d18ee7465f156d7f9c09230e59c135dc14ccd9c0166d21ecdb82",
-                                "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.5/DriveTrack-v1.7.5-release-x86_64.apk"
+                                "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.6/DriveTrack-v1.7.6-release-x86_64.apk",
+                                "sha256":  "b89e31971352c343ac1f1f4db0b0078d35d5a61e136692c466ca9384daf1621c",
+                                "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.6/DriveTrack-v1.7.6-release-x86_64.apk"
                             }
              },
-    "notes":  "1.7.5：底栏支持长按拖动与直接横拖，药丸逐帧跟手、页面同步位移并弹性吸附；补齐液态玻璃底栏的 Q 弹收位；适配自研 V4.6 硬件首次连接（蓝牙 NMEA 实时定位、电量/卫星数/固件版本与关机），并修复设备热点 HTTP 明文访问被系统拦截的问题。"
+    "notes":  "1.7.6：侧拉菜单按赛道/驾驶、知识/数据、系统三组重排；数据导出新增 VBO（RaceChrono / dragy 通用）；记录页支持导入运动相机视频并匹配行程、按拍摄时间对齐后加 HUD 编辑分享；设备中心重绘运动相机 / 外接 GPS / OBD 线性图标并去掉外框，相机与 GPS 匹配页改为极简扫描列表；底栏液态玻璃染色跟随主题并降低不透明度，选中药丸改用主题色；用户 ID 改为纯数字；首页相机状态药丸与赛道卡右边框对齐。",
+    "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.6/DriveTrack-v1.7.6-release-arm64-v8a.apk"
 }

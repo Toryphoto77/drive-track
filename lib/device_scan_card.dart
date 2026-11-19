@@ -2,32 +2,25 @@ import 'package:flutter/material.dart';
 
 import 'app_locale.dart';
 
-/// 设备中心共用扫描卡片（v1.2.12）：运动相机页与外接 GPS 页共用一套。
+/// 设备中心共用扫描组件（v1.2.12 抽出，v1.7.x 极简化）。
+/// 运动相机页与外接 GPS 页共用一套（两页一致，不许各改各的）。
 ///
-/// 样式（两页一致，不许各改各的）：
-/// - 深色 #121212 页面底（各页 Scaffold 自带），卡片底 #0B0E13、圆角 16、
-///   白 12% 描边；法拉利红 #E10600 点缀（图标圆圈、波纹、进度环）。
-/// - 字号层级：卡片标题 18 加粗白、说明 12 白 70 居中、状态行 12 白 54 居中、
-///   列表头 15 加粗白、行标题 14 加粗白、行说明 12 白 70、行元信息 11 白 54。
-/// - 动画节奏：扫描动画固定 132px、1800ms 一圈、三环波纹（见
-///   [DeviceScanRipple]，原相机页 _ScanRipple 原样抽出，不改节奏）。
-///
-/// 三种状态（卡片 + 行共用同一套呈现）：
-/// - 空态：静态红圈图标 + [statusLine]（如“尚未扫描…”），列表区给空态文案，
-///   不出现假的已连接 / 假设备。
-/// - 扫描中：[DeviceScanRipple]（转圈 + 波纹）+ 扫描中状态行，按钮变“停止…”。
-/// - 已连接：行卡片描边变绿、行内文案变“已连接”，连接详情（定位 / 电量）
-///   由各页在卡片下方的已连接面板里另行展示，本组件不编造。
-///
-/// 本文件只管外衣：扫描 / 连接逻辑一律不动，各页把自己的状态与回调传进来。
+/// v1.7.x 按参考图收敛为极简样式：
+/// - 扫描条：左侧小图标 / 波纹 + 一行状态文字 + 右侧「扫描 / 停止」文字按钮，
+///   不再有 56px 大红圈、大标题说明和整宽大按钮。
+/// - 设备行：左侧红色圆角图标 + 名称 + 一行副信息（信号 / 地址）+ 右侧一个
+///   动作按钮（实心「连接」/ 描边「配对」/ 灰色「已连接」）。
+/// - 扫描 / 连接逻辑一律不动，各页把自己的状态与回调传进来。
+
+const Color _kRed = Color(0xFFE10600);
 
 /// 扫描动画：转圈 + 三环波纹（扫描中才播放）。
-/// 原相机页 _ScanRipple 原样抽出：132px、1800ms、三环依次外扩淡出，
-/// 中央 56px 红圈图标 + 一圈 CircularProgressIndicator。
+/// 默认 132px；卡片内用 [size] 收小到 36px，保持极简。
 class DeviceScanRipple extends StatefulWidget {
-  const DeviceScanRipple({super.key, required this.icon});
+  const DeviceScanRipple({super.key, required this.icon, this.size = 132});
 
   final IconData icon;
+  final double size;
 
   @override
   State<DeviceScanRipple> createState() => _DeviceScanRippleState();
@@ -54,7 +47,8 @@ class _DeviceScanRippleState extends State<DeviceScanRipple>
 
   @override
   Widget build(BuildContext context) {
-    const size = 132.0;
+    final size = widget.size;
+    final core = size * 0.42;
     return SizedBox(
       width: size,
       height: size,
@@ -77,8 +71,7 @@ class _DeviceScanRippleState extends State<DeviceScanRipple>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: const Color(0xFFE10600)
-                                .withValues(alpha: 0.55 * (1 - progress)),
+                            color: _kRed.withValues(alpha: 0.55 * (1 - progress)),
                             width: 2,
                           ),
                         ),
@@ -89,28 +82,21 @@ class _DeviceScanRippleState extends State<DeviceScanRipple>
             },
           ),
           Container(
-            width: 56,
-            height: 56,
+            width: core,
+            height: core,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFE10600).withValues(alpha: 0.15),
-              border: Border.all(
-                color: const Color(0xFFE10600),
-                width: 2,
-              ),
+              color: _kRed.withValues(alpha: 0.15),
+              border: Border.all(color: _kRed, width: 2),
             ),
-            child: Icon(
-              widget.icon,
-              color: const Color(0xFFE10600),
-              size: 28,
-            ),
+            child: Icon(widget.icon, color: _kRed, size: core * 0.5),
           ),
-          const SizedBox(
-            width: 132,
-            height: 132,
-            child: CircularProgressIndicator(
+          SizedBox(
+            width: size,
+            height: size,
+            child: const CircularProgressIndicator(
               strokeWidth: 2,
-              color: Color(0xFFE10600),
+              color: _kRed,
             ),
           ),
         ],
@@ -119,8 +105,7 @@ class _DeviceScanRippleState extends State<DeviceScanRipple>
   }
 }
 
-/// 扫描入口大卡片：标题 + 说明 + 扫描按钮 + 状态行（+ 可选脚注 / 权限提示）。
-/// 空态与扫描中只换中间图标（静态红圈 ↔ [DeviceScanRipple]），其余不动。
+/// 扫描条（极简）：标题 + 一行状态 + 扫描/停止，可选脚注与权限提示。
 class DeviceScanCard extends StatelessWidget {
   const DeviceScanCard({
     super.key,
@@ -142,18 +127,17 @@ class DeviceScanCard extends StatelessWidget {
   final String description;
   final IconData icon;
 
-  /// 扫描中：中间换波纹动画，按钮变停止态。
+  /// 扫描中：左侧换成波纹动画，按钮变停止态。
   final bool scanning;
 
-  /// 未扫描时按钮文案（如“扫描相机”）；扫描中按钮文案（如“停止扫描”）。
   final String scanLabel;
   final String stopLabel;
   final VoidCallback onScanToggle;
 
-  /// 卡片底部状态行：空态 / 扫描中 / 扫描结果摘要，各页自己算好传进来。
+  /// 一行状态文字：空态 / 扫描中 / 扫描结果摘要，各页自己算好传进来。
   final String statusLine;
 
-  /// 未扫描时扫描按钮的图标（默认用 [icon]）；扫描中固定为停止图标。
+  /// 未扫描时扫描按钮的图标（保留参数以兼容既有调用；极简样式下不再显示）。
   final IconData? scanButtonIcon;
 
   /// 卡片底部小字脚注，可空。
@@ -166,77 +150,83 @@ class DeviceScanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
       decoration: BoxDecoration(
         color: const Color(0xFF0B0E13),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white12),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (scanning)
-            DeviceScanRipple(icon: icon)
-          else
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFFE10600).withValues(alpha: 0.15),
-                border: Border.all(
-                  color: const Color(0xFFE10600),
-                  width: 2,
+          Row(
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: scanning
+                    ? DeviceScanRipple(icon: icon, size: 36)
+                    : Container(
+                        decoration: BoxDecoration(
+                          color: _kRed.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(icon, color: _kRed, size: 20),
+                      ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      statusLine,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: Icon(
-                icon,
-                color: const Color(0xFFE10600),
-                size: 28,
+              const SizedBox(width: 4),
+              TextButton(
+                onPressed: onScanToggle,
+                style: TextButton.styleFrom(
+                  foregroundColor: scanning ? Colors.white70 : _kRed,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(scanning ? stopLabel : scanLabel),
               ),
-            ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            description,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onScanToggle,
-              icon: Icon(
-                scanning ? Icons.stop : (scanButtonIcon ?? icon),
-                size: 18,
-              ),
-              label: Text(scanning ? stopLabel : scanLabel),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            statusLine,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ],
           ),
           if (footnote != null) ...[
             const SizedBox(height: 6),
-            Text(
-              footnote!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            Padding(
+              padding: const EdgeInsets.only(left: 46, right: 6),
+              child: Text(
+                footnote!,
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
             ),
           ],
           if (permNotice != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Row(
               children: [
                 Expanded(
@@ -262,11 +252,7 @@ class DeviceScanCard extends StatelessWidget {
   }
 }
 
-/// 搜到的设备行卡片：相机页与 GPS 页共用同一套行样式。
-/// - 标题 14 加粗白 + 右上角徽标（连接方式 / 通道，警告色为琥珀底、
-///   其余为主题 primary 20% 底）；说明 12 白 70；元信息 11 白 54。
-/// - 连接中：16px 转圈 + [connectingLabel]；已连接：绿字“已连接”、
-///   卡片描边变绿；其余：[actionLabel]（如“点行连接”）。
+/// 搜到的设备行（极简）：左侧红图标 + 名称 + 一行副信息 + 右侧动作按钮。
 class DeviceScanRow extends StatelessWidget {
   const DeviceScanRow({
     super.key,
@@ -280,12 +266,14 @@ class DeviceScanRow extends StatelessWidget {
     this.isConnecting = false,
     this.isConnected = false,
     this.connectingLabel = '连接中…',
+    this.actionIsOutline = false,
+    this.icon = Icons.bluetooth,
   });
 
   final String title;
   final String badgeLabel;
 
-  /// 徽标是否用琥珀警告底（向导连接类）；false 用主题 primary 底。
+  /// 徽标是否用琥珀警告底（向导连接类）；保留以兼容调用方。
   final bool badgeIsWarning;
   final String detail;
   final String meta;
@@ -297,10 +285,16 @@ class DeviceScanRow extends StatelessWidget {
   /// 连接中文案：相机页用“连接中…”，GPS 页沿用旧文案“连接中”。
   final String connectingLabel;
 
+  /// 动作按钮是否描边样式（配对类用描边，连接类用实心）。
+  final bool actionIsOutline;
+
+  /// 设备类型图标（默认蓝牙）。
+  final IconData icon;
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final accent = Theme.of(context).colorScheme.primary;
+    final subtitle = meta.isNotEmpty ? meta : detail;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -314,87 +308,111 @@ class DeviceScanRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _kRed.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: _kRed, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: badgeIsWarning
-                          ? Colors.amber.withValues(alpha: 0.2)
-                          : accent.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      badgeLabel,
+                    const SizedBox(height: 2),
+                    Text(
+                      badgeLabel.isEmpty
+                          ? subtitle
+                          : '$badgeLabel · $subtitle',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: Colors.white54,
                         fontSize: 12,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                detail,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                meta,
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  if (isConnecting)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          connectingLabel,
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                      ],
-                    )
-                  else if (isConnected)
-                    Text(
-                      s.t('已连接', 'Connected'),
-                      style: const TextStyle(color: Colors.greenAccent),
-                    )
-                  else
-                    Text(
-                      actionLabel,
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                ],
-              ),
+              const SizedBox(width: 8),
+              _action(s),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _action(S s) {
+    if (isConnecting) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            connectingLabel,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
+      );
+    }
+    if (isConnected) {
+      return Text(
+        s.t('已连接', 'Connected'),
+        style: const TextStyle(color: Colors.greenAccent, fontSize: 12),
+      );
+    }
+    final style = TextButton.styleFrom(
+      minimumSize: const Size(0, 32),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      foregroundColor: actionIsOutline ? _kRed : Colors.white,
+      backgroundColor: actionIsOutline ? null : _kRed,
+      side: actionIsOutline ? const BorderSide(color: _kRed) : null,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+    );
+    return TextButton(
+      onPressed: onTap,
+      style: style,
+      child: Text(actionLabel, style: const TextStyle(fontSize: 12)),
+    );
+  }
+}
+
+/// 底部提示：找不到设备时的说明（参考图样式），两页共用。
+class DeviceScanHint extends StatelessWidget {
+  const DeviceScanHint({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        text,
+        style: const TextStyle(color: Colors.white38, fontSize: 11),
       ),
     );
   }

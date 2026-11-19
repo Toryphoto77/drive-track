@@ -32,7 +32,9 @@ import 'app_notice.dart';
 import 'card_style.dart';
 import 'models.dart';
 import 'native.dart';
+import 'store.dart';
 import 'track_timing.dart';
+import 'video_import_match.dart';
 
 const Color _kHudRed = Color(0xFFE10600);
 
@@ -48,15 +50,25 @@ extension HudStyleLabel on HudStyle {
 }
 
 class VideoHudPage extends StatefulWidget {
-  const VideoHudPage({super.key, required this.trip});
+  const VideoHudPage({super.key, required this.trip, required this.store});
 
   final Trip trip;
+  final Store store;
 
   @override
   State<VideoHudPage> createState() => _VideoHudPageState();
 }
 
 class _VideoHudPageState extends State<VideoHudPage> {
+  /// 本地可变副本：导入运动相机视频后刷新关联列表（widget.trip 是 final）。
+  late Trip _trip;
+
+  @override
+  void initState() {
+    super.initState();
+    _trip = widget.trip;
+  }
+
   int _segment = 0;
   int _manualOffsetMs = 0;
   int _scrubMs = 0;
@@ -85,9 +97,26 @@ class _VideoHudPageState extends State<VideoHudPage> {
   /// 倾角只对摩托有意义：非摩托行程即便勾了也不输出。
   bool get _leanEnabled => _showLean && trip.mode == TripMode.moto;
 
-  Trip get trip => widget.trip;
+  Trip get trip => _trip;
 
   List<String> get _videos => trip.videoPaths;
+
+  /// v1.7.x：空态下直接导入运动相机视频并关联到本行程，成功后刷新列表，
+  /// 之后即可走现有的对齐 / HUD 编辑 / 烧录 / 分享流程。
+  Future<void> _importVideo() async {
+    final updated = await pickAndImportVideo(
+      context,
+      store: widget.store,
+      preselectedTrip: _trip,
+    );
+    if (updated != null && mounted) {
+      setState(() {
+        _trip = updated;
+        _segment = 0;
+        _manualOffsetMs = 0;
+      });
+    }
+  }
 
   int get _durationMs {
     final d = trip.endMs - trip.startMs;
@@ -641,10 +670,19 @@ class _VideoHudPageState extends State<VideoHudPage> {
           const EdgeInsets.fromLTRB(16, 12, 16, 28),
         ),
         children: [
-          if (_videos.isEmpty)
-            _warn('这条行程没有关联视频。连接运动相机并开启“同步视频记录”后重录一场，'
-                '这里会自动出现可对齐的视频段。')
-          else ...[
+          if (_videos.isEmpty) ...[
+            _warn('这条行程没有关联视频。可导入运动相机拍摄的素材，'
+                '在此对齐并添加 HUD 后分享。'),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ElevatedButton.icon(
+                onPressed: _importVideo,
+                icon: const Icon(Icons.video_library_outlined),
+                label: const Text('导入运动相机视频'),
+              ),
+            ),
+          ] else ...[
             _sectionTitle('1. 选择视频段'),
             const SizedBox(height: 8),
             Wrap(

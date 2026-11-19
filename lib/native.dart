@@ -375,6 +375,16 @@ class Native {
     return r as String?;
   }
 
+  /// v1.7.x 导入运动相机视频：系统选择器选 video/*，原生侧拷贝到
+  /// filesDir/videos/imported_<ts>.mp4，返回 {path, createdMs}（createdMs
+  /// 为拍摄时间戳 ms，取 DATE_TAKEN 回落 lastModified）；取消返回 null。
+  static Future<Map<String, dynamic>?> pickVideo() async {
+    final r = await _m.invokeMethod('pickVideo');
+    if (r == null) return null;
+    final m = Map<String, dynamic>.from(r as Map);
+    return m;
+  }
+
   /// v0.1.8 记录时保持屏幕常亮：原生 window FLAG_KEEP_SCREEN_ON。
   /// 返回 true = 原生确实加上了 flag；返回 false / 抛错 = 未开启，
   /// 调用方必须按 false 显示“常亮未开启”，绝不假装已开启。

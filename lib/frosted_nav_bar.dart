@@ -226,12 +226,21 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                   filter: _backdropFilter(),
                   child: Container(
                     decoration: BoxDecoration(
+                      // 染色层跟主题 surface（近黑）走，alpha 压低到 0.20/0.14，
+                      // 让模糊背景真正透出来。之前是 0.52/0.48 的中灰，
+                      // 把毛玻璃盖成一块与 App 颜色不符的灰板。
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          const Color(0xFF4A4A50).withValues(alpha: 0.52),
-                          const Color(0xFF26262B).withValues(alpha: 0.48),
+                          Theme.of(context)
+                              .colorScheme
+                              .surface
+                              .withValues(alpha: 0.20),
+                          Theme.of(context)
+                              .colorScheme
+                              .surface
+                              .withValues(alpha: 0.14),
                         ],
                       ),
                     ),
@@ -271,10 +280,11 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
                       builder: (context, constraints) {
                         final slotWidth = constraints.maxWidth / n;
                         final pillWidth = (slotWidth - 12).clamp(40.0, 132.0);
-                        // 参考视频的选中态：偏亮的深灰玻璃药丸（不带主题色），
-                        // 主题色只用在图标和文字上；只做水平滑动。
-                        final pillBase = const Color(0xFF313138);
-                        final pillTop = const Color(0xFF3B3B44);
+                        // 选中态：主题强调色低透明度玻璃药丸 + 白色高光边，
+                        // 跟随用户选择的主题色（之前硬编码深灰，换主题色
+                        // 时药丸不变，和 App 颜色脱节）。
+                        final pillBase = accent.withValues(alpha: 0.22);
+                        final pillTop = accent.withValues(alpha: 0.32);
                         // 页面滑动和底栏直接拖动共用连续页码；松手回到
                         // selectedIndex，用 320ms easeOutBack 收尾（Q 弹）。
                         final drag = widget.dragProgress;

@@ -13,6 +13,7 @@ import 'home_layout.dart';
 import 'blediy_gps.dart';
 import 'bt_gps_receiver.dart';
 import 'camera_connect_page.dart';
+import 'device_icons.dart';
 import 'device_scan_card.dart';
 import 'firmware_update_service.dart';
 import 'gps_source.dart';
@@ -965,8 +966,8 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     final adaptable = _scanned.where(gpsDeviceIsAdaptable).toList();
     final scanStatusLine = _adaptScanning
         ? s.t(
-            '正在扫描附近 GPS（BLE、经典蓝牙、已配对）…',
-            'Scanning nearby GPS (BLE, classic, paired)…',
+            '正在扫描附近的 GPS 模块…',
+            'Scanning nearby GPS modules…',
           )
         : _scanned.isEmpty
         ? s.t('尚未扫描，点「扫描适配设备」。', 'Not scanned. Tap Scan devices.')
@@ -1003,6 +1004,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
             onScanToggle: _toggleAdaptScan,
             statusLine: scanStatusLine,
             scanButtonIcon: Icons.bluetooth_searching,
+            footnote: s.t(
+              '找不到？确认设备已开机并处于可发现状态。',
+              'Not found? Make sure the device is on and discoverable.',
+            ),
             permNotice: _permNotice,
             onOpenSettings: () => Native.openAppSettings(),
           ),
@@ -1092,10 +1097,12 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
                     ? '${btGpsFixStatusLabel(fix)} · '
                           '卫星 ${fix.satellites ?? '—'} · '
                           '更新率 ${fix.hz?.toStringAsFixed(0) ?? '—'} Hz'
-                          '${signal.isEmpty ? '' : ' · $signal'} · $addr'
+                          '${signal.isEmpty ? '' : ' · $signal'}'
                     : (signal.isEmpty ? addr : '$signal · $addr'),
-                actionLabel: s.t('点按连接', 'Tap to connect'),
-                // GPS 页沿用旧文案“连接中”（无省略号），与单入口测试一致。
+                actionLabel: dev['bonded'] == true
+                    ? s.t('连接', 'Connect')
+                    : s.t('去配对', 'Pair first'),
+                actionIsOutline: dev['bonded'] != true,
                 connectingLabel: s.t('连接中', 'Connecting'),
                 isConnecting: isConnecting,
                 isConnected: isConnected,
@@ -1688,7 +1695,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       child: Column(
         children: [
           _deviceEntry(
-            icon: Icons.videocam_outlined,
+            glyph: DeviceGlyphKind.actionCam,
             title: s.t('运动相机', 'Action cam'),
             subtitle: 'GoPro · Insta360 · DJI',
             trailing: s.t('连接', 'Connect'),
@@ -1696,7 +1703,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           ),
           _dividerLine(),
           _deviceEntry(
-            icon: Icons.gps_fixed,
+            glyph: DeviceGlyphKind.gpsModule,
             title: s.t('外接 GPS 模块', 'External GPS'),
             subtitle: s.t(
               '断线自动回落手机 GPS',
@@ -1707,7 +1714,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           ),
           _dividerLine(),
           _deviceEntry(
-            icon: Icons.speed,
+            glyph: DeviceGlyphKind.obd,
             title: s.t('OBD（ELM327）', 'OBD (ELM327)'),
             subtitle: s.t('车速 / 转速 / 油门 / 水温', 'Speed / rpm / throttle'),
             trailing: s.t('敬请期待', 'Soon'),
@@ -1720,7 +1727,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   }
 
   Widget _deviceEntry({
-    required IconData icon,
+    required DeviceGlyphKind glyph,
     required String title,
     required String subtitle,
     required String trailing,
@@ -1735,7 +1742,18 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
           child: Row(
             children: [
-              _iconTile(icon, size: 38, dimmed: !enabled),
+              // 无外框：直接画设备线性图标（参考图样式）。
+              SizedBox(
+                width: 38,
+                height: 38,
+                child: Center(
+                  child: DeviceGlyph(
+                    kind: glyph,
+                    size: 28,
+                    color: enabled ? Colors.white : Colors.white24,
+                  ),
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1812,8 +1830,8 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                     Expanded(
                       child: Text(
                         s.t(
-                          '扫描附近的运动相机',
-                          'Scanning for action cams',
+                          '扫描设备',
+                          'Scan devices',
                         ),
                         style: const TextStyle(
                           fontSize: 17,
@@ -1862,7 +1880,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        s.t('GPS', 'GPS'),
+                        s.t('扫描设备', 'Scan devices'),
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -1897,17 +1915,13 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     return DriveTrackCard(padding: padding, child: child);
   }
 
-  /// 设备图标：统一单色线性图标，不跟主题色着色。
+  /// 设备图标：统一单色线性图标，不跟主题色着色，**不加外框**（v1.7.x）。
   Widget _iconTile(IconData icon, {double size = 40, bool dimmed = false}) {
     final tint = dimmed ? Colors.white24 : Colors.white70;
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, size: size * 0.5, color: tint),
+      child: Icon(icon, size: size * 0.62, color: tint),
     );
   }
 

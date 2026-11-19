@@ -67,7 +67,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('v1.7.2 GPS 行拉起底部面板：标题为 GPS，可关闭',
+  testWidgets('v1.7.2 GPS 行拉起底部面板：标题为扫描设备，可关闭',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1.0;
@@ -85,7 +85,7 @@ void main() {
     await tester.tap(find.text('外接 GPS 模块'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('GPS'), findsOneWidget);
+    expect(find.text('扫描设备'), findsOneWidget);
     expect(find.text('取消'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pump();
