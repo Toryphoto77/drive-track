@@ -93,7 +93,8 @@ void main() {
       await tester.pumpWidget(row());
       await tester.pump();
       expect(find.text('DEXIAN D1'), findsOneWidget);
-      expect(find.text('BLE'), findsOneWidget);
+      // 极简行：徽标与副信息合并为一行（BLE · 信号 · 地址）。
+      expect(find.textContaining('BLE · 信号 -60'), findsOneWidget);
       expect(find.text('点按连接'), findsOneWidget);
       expect(find.text('已连接'), findsNothing);
 
@@ -239,9 +240,10 @@ void main() {
       await tester.pump();
       expect(find.byType(DeviceScanRow), findsOneWidget);
       expect(find.text('DEXIAN D1'), findsOneWidget);
-      expect(find.text('BLE'), findsOneWidget);
-      expect(find.textContaining('名称匹配'), findsOneWidget);
-      expect(find.text('点按连接'), findsOneWidget);
+      // 极简行：徽标与信号 / 地址合并为一行。
+      expect(find.textContaining('BLE · 信号 -60'), findsOneWidget);
+      // 未配对设备走描边「去配对」按钮。
+      expect(find.text('去配对'), findsOneWidget);
 
       // 点 D1 行 → 连接中（GPS 旧文案，无省略号）。
       await tester.tap(find.text('DEXIAN D1'));

@@ -72,7 +72,7 @@ void main() {
     expect(find.text('设置快捷'), findsNothing);
     expect(find.text('赛道库'), findsOneWidget);
     expect(find.text('设备中心'), findsNothing);
-    expect(find.text('数据导出/备份'), findsOneWidget);
+    expect(find.text('数据导出和备份'), findsOneWidget);
     expect(find.text('免责声明'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
   });

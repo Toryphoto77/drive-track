@@ -119,6 +119,14 @@ class _DataExportPageState extends State<DataExportPage> {
             startFinish: startFinish,
             sectorPoints: sectorPoints));
         await Native.shareFiles([path], 'application/gpx+xml', '驰迹 GPX（${trip.trimPrivacy ? '已截掉首尾' : '完整轨迹'}）');
+      } else if (kind == 'vbo') {
+        // VBO（Racelogic VBOX 文本）：RaceChrono / dragy 均原生支持，
+        // 与 CSV 一样为完整数据（不截首尾）。
+        final path = '$dir/trip_${trip.id}.vbo';
+        await File(path)
+            .writeAsString(widget.store.toVbo(trip, trimmed: false));
+        await Native.shareFiles([path], 'application/octet-stream',
+            '驰迹 VBO（完整数据，可导入 RaceChrono / dragy）');
       } else {
         final path = '$dir/trip_${trip.id}.csv';
         await File(path).writeAsString(widget.store.toCsv(trip,
@@ -275,7 +283,7 @@ class _DataExportPageState extends State<DataExportPage> {
                 const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text(
-                    '导出走系统分享，数据仅存本机，不上传。GPX 默认截掉首尾；CSV 为完整数据，请注意隐私。',
+                    '导出走系统分享，数据仅存本机，不上传。GPX 默认截掉首尾；CSV / VBO 为完整数据，请注意隐私。VBO 可导入 RaceChrono / dragy。',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ),
@@ -301,6 +309,10 @@ class _DataExportPageState extends State<DataExportPage> {
                             TextButton(
                               onPressed: _busyId == '${m.id}:csv' ? null : () => _export(m, 'csv'),
                               child: const Text('CSV'),
+                            ),
+                            TextButton(
+                              onPressed: _busyId == '${m.id}:vbo' ? null : () => _export(m, 'vbo'),
+                              child: const Text('VBO'),
                             ),
                           ],
                         ),

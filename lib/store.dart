@@ -334,6 +334,17 @@ class Store {
     return r.trip;
   }
 
+  /// v1.7.x 导入运动相机视频：改写行程的 videoPaths（追加 / 移除关联视频）。
+  /// 只换 videoPaths，其余字段原样保留；文件重命名 / 删除由调用方负责。
+  Future<Trip?> updateTripVideoPaths(String id, List<String> videoPaths) =>
+      _mutex.run(() async {
+        final old = await loadTrip(id);
+        if (old == null) return null;
+        final trip = old.copyWith(videoPaths: videoPaths);
+        await _writeTrip(trip);
+        return trip;
+      });
+
   /// v0.1.7 删行程：删行程 JSON + 索引条目，并删该行程照片点的
   /// 本 App 副本。只删 photo_points/ 目录下的路径（守卫见
   /// photo_points.dart），用户相册原图、头像、视频一律不动。
@@ -525,6 +536,52 @@ class Store {
             : '';
         b.writeln('${i + 1},${lap.durationMs},${sec(0)},${sec(1)},${sec(2)}');
       }
+    }
+    return b.toString();
+  }
+
+  /// 导出 Racelogic VBOX 文本格式（.vbo）：RaceChrono 与 dragy 均原生支持，
+  /// 是 GPX / CSV 之外赛道数据互通性最高的公共格式。纯文本、与 CSV 同构，
+  /// 不引入新依赖。列顺序取 VBOX 标准表头：velocity 单位 km/h，time 为
+  /// UTC 当日秒数，date 为 dd/mm/yy。vertical velocity 暂无数据源写 0。
+  String toVbo(Trip trip, {bool trimmed = false}) {
+    final pts = trimmed ? trimmedPoints(trip) : trip.points;
+    final start = DateTime.fromMillisecondsSinceEpoch(trip.startMs).toUtc();
+    String two(int v) => v.toString().padLeft(2, '0');
+    String ddmmyy(DateTime d) =>
+        '${two(d.day)}/${two(d.month)}/${two(d.year % 100)}';
+    String hms(DateTime d) =>
+        '${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
+    double secOfDay(DateTime d) =>
+        d.hour * 3600 + d.minute * 60 + d.second + d.millisecond / 1000;
+    final b = StringBuffer()
+      ..writeln('[header]')
+      ..writeln('[column names]')
+      ..writeln('satellites,time,latitude,longitude,velocity,heading,'
+          'vertical velocity,height,glonass,raw time,date,start time,'
+          'start date,station id,star indicator')
+      ..writeln('[comments]')
+      ..writeln('DriveTrack ${trip.mode.label} export')
+      ..writeln('[data]');
+    for (final p in pts) {
+      final d = DateTime.fromMillisecondsSinceEpoch(p.timeMs).toUtc();
+      final t = secOfDay(d);
+      final tStr = t.toStringAsFixed(2);
+      b.writeln('${p.satCount ?? 0},'
+          '$tStr,'
+          '${p.lat.toStringAsFixed(6)},'
+          '${p.lon.toStringAsFixed(6)},'
+          '${(p.speed * 3.6).toStringAsFixed(2)},'
+          '${p.bearing.toStringAsFixed(2)},'
+          '0.00,'
+          '${(p.altValid ? p.alt : 0.0).toStringAsFixed(1)},'
+          '0,'
+          '$tStr,'
+          '${ddmmyy(d)},'
+          '${hms(start)},'
+          '${ddmmyy(start)},'
+          '0,'
+          '*');
     }
     return b.toString();
   }

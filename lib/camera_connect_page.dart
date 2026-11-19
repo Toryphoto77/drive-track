@@ -612,6 +612,13 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
             ),
           ],
           const SizedBox(height: 16),
+          DeviceScanHint(
+            text: s.t(
+              '找不到？确认相机已开机并处于可发现状态。',
+              'Not found? Make sure the camera is on and discoverable.',
+            ),
+          ),
+          const SizedBox(height: 16),
           const Text(
             '一次只能连一台蓝牙设备，连新设备会断开旧的；'
             'Insta360 / DJI 是否连上以系统 Wi-Fi 与品牌 App 显示为准。',
@@ -649,18 +656,18 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
     final guide = isGuide
         ? cameraGuides[cameraGuideBrandFor(cam.brand)!]
         : null;
-    // 行卡片走共用组件，与外接 GPS 页同一套行样式；文案原样不动。
+    // 行卡片走共用极简组件：名称 + 一行（品牌 / 信号 / 地址）+ 一个动作按钮。
+    final s = S.of(context);
     return DeviceScanRow(
       title: cam.name.isEmpty ? cameraBrandLabel(cam.brand) : cam.name,
       badgeLabel: cameraConnectionLabel(cam.brand),
       badgeIsWarning: isGuide,
-      detail: isGuide
-          ? (guide?.connectionSummary ?? '')
-          : '点行即连，收到相机响应后才算连上。',
+      detail: isGuide ? (guide?.connectionSummary ?? '') : '',
       meta: '${cameraBrandLabel(cam.brand)}'
-          '${cam.rssi != null ? ' · 信号 ${cam.rssi}' : ''} · ${cam.address}'
-          '${isGuide ? ' · 电量：—' : ''}',
-      actionLabel: isGuide ? '点行打开连接向导' : '点行连接',
+          '${cam.rssi != null ? ' · 信号 ${cam.rssi}' : ''}'
+          '${isGuide ? ' · 需向导' : ' · 可直连'}',
+      actionLabel: isGuide ? s.t('配对', 'Pair') : s.t('连接', 'Connect'),
+      actionIsOutline: isGuide,
       isConnecting: isConnecting,
       isConnected: isConnected,
       onTap: () => _connectCamera(cam),

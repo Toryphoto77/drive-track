@@ -133,9 +133,8 @@ void main() {
     expect(find.text('连接运动相机'), findsNWidgets(2));
     expect(find.text('扫描相机'), findsOneWidget);
     expect(find.text('搜到的相机'), findsOneWidget);
-    // 大卡片说明：GoPro 直连、Insta360 / DJI 向导，不用先选品牌。
-    expect(find.textContaining('GoPro 走 BLE 直连'), findsOneWidget);
-    expect(find.textContaining('不用先选品牌'), findsOneWidget);
+    // 极简卡片：不再显示长说明，只保留一行扫描状态。
+    expect(find.text('尚未扫描，点「扫描相机」。'), findsOneWidget);
     // 未扫描时不出现假的已连接 / 假的同步录像入口。
     expect(find.text('已连接相机'), findsNothing);
     expect(find.text('开始同步录像（待接入）'), findsNothing);
