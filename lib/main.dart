@@ -537,7 +537,9 @@ class _DriveTrackAppState extends State<DriveTrackApp> {
           // 首页 widget 对象只在 '/home' 路由 builder 里首次构造，
           // 即启动动画完成之后；原生启动背景保持纯黑（v1.0.0 已改黑）。
           // v1.6.0：偏好未读完前传 null，启动页先不画图标（不闪一张默认图标）。
-          home: SplashPage(appIconKey: appPrefs.loaded ? appPrefs.appIcon : null),
+          home: SplashPage(
+            appIconKey: appPrefs.loaded ? appPrefs.appIcon : null,
+          ),
           routes: {
             // 启动动画结束后先过账号门：没有邮箱 / 手机号 / 微信会话时
             // 只显示登录页，不构造记录首页。
@@ -1306,7 +1308,11 @@ class _HomePageState extends State<HomePage>
     if (problem == null) return true;
     if (mode == TripMode.kart) {
       if (mounted) {
-        showAppNotice(context, '$problem。可在卡丁车准备页选择或创建赛道', AppNoticeKind.warning);
+        showAppNotice(
+          context,
+          '$problem。可在卡丁车准备页选择或创建赛道',
+          AppNoticeKind.warning,
+        );
       }
       _openKartPrep();
       return false;
@@ -1343,7 +1349,11 @@ class _HomePageState extends State<HomePage>
             const Text(
               '赛道库里没找到你所在的赛道时，可以直接实录自建：沿赛道跑完一圈，'
               '系统会用这圈的轨迹闭合出中心线与起终点，之后就能计时。',
-              style: TextStyle(fontSize: 13, height: 1.5, color: Colors.white70),
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: Colors.white70,
+              ),
             ),
             const SizedBox(height: 18),
             SizedBox(
@@ -1352,7 +1362,9 @@ class _HomePageState extends State<HomePage>
               child: FilledButton.icon(
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  unawaited(_openCustomTrackCreator(CustomTrackMethod.measured));
+                  unawaited(
+                    _openCustomTrackCreator(CustomTrackMethod.measured),
+                  );
                 },
                 icon: const Icon(Icons.route, size: 18),
                 label: const Text('实录建赛道（跑一圈自动闭合）'),
@@ -1482,14 +1494,49 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  /// 底栏长按/横拖时，让外层 PageView 与选中药丸使用同一个连续页码。
+  void _onNavDrag(double page) {
+    final p = page.clamp(0.0, 3.0).toDouble();
+    _tabDrag.value = p;
+    if (!_tabController.hasClients) return;
+    final position = _tabController.position;
+    if (!position.hasViewportDimension || !position.hasContentDimensions) {
+      return;
+    }
+    final pixels = (p * position.viewportDimension)
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    position.jumpTo(pixels);
+  }
+
+  /// 松手后无论是否已跨过 onPageChanged，都从当前连续位置吸附到目标页。
+  void _finishNavDrag(int i) {
+    if (i < 0 || i > 3) return;
+    if (tab != i) setState(() => tab = i);
+    _tabDrag.value = null;
+    if (_tabController.hasClients) {
+      _tabController.animateToPage(
+        i,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
   /// 只处理 PageView 自己的横向滚动（depth 0），页内的纵向列表忽略。
+  /// 直接由 metrics 计算连续页码，同时覆盖手指拖动与 animateToPage。
   bool _onTabScroll(ScrollNotification n) {
     if (n.depth != 0) return false;
-    if (n is ScrollStartNotification && n.dragDetails != null) {
-      _tabDrag.value = _tabController.page ?? tab.toDouble();
-    } else if (n is ScrollUpdateNotification && _tabDrag.value != null) {
-      _tabDrag.value = _tabController.page ?? tab.toDouble();
-    } else if (n is ScrollEndNotification && _tabDrag.value != null) {
+    double? pageFromMetrics() {
+      final viewport = n.metrics.viewportDimension;
+      if (viewport <= 0) return null;
+      return (n.metrics.pixels / viewport).clamp(0.0, 3.0).toDouble();
+    }
+
+    if (n is ScrollStartNotification || n is ScrollUpdateNotification) {
+      _tabDrag.value =
+          pageFromMetrics() ?? _tabController.page ?? tab.toDouble();
+    } else if (n is ScrollEndNotification) {
       _tabDrag.value = null;
     }
     return false;
@@ -1532,7 +1579,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.4',
+          versionName: '1.7.5',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -2669,6 +2716,8 @@ class _HomePageState extends State<HomePage>
                     // 页 tab 与导航栏一一对应：0 首页 / 1 设备 / 2 记录 / 3 我的。
                     selectedIndex: tab.clamp(0, 3),
                     dragProgress: _tabDrag,
+                    onDragProgress: _onNavDrag,
+                    onDragEnd: _finishNavDrag,
                     onTap: _goTab,
                   ),
                 ),
@@ -3622,8 +3671,7 @@ class _HomePageState extends State<HomePage>
     if (_uploadingAll) return;
     final svc = CloudService.instance;
     if (!svc.isConfigured) {
-      showAppNotice(context, '云端未配置：请先在云端页登录后再上传。',
-          AppNoticeKind.error);
+      showAppNotice(context, '云端未配置：请先在云端页登录后再上传。', AppNoticeKind.error);
       return;
     }
     setState(() => _uploadingAll = true);
@@ -3723,10 +3771,13 @@ class _HomePageState extends State<HomePage>
     String trackNameOf(TripMeta m) =>
         m.trackName.isEmpty ? s.t('赛道行程', 'Track trip') : m.trackName;
     // 只统计已拿到真实最佳圈的赛道行程：加载中/无计入圈的一律不补数。
-    final trackLaps = real
-        .where((m) => m.isTrackMode && trackBestLapMs[m.id] != null)
-        .toList()
-      ..sort((a, b) => trackBestLapMs[a.id]!.compareTo(trackBestLapMs[b.id]!));
+    final trackLaps =
+        real
+            .where((m) => m.isTrackMode && trackBestLapMs[m.id] != null)
+            .toList()
+          ..sort(
+            (a, b) => trackBestLapMs[a.id]!.compareTo(trackBestLapMs[b.id]!),
+          );
     MyBestLap? bestLap;
     if (trackLaps.isNotEmpty) {
       final m = trackLaps.first;

@@ -1,5 +1,15 @@
 {
   "channel": "stable",
-  "updatedAt": "2026-11-16T00:00:00Z",
-  "releases": []
+  "updatedAt": "2026-11-19T00:00:00Z",
+  "releases": [
+    {
+      "version": "0.3.0",
+      "build": 3,
+      "model": "DT-BOX-1",
+      "url": "https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/firmware/bin/drivetrack-box-0.3.0.bin",
+      "sha256": "24f21b70387f2a61f40a1f5c1a5b024e647168b2d70f4f77ab508e94e14c1ed8",
+      "size": 1145120,
+      "notes": "首个随硬件交付的固件：WiFi 热点 + HTTP OTA、BLE 实时 NMEA 透传、电量百分比、/api/status 与 /api/shutdown。"
+    }
+  ]
 }

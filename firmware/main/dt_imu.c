@@ -273,7 +273,8 @@ static void imu_task(void *arg)
         uint8_t raw[6];
         if (accel_read(ACC_X_LSB, raw, sizeof(raw)) != ESP_OK) {
             if (++errors % 20 == 1) {
-                ESP_LOGW(TAG, "加速度读取失败（已连续 %u 次）", errors);
+                ESP_LOGW(TAG, "加速度读取失败（已连续 %u 次）",
+                         (unsigned)errors);
             }
             vTaskDelay(pdMS_TO_TICKS(1000 / DT_IMU_HZ));
             continue;

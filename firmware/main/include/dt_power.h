@@ -8,3 +8,6 @@ bool dt_power_start(void);
 
 // 最近一次电池电压（mV）。未采样到返回 0。
 int dt_power_batt_mv(void);
+
+// 由电压估算的剩余电量百分比（0~100）。未采样到返回 -1。
+int dt_power_batt_percent(void);

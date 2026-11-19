@@ -48,7 +48,12 @@ idf.py set-target esp32s3
 idf.py build
 ```
 
-产物：`build/drivetrack-box.bin`（含 bootloader 与分区表）。
+产物：
+
+- `build/drivetrack-box.bin`：应用镜像（App 内 OTA 用）
+- `build/bootloader/bootloader.bin`：引导程序（首次串口烧录用）
+- `build/partition_table/partition-table.bin`：分区表（首次串口烧录用）
+- `build/ota_data_initial.bin`：OTA 启动信息（首次串口烧录用）
 
 ## 3. 首次烧录（必须用串口，仅此一次）
 
@@ -58,15 +63,19 @@ idf.py build
 idf.py -p COM3 flash monitor
 ```
 
-或纯 esptool（注意 16 MB Flash、DIO 40 MHz）：
+或纯 esptool（注意 16 MB Flash、DIO 80 MHz，共 4 个镜像）：
 
 ```bash
 esptool.py -p COM3 -b 460800 --before default_reset --after hard_reset \
-  write_flash --flash_mode dio --flash_freq 40m --flash_size 16MB \
+  write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB \
   0x0     build/bootloader/bootloader.bin \
   0x8000  build/partition_table/partition-table.bin \
+  0xf000  build/ota_data_initial.bin \
   0x20000 build/drivetrack-box.bin
 ```
+
+不想装 ESP-IDF 时，直接用固件包里的 `tools/flash_firmware.ps1`：
+`powershell -ExecutionPolicy Bypass -File tools\flash_firmware.ps1 -Port COM5`。
 
 烧完设备会开热点 `DriveTrack-XXXX`（密码 `drivetrack123`），
 浏览器访问 `http://192.168.4.1/api/info` 应能看到型号、板卡、电量与版本。
@@ -78,7 +87,10 @@ esptool.py -p COM3 -b 460800 --before default_reset --after hard_reset \
 
 | 接口 | 说明 |
 | --- | --- |
-| `GET /api/info` | `{"model":"DT-BOX-1","board":"DriveTrack V4.6","fw":"0.2.0","build":2,"battMv":4020,"freeHeap":..,"uptimeMs":..}` |
+| `GET /api/info` | `{"model":"DT-BOX-1","board":"DriveTrack V4.6","fw":"0.3.0","build":3,"battMv":4020,"battery":90,"freeHeap":..,"uptimeMs":..}` |
+| `GET /api/status` | 硬件卡实时状态：`battery / battMv / recording / fix / sats / uptimeMs / freeHeap / caps` |
+| `GET /api/laps` | 固定返回 `{"laps":[]}`；圈速在 App 内计算 |
+| `POST /api/shutdown` | 回应 `{"ok":true}` 后停止记录并进入深度睡眠（USB 供电时会重启） |
 | `POST /api/ota` | 请求体为固件 `.bin`，头 `X-Firmware-Sha256` 为 64 位十六进制摘要 |
 
 设备收到固件后：写入当前未运行的 OTA 分区 → 校验 SHA-256 → 切换启动分区 →
@@ -94,7 +106,7 @@ esptool.py -p COM3 -b 460800 --before default_reset --after hard_reset \
 3. 取文件大小与 SHA-256：
 
    ```powershell
-   $f = "firmware/bin/drivetrack-box-0.2.1.bin"
+   $f = "firmware/bin/drivetrack-box-0.3.0.bin"
    "{0} {1}" -f (Get-Item $f).Length, (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
    ```
 
@@ -134,7 +146,9 @@ esptool.py -p COM3 -b 460800 --before default_reset --after hard_reset \
 - RX（手机写）`6e400002-…`
 - TX（设备通知）`6e400003-…`
 
-设备按采样率推送 NDJSON（一行一条 JSON）：
+设备按采样率推送 NDJSON（一行一条 JSON），同时把 GNSS 模块原始的 GGA / RMC
+NMEA 语句原样转发一份——App 的蓝牙 GPS 通道按 NMEA 解析，没有这一份就只会
+显示“未连接外接 GPS”。
 
 ```json
 {"t":"gps","fix":1,"sats":9,"lat":30.1234567,"lon":120.1234567,"alt":8.1,"spd":45.20,"cog":128.4,"hdop":0.9}
@@ -176,7 +190,7 @@ App 下发指令（同样是一行 JSON）：
 
 按顺序做，任何一步失败都只影响对应模块：
 
-1. 上电后串口应打印 `DriveTrack V4.6 fw=0.2.0 build=2`。
+1. 上电后串口应打印 `DriveTrack V4.6 fw=0.3.0 build=3`。
 2. 状态灯 IO7 每 2 秒短闪一次；低电时第 4 颗灯（IO2）常亮。
 3. 手机能搜到 `DriveTrack-XXXX`，连上后 `http://192.168.4.1/api/info` 返回 JSON，
    `battMv` 与万用表测的电池电压相差应在 ±100 mV 内。
@@ -185,7 +199,9 @@ App 下发指令（同样是一行 JSON）：
 5. 串口日志出现 `BMI088 已启动 20 Hz`，`t=imu` 行静止时 `az≈1.0`、`gz≈0`。
 6. App 连 BLE，下发 `{"cmd":"start"}` 收到 `sess/ack`，状态灯转为双闪；
    `{"cmd":"stop"}` 收到 `sum` 汇总。
-7. App 打开固件升级页，能看到当前 `0.2.0 / build 2`；发一个新版本后能升级并自重启。
+7. App 打开「设备中心」，连上设备热点后硬件卡显示电量、`0.3.0 / build 3`、
+   定位卫星数与关机按钮；发一个新版本后能升级并自重启。
 
-> 本仓库没有 ESP-IDF 构建环境，固件未在本地编译验证。`idf.py build` 若报错，
-> 优先检查目标芯片是否为 `esp32s3`、`dt_config.h` 引脚是否与板上一致。
+> 0.3.0 已在 ESP-IDF v5.3.5 下本地编译通过（app 镜像 1,145,120 字节，
+> 占 app 分区 27%）。`idf.py build` 若报错，优先检查目标芯片是否为
+> `esp32s3`、`dt_config.h` 引脚是否与板上一致。

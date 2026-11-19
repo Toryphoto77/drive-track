@@ -16,6 +16,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "dt_ble.h"
 #include "dt_config.h"
 #include "dt_session.h"
 #include "dt_types.h"
@@ -111,6 +112,17 @@ static void handle_sentence(char *line)
     if (!sentence_checksum_ok(line)) {
         return;
     }
+
+#if DT_BLE_NMEA_PASSTHROUGH
+    // App 的蓝牙 GPS 只认标准 NMEA 文本，所以 GGA / RMC 原样转发一份。
+    // 必须赶在 parse_fields 把逗号改成 '\0' 之前发出去。
+    if (strlen(line) >= 6 &&
+        ((strncmp(line + 3, "GGA", 3) == 0) ||
+         (strncmp(line + 3, "RMC", 3) == 0))) {
+        dt_ble_send_line(line);
+    }
+#endif
+
     char *star = strchr(line, '*');
     if (star != NULL) {
         *star = '\0';
@@ -330,4 +342,14 @@ void dt_gnss_start(void)
     xTaskCreate(gnss_task, "dt_gnss", 4096, NULL, 5, NULL);
     ESP_LOGI(TAG, "GNSS 已启动 uart%d tx=IO%d rx=IO%d %u bps", DT_GNSS_UART_PORT,
              DT_GNSS_TX_GPIO, DT_GNSS_RX_GPIO, (unsigned)s_baud);
+}
+
+bool dt_gnss_last_fix(void)
+{
+    return s_sample.fix;
+}
+
+int dt_gnss_last_sats(void)
+{
+    return (int)s_sample.sats;
 }
