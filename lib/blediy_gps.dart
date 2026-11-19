@@ -13,9 +13,9 @@
 ///   为准（可用 device_center.dart 的通用 BLE 表单登记），不得硬说
 ///   NUS 就是 BleDIY 的官方值。
 /// - 解析本身与传输无关：只要拿到的是 NMEA 文本行，下面逻辑就适用。
-const String nordicUartServiceUuid = '6e400001-b5a3-f393-e0a9-e50e24dcca';
-const String nordicUartRxUuid = '6e400002-b5a3-f393-e0a9-e50e24dcca';
-const String nordicUartTxUuid = '6e400003-b5a3-f393-e0a9-e50e24dcca';
+const String nordicUartServiceUuid = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const String nordicUartRxUuid = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const String nordicUartTxUuid = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
 /// 外部 GPS 输出的统一结构。速度单位统一为米/秒，方向为真北度数。
 class ExternalGpsFix {

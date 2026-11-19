@@ -328,6 +328,9 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     }
                 }
             }
+            // 提高 MTU：默认 23 时每个通知只有 20 字节，25Hz 的 NMEA
+            //（GGA+RMC+GSA）带宽不够。失败不影响连接，按设备实际能力走。
+            try { gatt.requestMtu(247) } catch (_: Exception) {}
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {
