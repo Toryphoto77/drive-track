@@ -385,6 +385,53 @@ class Native {
     return m;
   }
 
+  /// v1.7.x 读取手机相册视频（本 App 自己的相册页用）：MediaStore 查询
+  /// 最近 60 段视频，原生生成缩略图缓存后回传。
+  /// 返回 [{id, name, durationMs, sizeBytes, dateTakenMs, uri, thumbPath}]；
+  /// 无读取媒体权限或查询失败返回空列表（调用方退回系统选择器）。
+  static Future<List<Map<String, dynamic>>> listVideos() async {
+    try {
+      final r = await _m.invokeMethod('listVideos');
+      final list = (r as List?) ?? const [];
+      return list
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// v1.7.x 把相册里选中的 content:// 视频拷贝到本 App 的
+  /// filesDir/videos/imported_<ts>.mp4，返回 {path, createdMs}；
+  /// 失败返回 null（不伪造本机路径）。
+  static Future<Map<String, dynamic>?> importVideoUri(String uri) async {
+    try {
+      final r = await _m.invokeMethod('importVideoUri', {'uri': uri});
+      if (r == null) return null;
+      return Map<String, dynamic>.from(r as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// v1.7.x 时间轴胶片条：按 count 段抽帧，返回本地 jpg 路径列表
+  /// （原生侧已缓存）。失败返回空列表，页面画占位格。
+  static Future<List<String>> videoThumbnails(
+    String path, {
+    int count = 7,
+  }) async {
+    try {
+      final r = await _m.invokeMethod('videoThumbnails', {
+        'path': path,
+        'count': count,
+      });
+      return ((r as List?) ?? const []).map((e) => e.toString()).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// v0.1.8 记录时保持屏幕常亮：原生 window FLAG_KEEP_SCREEN_ON。
   /// 返回 true = 原生确实加上了 flag；返回 false / 抛错 = 未开启，
   /// 调用方必须按 false 显示“常亮未开启”，绝不假装已开启。

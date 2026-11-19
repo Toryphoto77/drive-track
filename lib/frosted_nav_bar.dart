@@ -6,9 +6,11 @@
 /// - 独立悬浮药丸：高度 56、全圆角（圆角 = 高 / 2）；
 ///   v1.7.3 起宽度跟随屏幕（左右各 16 留白，最小 288、最大 560），
 ///   与首页内容卡两侧对齐；4 项（首页 / 设备 / 记录 / 我的）等分；
-/// - v1.7.3 液态玻璃：32px 高斯模糊 + 低透明度灰玻璃染色（透出下方
-///   内容）、左上斜向液面反光、上亮下暗的 1px 渐变描边、悬浮投影；
-///   选中态为主题色径向渐变小玻璃 + 柔光晕；
+/// - v1.7.6 液态玻璃：轻高斯模糊 + 20% 低透明度主题 surface 染色
+///   （透出下方内容）、左上斜向液面反光、上亮下暗的 1px 渐变描边、
+///   悬浮投影；选中态为主题色低透明度玻璃药丸 + 柔光晕；
+///   不做折射 / 色散（v1.7.3 的 shader 会在文字上产生紫边与暗角，
+///   已移除，只保留纯高斯模糊，背景文字只糊不变色）；
 /// - 图标随玻璃改色：未选中白色 70%，选中主题色，
 ///   选中圆底为主题色径向渐变（40% → 14%）+ 柔光晕；
 /// - 静态玻璃：无滚动放大、无切换拉伸、无选中放大；
@@ -88,10 +90,6 @@ class FrostedGlassNavBar extends StatefulWidget {
 }
 
 class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
-  /// 液态玻璃折射 shader；仅 Impeller 可用，加载失败/不支持时为 null，
-  /// 回退到纯高斯模糊（视觉不变，只是没有边缘折射）。
-  ui.FragmentShader? _shader;
-
   // 底栏自身的长按/横拖手势。位置以连续页码表示，拖动期间不经过
   // AnimatedPositioned 的缓动，保证药丸和调用方 PageView 都能逐帧跟手。
   double? _directDragPos;
@@ -135,51 +133,16 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _loadShader();
-  }
-
-  Future<void> _loadShader() async {
-    if (!ui.ImageFilter.isShaderFilterSupported) return;
-    try {
-      final program = await ui.FragmentProgram.fromAsset(
-        'shaders/liquid_glass.frag',
-      );
-      final shader = program.fragmentShader()
-        ..setFloat(2, 24.0) // u_strength：边缘折射位移（px）
-        ..setFloat(3, 14.0) // u_blur：模糊半径（shader 内 9 抽样）
-        ..setFloat(4, 2.4) // u_chroma：边缘色散（px）
-        ..setFloat(5, 34.0); // u_edge：折射生效带宽（px）
-      if (!mounted) {
-        shader.dispose();
-        return;
-      }
-      setState(() => _shader = shader);
-    } catch (_) {
-      // 测试环境或非 Impeller 后端：静默回退纯模糊。
-    }
-  }
-
-  @override
-  void dispose() {
-    _shader?.dispose();
-    super.dispose();
-  }
-
-  /// 背景滤镜：模糊与折射都在 shader 内完成；不可用时回退纯高斯模糊。
-  ui.ImageFilter _backdropFilter() {
-    final shader = _shader;
-    if (shader == null) {
-      return ui.ImageFilter.blur(sigmaX: 32, sigmaY: 32);
-    }
-    try {
-      return ui.ImageFilter.shader(shader);
-    } catch (_) {
-      return ui.ImageFilter.blur(sigmaX: 32, sigmaY: 32);
-    }
-  }
+  /// 背景滤镜：纯高斯模糊（轻模糊，保持文字可辨认）。
+  ///
+  /// v1.7.6 起不再接 ImageFilter.shader 做折射 / 色散：BackdropFilter 的
+  /// shader 输入是整块背景纹理，u_size 与药丸几何对不上，边缘会按错误
+  /// 的胶囊 SDF 采样，透过玻璃的文字出现紫边色散与顶部暗角（倒三角）。
+  /// 参考成熟 App 的做法，只用模糊 + 低透明度染色，文字只糊不变色。
+  /// 模糊值取 3：更大的值会把细笔画彻底糊平、文字像消失；
+  /// 3 保留文字轮廓，只是轻微发虚，接近参考图里“透明 + 轻微扭曲”的观感。
+  ui.ImageFilter _backdropFilter() =>
+      ui.ImageFilter.blur(sigmaX: 3, sigmaY: 3);
 
   @override
   Widget build(BuildContext context) {
@@ -219,9 +182,8 @@ class _FrostedGlassNavBarState extends State<FrostedGlassNavBar> {
             borderRadius: BorderRadius.circular(kPillNavHeight / 2),
             child: Stack(
               children: [
-                // 1) 底色：大半径高斯模糊 + 液态玻璃折射 shader
-                //    （仅 Impeller）+ 低透明度灰玻璃染色；不支持 shader
-                //    时自动回退纯模糊。
+                // 1) 底色：纯高斯模糊 + 低透明度主题 surface 染色。
+                //    不做折射 / 色散，避免下方文字出现紫边与暗角。
                 BackdropFilter(
                   filter: _backdropFilter(),
                   child: Container(

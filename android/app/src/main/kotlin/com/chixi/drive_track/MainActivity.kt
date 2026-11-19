@@ -38,6 +38,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioManager
+import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.speech.tts.TextToSpeech
@@ -295,7 +296,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     // 分步授权：每个 step 一个 requestCode，结果按 code 存 map 分发，杜绝单一
     // pendingPermResult 被后一次请求覆盖丢结果。旧 1001 保留给 foreground 一步。
     private val pendingPermResults = mutableMapOf<Int, MethodChannel.Result>()
-    private val permStepByCode = mapOf(1001 to "foreground", 1002 to "extras", 1003 to "background", 1004 to "camera", 1005 to "microphone")
+    private val permStepByCode = mapOf(1001 to "foreground", 1002 to "extras", 1003 to "background", 1004 to "camera", 1005 to "microphone", 1006 to "media")
     // v0.1.3 通用 BLE：带服务过滤的扫描 + 通用读写订阅（单 GATT，一次一台）。
     private var scanServiceFilter: List<String>? = null
     private var pendingReadResult: MethodChannel.Result? = null
@@ -1137,6 +1138,189 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             result.error("PICK_FAILED", e.message, null)
                         }
                     }
+                    // v1.7.x 本 App 视频相册页：MediaStore 查最近视频 + 缩略图
+                    // （最多 60 段，避免首次进入一次性生成过多缩略图）。
+                    // 无权限时返回空列表（Dart 侧退回系统选择器），绝不伪造数据。
+                    "listVideos" -> {
+                        Thread {
+                            val out = ArrayList<Map<String, Any>>()
+                            try {
+                                val proj = arrayOf(
+                                    MediaStore.Video.Media._ID,
+                                    MediaStore.Video.Media.DISPLAY_NAME,
+                                    MediaStore.Video.Media.DURATION,
+                                    MediaStore.Video.Media.SIZE,
+                                    MediaStore.Video.Media.DATE_TAKEN,
+                                    MediaStore.Video.Media.DATE_ADDED
+                                )
+                                val thumbDir = File(cacheDir, "video_thumbs")
+                                if (!thumbDir.exists()) thumbDir.mkdirs()
+                                contentResolver.query(
+                                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                                    proj,
+                                    "${MediaStore.Video.Media.DURATION} > 0",
+                                    null,
+                                    "${MediaStore.Video.Media.DATE_ADDED} DESC"
+                                )?.use { c ->
+                                    val idCol = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                                    val nameCol =
+                                        c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                                    val durCol =
+                                        c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+                                    val sizeCol =
+                                        c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                                    val takenCol =
+                                        c.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_TAKEN)
+                                    val addedCol =
+                                        c.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+                                    while (c.moveToNext() && out.size < 60) {
+                                        val id = c.getLong(idCol)
+                                        val uri = android.content.ContentUris.withAppendedId(
+                                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id
+                                        )
+                                        val thumb = File(thumbDir, "$id.jpg")
+                                        if (!thumb.exists() || thumb.length() <= 0) {
+                                            try {
+                                                val bmp = MediaStore.Video.Thumbnails
+                                                    .getThumbnail(
+                                                        contentResolver, id,
+                                                        MediaStore.Video.Thumbnails.MINI_KIND,
+                                                        null
+                                                    )
+                                                if (bmp != null) {
+                                                    thumb.outputStream().use {
+                                                        bmp.compress(
+                                                            android.graphics.Bitmap.CompressFormat.JPEG,
+                                                            80, it
+                                                        )
+                                                    }
+                                                    bmp.recycle()
+                                                }
+                                            } catch (_: Exception) {
+                                            }
+                                        }
+                                        val taken = if (!c.isNull(takenCol)) c.getLong(takenCol)
+                                        else c.getLong(addedCol) * 1000L
+                                        out.add(
+                                            mapOf(
+                                                "id" to id,
+                                                "name" to (c.getString(nameCol) ?: "video_$id.mp4"),
+                                                "durationMs" to c.getLong(durCol),
+                                                "sizeBytes" to c.getLong(sizeCol),
+                                                "dateTakenMs" to taken,
+                                                "uri" to uri.toString(),
+                                                "thumbPath" to
+                                                    if (thumb.exists() && thumb.length() > 0)
+                                                        thumb.absolutePath else ""
+                                            )
+                                        )
+                                    }
+                                }
+                            } catch (_: Exception) {
+                            }
+                            runOnUiThread { result.success(out) }
+                        }.start()
+                    }
+                    // v1.7.x 相册选中视频 → 拷到 App 私有目录，返回路径+拍摄时间。
+                    "importVideoUri" -> {
+                        Thread {
+                            try {
+                                val uriStr = call.argument<String>("uri") ?: ""
+                                val uri = Uri.parse(uriStr)
+                                val dir = File(filesDir, "videos")
+                                if (!dir.exists()) dir.mkdirs()
+                                val out =
+                                    File(dir, "imported_${System.currentTimeMillis()}.mp4")
+                                contentResolver.openInputStream(uri)?.use { input ->
+                                    out.outputStream().use { output -> input.copyTo(output) }
+                                }
+                                if (!out.exists() || out.length() <= 0) {
+                                    try { out.delete() } catch (_: Exception) {}
+                                    runOnUiThread { result.success(null) }
+                                    return@Thread
+                                }
+                                var createdMs: Long = out.lastModified()
+                                try {
+                                    val proj =
+                                        arrayOf(MediaStore.Video.Media.DATE_TAKEN)
+                                    contentResolver.query(uri, proj, null, null, null)
+                                        ?.use { c ->
+                                            if (c.moveToFirst()) {
+                                                val idx = c.getColumnIndex(
+                                                    MediaStore.Video.Media.DATE_TAKEN
+                                                )
+                                                if (idx >= 0 && !c.isNull(idx)) {
+                                                    createdMs = c.getLong(idx)
+                                                }
+                                            }
+                                        }
+                                } catch (_: Exception) {
+                                }
+                                runOnUiThread {
+                                    result.success(
+                                        mapOf(
+                                            "path" to out.absolutePath,
+                                            "createdMs" to createdMs
+                                        )
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                runOnUiThread {
+                                    result.error("COPY_FAILED", e.message, null)
+                                }
+                            }
+                        }.start()
+                    }
+                    // v1.7.x 时间轴胶片条：按 count 段抽帧写缓存，回传 jpg 路径。
+                    "videoThumbnails" -> {
+                        Thread {
+                            val out = ArrayList<String>()
+                            val path = call.argument<String>("path") ?: ""
+                            val count = (call.argument<Int>("count") ?: 7).coerceIn(1, 20)
+                            var retriever: MediaMetadataRetriever? = null
+                            try {
+                                if (path.isNotEmpty() && File(path).exists()) {
+                                    val dir = File(cacheDir, "video_frames")
+                                    if (!dir.exists()) dir.mkdirs()
+                                    val key = Math.abs(path.hashCode())
+                                    retriever = MediaMetadataRetriever()
+                                    retriever.setDataSource(path)
+                                    val dur = (retriever.extractMetadata(
+                                        MediaMetadataRetriever.METADATA_KEY_DURATION
+                                    )?.toLongOrNull() ?: 0L)
+                                    if (dur > 0) {
+                                        for (i in 0 until count) {
+                                            val f = File(dir, "f_${key}_${i}_$count.jpg")
+                                            if (!f.exists() || f.length() <= 0) {
+                                                val us = dur * 1000L * i / count
+                                                val bmp = retriever.getFrameAtTime(
+                                                    us,
+                                                    MediaMetadataRetriever
+                                                        .OPTION_CLOSEST_SYNC
+                                                ) ?: retriever.frameAtTime
+                                                if (bmp != null) {
+                                                    f.outputStream().use {
+                                                        bmp.compress(
+                                                            android.graphics.Bitmap.CompressFormat.JPEG,
+                                                            75, it
+                                                        )
+                                                    }
+                                                    bmp.recycle()
+                                                }
+                                            }
+                                            if (f.exists() && f.length() > 0) {
+                                                out.add(f.absolutePath)
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) {
+                            } finally {
+                                try { retriever?.release() } catch (_: Exception) {}
+                            }
+                            runOnUiThread { result.success(out) }
+                        }.start()
+                    }
                     // v0.1.7 拍照打点（新增，原先只有 Camera2 视频录制，
                     // 没有静态照片通道）：系统相机 ACTION_IMAGE_CAPTURE，
                     // FileProvider 输出到 filesDir/photo_points/ 唯一文件；
@@ -1293,9 +1477,18 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             "background" to backgroundGranted,
             "notifications" to notificationsGranted,
             "bluetooth" to bluetoothGranted,
+            "media" to mediaPermissionNames().all { hasPerm(it) },
             "permanentlyDenied" to permanentlyDenied
         )
     }
+
+    /// v1.7.x 读取相册视频所需权限名（按系统版本分派）。
+    private fun mediaPermissionNames(): List<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            listOf(Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
 
     private fun requestOrImmediate(
         requestCode: Int,
@@ -1376,6 +1569,12 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             "microphone" -> {
                 val needed = listOf(Manifest.permission.RECORD_AUDIO).filter { !hasPerm(it) }
                 requestOrImmediate(1005, "microphone", needed, result)
+            }
+            // v1.7.x 相册视频读取：Android 13+ READ_MEDIA_VIDEO，
+            // 低版本 READ_EXTERNAL_STORAGE。拒绝时 Dart 侧退回系统选择器。
+            "media" -> {
+                val needed = mediaPermissionNames().filter { !hasPerm(it) }
+                requestOrImmediate(1006, "media", needed, result)
             }
             else -> result.error("INVALID_STEP", "Unknown permission step: $step", null)
         }

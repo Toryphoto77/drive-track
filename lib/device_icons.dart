@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// 设备线性图标（v1.7.x）：运动相机 / 外接 GPS / OBD，按参考图的实物
-/// 轮廓手绘，单色描边、无外框。只做外观还原，不引入图片资源。
-enum DeviceGlyphKind { actionCam, gpsModule, obd }
+/// 设备线性图标（v1.7.x）：运动相机 / 外接 GPS / OBD / 视频同步，按参考图
+/// 的实物轮廓手绘，单色描边、无外框。只做外观还原，不引入图片资源。
+enum DeviceGlyphKind { actionCam, gpsModule, obd, video }
 
 class DeviceGlyph extends StatelessWidget {
   const DeviceGlyph({
@@ -51,6 +51,9 @@ class _DeviceGlyphPainter extends CustomPainter {
         break;
       case DeviceGlyphKind.obd:
         _paintObd(canvas, paint);
+        break;
+      case DeviceGlyphKind.video:
+        _paintVideo(canvas, paint);
         break;
     }
     canvas.restore();
@@ -101,6 +104,22 @@ class _DeviceGlyphPainter extends CustomPainter {
     canvas.drawPath(shape, paint);
     for (final x in <double>[0.38, 0.50, 0.62]) {
       canvas.drawLine(Offset(x, 0.47), Offset(x, 0.63), paint);
+    }
+  }
+
+  /// 视频同步：圆角画框 + 播放三角 + 右侧胶片齿。
+  void _paintVideo(Canvas canvas, Paint paint) {
+    final frame =
+        RRect.fromLTRBR(0.10, 0.26, 0.74, 0.78, const Radius.circular(0.10));
+    canvas.drawRRect(frame, paint);
+    final play = Path()
+      ..moveTo(0.36, 0.40)
+      ..lineTo(0.56, 0.52)
+      ..lineTo(0.36, 0.64)
+      ..close();
+    canvas.drawPath(play, paint);
+    for (final y in <double>[0.34, 0.52, 0.70]) {
+      canvas.drawLine(Offset(0.80, y), Offset(0.90, y), paint);
     }
   }
 

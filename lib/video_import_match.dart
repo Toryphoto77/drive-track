@@ -2,25 +2,130 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_locale.dart';
+import 'app_notice.dart';
+import 'dt_page_route.dart';
 import 'models.dart';
-import 'native.dart';
 import 'store.dart';
+import 'video_gallery_page.dart';
+import 'video_hud_page.dart';
 
-/// v1.7.x 导入运动相机视频：系统选择器选完视频后，弹出本底栏
-/// 「匹配行程 + 校正首帧拍摄时刻」。
+/// v1.7.x 视频与赛道记录关联（双向入口统一收口）。
 ///
-/// [preselectedTrip] 非空时跳过选行程（如从行程详情 / HUD 空态进入），
-/// 只校正拍摄时刻。确认后把视频重命名为 `trip_<startMs>.mp4`，使
-/// [VideoHudPage] 的 `_autoOffset` 自动算出偏移（零改动复用现有对齐），
-/// 并把路径写回 `trip.videoPaths`。
+/// 两个入口、同一条结果链：
+/// - 设备中心「视频同步」→ 先选视频（App 内相册页）→ 再选行程 → 编辑页；
+/// - 记录详情「添加视频」→ 已带行程 → 只选视频 → 编辑页。
 ///
-/// 返回已落盘的更新后 [Trip]；用户取消返回 null。
-Future<Trip?> showVideoImportSheet(
-  BuildContext context, {
-  required Store store,
+/// 关联动作本身仍沿用旧规则：把素材重命名为 `trip_<开录ms>.mp4` 后
+/// 追加进 `trip.videoPaths`，使编辑页的自动对齐能直接读到开录时间。
+/// 偏移微调不再在导入时做，全部放进编辑页的「调整画面对齐」。
+
+/// 关联结果：更新后的行程（已写入新的视频路径）。
+Future<Trip?> linkVideoToTrip(
+  Store store, {
+  required Trip trip,
   required String videoPath,
   required int createdMs,
+}) async {
+  try {
+    // 重命名为 trip_<startMs>.mp4 → 编辑页按文件名自动对齐；
+    // 同目录 instant rename，撞名 +1ms 避让。
+    final src = File(videoPath);
+    final dir = src.parent;
+    var ms = createdMs;
+    var target = File('${dir.path}/trip_$ms.mp4');
+    while (target.existsSync()) {
+      ms += 1;
+      target = File('${dir.path}/trip_$ms.mp4');
+    }
+    src.renameSync(target.path);
+
+    final existing = trip.videoPaths;
+    final paths = <String>[...existing, target.path];
+    return await store.updateTripVideoPaths(trip.id, paths);
+  } catch (e) {
+    throw Exception('导入失败：$e');
+  }
+}
+
+/// 统一入口：选视频 → （可选）选行程 → 关联 → 视频编辑页。
+///
+/// [preselectedTrip] 非空 = 记录页入口，跳过选行程。
+/// [initialVideoPath] 非空 = 已有素材（如编辑页空态里重导），跳过选视频。
+/// 返回最终更新后的行程（用户取消返回 null）。
+Future<Trip?> openVideoSyncFlow(
+  BuildContext context, {
+  required Store store,
   Trip? preselectedTrip,
+  String? initialVideoPath,
+  int? initialCreatedMs,
+}) async {
+  String? path = initialVideoPath;
+  int createdMs = initialCreatedMs ?? DateTime.now().millisecondsSinceEpoch;
+  final freshlyCopied = initialVideoPath == null;
+
+  if (path == null) {
+    final picked = await Navigator.of(context).push<VideoPickResult>(
+      DtPageRoute(builder: (_) => const VideoGalleryPage()),
+    );
+    if (picked == null) return null;
+    path = picked.path;
+    createdMs = picked.createdMs;
+  }
+
+  var trip = preselectedTrip;
+  if (trip == null) {
+    trip = await showVideoTripPickerSheet(
+      context,
+      store: store,
+      createdMs: createdMs,
+    );
+    if (trip == null) {
+      // 用户取消了选行程：刚拷进 App 目录的副本没有用途，清掉避免占空间。
+      if (freshlyCopied) {
+        try {
+          File(path).deleteSync();
+        } catch (_) {}
+      }
+      return null;
+    }
+  }
+
+  Trip? updated;
+  try {
+    updated = await linkVideoToTrip(
+      store,
+      trip: trip,
+      videoPath: path,
+      createdMs: createdMs,
+    );
+  } catch (e) {
+    if (context.mounted) {
+      showAppNotice(context, '$e', AppNoticeKind.error);
+    }
+    return null;
+  }
+  if (updated == null || !context.mounted) return updated;
+
+  await Navigator.of(context).push(
+    DtPageRoute(
+      builder: (_) => VideoHudPage(
+        trip: updated!,
+        store: store,
+        initialVideoPath: path,
+      ),
+    ),
+  );
+  // 编辑页里可能解除关联：返回前重新读一次行程，调用方据此刷新列表。
+  final latest = await store.loadTrip(updated.id);
+  return latest ?? updated;
+}
+
+/// 选择这段视频对应的行程；返回更新后的行程，取消返回 null。
+Future<Trip?> showVideoTripPickerSheet(
+  BuildContext context, {
+  required Store store,
+  required int createdMs,
 }) {
   return showModalBottomSheet<Trip>(
     context: context,
@@ -29,64 +134,27 @@ Future<Trip?> showVideoImportSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (ctx) => _VideoImportSheet(
+    builder: (ctx) => _TripPickerSheet(
       store: store,
-      videoPath: videoPath,
       createdMs: createdMs,
-      preselectedTrip: preselectedTrip,
     ),
   );
 }
 
-/// 一步式便捷入口：直接拉起系统视频选择器，选完弹匹配面板。
-/// [preselectedTrip] 非空时跳过选行程。返回更新后 Trip；取消/失败返回 null。
-Future<Trip?> pickAndImportVideo(
-  BuildContext context, {
-  required Store store,
-  Trip? preselectedTrip,
-}) async {
-  final r = await Native.pickVideo();
-  if (r == null) return null;
-  final path = r['path'] as String?;
-  final createdMs = (r['createdMs'] as num?)?.toInt() ??
-      DateTime.now().millisecondsSinceEpoch;
-  if (path == null || !context.mounted) return null;
-  return showVideoImportSheet(
-    context,
-    store: store,
-    videoPath: path,
-    createdMs: createdMs,
-    preselectedTrip: preselectedTrip,
-  );
-}
-
-class _VideoImportSheet extends StatefulWidget {
+class _TripPickerSheet extends StatefulWidget {
   final Store store;
-  final String videoPath;
   final int createdMs;
-  final Trip? preselectedTrip;
 
-  const _VideoImportSheet({
-    required this.store,
-    required this.videoPath,
-    required this.createdMs,
-    this.preselectedTrip,
-  });
+  const _TripPickerSheet({required this.store, required this.createdMs});
 
   @override
-  State<_VideoImportSheet> createState() => _VideoImportSheetState();
+  State<_TripPickerSheet> createState() => _TripPickerSheetState();
 }
 
-class _VideoImportSheetState extends State<_VideoImportSheet> {
+class _TripPickerSheetState extends State<_TripPickerSheet> {
   String? _tripId;
-  late int _startMs = widget.createdMs;
+  TripMeta? _selected;
   bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _tripId = widget.preselectedTrip?.id;
-  }
 
   String _fmt(int ms) {
     final d = DateTime.fromMillisecondsSinceEpoch(ms);
@@ -98,44 +166,34 @@ class _VideoImportSheetState extends State<_VideoImportSheet> {
   String _dur(int start, int end) {
     final s = ((end - start) ~/ 1000).abs();
     if (s < 60) return '${s}秒';
-    return '${s ~/ 60}分${s % 60}秒';
+    if (s < 3600) return '${s ~/ 60}分${s % 60}秒';
+    return '${s ~/ 3600}小时${(s % 3600) ~/ 60}分';
   }
 
   Future<void> _confirm() async {
-    final id = _tripId;
-    if (id == null) return;
+    final meta = _selected;
+    if (meta == null || _busy) return;
     setState(() => _busy = true);
+    Trip? trip;
     try {
-      // 重命名为 trip_<startMs>.mp4 → VideoHudPage._autoOffset 自动对齐：
-      // 偏移 = startMs - trip.startMs。同目录 instant rename；撞名 +1ms 避让。
-      final src = File(widget.videoPath);
-      final dir = src.parent;
-      var ms = _startMs;
-      var target = File('${dir.path}/trip_$ms.mp4');
-      while (target.existsSync()) {
-        ms += 1;
-        target = File('${dir.path}/trip_$ms.mp4');
-      }
-      src.renameSync(target.path);
-
-      final existing = widget.preselectedTrip?.videoPaths ??
-          (await widget.store.loadTrip(id))?.videoPaths ??
-          const <String>[];
-      final paths = <String>[...existing, target.path];
-      final updated = await widget.store.updateTripVideoPaths(id, paths);
+      trip = await widget.store.loadTrip(meta.id);
       if (!mounted) return;
-      Navigator.of(context).pop(updated);
+      if (trip == null) {
+        setState(() => _busy = false);
+        showAppNotice(context, '行程文件读取失败，请重试。', AppNoticeKind.error);
+        return;
+      }
+      Navigator.of(context).pop(trip);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导入失败：$e')),
-      );
       setState(() => _busy = false);
+      showAppNotice(context, '读取行程失败：$e', AppNoticeKind.error);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
@@ -151,10 +209,10 @@ class _VideoImportSheetState extends State<_VideoImportSheet> {
               padding: const EdgeInsets.fromLTRB(16, 14, 8, 4),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      '导入运动相机视频',
-                      style: TextStyle(
+                      s.t('关联到哪条赛道记录', 'Which trip is this video for?'),
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -167,131 +225,100 @@ class _VideoImportSheetState extends State<_VideoImportSheet> {
                 ],
               ),
             ),
-            if (widget.preselectedTrip == null)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
-                child: Text(
-                  '选择这段视频对应的行程',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Text(
+                s.t(
+                  '选择后进入视频编辑页，可再调整画面对齐与 HUD 信息。',
+                  'You can adjust sync and HUD after choosing.',
                 ),
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
-            if (widget.preselectedTrip == null)
-              Flexible(
-                child: FutureBuilder<List<TripMeta>>(
-                  future: widget.store.loadIndex(),
-                  builder: (ctx, snap) {
-                    if (!snap.hasData) {
-                      return const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    final metas = snap.data!;
-                    if (metas.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text('还没有行程记录',
-                            style: TextStyle(color: Colors.white54)),
-                      );
-                    }
-                    // 推荐：createdMs 落在行程时间窗内；否则取开始时间最近的。
-                    TripMeta? recommended;
-                    for (final m in metas) {
-                      if (widget.createdMs >= m.startMs &&
-                          widget.createdMs <= m.endMs) {
-                        recommended = m;
-                        break;
-                      }
-                    }
-                    recommended ??= metas.reduce((a, b) =>
-                        (widget.createdMs - a.startMs).abs() <=
-                                (widget.createdMs - b.startMs).abs()
-                            ? a
-                            : b);
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: metas.length,
-                      itemBuilder: (ctx, i) {
-                        final m = metas[i];
-                        final selected = _tripId == m.id;
-                        final isRec = recommended?.id == m.id;
-                        return ListTile(
-                          dense: true,
-                          leading: Icon(
-                            selected
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_off,
-                            color: selected ? Colors.redAccent : Colors.white54,
-                          ),
-                          title: Text('${m.mode.label} · ${_fmt(m.startMs)}'),
-                          subtitle: Text(
-                            '${_dur(m.startMs, m.endMs)}'
-                            '${isRec ? ' · 推荐匹配' : ''}',
-                          ),
-                          onTap: () => setState(() => _tripId = m.id),
-                        );
-                      },
+            ),
+            Flexible(
+              child: FutureBuilder<List<TripMeta>>(
+                future: widget.store.loadIndex(),
+                builder: (ctx, snap) {
+                  if (!snap.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
                     );
-                  },
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Text(
-                  '匹配到：${widget.preselectedTrip!.mode.label} · '
-                  '${_fmt(widget.preselectedTrip!.startMs)}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-              ),
-            const Divider(color: Colors.white12, height: 1),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
-              child: Text(
-                '视频首帧拍摄时刻（用于与行程自动对齐）',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
+                  }
+                  final metas = snap.data!;
+                  if (metas.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        s.t('还没有行程记录', 'No trips yet'),
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                    );
+                  }
+                  // 推荐：拍摄时间落在行程时间窗内；否则取开始时间最近的。
+                  TripMeta? recommended;
+                  for (final m in metas) {
+                    if (widget.createdMs >= m.startMs &&
+                        widget.createdMs <= m.endMs) {
+                      recommended = m;
+                      break;
+                    }
+                  }
+                  recommended ??= metas.reduce((a, b) =>
+                      (widget.createdMs - a.startMs).abs() <=
+                              (widget.createdMs - b.startMs).abs()
+                          ? a
+                          : b);
+                  _tripId ??= recommended.id;
+                  _selected ??= recommended;
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: metas.length,
+                    itemBuilder: (ctx, i) {
+                      final m = metas[i];
+                      final selected = _tripId == m.id;
+                      final isRec = recommended?.id == m.id;
+                      return ListTile(
+                        dense: true,
+                        leading: Icon(
+                          selected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                          color: selected
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.white54,
+                        ),
+                        title: Text('${m.mode.label} · ${_fmt(m.startMs)}'),
+                        subtitle: Text(
+                          '${_dur(m.startMs, m.endMs)}'
+                          '${isRec ? ' · 推荐匹配' : ''}',
+                        ),
+                        onTap: () => setState(() {
+                          _tripId = m.id;
+                          _selected = m;
+                        }),
+                      );
+                    },
+                  );
+                },
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-              child: Text(
-                _fmt(_startMs),
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-              child: Wrap(
-                spacing: 6,
-                children: [
-                  _stepButton('-10秒', -10000),
-                  _stepButton('-1秒', -1000),
-                  _stepButton('+1秒', 1000),
-                  _stepButton('+10秒', 10000),
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => setState(() => _startMs = widget.createdMs),
-                    child: const Text('用拍摄时间'),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: (_tripId == null || _busy) ? null : _confirm,
+                  onPressed: _selected == null || _busy ? null : _confirm,
                   icon: _busy
                       ? const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.link),
-                  label: Text(_busy ? '正在导入…' : '关联到此行程'),
+                      : const Icon(Icons.movie_filter_outlined),
+                  label: Text(
+                    _busy ? s.t('正在进入…', 'Opening…') : s.t('关联并编辑', 'Link and edit'),
+                  ),
                 ),
               ),
             ),
@@ -300,9 +327,4 @@ class _VideoImportSheetState extends State<_VideoImportSheet> {
       ),
     );
   }
-
-  Widget _stepButton(String label, int delta) => TextButton(
-        onPressed: _busy ? null : () => setState(() => _startMs += delta),
-        child: Text(label),
-      );
 }

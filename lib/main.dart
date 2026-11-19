@@ -1584,7 +1584,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.6',
+          versionName: '1.7.7',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -2702,7 +2702,7 @@ class _HomePageState extends State<HomePage>
                                 setState(() => tab = i.clamp(0, 3)),
                             children: [
                               _buildModePages(),
-                              const DeviceCenterPage(embedded: true),
+                              DeviceCenterPage(embedded: true, store: store),
                               _buildList(),
                               _buildMyPage(),
                             ],
@@ -4440,7 +4440,7 @@ class _HomePageState extends State<HomePage>
     }
     Navigator.push(
       context,
-      DtPageRoute(builder: (_) => const DeviceCenterPage()),
+      DtPageRoute(builder: (_) => DeviceCenterPage(store: store)),
     );
   }
 
@@ -6364,11 +6364,12 @@ class _TripDetailPageState extends State<TripDetailPage> {
         : Theme.of(context).colorScheme.primary;
   }
 
-  /// v1.7.x 导入运动相机视频并关联到当前行程（选视频 → 匹配面板 → 落盘）。
-  Future<void> _importActionCameraVideo() async {
+  /// v1.7.x 记录 → 视频（双向入口之一）：从本行程直接选视频，
+  /// 关联后进入视频编辑页（与设备中心入口同一条结果链）。
+  Future<void> _addVideoToTrip() async {
     final t = trip;
     if (t == null) return;
-    final updated = await pickAndImportVideo(
+    final updated = await openVideoSyncFlow(
       context,
       store: widget.store,
       preselectedTrip: t,
@@ -7465,12 +7466,25 @@ class _TripDetailPageState extends State<TripDetailPage> {
                               label: '视频 HUD 合成',
                               child: IconButton(
                                 icon: const Icon(Icons.movie_filter_outlined),
-                                onPressed: () => Navigator.push(
-                                  context,
-                                  DtPageRoute(
-                                    builder: (_) => VideoHudPage(trip: t, store: widget.store),
-                                  ),
-                                ),
+                                onPressed: () async {
+                                  await Navigator.push(
+                                    context,
+                                    DtPageRoute(
+                                      builder: (_) => VideoHudPage(
+                                        trip: t,
+                                        store: widget.store,
+                                        initialVideoPath: vp,
+                                      ),
+                                    ),
+                                  );
+                                  // 编辑页可能解除关联：回来重读行程刷新列表。
+                                  if (!mounted) return;
+                                  final nt =
+                                      await widget.store.loadTrip(t.id);
+                                  if (nt != null && mounted) {
+                                    setState(() => trip = nt);
+                                  }
+                                },
                               ),
                             ),
                             Semantics(
@@ -7496,11 +7510,11 @@ class _TripDetailPageState extends State<TripDetailPage> {
                         ),
                       ),
                   ],
-                  // v1.7.x：导入运动相机素材并关联，进入 HUD 合成页对齐/烧录/分享。
+                  // v1.7.x：记录 → 视频。选素材并关联后进入视频编辑页。
                   _pillButton(
-                    '导入运动相机视频',
+                    '添加视频',
                     Icons.video_library_outlined,
-                    _importActionCameraVideo,
+                    _addVideoToTrip,
                   ),
                   const SizedBox(height: 8),
                   Row(

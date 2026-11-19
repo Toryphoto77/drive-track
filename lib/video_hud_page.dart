@@ -26,14 +26,16 @@ import 'package:ffmpeg_kit_flutter_new_video/return_code.dart';
 import 'package:ffmpeg_kit_flutter_new_video/session.dart';
 import 'package:ffmpeg_kit_flutter_new_video/statistics.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'app_notice.dart';
-import 'card_style.dart';
+import 'dt_page_route.dart';
 import 'models.dart';
 import 'native.dart';
 import 'store.dart';
 import 'track_timing.dart';
+import 'video_gallery_page.dart';
 import 'video_import_match.dart';
 
 const Color _kHudRed = Color(0xFFE10600);
@@ -50,10 +52,19 @@ extension HudStyleLabel on HudStyle {
 }
 
 class VideoHudPage extends StatefulWidget {
-  const VideoHudPage({super.key, required this.trip, required this.store});
+  const VideoHudPage({
+    super.key,
+    required this.trip,
+    required this.store,
+    this.initialVideoPath,
+  });
 
   final Trip trip;
   final Store store;
+
+  /// 从某一段视频直接进入（记录详情 / 新导入流程都会带上）。
+  /// 为空时默认第一段。
+  final String? initialVideoPath;
 
   @override
   State<VideoHudPage> createState() => _VideoHudPageState();
@@ -67,11 +78,45 @@ class _VideoHudPageState extends State<VideoHudPage> {
   void initState() {
     super.initState();
     _trip = widget.trip;
+    final p = widget.initialVideoPath;
+    if (p != null) {
+      final i = _trip.videoPaths.indexOf(p);
+      if (i >= 0) _segment = i;
+    }
+    _poll = Timer.periodic(const Duration(milliseconds: 250), (_) => _pollOnce());
+    _loadFrames();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    try {
+      _channel?.invokeMethod('pause');
+    } catch (_) {}
+    super.dispose();
   }
 
   int _segment = 0;
   int _manualOffsetMs = 0;
   int _scrubMs = 0;
+
+  /// 撤销 / 重做只记录手动对齐偏移（±步进）。
+  final List<int> _offsetHistory = [];
+  final List<int> _redoStack = [];
+
+  // ---- 原生视频预览（复用 drivetrack/video_view 平台视图）----
+  MethodChannel? _channel;
+  Timer? _poll;
+  bool _prepared = false;
+  bool _playing = false;
+  bool _dragging = false;
+  int _playerMs = 0;
+  int _playerDurationMs = 0;
+  String? _playerError;
+  List<String> _frames = const [];
+
+  /// 底部弹层（对齐 / HUD / 导出）在父级 setState 后需要刷新自身。
+  VoidCallback? _sheetRefresh;
 
   HudStyle _style = HudStyle.race;
   bool _showSpeed = true;
@@ -94,6 +139,9 @@ class _VideoHudPageState extends State<VideoHudPage> {
   /// 导出起点：null = 行程开始；否则 = 第几圈（1 起）的开始。
   int? _trimLap;
 
+  /// 当前时间轴选中的圈（null = 未选，时间轴显示全片）。
+  int? _activeLap;
+
   /// 倾角只对摩托有意义：非摩托行程即便勾了也不输出。
   bool get _leanEnabled => _showLean && trip.mode == TripMode.moto;
 
@@ -101,20 +149,33 @@ class _VideoHudPageState extends State<VideoHudPage> {
 
   List<String> get _videos => trip.videoPaths;
 
-  /// v1.7.x：空态下直接导入运动相机视频并关联到本行程，成功后刷新列表，
-  /// 之后即可走现有的对齐 / HUD 编辑 / 烧录 / 分享流程。
+  /// v1.7.x：空态下从相册选一段视频关联到本行程，成功后刷新列表，
+  /// 直接留在编辑页继续对齐 / HUD / 烧录。
   Future<void> _importVideo() async {
-    final updated = await pickAndImportVideo(
-      context,
-      store: widget.store,
-      preselectedTrip: _trip,
+    final picked = await Navigator.of(context).push<VideoPickResult>(
+      DtPageRoute(builder: (_) => const VideoGalleryPage()),
     );
-    if (updated != null && mounted) {
-      setState(() {
-        _trip = updated;
-        _segment = 0;
-        _manualOffsetMs = 0;
-      });
+    if (picked == null || !mounted) return;
+    try {
+      final updated = await linkVideoToTrip(
+        widget.store,
+        trip: _trip,
+        videoPath: picked.path,
+        createdMs: picked.createdMs,
+      );
+      if (updated != null && mounted) {
+        setState(() {
+          _trip = updated;
+          _segment = updated.videoPaths.length - 1;
+          _manualOffsetMs = 0;
+          _scrubMs = 0;
+          _playerMs = 0;
+          _frames = const [];
+        });
+        _loadFrames();
+      }
+    } catch (e) {
+      if (mounted) showAppNotice(context, '$e', AppNoticeKind.error);
     }
   }
 
@@ -484,6 +545,7 @@ class _VideoHudPageState extends State<VideoHudPage> {
       _burnError = null;
       _burnEncoder = '';
     });
+    _sheetRefresh?.call();
     try {
       final dir = await Native.getCacheDir();
       final base = 'hud_${trip.id}';
@@ -510,6 +572,7 @@ class _VideoHudPageState extends State<VideoHudPage> {
           _burnError = null;
           _burnProgress = 0;
         });
+        _sheetRefresh?.call();
       }
     } catch (e) {
       if (mounted) {
@@ -517,6 +580,7 @@ class _VideoHudPageState extends State<VideoHudPage> {
           _burning = false;
           _burnError = '$e';
         });
+        _sheetRefresh?.call();
       }
     }
   }
@@ -554,6 +618,7 @@ class _VideoHudPageState extends State<VideoHudPage> {
         _burning = true;
         _burnEncoder = enc;
       });
+      _sheetRefresh?.call();
     }
     final session = await FFmpegKit.executeAsync(
       cmd,
@@ -566,6 +631,7 @@ class _VideoHudPageState extends State<VideoHudPage> {
               _burnProgress = 1;
               _burnOutput = outPath;
             });
+            _sheetRefresh?.call();
           }
           if (!done.isCompleted) done.complete(true);
         } else if (ReturnCode.isCancel(code)) {
@@ -574,6 +640,7 @@ class _VideoHudPageState extends State<VideoHudPage> {
               _burning = false;
               _burnProgress = 0;
             });
+            _sheetRefresh?.call();
             showAppNotice(context, '已取消烧录。', AppNoticeKind.info);
           }
           if (!done.isCompleted) done.complete(null);
@@ -584,6 +651,7 @@ class _VideoHudPageState extends State<VideoHudPage> {
               _burning = false;
               _burnError = _tail(out);
             });
+            _sheetRefresh?.call();
           }
           if (!done.isCompleted) done.complete(false);
         }
@@ -595,6 +663,7 @@ class _VideoHudPageState extends State<VideoHudPage> {
         if (span <= 0) return;
         final p = (st.getTime() / span).clamp(0.0, 0.99);
         setState(() => _burnProgress = p.toDouble());
+        _sheetRefresh?.call();
       },
     );
     if (mounted) {
@@ -655,311 +724,1306 @@ class _VideoHudPageState extends State<VideoHudPage> {
     }
   }
 
+  // ---------------------------------------------------------------
+  // v1.7.x 全新编辑页（参考 "Video Sync"）：
+  // 顶栏（返回 / 视频同步 / 删除）→ 视频预览 + HUD 叠加 →
+  // 调整画面对齐 / HUD 信息 → 时间轴（刻度 + 选区 + 游标 + 速度曲线
+  // + 胶片条）→ 底部圈选择。导出/烧录收进"导出成片"弹层，
+  // 原有 FFmpegKit 与三件套逻辑全部保留。
+  // ---------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    final f = _frameAt(_tripMs);
     final laps = _laps;
+    final f = _frameAt(_tripMs);
+    final hasVideo = _videos.isNotEmpty && File(_currentPath).existsSync();
     return Scaffold(
-      backgroundColor: Colors.black,
-      extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: const Text('视频 HUD 合成')),
-      body: ListView(
-        padding: withAppBarTopInset(
-          context,
-          const EdgeInsets.fromLTRB(16, 12, 16, 28),
-        ),
-        children: [
-          if (_videos.isEmpty) ...[
-            _warn('这条行程没有关联视频。可导入运动相机拍摄的素材，'
-                '在此对齐并添加 HUD 后分享。'),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: ElevatedButton.icon(
-                onPressed: _importVideo,
-                icon: const Icon(Icons.video_library_outlined),
-                label: const Text('导入运动相机视频'),
-              ),
-            ),
-          ] else ...[
-            _sectionTitle('1. 选择视频段'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (var i = 0; i < _videos.length; i++)
-                  ChoiceChip(
-                    label: Text('第 ${i + 1} 段'),
-                    selected: _segment == i,
-                    onSelected: (_) {
-                      setState(() {
-                        _segment = i;
-                        _manualOffsetMs = 0;
-                        _scrubMs = 0;
-                      });
-                    },
-                  ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _currentPath.split('/').last,
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('2. 时间对齐'),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: CardStyle.innerCardColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: CardStyle.borderColor),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '当前偏移：${_offsetMs >= 0 ? '+' : ''}$_offsetMs ms'
-                    '（自动 ${_autoOffset(_currentPath)} ms，手动 $_manualOffsetMs ms）',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    '自动对齐取视频文件名里的开录时间戳。若画面首发点与数据差一截，'
-                    '用下面的按钮微调：让“画面出现起跑线”的时刻对应下方圈时归零。',
-                    style: TextStyle(color: Colors.white54, fontSize: 11),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final d in const [-1000, -500, -100, 100, 500, 1000])
-                        OutlinedButton(
-                          onPressed: () =>
-                              setState(() => _manualOffsetMs += d),
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                          ),
-                          child: Text('${d > 0 ? '+' : ''}$d ms'),
+      backgroundColor: const Color(0xFF0B0B0C),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _topBar(),
+            Expanded(
+              child: _videos.isEmpty
+                  ? _emptyVideoState(accent)
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                      children: [
+                        _preview(f, hasVideo, accent),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _actionPill(
+                                icon: Icons.center_focus_strong,
+                                label: S.of(context)
+                                    .t('调整画面对齐', 'Adjust video sync'),
+                                onTap: _showSyncSheet,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _actionPill(
+                                icon: Icons.tune,
+                                label: S.of(context).t('HUD 信息', 'HUD info'),
+                                onTap: _showHudSheet,
+                              ),
+                            ),
+                          ],
                         ),
-                      TextButton(
-                        onPressed: () => setState(() => _manualOffsetMs = 0),
-                        child: const Text('复位'),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(height: 10),
+                        _timeRow(accent),
+                        const SizedBox(height: 2),
+                        _timeline(accent),
+                        const SizedBox(height: 14),
+                        _curveBand(accent),
+                        const SizedBox(height: 1),
+                        _filmstrip(),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          height: 46,
+                          child: FilledButton.icon(
+                            onPressed: _showExportSheet,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _kHudRed,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            icon: const Icon(Icons.movie_filter_outlined,
+                                size: 18),
+                            label: Text(
+                              S.of(context)
+                                  .t('导出 HUD 成片', 'Export HUD video'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Text(
+                            _offsetMs == 0
+                                ? S.of(context).t(
+                                    '已按开录时间自动对齐',
+                                    'Auto-aligned by clip start time',
+                                  )
+                                : S.of(context).t(
+                                    '对齐偏移 ${_fmtOffset(_offsetMs)}',
+                                    'Sync offset ${_fmtOffset(_offsetMs)}',
+                                  ),
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            if (_videos.isNotEmpty) _lapBar(laps, accent),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _topBar() {
+    final s = S.of(context);
+    return SizedBox(
+      height: 56,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 12,
+            child: _circleButton(
+              icon: Icons.arrow_back_ios_new,
+              onTap: () => Navigator.of(context).maybePop(),
+            ),
+          ),
+          Text(
+            s.t('视频同步', 'Video Sync'),
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+          Positioned(
+            right: 12,
+            child: _circleButton(
+              icon: Icons.delete_outline,
+              onTap: _deleteCurrentVideo,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _circleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: const Color(0xFF1C1C1E),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(icon, size: 19, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyVideoState(Color accent) {
+    final s = S.of(context);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1C),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.videocam_off_outlined,
+                  size: 30, color: Colors.white54),
+              const SizedBox(height: 10),
+              Text(
+                s.t('这条行程还没有关联视频', 'No video linked to this trip'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                s.t(
+                  '从手机相册选择一段素材，关联后即可对齐画面、添加 HUD。',
+                  'Pick a clip from your gallery, then sync it and add HUD.',
+                ),
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: FilledButton.icon(
+                  onPressed: _importVideo,
+                  style: FilledButton.styleFrom(backgroundColor: accent),
+                  icon: const Icon(Icons.video_library_outlined, size: 18),
+                  label: Text(s.t('选择视频', 'Choose video')),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _preview(_HudFrame f, bool hasVideo, Color accent) {
+    final s = S.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (hasVideo && Platform.isAndroid)
+              AndroidView(
+                key: ValueKey(_currentPath),
+                viewType: 'drivetrack/video_view',
+                creationParams: <String, dynamic>{'path': _currentPath},
+                onPlatformViewCreated: _onPlatformViewCreated,
+              )
+            else
+              const _PreviewPlaceholder(),
+            IgnorePointer(
+              child: Stack(
+                children: [
+                  if (_showLap && _laps.isNotEmpty) _lapStack(),
+                  _hudOverlay(f),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            _sectionTitle('3. 预览'),
-            const SizedBox(height: 8),
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  fit: StackFit.expand,
+            if (_playerError != null)
+              Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _playerError!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ),
+            Positioned(
+              top: 8,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    s.t('已导入视频', 'Imported Video'),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 预览左上角的圈列表（参考图）：当前圈高亮，最多显示 5 行。
+  Widget _lapStack() {
+    final laps = _laps;
+    final shown = laps.take(5).toList();
+    return Positioned(
+      left: 8,
+      top: 8,
+      child: Container(
+        width: 92,
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < shown.length; i++)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _activeLap == shown[i].number
+                      ? const Color(0xFF1E78D2)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Color(0xFF1B2430),
-                            Color(0xFF0B0E13),
-                            Color(0xFF05070A),
-                          ],
+                    Text(
+                      '${shown[i].number}',
+                      style: const TextStyle(
+                        fontSize: 8.5,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    Text(
+                      _fmtLap(shown[i].endMs - shown[i].startMs),
+                      style: const TextStyle(
+                        fontSize: 8.5,
+                        color: Colors.white,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _actionPill({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: const Color(0xFF2C2C2E),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: SizedBox(
+          height: 38,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 15, color: Colors.white70),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _timeRow(Color accent) {
+    final dur = _videoDurationMs;
+    final pos = _posMs;
+    return Row(
+      children: [
+        Text(
+          '${_fmtClock(pos)}/${_fmtClock(dur)}',
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          onPressed: _togglePlay,
+          icon: Icon(
+            _playing ? Icons.pause : Icons.play_arrow_rounded,
+            size: 32,
+            color: Colors.white,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          onPressed: _offsetHistory.isEmpty ? null : _undoOffset,
+          icon: Icon(
+            Icons.undo,
+            size: 21,
+            color: _offsetHistory.isEmpty ? Colors.white24 : Colors.white70,
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          onPressed: _redoStack.isEmpty ? null : _redoOffset,
+          icon: Icon(
+            Icons.redo,
+            size: 21,
+            color: _redoStack.isEmpty ? Colors.white24 : Colors.white70,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _timeline(Color accent) {
+    final dur = _videoDurationMs;
+    return SizedBox(
+      height: 58,
+      child: LayoutBuilder(
+        builder: (ctx, c) {
+          void seek(double dx) {
+            if (dur <= 0 || c.maxWidth <= 0) return;
+            final ms = (dx / c.maxWidth * dur).round().clamp(0, dur);
+            _seekVideo(ms);
+          }
+
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (d) => seek(d.localPosition.dx),
+            onHorizontalDragStart: (d) {
+              setState(() => _dragging = true);
+              seek(d.localPosition.dx);
+            },
+            onHorizontalDragUpdate: (d) => seek(d.localPosition.dx),
+            onHorizontalDragEnd: (_) {
+              setState(() => _dragging = false);
+              _seekVideo(_scrubMs);
+            },
+            child: CustomPaint(
+              painter: _TimelinePainter(
+                durationMs: dur,
+                positionMs: _posMs,
+                accent: accent,
+                // 刻度文字继承页面字体（TextPainter 不读主题，
+                // 不显式传入会落回系统默认字体，与其它文字不统一）。
+                labelStyle: DefaultTextStyle.of(ctx).style,
+                lapLabel: _activeLap == null
+                    ? null
+                    : S.of(context).t('第 $_activeLap 圈', 'Lap $_activeLap'),
+              ),
+              size: Size(c.maxWidth, 58),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _curveBand(Color accent) {
+    final dur = _videoDurationMs;
+    final win = _activeLapWindow();
+    final startMs = win?.$1 ?? 0;
+    final endMs = win?.$2 ?? dur;
+    final samples = <Offset>[];
+    if (dur > 0 && endMs > startMs) {
+      const n = 72;
+      for (var i = 0; i <= n; i++) {
+        final videoMs = startMs + (endMs - startMs) * i ~/ n;
+        final p = _pointAt(trip.startMs + _offsetMs + videoMs);
+        samples.add(Offset(
+          dur == 0 ? 0 : videoMs / dur,
+          p == null ? 0 : p.speed * 3.6,
+        ));
+      }
+    }
+    return SizedBox(
+      height: 52,
+      child: CustomPaint(
+        painter: _CurvePainter(
+          samples: samples,
+          positionRatio: dur <= 0 ? 0 : (_posMs / dur).clamp(0.0, 1.0),
+          accent: accent,
+        ),
+        size: const Size(double.infinity, 52),
+      ),
+    );
+  }
+
+  Widget _filmstrip() {
+    final frames = _frames;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: SizedBox(
+        height: 54,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (frames.isEmpty)
+              Row(
+                children: [
+                  for (var i = 0; i < 7; i++)
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Color.lerp(
+                            const Color(0xFF1B1B1B),
+                            const Color(0xFF2A2A2A),
+                            i / 6,
+                          ),
+                          border: Border.all(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            width: 0.5,
+                          ),
                         ),
                       ),
                     ),
-                    // 预览底图只是示意：真实画面来自视频，这里只画 HUD 层。
-                    const Center(
-                      child: Text(
-                        '画面示意（HUD 层预览）',
-                        style: TextStyle(color: Colors.white12, fontSize: 11),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  for (final p in frames)
+                    Expanded(
+                      child: Image.file(
+                        File(p),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const ColoredBox(color: Color(0xFF1B1B1B)),
                       ),
                     ),
-                    _hudOverlay(f),
-                    if (_showBrand)
-                      const Positioned(
-                        top: 8,
-                        right: 10,
-                        child: Text(
-                          '驰迹 DriveTrack',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
+                ],
+              ),
+            Positioned(
+              left: 4,
+              top: 2,
+              child: Text(
+                S.of(context).t('已导入视频', 'Imported Video'),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 9,
+                  shadows: [Shadow(color: Colors.black87, blurRadius: 3)],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: ignorePointerLine(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget ignorePointerLine() {
+    return IgnorePointer(
+      child: CustomPaint(
+        painter: _CursorLinePainter(
+          ratio: _videoDurationMs <= 0
+              ? 0
+              : (_posMs / _videoDurationMs).clamp(0.0, 1.0),
+        ),
+        size: const Size(double.infinity, 54),
+      ),
+    );
+  }
+
+  Widget _lapBar(List<Lap> laps, Color accent) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        12,
+        10,
+        12,
+        10 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: const BoxDecoration(color: Color(0xFF0B0B0C)),
+      child: SizedBox(
+        height: 46,
+        child: laps.isEmpty
+            ? Center(
+                child: Text(
+                  S.of(context).t('本次行程没有分圈', 'No laps in this trip'),
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              )
+            : laps.length <= 5
+                // ≤5 圈：等分铺满，和参考图一样五个圈号一眼可见。
+                ? Row(
+                    children: [
+                      for (var i = 0; i < laps.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        Expanded(
+                          child: _LapChip(
+                            label: 'Lap${laps[i].number}',
+                            selected: _activeLap == laps[i].number,
+                            accent: accent,
+                            onTap: () => _selectLap(laps[i]),
+                          ),
+                        ),
+                      ],
+                    ],
+                  )
+                : ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: laps.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (ctx, i) {
+                      final l = laps[i];
+                      final selected = _activeLap == l.number;
+                      return _LapChip(
+                        label: 'Lap${l.number}',
+                        selected: selected,
+                        accent: accent,
+                        onTap: () => _selectLap(l),
+                      );
+                    },
+                  ),
+      ),
+    );
+  }
+
+  // ---- 播放器 ----
+  void _onPlatformViewCreated(int id) {
+    final ch = MethodChannel('drivetrack/video_view_$id');
+    ch.setMethodCallHandler((call) async {
+      if (!mounted) return null;
+      switch (call.method) {
+        case 'onPrepared':
+          final d = (call.arguments as Map?)?['duration'];
+          setState(() {
+            _prepared = true;
+            _playerError = null;
+            if (d is num) _playerDurationMs = d.toInt();
+          });
+        case 'onCompleted':
+          setState(() {
+            _playing = false;
+            if (_playerDurationMs > 0) _playerMs = _playerDurationMs;
+          });
+        case 'onError':
+          setState(() {
+            _playerError = S.of(context).t(
+              '应用内播放失败，可改用系统播放器',
+              'In-app playback failed',
+            );
+            _playing = false;
+          });
+      }
+      return null;
+    });
+    _channel = ch;
+    setState(() {
+      _prepared = false;
+      _playing = false;
+      _playerMs = 0;
+      _scrubMs = 0;
+      _playerDurationMs = 0;
+      _playerError = null;
+    });
+  }
+
+  Future<void> _pollOnce() async {
+    final ch = _channel;
+    if (!mounted || ch == null || !_prepared || _dragging) return;
+    try {
+      final results = await Future.wait([
+        ch.invokeMethod<int>('getPosition'),
+        ch.invokeMethod<int>('getDuration'),
+        ch.invokeMethod<bool>('isPlaying'),
+      ]);
+      final pos = (results[0] as int?) ?? _playerMs;
+      final dur = (results[1] as int?) ?? _playerDurationMs;
+      final playing = (results[2] as bool?) ?? _playing;
+      if (!mounted || _dragging) return;
+      if ((pos - _playerMs).abs() >= 100 ||
+          dur != _playerDurationMs ||
+          playing != _playing) {
+        setState(() {
+          _playerMs = pos;
+          _scrubMs = pos;
+          _playerDurationMs = dur;
+          _playing = playing;
+        });
+      }
+    } catch (_) {
+      // 轮询失败不弹错，下次 tick 再试。
+    }
+  }
+
+  Future<void> _togglePlay() async {
+    final ch = _channel;
+    if (ch == null || !_prepared) return;
+    try {
+      if (_playing) {
+        await ch.invokeMethod('pause');
+        setState(() => _playing = false);
+      } else {
+        await ch.invokeMethod('play');
+        setState(() => _playing = true);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _seekVideo(int ms) async {
+    var target = ms;
+    final dur = _videoDurationMs;
+    if (dur > 0) target = target.clamp(0, dur);
+    setState(() {
+      _scrubMs = target;
+      _playerMs = target;
+    });
+    final ch = _channel;
+    if (ch != null && _prepared) {
+      try {
+        await ch.invokeMethod('seekTo', {'position': target});
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _loadFrames() async {
+    final path = _currentPath;
+    if (path.isEmpty) return;
+    final frames = await Native.videoThumbnails(path, count: 7);
+    if (!mounted || _currentPath != path) return;
+    setState(() => _frames = frames);
+  }
+
+  int get _videoDurationMs =>
+      _playerDurationMs > 0 ? _playerDurationMs : _durationMs;
+
+  int get _posMs => _dragging ? _scrubMs : _playerMs;
+
+  /// 选中圈的视频时间窗（已钳制到视频长度）；未选圈返回 null。
+  (int, int)? _activeLapWindow() {
+    final n = _activeLap;
+    if (n == null) return null;
+    final laps = _laps;
+    final idx = laps.indexWhere((l) => l.number == n);
+    if (idx < 0) return null;
+    final dur = _videoDurationMs;
+    final start = (laps[idx].startMs - trip.startMs - _offsetMs).clamp(0, dur);
+    final end = (laps[idx].endMs - trip.startMs - _offsetMs).clamp(0, dur);
+    if (end <= start) return null;
+    return (start, end);
+  }
+
+  void _selectLap(Lap l) {
+    setState(() {
+      _activeLap = l.number;
+      _trimLap = l.number;
+    });
+    final start = l.startMs - trip.startMs - _offsetMs;
+    _seekVideo(start < 0 ? 0 : start);
+  }
+
+  void _bumpOffset(int delta) {
+    if (_videos.isEmpty) return;
+    setState(() {
+      _offsetHistory.add(_manualOffsetMs);
+      _redoStack.clear();
+      _manualOffsetMs += delta;
+    });
+    _sheetRefresh?.call();
+  }
+
+  void _undoOffset() {
+    if (_offsetHistory.isEmpty) return;
+    setState(() {
+      _redoStack.add(_manualOffsetMs);
+      _manualOffsetMs = _offsetHistory.removeLast();
+    });
+    _sheetRefresh?.call();
+  }
+
+  void _redoOffset() {
+    if (_redoStack.isEmpty) return;
+    setState(() {
+      _offsetHistory.add(_manualOffsetMs);
+      _manualOffsetMs = _redoStack.removeLast();
+    });
+    _sheetRefresh?.call();
+  }
+
+  void _switchSegment(int i) {
+    if (i == _segment || i < 0 || i >= _videos.length) return;
+    final ch = _channel;
+    try {
+      ch?.invokeMethod('pause');
+    } catch (_) {}
+    setState(() {
+      _segment = i;
+      _channel = null;
+      _prepared = false;
+      _playing = false;
+      _playerMs = 0;
+      _scrubMs = 0;
+      _playerDurationMs = 0;
+      _playerError = null;
+      _frames = const [];
+      _manualOffsetMs = 0;
+      _offsetHistory.clear();
+      _redoStack.clear();
+      _activeLap = null;
+      _trimLap = null;
+    });
+    _loadFrames();
+  }
+
+  Future<void> _deleteCurrentVideo() async {
+    final path = _currentPath;
+    if (path.isEmpty) return;
+    final s = S.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.t('解除视频关联？', 'Unlink this video?')),
+        content: Text(
+          s.t(
+            '只会把这段视频从当前行程移除，不会删除手机里的原文件。',
+            'The clip is removed from this trip; the original file is kept.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.t('取消', 'Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(s.t('解除关联', 'Unlink')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final paths = <String>[..._videos]..remove(path);
+    final updated =
+        await widget.store.updateTripVideoPaths(trip.id, paths);
+    if (!mounted) return;
+    if (updated == null) {
+      showAppNotice(context, s.t('解除关联失败', 'Unlink failed'),
+          AppNoticeKind.error);
+      return;
+    }
+    if (updated.videoPaths.isEmpty) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {
+      _trip = updated;
+      _segment = 0;
+      _manualOffsetMs = 0;
+      _scrubMs = 0;
+      _playerMs = 0;
+      _activeLap = null;
+      _trimLap = null;
+      _offsetHistory.clear();
+      _redoStack.clear();
+      _frames = const [];
+    });
+    _loadFrames();
+  }
+
+  // ---- 底部弹层 ----
+  void _showSyncSheet() {
+    final s = S.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF141416),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, refresh) {
+          _sheetRefresh = () => refresh(() {});
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              14,
+              16,
+              20 + MediaQuery.of(ctx).padding.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        s.t('调整画面对齐', 'Adjust video sync'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                Text(
+                  s.t(
+                    '拖动按钮逐帧微调；正偏移 = 视频画面前移。',
+                    'Fine-tune the offset; positive = video ahead.',
+                  ),
+                  style:
+                      const TextStyle(color: Colors.white54, fontSize: 11.5),
+                ),
+                const SizedBox(height: 10),
+                if (_videos.length > 1) ...[
+                  Text(
+                    s.t('视频段', 'Segment'),
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                  const SizedBox(height: 6),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < _videos.length; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text('${i + 1}'),
+                              selected: _segment == i,
+                              onSelected: (_) {
+                                _switchSegment(i);
+                                refresh(() {});
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E20),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _fmtOffset(_offsetMs),
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    for (final d in <int>[-10000, -1000, -100])
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () => _bumpOffset(d),
+                            child: Text(
+                              _fmtOffset(d),
+                              style: const TextStyle(fontSize: 11),
+                            ),
                           ),
                         ),
                       ),
                   ],
                 ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Slider(
-              value: _durationMs <= 0
-                  ? 0
-                  : _scrubMs.clamp(0, _durationMs).toDouble(),
-              max: math.max(1, _durationMs).toDouble(),
-              onChanged: (v) => setState(() => _scrubMs = v.round()),
-            ),
-            Text(
-              '播放头 ${_fmtLap(_scrubMs)} / ${_fmtLap(_durationMs)}'
-              ' · 对应行程时刻 ${_fmtLap(_tripMs - trip.startMs)}',
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('4. HUD 版式'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final s in HudStyle.values)
-                  ChoiceChip(
-                    label: Text(s.label),
-                    selected: _style == s,
-                    onSelected: (_) => setState(() {
-                      _style = s;
-                      // 摩托版默认带倾角；其他版式默认不带。
-                      _showLean = s == HudStyle.moto &&
-                          trip.mode == TripMode.moto;
-                    }),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    for (final d in <int>[100, 1000, 10000])
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () => _bumpOffset(d),
+                            child: Text(
+                              _fmtOffset(d),
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          _bumpOffset(-_manualOffsetMs);
+                          refresh(() {});
+                        },
+                        icon: const Icon(Icons.restart_alt, size: 16),
+                        label: Text(
+                          s.t('恢复自动对齐', 'Reset to auto'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  s.t(
+                    '自动对齐：${_fmtOffset(_autoOffset(_currentPath))}（文件名开录时间）',
+                    'Auto offset: ${_fmtOffset(_autoOffset(_currentPath))}',
                   ),
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 10.5,
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
+          );
+        },
+      ),
+    ).whenComplete(() => _sheetRefresh = null);
+  }
+
+  void _showHudSheet() {
+    final s = S.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF141416),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, refresh) {
+          _sheetRefresh = () => refresh(() {});
+          void toggle(VoidCallback fn) {
+            setState(fn);
+            refresh(() {});
+          }
+
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              14,
+              16,
+              20 + MediaQuery.of(ctx).padding.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _toggle('速度', _showSpeed, (v) => setState(() => _showSpeed = v)),
-                _toggle('圈号/圈时', _showLap, (v) => setState(() => _showLap = v)),
-                _toggle('G 值', _showG, (v) => setState(() => _showG = v)),
-                // 倾角只给摩托：非摩托行程不出现这个开关。
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        s.t('画面上显示什么', 'What to show on screen'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                Text(
+                  s.t('版式', 'Style'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final st in HudStyle.values)
+                      ChoiceChip(
+                        label: Text(st.label),
+                        selected: _style == st,
+                        onSelected: (_) => toggle(() => _style = st),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                _toggle('速度', _showSpeed,
+                    (v) => toggle(() => _showSpeed = v)),
+                _toggle('圈号 / 圈时', _showLap,
+                    (v) => toggle(() => _showLap = v)),
+                _toggle('G 值', _showG, (v) => toggle(() => _showG = v)),
                 if (trip.mode == TripMode.moto)
-                  _toggle('倾角', _showLean, (v) => setState(() => _showLean = v)),
-                _toggle('品牌角标', _showBrand, (v) => setState(() => _showBrand = v)),
-              ],
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              '倾角只对摩托有效：汽车行程打开也不会显示读数（数据本身是车身横滚角）。',
-              style: TextStyle(color: Colors.white38, fontSize: 11),
-            ),
-            const SizedBox(height: 16),
-            _sectionTitle('5. 导出起点'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('行程开始'),
-                  selected: _trimLap == null,
-                  onSelected: (_) => setState(() => _trimLap = null),
-                ),
-                for (final l in laps)
-                  ChoiceChip(
-                    label: Text('第 ${l.number} 圈起'),
-                    selected: _trimLap == l.number,
-                    onSelected: (_) => setState(() => _trimLap = l.number),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '导出范围：${_fmtLap(_exportStartTripMs - trip.startMs)} → '
-              '${_fmtLap(_exportEndTripMs - trip.startMs)}'
-              '（约 ${_fmtLap(_exportEndTripMs - _exportStartTripMs)}）',
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
-            ),
-            const SizedBox(height: 22),
-            _sectionTitle('6. 手机内直接出片'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                ChoiceChip(
-                  label: const Text('1080p（推荐）'),
-                  selected: _burnHeight == 1080,
-                  onSelected: (_) => setState(() => _burnHeight = 1080),
-                ),
-                ChoiceChip(
-                  label: const Text('原画质'),
-                  selected: _burnHeight == null,
-                  onSelected: (_) => setState(() => _burnHeight = null),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (_burning) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: _burnProgress,
-                  minHeight: 6,
-                  backgroundColor: Colors.white12,
-                  color: _kHudRed,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
+                  _toggle('倾角', _showLean,
+                      (v) => toggle(() => _showLean = v)),
+                _toggle('品牌角标', _showBrand,
+                    (v) => toggle(() => _showBrand = v)),
+                if (_style == HudStyle.minimal &&
+                    (_showLap || _showG || _showLean))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      '正在烧录：${(_burnProgress * 100).toStringAsFixed(0)}%'
-                      '${_burnEncoder.isEmpty ? '' : ' · $_burnEncoder'}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      s.t(
+                        '极简版式通常只留速度与品牌角标，勾选项仍会生效。',
+                        'Minimal style usually keeps speed and brand only.',
+                      ),
+                      style: TextStyle(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.85),
+                        fontSize: 11,
+                      ),
                     ),
                   ),
-                  TextButton(onPressed: _cancelBurn, child: const Text('取消')),
-                ],
-              ),
-              const SizedBox(height: 4),
-            ] else ...[
-              SizedBox(
-                height: 50,
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _burnInApp,
-                  style: FilledButton.styleFrom(backgroundColor: _kHudRed),
-                  icon: const Icon(Icons.movie_creation_outlined, size: 18),
-                  label: const Text('直接在手机上烧录成片'),
-                ),
-              ),
-              if (_burnOutput != null) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                    border:
-                        Border.all(color: Colors.green.withValues(alpha: 0.4)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ],
+            ),
+          );
+        },
+      ),
+    ).whenComplete(() => _sheetRefresh = null);
+  }
+
+  void _showExportSheet() {
+    final s = S.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF141416),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, refresh) {
+          _sheetRefresh = () => refresh(() {});
+          final laps = _laps;
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              14,
+              16,
+              20 + MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      const Text(
-                        '成片已生成，原视频未改动',
-                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      Expanded(
+                        child: Text(
+                          s.t('导出 HUD 成片', 'Export HUD video'),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _burnOutput!.split('/').last,
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 11),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    s.t('从第几圈开始', 'Start from lap'),
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: Text(s.t('行程开始', 'Trip start')),
+                        selected: _trimLap == null,
+                        onSelected: (_) {
+                          setState(() => _trimLap = null);
+                          refresh(() {});
+                        },
+                      ),
+                      for (final l in laps)
+                        ChoiceChip(
+                          label: Text('Lap${l.number}'),
+                          selected: _trimLap == l.number,
+                          onSelected: (_) {
+                            setState(() {
+                              _trimLap = l.number;
+                              _activeLap = l.number;
+                            });
+                            refresh(() {});
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    s.t('输出清晰度', 'Resolution'),
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: Text(s.t('原画质', 'Original')),
+                        selected: _burnHeight == null,
+                        onSelected: (_) {
+                          setState(() => _burnHeight = null);
+                          refresh(() {});
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('1080p'),
+                        selected: _burnHeight == 1080,
+                        onSelected: (_) {
+                          setState(() => _burnHeight = 1080);
+                          refresh(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_burning) ...[
+                    LinearProgressIndicator(value: _burnProgress),
+                    const SizedBox(height: 6),
+                    Text(
+                      '烧录中 ${(_burnProgress * 100).toStringAsFixed(0)}%'
+                      '${_burnEncoder.isEmpty ? '' : ' · $_burnEncoder'}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 40,
+                      child: OutlinedButton(
+                        onPressed: _cancelBurn,
+                        child: Text(s.t('取消烧录', 'Cancel')),
+                      ),
+                    ),
+                  ] else ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: FilledButton.icon(
+                        onPressed: _burnInApp,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _kHudRed,
+                        ),
+                        icon: const Icon(Icons.local_fire_department,
+                            size: 18),
+                        label: Text(
+                          s.t('开始烧录（手机内出片）', 'Burn in-app'),
+                        ),
+                      ),
+                    ),
+                    if (_burnOutput != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E20),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${s.t('成片已生成', 'Output ready')}\n$_burnOutput',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: Colors.white60,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       SizedBox(
@@ -968,63 +2032,89 @@ class _VideoHudPageState extends State<VideoHudPage> {
                         child: FilledButton.icon(
                           onPressed: _shareBurn,
                           icon: const Icon(Icons.ios_share, size: 16),
-                          label: const Text('分享成片'),
+                          label: Text(s.t('分享成片', 'Share')),
                         ),
                       ),
                     ],
+                    if (_burnError != null) ...[
+                      const SizedBox(height: 8),
+                      _warn(
+                        '${s.t('烧录失败', 'Burn failed')}：$_burnError\n'
+                        '${s.t(
+                          '个别机型的硬件编码器不兼容，可改用三件套到电脑合成。',
+                          'Some hardware encoders are incompatible; use the 3-file export.',
+                        )}',
+                      ),
+                    ],
+                  ],
+                  const SizedBox(height: 8),
+                  const Text(
+                    '手机烧录会重新编码：1080p 更快、体积更小；原画质更慢也更热，'
+                    '4K 长片建议用电脑合成。',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 11,
+                      height: 1.5,
+                    ),
                   ),
-                ),
-              ],
-              if (_burnError != null) ...[
-                const SizedBox(height: 8),
-                _warn(
-                  '烧录失败：$_burnError\n'
-                  '个别机型的硬件编码器不兼容，可改用下面的三件套到电脑合成。',
-                ),
-              ],
-            ],
-            const SizedBox(height: 8),
-            const Text(
-              '手机烧录会重新编码：1080p 更快、体积更小，适合直接发到网上；'
-              '原画质更慢也更热，4K 长片建议用电脑合成。',
-              style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.5),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              height: 46,
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _exporting ? null : _export,
-                icon: _exporting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.computer, size: 18),
-                label: Text(_exporting ? '正在生成…' : '导出三件套（电脑合成）'),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 46,
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _exporting
+                          ? null
+                          : () async {
+                              await _export();
+                              if (mounted) refresh(() {});
+                            },
+                      icon: _exporting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.computer, size: 18),
+                      label: Text(
+                        _exporting
+                            ? '正在生成…'
+                            : '导出三件套（电脑合成）',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '三件套：HUD 字幕轨（.ass）+ 数据轨（.json）+ 合成说明（.txt），'
+                    '连同原视频一起分享。电脑上一条 ffmpeg 命令即可烧录，4K 素材原样保留。',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 11,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              '三件套：HUD 字幕轨（.ass）+ 数据轨（.json）+ 合成说明（.txt），'
-              '连同原视频一起分享。电脑上一条 ffmpeg 命令即可烧录，4K 素材原样保留。',
-              style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.5),
-            ),
-            if (_style == HudStyle.minimal &&
-                (_showLap || _showG || _showLean))
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  '提示：极简版式通常只留速度与品牌角标，勾选项仍会生效。',
-                  style: TextStyle(color: accent.withValues(alpha: 0.8), fontSize: 11),
-                ),
-              ),
-          ],
-        ],
+          );
+        },
       ),
-    );
+    ).whenComplete(() => _sheetRefresh = null);
   }
+
+  String _fmtOffset(int ms) {
+    final sign = ms < 0 ? '-' : '+';
+    final abs = ms.abs();
+    if (abs >= 10000) return '$sign${(abs / 1000).round()}s';
+    return '$sign${(abs / 1000).toStringAsFixed(1)}s';
+  }
+
+  String _fmtClock(int ms) {
+    final total = ms < 0 ? 0 : ms;
+    final m = total ~/ 60000;
+    final sec = (total % 60000) / 1000;
+    return '$m:${sec.toStringAsFixed(1).padLeft(4, '0')}';
+  }
+
 
   Widget _warn(String text) => Container(
         padding: const EdgeInsets.all(12),
@@ -1035,15 +2125,6 @@ class _VideoHudPageState extends State<VideoHudPage> {
         ),
         child: Text(text,
             style: const TextStyle(color: Colors.white, fontSize: 12, height: 1.5)),
-      );
-
-  Widget _sectionTitle(String text) => Text(
-        text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 15,
-          fontWeight: FontWeight.bold,
-        ),
       );
 
   Widget _toggle(String label, bool value, ValueChanged<bool> onChanged) {
@@ -1159,4 +2240,295 @@ class _HudFrame {
   final int lapNo;
   final int lapElapsedMs;
   final int tripElapsedMs;
+}
+
+/// 时间轴：刻度 + 当前刻度蓝色高亮 + 白色游标 + "Lap N" 标签。
+class _TimelinePainter extends CustomPainter {
+  _TimelinePainter({
+    required this.durationMs,
+    required this.positionMs,
+    required this.accent,
+    required this.labelStyle,
+    this.lapLabel,
+  });
+
+  final int durationMs;
+  final int positionMs;
+  final Color accent;
+
+  /// 页面默认文字样式（字体族从这里继承）。
+  final TextStyle labelStyle;
+  final String? lapLabel;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0) return;
+    final w = size.width;
+    final dur = durationMs <= 0 ? 1 : durationMs;
+    double x(int ms) => (ms.clamp(0, dur) / dur) * w;
+
+    // 刻度：自适应步长，保证不超过 6 个标签。
+    var stepMs = 300000;
+    for (final s in <int>[1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800]) {
+      if (dur / (s * 1000) <= 6) {
+        stepMs = s * 1000;
+        break;
+      }
+    }
+    final labelStyle = this.labelStyle.copyWith(
+      color: const Color(0xFFDADADA),
+      fontSize: 12,
+      fontWeight: FontWeight.w500,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final centerStyle = labelStyle.copyWith(
+      color: Colors.white,
+      fontWeight: FontWeight.w700,
+    );
+
+    // 参考图：只有离播放头最近的那个刻度被蓝色圆角块托起，
+    // 不是整段选区，避免盖住相邻标签。
+    final ticks = <int>[];
+    for (var ms = 0; ms <= dur; ms += stepMs) {
+      ticks.add(ms);
+    }
+    var nearest = 0;
+    var nearestDist = double.infinity;
+    for (var i = 0; i < ticks.length; i++) {
+      final d = (x(ticks[i]) - x(positionMs)).abs();
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = i;
+      }
+    }
+    for (final ms in ticks) {
+      final px = x(ms);
+      final inSel = ms == ticks[nearest];
+      final tp = TextPainter(
+        text: TextSpan(
+          text: _tl(ms),
+          style: inSel ? centerStyle : labelStyle,
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      var tx = px - tp.width / 2;
+      if (tx < 0) tx = 0;
+      if (tx + tp.width > w) tx = w - tp.width;
+      if (inSel) {
+        canvas.drawRRect(
+          RRect.fromLTRBR(tx - 6, 1, tx + tp.width + 6, 27, const Radius.circular(5)),
+          Paint()..color = accent,
+        );
+      }
+      tp.paint(canvas, Offset(tx, 6));
+      // 小圆点刻度，参考图两个标签之间各点一个。
+      if (ms + stepMs <= dur) {
+        final mid = x(ms + stepMs ~/ 2);
+        canvas.drawCircle(
+          Offset(mid, 22),
+          1,
+          Paint()..color = const Color(0xFF8A8A8A),
+        );
+      }
+    }
+
+    // 游标：贯穿时间轴的白色竖线。
+    final cx = x(positionMs);
+    canvas.drawLine(
+      Offset(cx, 0),
+      Offset(cx, size.height),
+      Paint()
+        ..color = Colors.white
+        ..strokeWidth = 1.6,
+    );
+
+    // 圈标签：参考图在游标下沿贴一个浅灰圆角块。
+    final lbl = lapLabel;
+    if (lbl != null) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: lbl,
+          style: this.labelStyle.copyWith(
+            color: const Color(0xFF111111),
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final boxW = tp.width + 12;
+      final left = (cx - boxW / 2).clamp(0.0, w - boxW);
+      final rect = RRect.fromLTRBR(
+        left,
+        30,
+        left + boxW,
+        48,
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(rect, Paint()..color = const Color(0xFFE9E9E9));
+      tp.paint(canvas, Offset(left + 6, 32));
+    }
+  }
+
+  String _tl(int ms) {
+    final total = ms ~/ 1000;
+    return '${total ~/ 60}:${(total % 60).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelinePainter old) =>
+      old.durationMs != durationMs ||
+      old.positionMs != positionMs ||
+      old.accent != accent ||
+      old.labelStyle != labelStyle ||
+      old.lapLabel != lapLabel;
+}
+
+/// 速度曲线：参考图是蓝色实心带，底部一条亮边。
+class _CurvePainter extends CustomPainter {
+  _CurvePainter({
+    required this.samples,
+    required this.positionRatio,
+    required this.accent,
+  });
+
+  /// 归一化时间（0-1）× 速度（km/h）。
+  final List<Offset> samples;
+  final double positionRatio;
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final h = size.height;
+    final w = size.width;
+    if (samples.isEmpty || w <= 0) return;
+    var maxV = 1.0;
+    for (final p in samples) {
+      if (p.dy > maxV) maxV = p.dy;
+    }
+    final path = Path();
+    final top = h - 6;
+    path.moveTo(0, top);
+    for (final p in samples) {
+      final px = p.dx * w;
+      final py = top - (p.dy / maxV).clamp(0.0, 1.0) * (h - 12);
+      path.lineTo(px, py);
+    }
+    path.lineTo(w, top);
+    path.close();
+    final rect = Rect.fromLTWH(0, 0, w, h);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            accent.withValues(alpha: 0.85),
+            accent.withValues(alpha: 0.55),
+          ],
+        ).createShader(rect),
+    );
+    // 底部亮边（参考图的蓝色横条）。
+    canvas.drawRect(
+      Rect.fromLTWH(0, h - 3, w, 3),
+      Paint()..color = accent,
+    );
+    final cx = positionRatio * w;
+    canvas.drawLine(
+      Offset(cx, 0),
+      Offset(cx, h),
+      Paint()
+        ..color = Colors.white
+        ..strokeWidth = 1.4,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CurvePainter old) =>
+      old.samples != samples ||
+      old.positionRatio != positionRatio ||
+      old.accent != accent;
+}
+
+class _CursorLinePainter extends CustomPainter {
+  _CursorLinePainter({required this.ratio});
+
+  final double ratio;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final x = ratio.clamp(0.0, 1.0) * size.width;
+    canvas.drawLine(
+      Offset(x, 0),
+      Offset(x, size.height),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.9)
+        ..strokeWidth = 1.4,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CursorLinePainter old) =>
+      old.ratio != ratio;
+}
+
+/// 平台视图不可用 / 文件缺失时的视频位（不伪造画面）。
+class _PreviewPlaceholder extends StatelessWidget {
+  const _PreviewPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: Color(0xFF151515),
+      child: Center(
+        child: Icon(
+          Icons.play_circle_outline,
+          size: 40,
+          color: Colors.white24,
+        ),
+      ),
+    );
+  }
+}
+
+/// 底部圈选择按钮：选中实心主题色，未选中深灰。
+class _LapChip extends StatelessWidget {
+  const _LapChip({
+    required this.label,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? accent : const Color(0xFF2A2A2C),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          constraints: const BoxConstraints(minWidth: 64),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          height: 46,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : const Color(0xFFD4D4D4),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
