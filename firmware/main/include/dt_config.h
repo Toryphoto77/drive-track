@@ -11,8 +11,8 @@
 
 // ---------------- 固件身份 ----------------
 // 改功能就同时抬高版本号；App 按 build 判断是否需要升级。
-#define DT_FW_VERSION "0.3.0"
-#define DT_FW_BUILD 3
+#define DT_FW_VERSION "0.4.0"
+#define DT_FW_BUILD 10
 #define DT_DEVICE_MODEL "DT-BOX-1"
 #define DT_BOARD_NAME "DriveTrack V4.6"
 
@@ -31,16 +31,18 @@
 // 代码保留在 dt_can.c，换板后把该项置 1 并填好下面的引脚即可。
 #define DT_ENABLE_CAN 0
 #define DT_ENABLE_BLE 1
+#define DT_ENABLE_BARO 1
 // App 的蓝牙 GPS 通道按 NMEA 0183 文本解析，因此把模块原始 GGA/RMC
 // 原样转发一份；NDJSON 仍然保留，方便串口工具与后续功能直接读结构化数据。
 #define DT_BLE_NMEA_PASSTHROUGH 1
 
 // ---------------- GNSS（u-blox NEO-M9N，UART1） ----------------
-// U2 pin21 TXD1 → 网络 GPS_TX → U1 pad10(IO17)：这是 ESP32 的接收脚；
-// U2 pin20 RXD1 → 网络 GPS_RX → U1 pad11(IO18)：这是 ESP32 的发送脚。
+// U2 pin20 TXD1（模块输出） → 网络 GPS_RX → U1 pad11(IO18)：ESP32 的接收脚；
+// U2 pin21 RXD1（模块输入） → 网络 GPS_TX → U1 pad10(IO17)：ESP32 的发送脚。
+// 注意：网络名 GPS_TX 指的是模块侧信号，不要按名字直接当 ESP32 的 TX。
 #define DT_GNSS_UART_PORT 1
-#define DT_GNSS_TX_GPIO 18
-#define DT_GNSS_RX_GPIO 17
+#define DT_GNSS_TX_GPIO 17
+#define DT_GNSS_RX_GPIO 18
 // PPS 秒脉冲，U1 pad4(IO4)，当前固件不做授时，只记录引脚。
 #define DT_GNSS_PPS_GPIO 4
 #define DT_GNSS_BUF_SIZE 4096
@@ -54,7 +56,10 @@
 //   IMU_SCK  U1 pad22(IO14) / IMU_MOSI pad8(IO15) / IMU_MISO pad9(IO16)
 //   IMU_CS1  pad18(IO10) 加速度计 / IMU_CS2 pad19(IO11) 陀螺仪
 //   IMU_INT1 pad5(IO5) / IMU_INT3 pad6(IO6)，当前用轮询，不用中断
-#define DT_IMU_SPI_HOST 2
+// ESP32-S3 上 SPI2_HOST=1、SPI3_HOST=2（见 hal/spi_types.h）。
+// microSD 走 SPI3，IMU 必须走 SPI2，否则两条外设抢同一条 SPI 总线，
+// 后初始化的一方 spi_bus_initialize 会返回 ESP_ERR_INVALID_STATE。
+#define DT_IMU_SPI_HOST 1
 #define DT_IMU_SPI_SCK 14
 #define DT_IMU_SPI_MOSI 15
 #define DT_IMU_SPI_MISO 16
@@ -66,20 +71,24 @@
 // 板子装进外壳后若有 90°/180° 旋转，用这个角度把坐标系转正。
 #define DT_IMU_MOUNT_YAW_DEG 0
 
-// ---------------- 气压计（BMP388/390，I2C） ----------------
-// U4 pin5 SDO 接 +3V3，所以 I2C 地址是 0x77。当前固件不读气压计。
+// ---------------- 气压计（BMP390，I2C） ----------------
+// U4 pin5 SDO 接 +3V3，所以 I2C 地址是 0x77。
 #define DT_BARO_SDA_GPIO 8
 #define DT_BARO_SCL_GPIO 9
 #define DT_BARO_SCL_HZ 400000
 #define DT_BARO_ADDR 0x77
+// 采样与上报频率。1 Hz 足够算气压高度，也不会刷爆串口和蓝牙。
+#define DT_BARO_HZ 1
 
-// ---------------- microSD（SPI） ----------------
-// 当前固件用片内 Flash 做缓存，不挂 SD 卡；引脚先记在这里。
+// ---------------- microSD（SPI3 + FATFS） ----------------
+// 0.4.0 起：开机先挂 SD，挂上就用 SD 存会话缓存，挂不上自动回落片内 SPIFFS。
 #define DT_SD_CS_GPIO 12
 #define DT_SD_CD_GPIO 13
 #define DT_SD_SCK_GPIO 38
 #define DT_SD_MOSI_GPIO 39
 #define DT_SD_MISO_GPIO 40
+#define DT_SD_MOUNT_POINT "/sdcard"
+#define DT_SD_FILE DT_SD_MOUNT_POINT "/session.ndjson"
 
 // ---------------- 电源与指示灯 ----------------
 // VBAT 经 R30/R31 各 100k 分压为 VBAT_DIV，接 U1 pad39(IO1)=ADC1_CH0。

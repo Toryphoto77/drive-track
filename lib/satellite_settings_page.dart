@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'glass_button.dart';
 import 'satellite_pill.dart';
 import 'satellite_service.dart';
@@ -42,12 +43,13 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
   void _tick() => mounted ? setState(() {}) : null;
 
   Future<void> _toggle(bool v) async {
+    final s = S.of(context);
     setState(() => _busy = true);
     final r = await SatelliteService.instance.setDirectMode(v);
     if (mounted) {
       setState(() => _busy = false);
       if ((r['ok'] as bool?) != true) {
-        setState(() => _error = '切换失败：${r['error'] ?? '请先授予定位权限'}');
+        setState(() => _error = '${s.t('切换失败：', 'Switch failed: ')}${r['error'] ?? s.t('请先授予定位权限', 'grant location permission first')}');
       } else {
         setState(() => _error = null);
       }
@@ -56,11 +58,11 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
 
   /// 信号状态 pill：按平均 CN0 划分（本页划分，非设备标称）：
   /// ≥35 强，≥25 中，有数据但更低为弱，无数据为无信号。
-  (String, Color) _signalState(double? cn0) {
-    if (cn0 == null) return ('无信号', Colors.white38);
-    if (cn0 >= 35) return ('信号强', Colors.greenAccent);
-    if (cn0 >= 25) return ('信号中', Colors.yellowAccent);
-    return ('信号弱', Colors.orange);
+  (String, Color) _signalState(double? cn0, S s) {
+    if (cn0 == null) return (s.t('无信号', 'No signal'), Colors.white38);
+    if (cn0 >= 35) return (s.t('信号强', 'Strong'), Colors.greenAccent);
+    if (cn0 >= 25) return (s.t('信号中', 'Fair'), Colors.yellowAccent);
+    return (s.t('信号弱', 'Weak'), Colors.orange);
   }
 
   /// 连接步骤当前步（本页映射，如实按快照状态推导，不伪造设备状态）：
@@ -138,12 +140,13 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final svc = SatelliteService.instance;
     final snap = svc.latest;
     final connected = snap != null && svc.usedCount > 0;
-    final signal = _signalState(svc.avgCn0DbHz);
+    final signal = _signalState(svc.avgCn0DbHz, s);
     final step = _stepIndex(svc);
-    const steps = ['搜索', '配对', '解析 NMEA', '定位'];
+    final steps = [s.t('搜索', 'Search'), s.t('配对', 'Pair'), s.t('解析 NMEA', 'Parse NMEA'), s.t('定位', 'Fix')];
     final by = snap?.visibleByConstellation ?? const <GnssConstellation, int>{};
     final totalVisible = svc.visibleCount;
 
@@ -151,7 +154,7 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
-        title: const Text('外部 GPS · 可视化配置'),
+        title: Text(s.t('外部 GPS · 可视化配置', 'External GPS · Status')),
       ),
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 24)),
@@ -163,22 +166,24 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
               padding: const EdgeInsets.all(16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  const Text('设备连接状态', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(s.t('设备连接状态', 'Device status'), style: const TextStyle(fontWeight: FontWeight.bold)),
                   const Spacer(),
-                  _pill(connected ? '已连接' : '未连接',
+                  _pill(connected ? s.t('已连接', 'Connected') : s.t('未连接', 'Not connected'),
                       connected ? Colors.greenAccent : Colors.orange),
                   const SizedBox(width: 8),
                   _pill(signal.$1, signal.$2),
                 ]),
                 const SizedBox(height: 10),
                 Text(
-                  svc.directMode ? '设备：手机内置 GNSS（直连卫星模式）' : '设备：手机内置 GNSS（融合定位模式）',
+                  svc.directMode
+                      ? s.t('设备：手机内置 GNSS（直连卫星模式）', 'Device: phone GNSS (satellite-only mode)')
+                      : s.t('设备：手机内置 GNSS（融合定位模式）', 'Device: phone GNSS (fused mode)'),
                   style: const TextStyle(fontSize: 13),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  '外接 GPS：暂无 NMEA 数据流。',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                Text(
+                  s.t('外接 GPS：暂无 NMEA 数据流。', 'External GPS: no NMEA stream.'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
                 Align(
@@ -204,31 +209,38 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
               padding: const EdgeInsets.all(16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(
-                  '卫星状态 · 可见 ${svc.visibleCount} · 参与解算 ${svc.usedCount}',
+                  s.t(
+                    '卫星状态 · 可见 ${svc.visibleCount} · 参与解算 ${svc.usedCount}',
+                    'Satellites · visible ${svc.visibleCount} · used ${svc.usedCount}',
+                  ),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 _cn0Grid(svc.avgCn0DbHz),
                 const SizedBox(height: 8),
                 if (snap == null)
-                  const Text('暂无卫星数据（请在室外开阔处等待首次定位）',
-                      style: TextStyle(color: Colors.white54, fontSize: 12))
+                  Text(
+                      s.t('暂无卫星数据（请在室外开阔处等待首次定位）',
+                          'No satellite data yet. Wait outdoors with a clear view for the first fix.'),
+                      style: const TextStyle(color: Colors.white54, fontSize: 12))
                 else ...[
                   _bar('GPS', by[GnssConstellation.gps] ?? 0, totalVisible),
-                  _bar('北斗', by[GnssConstellation.beidou] ?? 0, totalVisible),
+                  _bar(s.t('北斗', 'BeiDou'), by[GnssConstellation.beidou] ?? 0, totalVisible),
                   _bar('Galileo', by[GnssConstellation.galileo] ?? 0, totalVisible),
                   _bar('GLONASS', by[GnssConstellation.glonass] ?? 0, totalVisible),
                   if (snap.l5Seen)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Text('本历元见过 L5 信号（不等同于支持双频）',
-                          style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                          s.t('本历元见过 L5 信号（不等同于支持双频）',
+                              'L5 seen this epoch (not the same as dual-band support)'),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
                     ),
                 ],
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.refresh),
-                  label: const Text('刷新卫星快照'),
+                  label: Text(s.t('刷新卫星快照', 'Refresh satellites')),
                   onPressed: () => svc.refreshSnapshot(),
                 ),
               ]),
@@ -240,7 +252,7 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('连接步骤', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(s.t('连接步骤', 'Connection steps'), style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -285,14 +297,22 @@ class _SatelliteSettingsPageState extends State<SatelliteSettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('当前：${steps[step]}',
+                Text(s.t('当前：${steps[step]}', 'Now: ${steps[step]}'),
                     style: const TextStyle(color: Colors.white54, fontSize: 12)),
               ]),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(kDirectSatelliteLimitations, style: TextStyle(color: Colors.white70, fontSize: 13)),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              s.t(
+                kDirectSatelliteLimitations,
+                'Satellite-only mode: location uses GNSS only, with the network helping only with almanac data. '
+                'Accuracy is limited by phone hardware, is not centimetre-level and has no RTK correction. '
+                'The first fix indoors, in tunnels or among tall buildings may be slower than fused mode. Turn it off to return to fused mode.',
+              ),
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
           ),
         ],
       ),

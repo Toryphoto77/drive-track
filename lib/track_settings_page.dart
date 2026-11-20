@@ -290,48 +290,52 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: const Text('赛道模式设置')),
+      appBar: DtAppBar(title: Text(s.t('赛道模式设置', 'Track mode'))),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
               children: [
-                _section('圈速判定'),
+                _section(s.t('圈速判定', 'Lap detection')),
                 ListTile(
-                  title: const Text('起终点判定半径'),
+                  title: Text(s.t('起终点判定半径', 'Start/finish radius')),
                   subtitle: Text(
-                      '${_s.crossingRadiusM.round()} 米（默认 30 米；越大越不易漏判，也越易误触发）'),
+                      s.t('${_s.crossingRadiusM.round()} 米（默认 30 米；越大越不易漏判，也越易误触发）',
+                          '${_s.crossingRadiusM.round()} m (default 30 m; larger is less likely to miss a lap but easier to trigger falsely)')),
                 ),
                 Slider(
                   value: _s.crossingRadiusM,
                   min: 10,
                   max: 100,
                   divisions: 18,
-                  label: '${_s.crossingRadiusM.round()} 米',
+                  label: s.t('${_s.crossingRadiusM.round()} 米', '${_s.crossingRadiusM.round()} m'),
                   onChanged: (v) =>
                       _apply(_s.copyWith(crossingRadiusM: v)),
                 ),
-                _section('停车暂停'),
+                _section(s.t('停车暂停', 'Stopped pause')),
                 ListTile(
-                  title: const Text('停车持续时长'),
+                  title: Text(s.t('停车持续时长', 'Stop duration')),
                   subtitle: Text(
-                      '${_s.dwellThresholdSec} 秒（默认 30 秒；低于阈值满此时长暂停计时，本圈不计）'),
+                      s.t('${_s.dwellThresholdSec} 秒（默认 30 秒；低于阈值满此时长暂停计时，本圈不计）',
+                          '${_s.dwellThresholdSec} s (default 30 s; timing pauses after this long below the threshold and the lap is not counted)')),
                 ),
                 Slider(
                   value: _s.dwellThresholdSec.toDouble(),
                   min: 10,
                   max: 120,
                   divisions: 22,
-                  label: '${_s.dwellThresholdSec} 秒',
+                  label: s.t('${_s.dwellThresholdSec} 秒', '${_s.dwellThresholdSec} s'),
                   onChanged: (v) => _apply(
                       _s.copyWith(dwellThresholdSec: v.round())),
                 ),
                 ListTile(
-                  title: const Text('停车速度阈值'),
+                  title: Text(s.t('停车速度阈值', 'Stop speed threshold')),
                   subtitle: Text(
-                      '${_s.dwellSpeedMs.toStringAsFixed(1)} m/s（默认 0.5 m/s）'),
+                      s.t('${_s.dwellSpeedMs.toStringAsFixed(1)} m/s（默认 0.5 m/s）',
+                          '${_s.dwellSpeedMs.toStringAsFixed(1)} m/s (default 0.5 m/s)')),
                 ),
                 Slider(
                   value: _s.dwellSpeedMs,
@@ -342,7 +346,7 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                   onChanged: (v) =>
                       _apply(_s.copyWith(dwellSpeedMs: v)),
                 ),
-                _section('分段模式'),
+                _section(s.t('分段模式', 'Sector mode')),
                 RadioGroup<TrackSectorMode>(
                   groupValue: _s.sectorMode,
                   onChanged: (v) =>
@@ -350,52 +354,55 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                   child: Column(
                     children: [
                       RadioListTile<TrackSectorMode>(
-                        title: const Text('前后半圈'),
+                        title: Text(s.t('前后半圈', 'Halves')),
                         subtitle:
-                            const Text('按圈时长中点切两段'),
+                            Text(s.t('按圈时长中点切两段', 'Split the lap at its midpoint')),
                         value: TrackSectorMode.halves,
                       ),
                       RadioListTile<TrackSectorMode>(
-                        title: const Text('三段示意'),
-                        subtitle: const Text(
-                            '需在赛道页设 S1、S2 分段点，否则按前后半圈显示'),
+                        title: Text(s.t('三段示意', 'Three sectors')),
+                        subtitle: Text(
+                            s.t('需在赛道页设 S1、S2 分段点，否则按前后半圈显示',
+                                'Set S1/S2 points on the track page; otherwise shown as halves')),
                         value: TrackSectorMode.threeSegment,
                       ),
                     ],
                   ),
                 ),
-                _section('最佳圈提醒'),
+                _section(s.t('最佳圈提醒', 'Best lap alert')),
                 SwitchListTile(
-                  title: const Text('语音提醒'),
-                  subtitle: const Text('新最快圈时语音播报圈速（需语音总开关开启）'),
+                  title: Text(s.t('语音提醒', 'Voice alert')),
+                  subtitle: Text(s.t('新最快圈时语音播报圈速（需语音总开关开启）',
+                      'Announce the lap time on a new best (master voice switch must be on)')),
                   value: _s.bestLapVoice,
                   onChanged: (v) =>
                       _apply(_s.copyWith(bestLapVoice: v)),
                 ),
                 SwitchListTile(
-                  title: const Text('震动提醒'),
-                  subtitle: const Text('新最快圈时震动一次'),
+                  title: Text(s.t('震动提醒', 'Vibration alert')),
+                  subtitle: Text(s.t('新最快圈时震动一次', 'Vibrate once on a new best lap')),
                   value: _s.bestLapVibration,
                   onChanged: (v) =>
                       _apply(_s.copyWith(bestLapVibration: v)),
                 ),
-                _section('显示'),
+                _section(s.t('显示', 'Display')),
                 SwitchListTile(
-                  title: const Text('显示 Delta'),
-                  subtitle: const Text('当前圈与最快圈的差值（负值表示更快）'),
+                  title: Text(s.t('显示 Delta', 'Show delta')),
+                  subtitle: Text(s.t('当前圈与最快圈的差值（负值表示更快）',
+                      'Difference from the best lap (negative means faster)')),
                   value: _s.showDelta,
                   onChanged: (v) => _apply(_s.copyWith(showDelta: v)),
                 ),
                 const SizedBox(height: 8),
-                const Text('赛道图配色',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(s.t('赛道图配色', 'Track colors'),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   children: [
                     for (final e in TrackColorSchemes.presets.entries)
                       ChoiceChip(
-                        label: Text(e.value.$1),
+                        label: Text(s.t(e.value.$1, _trackColorNameEn(e.key))),
                         selected: _s.trackColorKey == e.key,
                         selectedColor: e.value.$2.withValues(alpha: 0.25),
                         onSelected: (_) =>
@@ -403,32 +410,38 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                       ),
                   ],
                 ),
-                _section('外置设备与采样'),
+                _section(s.t('外置设备与采样', 'External device & sampling')),
                 _hardwareStatusTile(),
                 ListTile(
                   leading: const Icon(Icons.satellite_alt),
-                  title: Text(S.of(context).t('外置 GPS', 'External GPS')),
-                  subtitle: Text(S.of(context).t(
+                  title: Text(s.t('外置 GPS', 'External GPS')),
+                  subtitle: Text(s.t(
                     '在底栏「设备」里扫描、连接。本页只显示当前来源。',
                     'Scan and connect from the Devices tab. This page only shows the current source.',
                   )),
                 ),
                 ListTile(
                   leading: const Icon(Icons.sensors),
-                  title: const Text('IMU 标定（传感器校准）'),
+                  title: Text(s.t('IMU 标定（传感器校准）', 'IMU calibration (sensors)')),
                   subtitle: Text(widget.onOpenSensorCalibration == null
-                      ? '从设置首页 → 传感器校准进入'
-                      : '静置校零、车头方向标定、罗盘 8 字提示。标定结果只保存在内存里，退出 App 后失效，下次使用前需重校。'),
+                      ? s.t('从设置首页 → 传感器校准进入', 'Open Settings → Sensor calibration')
+                      : s.t(
+                          '静置校零、车头方向标定、罗盘 8 字提示。标定结果只保存在内存里，退出 App 后失效，下次使用前需重校。',
+                          'Zero-level, heading and compass figure-8 calibration. Results are kept in memory only, lost when the app exits, so recalibrate before the next use.',
+                        )),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: widget.onOpenSensorCalibration,
                 ),
                 const SizedBox(height: 8),
-                const Text('定位采样率（待固件支持）',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(s.t('定位采样率（待固件支持）', 'Location sample rate (pending firmware)'),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                const Text(
-                  '仅保存设置，暂未生效：采样率要等固件支持——D1 走二进制协议，包格式待设备回来抓包确认后才解析；自研硬件尚未组装调试。当前仍按设备实际输出采样；手机 GPS 采样率不受本项控制。',
-                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                Text(
+                  s.t(
+                    '仅保存设置，暂未生效：采样率要等固件支持——D1 走二进制协议，包格式待设备回来抓包确认后才解析；自研硬件尚未组装调试。当前仍按设备实际输出采样；手机 GPS 采样率不受本项控制。',
+                    'Saved only; not active yet. The rate needs firmware support: D1 uses a binary protocol whose packet format is pending on-device capture, and our own hardware is not assembled yet. Sampling continues at the device output rate; phone GPS rate is unaffected.',
+                  ),
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -444,24 +457,37 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  '自研硬件在研：ESP32-S3 + NEO-M9N（最高 25Hz）+ BMI088 + BMP390，车顶外壳已定型，尚未组装调试。',
-                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                Text(
+                  s.t(
+                    '自研硬件在研：ESP32-S3 + NEO-M9N（最高 25Hz）+ BMI088 + BMP390，车顶外壳已定型，尚未组装调试。',
+                    'In-house hardware in progress: ESP32-S3 + NEO-M9N (up to 25 Hz) + BMI088 + BMP390. The roof housing is designed but not assembled or tested yet.',
+                  ),
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
                 const SizedBox(height: 24),
                 OutlinedButton(
                   onPressed: () => _apply(TrackSettings.defaults),
-                  child: const Text('恢复默认'),
+                  child: Text(s.t('恢复默认', 'Restore defaults')),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  '行程中改设置只影响下一趟。',
-                  style: TextStyle(color: Colors.grey),
+                Text(
+                  s.t('行程中改设置只影响下一趟。', 'Changes during a trip apply to the next one.'),
+                  style: const TextStyle(color: Colors.grey),
                 ),
               ],
             ),
     );
   }
+
+  /// 赛道图配色英文名（预设中文名留在 TrackColorSchemes 里，不改）。
+  String _trackColorNameEn(String key) => switch (key) {
+        'red' => 'Red',
+        'blue' => 'Blue',
+        'green' => 'Green',
+        'amber' => 'Amber',
+        'purple' => 'Purple',
+        _ => key,
+      };
 
   /// 外置设备连接状态行：只读设备中心写入的共享状态
   /// （gps_source.dart 的 externalGpsStatus），本页不自己猜。
@@ -470,21 +496,26 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
     return ValueListenableBuilder<ExternalGpsStatus>(
       valueListenable: externalGpsStatus,
       builder: (context, st, _) {
+        final s = S.of(context);
         final String title;
         final String subtitle;
         final IconData icon;
         if (!st.connected) {
-          title = '未连接外置设备';
-          subtitle = '当前定位来源：手机 GPS。去设备中心扫描并连接外置 GPS。';
+          title = s.t('未连接外置设备', 'No external device');
+          subtitle = s.t('当前定位来源：手机 GPS。去设备中心扫描并连接外置 GPS。',
+              'Source: phone GPS. Scan and connect an external GPS in the device center.');
           icon = Icons.gps_not_fixed;
         } else if (st.binaryOnly) {
-          title = '已连接 ${st.deviceName}';
-          subtitle = '仅连接，不出定位：二进制包格式待实测确认。当前定位来源仍是手机 GPS。';
+          title = s.t('已连接 ${st.deviceName}', 'Connected: ${st.deviceName}');
+          subtitle = s.t(
+              '仅连接，不出定位：二进制包格式待实测确认。当前定位来源仍是手机 GPS。',
+              'Connected but no fixes yet: binary packet format is pending on-device confirmation. Location still comes from phone GPS.');
           icon = Icons.bluetooth_connected;
         } else {
-          title = '已连接 ${st.deviceName}';
-          subtitle =
-              '通道：${st.channel == 'spp' ? '经典蓝牙 SPP' : 'BLE'}；行程定位优先用外接设备，5 秒无新定位自动回落手机 GPS。';
+          title = s.t('已连接 ${st.deviceName}', 'Connected: ${st.deviceName}');
+          subtitle = s.t(
+              '通道：${st.channel == 'spp' ? '经典蓝牙 SPP' : 'BLE'}；行程定位优先用外接设备，5 秒无新定位自动回落手机 GPS。',
+              'Channel: ${st.channel == 'spp' ? 'Bluetooth SPP' : 'BLE'}. Trips prefer the external device and fall back to phone GPS after 5 s without a new fix.');
           icon = Icons.satellite_alt;
         }
         return ListTile(

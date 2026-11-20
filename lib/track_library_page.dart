@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 
 import 'amap_service.dart';
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'app_notice.dart';
 import 'card_style.dart';
 import 'dt_page_route.dart';
@@ -55,6 +56,32 @@ bool matchesTrackSearch(TrackPackage p, String query) {
   return p.nameCn.toLowerCase().contains(q) ||
       p.nameEn.toLowerCase().contains(q) ||
       p.region.toLowerCase().contains(q);
+}
+
+String _sourceLabel(S s, TrackPackageSource src) => switch (src) {
+      TrackPackageSource.official => s.t('官方', 'Official'),
+      TrackPackageSource.measured => s.t('实测', 'Measured'),
+      TrackPackageSource.osm => 'OSM',
+      TrackPackageSource.estimated => s.t('估算', 'Estimated'),
+      TrackPackageSource.pending => s.t('待核', 'Unverified'),
+      TrackPackageSource.community => s.t('社区', 'Community'),
+      TrackPackageSource.user => s.t('用户', 'User'),
+    };
+
+String _verificationLabel(S s, TrackPackageVerification v) =>
+    v == TrackPackageVerification.verified
+        ? s.t('已核对', 'Verified')
+        : s.t('待核', 'Pending');
+
+String _lengthLabel(S s, TrackPackage p) {
+  final km = p.lengthKm;
+  if (km == null) return s.t('长度待核', 'Length pending');
+  if (p.source == TrackPackageSource.osm ||
+      p.source == TrackPackageSource.measured ||
+      p.source == TrackPackageSource.official) {
+    return '${km.toStringAsFixed(3)} km';
+  }
+  return s.t('约 ${km.toStringAsFixed(3)} km', '~${km.toStringAsFixed(3)} km');
 }
 
 class TrackLibraryPage extends StatefulWidget {
@@ -115,7 +142,9 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   void _onVersionTap() {
     if (_versionTapGate.tap() && !_curation) {
       setState(() => _curation = true);
-      showAppNotice(context, '策展模式已解锁', AppNoticeKind.success);
+      final s = S.of(context);
+      showAppNotice(context, s.t('策展模式已解锁', 'Curation mode unlocked'),
+          AppNoticeKind.success);
     }
   }
 
@@ -145,24 +174,29 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
 
   Future<void> _applyOne(PackageUpdate u) async {
     if (_check == null) return;
+    final s = S.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('更新「${u.nameCn}」？'),
+        title: Text(s.t('更新「${u.nameCn}」？', 'Update "${u.nameCn}"?')),
         content: Text(
           u.isNew
-              ? '远端新增包 v${u.remoteVersion}，下载后加入本地库。'
-              : '本地 v${u.localVersion} → 远端 v${u.remoteVersion}。'
-                    '用户改过的包不会被覆盖。',
+              ? s.t('远端新增包 v${u.remoteVersion}，下载后加入本地库。',
+                  'New package v${u.remoteVersion} on the server; it will be downloaded into the local library.')
+              : s.t(
+                  '本地 v${u.localVersion} → 远端 v${u.remoteVersion}。'
+                  '用户改过的包不会被覆盖。',
+                  'Local v${u.localVersion} → server v${u.remoteVersion}. Packages you edited will not be overwritten.',
+                ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(s.t('取消', 'Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('更新'),
+            child: Text(s.t('更新', 'Update')),
           ),
         ],
       ),
@@ -174,21 +208,23 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   Future<void> _applyAll() async {
     final updates = _check?.updates ?? const [];
     if (updates.isEmpty) return;
+    final s = S.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('更新全部可更新包？'),
+        title: Text(s.t('更新全部可更新包？', 'Update all available packages?')),
         content: Text(
-          '共 ${updates.length} 个包。用户改过的包不会被覆盖。',
+          s.t('共 ${updates.length} 个包。用户改过的包不会被覆盖。',
+              '${updates.length} packages in total. Packages you edited will not be overwritten.'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(s.t('取消', 'Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('全部更新'),
+            child: Text(s.t('全部更新', 'Update all')),
           ),
         ],
       ),
@@ -209,9 +245,12 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       _applying = false;
       _check = null;
     });
-    final msg = StringBuffer('已更新 ${result.appliedIds.length} 个包');
+    final s = S.of(context);
+    final msg = StringBuffer(s.t('已更新 ${result.appliedIds.length} 个包',
+        'Updated ${result.appliedIds.length} packages'));
     if (result.skippedReasons.isNotEmpty) {
-      msg.write('；跳过 ${result.skippedReasons.length} 个');
+      msg.write(s.t('；跳过 ${result.skippedReasons.length} 个',
+          '; skipped ${result.skippedReasons.length}'));
     }
     showAppNotice(
       context,
@@ -223,22 +262,26 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   }
 
   Future<void> _export(TrackPackage pkg) async {
+    final s = S.of(context);
     try {
       final path = await _service.exportPackage(pkg);
       await Native.shareFiles(
         [path],
         'application/json',
-        '赛道数据包 ${pkg.nameCn} v${pkg.version}',
+        s.t('赛道数据包 ${pkg.nameCn} v${pkg.version}',
+            'Track package ${pkg.nameCn} v${pkg.version}'),
       );
     } catch (e) {
       if (!mounted) return;
-      showAppNotice(context, '导出失败：$e', AppNoticeKind.error);
+      showAppNotice(
+          context, s.t('导出失败：$e', 'Export failed: $e'), AppNoticeKind.error);
     }
   }
 
   Future<void> _exportAll() async {
     final snap = _snap;
     if (snap == null) return;
+    final s = S.of(context);
     try {
       final dir = await Native.getFilesDir();
       final path = '$dir/track_library_export_all.json';
@@ -251,10 +294,12 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       };
       await File(path)
           .writeAsString(const JsonEncoder.withIndent('  ').convert(doc));
-      await Native.shareFiles([path], 'application/json', '赛道库全部数据包');
+      await Native.shareFiles(
+          [path], 'application/json', s.t('赛道库全部数据包', 'All track packages'));
     } catch (e) {
       if (!mounted) return;
-      showAppNotice(context, '导出失败：$e', AppNoticeKind.error);
+      showAppNotice(
+          context, s.t('导出失败：$e', 'Export failed: $e'), AppNoticeKind.error);
     }
   }
 
@@ -274,19 +319,21 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   }
 
   Future<void> _deleteUserTrack(TrackPackage pkg) async {
+    final s = S.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('删除「${pkg.nameCn}」？'),
-        content: const Text('该用户赛道将从本地删除，此操作不可撤销。'),
+        title: Text(s.t('删除「${pkg.nameCn}」？', 'Delete "${pkg.nameCn}"?')),
+        content: Text(s.t('该用户赛道将从本地删除，此操作不可撤销。',
+            'This custom track will be deleted from this device. This cannot be undone.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(s.t('取消', 'Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
+            child: Text(s.t('删除', 'Delete')),
           ),
         ],
       ),
@@ -297,19 +344,22 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   }
 
   Future<void> _resetOverride(TrackPackage pkg) async {
+    final s = S.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('恢复「${pkg.nameCn}」默认？'),
-        content: const Text('本地版本将被删除，回到默认版本。'),
+        title: Text(s.t('恢复「${pkg.nameCn}」默认？',
+            'Restore the default "${pkg.nameCn}"?')),
+        content: Text(s.t('本地版本将被删除，回到默认版本。',
+            'The local version will be deleted and the default version restored.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(s.t('取消', 'Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('恢复默认'),
+            child: Text(s.t('恢复默认', 'Restore default')),
           ),
         ],
       ),
@@ -320,10 +370,15 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
   }
 
   Future<void> _importFromTrip() async {
+    final s = S.of(context);
     final trips = widget.metas.where((m) => !m.demo).toList()
       ..sort((a, b) => b.startMs.compareTo(a.startMs));
     if (trips.isEmpty) {
-      showAppNotice(context, '暂无可导入的行程：先去首页记录一次行程', AppNoticeKind.warning);
+      showAppNotice(
+          context,
+          s.t('暂无可导入的行程：先去首页记录一次行程',
+              'No trips to import yet: record a trip on the home page first'),
+          AppNoticeKind.warning);
       return;
     }
     final picked = await showModalBottomSheet<TripMeta>(
@@ -336,23 +391,26 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
           controller: ctrl,
           padding: const EdgeInsets.all(16),
           children: [
-            const Text(
-              '选择一次行程，导成赛道',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            Text(
+              s.t('选择一次行程，导成赛道', 'Pick a trip to turn into a track'),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            const Text(
-              '取该行程的 GPS 轨迹作轮廓与起终点。',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+            Text(
+              s.t('取该行程的 GPS 轨迹作轮廓与起终点。',
+                  'Uses the trip\'s GPS trace as its outline and start/finish.'),
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
             const SizedBox(height: 12),
             for (final m in trips)
               ListTile(
-                title: Text(m.trackName.isNotEmpty ? m.trackName : '行程'),
+                title: Text(m.trackName.isNotEmpty
+                    ? m.trackName
+                    : s.t('行程', 'Trip')),
                 subtitle: Text(
                   '${DateTime.fromMillisecondsSinceEpoch(m.startMs)}'
                   ' · ${(m.distanceM / 1000).toStringAsFixed(1)} km'
-                  '${m.isTrackMode ? ' · 赛道模式' : ''}',
+                  '${m.isTrackMode ? s.t(' · 赛道模式', ' · Track mode') : ''}',
                 ),
                 onTap: () => Navigator.pop(ctx, m),
               ),
@@ -364,12 +422,17 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     final trip = await widget.loadTrip(picked.id);
     if (!mounted) return;
     if (trip == null) {
-      showAppNotice(context, '行程文件读取失败，请重试', AppNoticeKind.error);
+      showAppNotice(context, s.t('行程文件读取失败，请重试', 'Failed to read the trip file. Try again.'),
+          AppNoticeKind.error);
       return;
     }
     final pkg = packageFromTrip(trip);
     if (pkg == null) {
-      showAppNotice(context, '轨迹点不足（需至少 10 点），无法导入', AppNoticeKind.warning);
+      showAppNotice(
+          context,
+          s.t('轨迹点不足（需至少 10 点），无法导入',
+              'Too few track points (at least 10 required); cannot import'),
+          AppNoticeKind.warning);
       return;
     }
     // 目标：新建我的赛道，或更新到现有官方包（成为本地改动）。
@@ -377,17 +440,18 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     final target = await showDialog<TrackPackage?>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('导入到哪里？'),
+        title: Text(s.t('导入到哪里？', 'Import to where?')),
         children: [
           SimpleDialogOption(
             onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('新建我的赛道'),
+            child: Text(s.t('新建我的赛道', 'Create a custom track')),
           ),
           if (snap != null)
             for (final p in snap.official)
               SimpleDialogOption(
                 onPressed: () => Navigator.pop(ctx, p),
-                child: Text('更新到「${p.nameCn}」（成为本地改动）'),
+                child: Text(s.t('更新到「${p.nameCn}」（成为本地改动）',
+                    'Update "${p.nameCn}" (becomes a local change)')),
               ),
         ],
       ),
@@ -397,7 +461,11 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       await _service.savePackage(pkg);
       await _refresh();
       if (!mounted) return;
-      showAppNotice(context, '已导入我的赛道「${pkg.nameCn}」', AppNoticeKind.success);
+      showAppNotice(
+          context,
+          s.t('已导入我的赛道「${pkg.nameCn}」',
+              'Imported custom track "${pkg.nameCn}"'),
+          AppNoticeKind.success);
       return;
     }
     final updated = target.copyWith(
@@ -413,13 +481,15 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     if (!mounted) return;
     showAppNotice(
       context,
-      '已用行程更新「${target.nameCn}」',
+      s.t('已用行程更新「${target.nameCn}」',
+          'Updated "${target.nameCn}" from the trip'),
       AppNoticeKind.success,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final snap = _snap;
     final check = _check;
     final updatesById = {
@@ -439,7 +509,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     // v1.5.9：按地区分组（保留原顺序，仅折叠同地区）。
     final grouped = <String, List<TrackPackage>>{};
     for (final p in official) {
-      final r = p.region.isEmpty ? '其他' : p.region;
+      final r = p.region.isEmpty ? s.t('其他', 'Other') : p.region;
       grouped.putIfAbsent(r, () => <TrackPackage>[]).add(p);
     }
     final regionOrder = grouped.keys.toList();
@@ -449,7 +519,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
-        title: const Text('赛道库'),
+        title: Text(s.t('赛道库', 'Track library')),
       ),
       body: snap == null
           ? const Center(child: CircularProgressIndicator())
@@ -471,28 +541,28 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                 const SizedBox(height: 16),
                 // v1.6.0：附近的赛道入口——用当前位置把赛道库按距离排序，
                 // 地图上标出来；不依赖网络也能用（本地库 + 直线距离）。
-                _nearbyEntry(snap),
+                _nearbyEntry(snap, s),
                 if (check != null && check.updates.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  const Text(
-                    '可更新的包',
-                    style: TextStyle(
+                  Text(
+                    s.t('可更新的包', 'Updates available'),
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  for (final u in check.updates) _updateRow(u),
+                  for (final u in check.updates) _updateRow(u, s),
                 ],
                 const SizedBox(height: 20),
                 // v1.5.2：官方赛道包标题行右侧放放大镜，点按展开搜索框
                 // （与 App 同款深色样式）；输入即按名称/英文名/地区过滤，
                 // 只过滤官方包，我的赛道不参与。
                 Row(children: [
-                  const Text(
-                    '官方赛道包',
-                    style: TextStyle(
+                  Text(
+                    s.t('官方赛道包', 'Official packages'),
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -503,7 +573,9 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                     icon: Icon(
                         _showSearch ? Icons.close : Icons.search,
                         color: Colors.white70),
-                    tooltip: _showSearch ? '关闭搜索' : '搜索赛道',
+                    tooltip: _showSearch
+                        ? s.t('关闭搜索', 'Close search')
+                        : s.t('搜索赛道', 'Search tracks'),
                     onPressed: () {
                       setState(() {
                         _showSearch = !_showSearch;
@@ -517,40 +589,47 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                 ]),
                 if (_showSearch) ...[
                   const SizedBox(height: 8),
-                  _searchField(),
+                  _searchField(s),
                 ],
                 const SizedBox(height: 8),
                 // v1.5.9：核对状态筛选 chips + 已核对/待核计数。
                 Wrap(
                   spacing: 8,
                   children: [
-                    _filterChip('全部 ${snap.official.length}', 0),
-                    _filterChip('已核对 $verifiedCount', 1),
-                    _filterChip('待核 $pendingCount', 2),
+                    _filterChip(s.t('全部 ${snap.official.length}',
+                        'All ${snap.official.length}'), 0),
+                    _filterChip(s.t('已核对 $verifiedCount',
+                        'Verified $verifiedCount'), 1),
+                    _filterChip(
+                        s.t('待核 $pendingCount', 'Pending $pendingCount'), 2),
                   ],
                 ),
                 const SizedBox(height: 8),
                 if (_showSearch && query.isNotEmpty) ...[
                   Text(
                     official.isEmpty
-                        ? '没有匹配“${_searchQuery.trim()}”的赛道'
-                        : '找到 ${official.length} 条（共 ${snap.official.length} 条）',
+                        ? s.t('没有匹配“${_searchQuery.trim()}”的赛道',
+                            'No tracks match "${_searchQuery.trim()}"')
+                        : s.t(
+                            '找到 ${official.length} 条（共 ${snap.official.length} 条）',
+                            'Found ${official.length} of ${snap.official.length}'),
                     style:
                         const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
                 ],
                 if (official.isEmpty && query.isEmpty && _verificationFilter != 0)
-                  const Text(
-                    '该筛选下暂无赛道',
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  Text(
+                    s.t('该筛选下暂无赛道', 'No tracks under this filter'),
+                    style: const TextStyle(color: Colors.white54, fontSize: 13),
                   )
                 else
                   for (final region in regionOrder) ...[
                     Padding(
                       padding: const EdgeInsets.only(top: 4, bottom: 6),
                       child: Text(
-                        '$region（${grouped[region]!.length}）',
+                        s.t('$region（${grouped[region]!.length}）',
+                            '$region (${grouped[region]!.length})'),
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 13,
@@ -564,6 +643,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                         update: updatesById[p.id],
                         canReset: snap.overrideIds.contains(p.id),
                         isUser: false,
+                        s: s,
                       ),
                   ],
                 const SizedBox(height: 20),
@@ -571,9 +651,9 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                 // 它是往“我的赛道”里加东西的动作，放在标题行更符合预期。
                 Row(
                   children: [
-                    const Text(
-                      '我的赛道',
-                      style: TextStyle(
+                    Text(
+                      s.t('我的赛道', 'My tracks'),
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -587,18 +667,22 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
                       icon: const Icon(Icons.download_outlined, size: 16),
-                      label: const Text('从行程导入'),
+                      label: Text(s.t('从行程导入', 'Import from trip')),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 if (snap.userTracks.isEmpty)
-                  const Text(
-                    '暂无我的赛道：用“从行程导入”把一次实测行程导成赛道，或在编辑器里新建。',
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  Text(
+                    s.t(
+                      '暂无我的赛道：用“从行程导入”把一次实测行程导成赛道，或在编辑器里新建。',
+                      'No custom tracks yet: use "Import from trip" to turn a recorded trip into a track, or create one in the editor.',
+                    ),
+                    style: const TextStyle(color: Colors.white54, fontSize: 13),
                   )
                 else
-                  for (final p in snap.userTracks) _packageRow(p, isUser: true),
+                  for (final p in snap.userTracks)
+                    _packageRow(p, isUser: true, s: s),
                 if (_curation) ...[
                   const SizedBox(height: 24),
                   Container(
@@ -611,21 +695,27 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '策展模式',
-                          style: TextStyle(
+                        Text(
+                          s.t('策展模式', 'Curation mode'),
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: Colors.orange,
                           ),
                         ),
                         const SizedBox(height: 6),
-                        const Text(
-                          '发布流（当前）：导出包 JSON → 提交到仓库 data/packages/ → '
-                          '更新 data/tracks-manifest.json（dataVersion 升一档，如 V1.0.1 → V1.0.2；包版本 +1）→ '
-                          '用户在库页检查更新即收到。应用内直发仓库需 GitHub 凭证，暂未接入，'
-                          '不得伪装已发布。',
-                          style: TextStyle(
+                        Text(
+                          s.t(
+                            '发布流（当前）：导出包 JSON → 提交到仓库 data/packages/ → '
+                            '更新 data/tracks-manifest.json（dataVersion 升一档，如 V1.0.1 → V1.0.2；包版本 +1）→ '
+                            '用户在库页检查更新即收到。应用内直发仓库需 GitHub 凭证，暂未接入，'
+                            '不得伪装已发布。',
+                            'Publishing flow (current): export package JSON → commit to data/packages/ in the repo → '
+                            'update data/tracks-manifest.json (bump dataVersion, e.g. V1.0.1 → V1.0.2; package version +1) → '
+                            'users receive it via check-for-updates. Direct publishing from the app needs GitHub credentials and is not wired up yet; '
+                            'never pretend it has been published.',
+                          ),
+                          style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
                             height: 1.4,
@@ -636,7 +726,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                           children: [
                             FilledButton(
                               onPressed: _exportAll,
-                              child: const Text('导出全部包'),
+                              child: Text(s.t('导出全部包', 'Export all packages')),
                             ),
                           ],
                         ),
@@ -648,7 +738,8 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                 // 用户反馈那行小字碍事）。ODbL 署名要求仍然满足。
                 const SizedBox(height: 24),
                 Text(
-                  '$kOsmAttribution；OSM 数据遵循 ODbL。',
+                  s.t('$kOsmAttribution；OSM 数据遵循 ODbL。',
+                      '$kOsmAttribution; OSM data is under ODbL.'),
                   style: const TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ],
@@ -658,13 +749,13 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
 
   /// 官方包搜索框（v1.5.2）：与 App 同款深色样式——卡片底色 #1E1E1E、
   /// 圆角 12、白字、灰色提示；前缀放大镜，有输入时后缀清空钮。
-  Widget _searchField() {
+  Widget _searchField(S s) {
     return TextField(
       controller: _searchCtrl,
       autofocus: true,
       style: const TextStyle(color: Colors.white, fontSize: 14),
       decoration: InputDecoration(
-        hintText: '搜索赛道名称 / 地区',
+        hintText: s.t('搜索赛道名称 / 地区', 'Search track name / region'),
         hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
         prefixIcon: const Icon(Icons.search, color: Colors.white54, size: 20),
         suffixIcon: _searchQuery.isEmpty
@@ -672,7 +763,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
             : IconButton(
                 icon:
                     const Icon(Icons.clear, color: Colors.white54, size: 18),
-                tooltip: '清空',
+                tooltip: s.t('清空', 'Clear'),
                 onPressed: () {
                   _searchCtrl.clear();
                   setState(() => _searchQuery = '');
@@ -702,27 +793,29 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     );
   }
 
-  Widget _updateRow(PackageUpdate u) {
+  Widget _updateRow(PackageUpdate u, S s) {
     return Card(
       color: const Color(0xFF1E1E1E),
       child: ListTile(
         title: Text(u.nameCn),
         subtitle: Text(
           u.isNew
-              ? '远端新增包 v${u.remoteVersion}'
-              : '本地 v${u.localVersion} → 远端 v${u.remoteVersion}',
+              ? s.t('远端新增包 v${u.remoteVersion}',
+                  'New package v${u.remoteVersion} on server')
+              : s.t('本地 v${u.localVersion} → 远端 v${u.remoteVersion}',
+                  'Local v${u.localVersion} → server v${u.remoteVersion}'),
           style: const TextStyle(color: Colors.white54),
         ),
         trailing: TextButton(
           onPressed: _applying ? null : () => _applyOne(u),
-          child: const Text('更新'),
+          child: Text(s.t('更新', 'Update')),
         ),
       ),
     );
   }
 
   /// v1.6.0：附近的赛道入口卡片。点开按当前位置排序并尝试在地图上标出。
-  Widget _nearbyEntry(LibrarySnapshot snap) {
+  Widget _nearbyEntry(LibrarySnapshot snap, S s) {
     final total = snap.official.length + snap.userTracks.length;
     return Material(
       color: const Color(0xFF1E1E1E),
@@ -751,9 +844,9 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '附近的赛道',
-                      style: TextStyle(
+                    Text(
+                      s.t('附近的赛道', 'Nearby tracks'),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -761,7 +854,10 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '按当前位置排序 · 地图查看卡丁车 / 摩托 / 汽车赛道（共 $total 条）',
+                      s.t(
+                        '按当前位置排序 · 地图查看卡丁车 / 摩托 / 汽车赛道（共 $total 条）',
+                        'Sorted by location · view kart / motorcycle / car tracks on the map ($total total)',
+                      ),
                       style: const TextStyle(
                         color: Colors.white54,
                         fontSize: 12,
@@ -783,6 +879,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
     PackageUpdate? update,
     bool canReset = false,
     required bool isUser,
+    required S s,
   }) {
     return Card(
       color: const Color(0xFF1E1E1E),
@@ -805,7 +902,7 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                 ),
                 _badge('v${p.version}'),
                 const SizedBox(width: 6),
-                _badge('${p.sourceLabel} · ${p.verificationLabel}'),
+                _badge('${_sourceLabel(s, p.source)} · ${_verificationLabel(s, p.verification)}'),
               ],
             ),
             const SizedBox(height: 2),
@@ -813,8 +910,8 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
               [
                 if (p.nameEn.isNotEmpty) p.nameEn,
                 if (p.region.isNotEmpty) p.region,
-                p.lengthLabel,
-                if (p.userModified) '本地改动',
+                _lengthLabel(s, p),
+                if (p.userModified) s.t('本地改动', 'Local changes'),
               ].join(' · '),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
@@ -825,8 +922,10 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
             if (update != null)
               Text(
                 update.isNew
-                    ? '可更新：远端新增包 v${update.remoteVersion}'
-                    : '可更新：v${update.localVersion} → v${update.remoteVersion}',
+                    ? s.t('可更新：远端新增包 v${update.remoteVersion}',
+                        'Update available: new package v${update.remoteVersion} on server')
+                    : s.t('可更新：v${update.localVersion} → v${update.remoteVersion}',
+                        'Update available: v${update.localVersion} → v${update.remoteVersion}'),
                 style: const TextStyle(color: Colors.orange, fontSize: 12),
               ),
             const SizedBox(height: 6),
@@ -836,25 +935,27 @@ class _TrackLibraryPageState extends State<TrackLibraryPage> {
                 if (update != null)
                   TextButton(
                     onPressed: _applying ? null : () => _applyOne(update),
-                    child: const Text('更新'),
+                    child: Text(s.t('更新', 'Update')),
                   ),
-                TextButton(onPressed: () => _edit(p), child: const Text('编辑')),
+                TextButton(
+                    onPressed: () => _edit(p),
+                    child: Text(s.t('编辑', 'Edit'))),
                 TextButton(
                   onPressed: () => _export(p),
-                  child: const Text('导出'),
+                  child: Text(s.t('导出', 'Export')),
                 ),
                 if (isUser)
                   TextButton(
                     onPressed: () => _deleteUserTrack(p),
-                    child: const Text(
-                      '删除',
-                      style: TextStyle(color: Colors.red),
+                    child: Text(
+                      s.t('删除', 'Delete'),
+                      style: const TextStyle(color: Colors.red),
                     ),
                   )
                 else if (canReset)
                   TextButton(
                     onPressed: () => _resetOverride(p),
-                    child: const Text('恢复默认'),
+                    child: Text(s.t('恢复默认', 'Restore default')),
                   ),
               ],
             ),
@@ -936,32 +1037,35 @@ class LibraryVersionCard extends StatelessWidget {
 
   /// 状态标题：未检测 / 检测中 / 已是最新 / 发现新版本 / 检测失败。
   /// 版本号降级成右上角标签，状态与主操作才是这张卡的主体。
-  String get statusTitle {
-    if (checking) return '正在检测…';
+  String statusTitle(S s) {
+    if (checking) return s.t('正在检测…', 'Checking…');
     final c = check;
-    if (c == null) return '尚未检测';
+    if (c == null) return s.t('尚未检测', 'Not checked yet');
     switch (c.status) {
       case UpdateCheckStatus.upToDate:
-        return '已是最新版本';
+        return s.t('已是最新版本', 'Up to date');
       case UpdateCheckStatus.available:
         return c.remoteDataVersion.isEmpty
-            ? '发现新版本'
-            : '发现新版本 ${c.remoteDataVersion}';
+            ? s.t('发现新版本', 'New version available')
+            : s.t('发现新版本 ${c.remoteDataVersion}',
+                'New version ${c.remoteDataVersion} available');
       case UpdateCheckStatus.error:
-        return '检测失败';
+        return s.t('检测失败', 'Check failed');
     }
   }
 
   /// 状态副文案：说明这次检测在做什么或结果含义，失败时是错误原文。
-  String get statusDetail {
-    if (checking) return '正在连接服务器';
+  String statusDetail(S s) {
+    if (checking) return s.t('正在连接服务器', 'Connecting to server');
     final c = check;
-    if (c == null) return '获取最新赛道数据与修复';
+    if (c == null) return s.t('获取最新赛道数据与修复', 'Fetch the latest track data and fixes');
     switch (c.status) {
       case UpdateCheckStatus.upToDate:
-        return '本地赛道数据已与服务器一致';
+        return s.t('本地赛道数据已与服务器一致',
+            'Local track data matches the server');
       case UpdateCheckStatus.available:
-        return '${c.updates.length} 个包可更新';
+        return s.t('${c.updates.length} 个包可更新',
+            '${c.updates.length} packages can be updated');
       case UpdateCheckStatus.error:
         return c.message;
     }
@@ -995,6 +1099,7 @@ class LibraryVersionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final accent = Theme.of(context).colorScheme.primary;
     final c = check;
     final available = c != null && c.status == UpdateCheckStatus.available;
@@ -1021,7 +1126,7 @@ class LibraryVersionCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(applying ? '更新中…' : '检测中…'),
+            Text(applying ? s.t('更新中…', 'Updating…') : s.t('检测中…', 'Checking…')),
           ],
         ),
       );
@@ -1031,21 +1136,22 @@ class LibraryVersionCard extends StatelessWidget {
         style: _actionStyle(accent),
         child: Text(
           c.remoteDataVersion.isEmpty
-              ? '更新赛道库'
-              : '更新到 ${c.remoteDataVersion}',
+              ? s.t('更新赛道库', 'Update track library')
+              : s.t('更新到 ${c.remoteDataVersion}',
+                  'Update to ${c.remoteDataVersion}'),
         ),
       );
     } else if (upToDate) {
       action = OutlinedButton(
         onPressed: onCheck,
         style: _outlineStyle(),
-        child: const Text('重新检测'),
+        child: Text(s.t('重新检测', 'Check again')),
       );
     } else {
       action = FilledButton(
         onPressed: onCheck,
         style: _actionStyle(accent),
-        child: Text(failed ? '重新检测' : '检测更新'),
+        child: Text(failed ? s.t('重新检测', 'Check again') : s.t('检测更新', 'Check for updates')),
       );
     }
 
@@ -1066,22 +1172,23 @@ class LibraryVersionCard extends StatelessWidget {
                 child: Icon(Icons.map_outlined, color: accent, size: 20),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '赛道库',
-                      style: TextStyle(
+                      s.t('赛道库', 'Track library'),
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      '赛道数据与版本管理',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                      s.t('赛道数据与版本管理', 'Track data and version management'),
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ),
@@ -1129,7 +1236,7 @@ class LibraryVersionCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  statusTitle,
+                  statusTitle(s),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
@@ -1143,7 +1250,7 @@ class LibraryVersionCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(left: 16),
             child: Text(
-              statusDetail,
+              statusDetail(s),
               style: const TextStyle(color: Colors.white38, fontSize: 12),
             ),
           ),
@@ -1152,7 +1259,8 @@ class LibraryVersionCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 16),
               child: Text(
-                '${c.skippedUserModified.length} 个包因本地改动未列入更新',
+                s.t('${c.skippedUserModified.length} 个包因本地改动未列入更新',
+                    '${c.skippedUserModified.length} packages are excluded from updates due to local changes'),
                 style: const TextStyle(color: Colors.white30, fontSize: 11),
               ),
             ),
@@ -1240,6 +1348,7 @@ class _TrackPlaceLineState extends State<_TrackPlaceLine> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final t = widget.track;
     final g = _anchor;
     final parts = <String>[
@@ -1254,7 +1363,10 @@ class _TrackPlaceLineState extends State<_TrackPlaceLine> {
         const SizedBox(width: 4),
         Expanded(
           child: Text(
-            parts.isEmpty ? '地点待核' : '地点：${parts.join(' · ')}',
+            parts.isEmpty
+                ? s.t('地点待核', 'Location pending')
+                : s.t('地点：${parts.join(' · ')}',
+                    'Location: ${parts.join(' · ')}'),
             style: const TextStyle(color: Colors.white54, fontSize: 12),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

@@ -14,12 +14,14 @@
 #include "nvs_flash.h"
 
 #include "dt_ble.h"
+#include "dt_baro.h"
 #include "dt_can.h"
 #include "dt_config.h"
 #include "dt_gnss.h"
 #include "dt_imu.h"
 #include "dt_ota.h"
 #include "dt_power.h"
+#include "dt_sd.h"
 #include "dt_session.h"
 #include "dt_store.h"
 
@@ -46,6 +48,10 @@ void app_main(void)
     ESP_LOGI(TAG, "%s fw=%s build=%d", DT_DEVICE_MODEL, DT_FW_VERSION,
              DT_FW_BUILD);
 
+    // 先挂 SD（dt_store 里会复用这次结果），失败只是回落片内缓存。
+    if (!dt_sd_init()) {
+        ESP_LOGW(TAG, "SD 不可用（state=%d），改用片内缓存", dt_sd_state());
+    }
     if (!dt_store_init()) {
         ESP_LOGW(TAG, "本地缓存不可用，掉线数据不会补传");
     }
@@ -67,6 +73,11 @@ void app_main(void)
 #if DT_ENABLE_IMU
     if (!dt_imu_start()) {
         ESP_LOGW(TAG, "IMU 未就绪，其余功能继续");
+    }
+#endif
+#if DT_ENABLE_BARO
+    if (!dt_baro_start()) {
+        ESP_LOGW(TAG, "气压计未就绪，其余功能继续");
     }
 #endif
 #if DT_ENABLE_CAN

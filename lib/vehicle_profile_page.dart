@@ -28,6 +28,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'app_notice.dart';
 import 'card_style.dart';
 
@@ -108,32 +109,36 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
     // 回到列表后给顶部自动消失提示（app_notice；
     // 提示挂根 Overlay，编辑页已 pop 也不会被吞掉）。
     if (mounted) {
+      final s = S.of(context);
       showAppNotice(
         context,
-        isNew ? '已新增车辆“${saved.name}”。' : '已保存车辆“${saved.name}”。',
+        isNew
+            ? s.t('已新增车辆“${saved.name}”。', 'Vehicle "${saved.name}" added.')
+            : s.t('已保存车辆“${saved.name}”。', 'Vehicle "${saved.name}" saved.'),
         AppNoticeKind.success,
       );
     }
   }
 
   Future<void> _deleteVehicle(VehicleProfile v) async {
+    final s = S.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除车辆？'),
+        title: Text(s.t('删除车辆？', 'Delete vehicle?')),
         content: Text(
-          '将删除“${v.name}”的档案及其全部加油记录。\n\n'
-          '行程本身不会被删除：已绑定该车的行程会回退为全局油耗 / 油价设置。'
-          '${_library.defaultVehicleId == v.id ? '\n\n该车是当前默认车辆，删除后默认随之取消。' : ''}',
+          '${s.t('将删除“${v.name}”的档案及其全部加油记录。', 'This deletes the profile of "${v.name}" and all its fuel logs.')}\n\n'
+          '${s.t('行程本身不会被删除：已绑定该车的行程会回退为全局油耗 / 油价设置。', 'Trips are not deleted: trips linked to this vehicle fall back to the global fuel consumption and price.')}'
+          '${_library.defaultVehicleId == v.id ? s.t('\n\n该车是当前默认车辆，删除后默认随之取消。', '\n\nThis is the default vehicle; the default will be cleared as well.') : ''}',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(s.t('取消', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
+            child: Text(s.t('删除', 'Delete')),
           ),
         ],
       ),
@@ -144,7 +149,8 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
     if (mounted) {
       showAppNotice(
         context,
-        '已删除“${v.name}”，其加油记录一并删除。',
+        s.t('已删除“${v.name}”，其加油记录一并删除。',
+            'Deleted "${v.name}" and its fuel logs.'),
         AppNoticeKind.success,
       );
     }
@@ -178,15 +184,16 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final vehicles = _library.vehicles;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
-        title: const Text('车辆档案'),
+        title: Text(s.t('车辆档案', 'Vehicles')),
         actions: [
           Semantics(
-            label: '新增车辆',
+            label: s.t('新增车辆', 'Add vehicle'),
             child: IconButton(
               icon: const Icon(Icons.add),
               onPressed: () => _editVehicle(),
@@ -197,45 +204,51 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
         children: [
-          const Text(
-            '行程油耗优先用所绑车辆的油耗，未绑定或未填时回退全局值。',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+          Text(
+            s.t('行程油耗优先用所绑车辆的油耗，未绑定或未填时回退全局值。',
+                'Trip fuel use prefers the linked vehicle; unlinked or blank falls back to the global value.'),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
-          const Text(
-            '空字段不显示、不参与计算。排量与车重只作档案记录，不用于推算油耗。',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+          Text(
+            s.t('空字段不显示、不参与计算。排量与车重只作档案记录，不用于推算油耗。',
+                "Blank fields are hidden and not used. Displacement and weight are recorded for reference only, not used to estimate fuel use."),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
-          const Text(
-            '默认车辆用于新行程的油耗估算；未设默认时用全局值。'
-            '删除车辆时其加油记录一并删除，行程本身不删除。',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
+          Text(
+            s.t(
+              '默认车辆用于新行程的油耗估算；未设默认时用全局值。'
+              '删除车辆时其加油记录一并删除，行程本身不删除。',
+              'The default vehicle is used to estimate fuel use for new trips; without one the global value applies. Deleting a vehicle also deletes its fuel logs, but not the trips.',
+            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 16),
           if (vehicles.isEmpty)
-            const Card(
+            Card(
               child: Padding(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 child: Text(
-                  '还没有车辆档案。点右上角 + 新增一辆车，只填名称也能保存。',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                  s.t('还没有车辆档案。点右上角 + 新增一辆车，只填名称也能保存。',
+                      'No vehicles yet. Tap + in the top right to add one; a name alone is enough.'),
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ),
             ),
-          for (final v in vehicles) _vehicleCard(v),
+          for (final v in vehicles) _vehicleCard(v, s),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: () => _editVehicle(),
             icon: const Icon(Icons.add),
-            label: const Text('新增车辆'),
+            label: Text(s.t('新增车辆', 'Add vehicle')),
           ),
         ],
       ),
     );
   }
 
-  Widget _vehicleCard(VehicleProfile v) {
+  Widget _vehicleCard(VehicleProfile v, S s) {
     final isDefault = _library.defaultVehicleId == v.id;
     final logs = _library.logsFor(v.id);
     final measured = _library.measuredFor(v.id);
@@ -259,14 +272,14 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
                   ),
                 ),
                 if (isDefault)
-                  const Chip(
-                    label: Text('默认'),
+                  Chip(
+                    label: Text(s.t('默认', 'Default')),
                     visualDensity: VisualDensity.compact,
                   )
                 else
                   TextButton(
                     onPressed: () => _setDefault(v.id),
-                    child: const Text('设为默认'),
+                    child: Text(s.t('设为默认', 'Set default')),
                   ),
               ],
             ),
@@ -275,7 +288,7 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
-                  '${e.key}：${e.value}',
+                  s.t('${e.key}：${e.value}', '${e.key}: ${e.value}'),
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ),
@@ -283,13 +296,18 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 measured == null
-                    ? '实测：暂无，需要两次满油记录'
-                    : '实测：${_fmtNum(measured)} L/100km（${intervals.length} 段满油区间）',
+                    ? s.t('实测：暂无，需要两次满油记录',
+                        'Measured: none yet, needs two full-tank logs')
+                    : s.t(
+                        '实测：${_fmtNum(measured)} L/100km（${intervals.length} 段满油区间）',
+                        'Measured: ${_fmtNum(measured)} L/100km (${intervals.length} full-tank intervals)',
+                      ),
                 style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
             ),
             Text(
-              '加油记录：${logs.length} 条（不满油记录只记账，不计入实测）',
+              s.t('加油记录：${logs.length} 条（不满油记录只记账，不计入实测）',
+                  'Fuel logs: ${logs.length} (partial fills are recorded but not measured)'),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
             const SizedBox(height: 8),
@@ -298,22 +316,22 @@ class _VehicleProfilePageState extends State<VehicleProfilePage> {
               children: [
                 OutlinedButton(
                   onPressed: () => _openFuelLogs(v),
-                  child: const Text('加油记录'),
+                  child: Text(s.t('加油记录', 'Fuel logs')),
                 ),
                 OutlinedButton(
                   onPressed: () => _editVehicle(v),
-                  child: const Text('编辑'),
+                  child: Text(s.t('编辑', 'Edit')),
                 ),
                 if (isDefault)
                   OutlinedButton(
                     onPressed: () => _setDefault(null),
-                    child: const Text('取消默认'),
+                    child: Text(s.t('取消默认', 'Clear default')),
                   ),
                 TextButton(
                   onPressed: () => _deleteVehicle(v),
-                  child: const Text(
-                    '删除',
-                    style: TextStyle(color: Colors.redAccent),
+                  child: Text(
+                    s.t('删除', 'Delete'),
+                    style: const TextStyle(color: Colors.redAccent),
                   ),
                 ),
               ],
@@ -386,9 +404,10 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
 
   static String _numText(double? v) => v == null ? '' : _fmtNum(v);
 
-  static String? _numberError(String raw, String label) {
+  static String? _numberError(String raw, String label, S s) {
     if (!isVehicleNumberValid(raw)) {
-      return '$label格式不对：只填大于 0 的数字，留空表示未填写。';
+      return s.t('$label格式不对：只填大于 0 的数字，留空表示未填写。',
+          '$label is invalid: enter a number greater than 0, or leave it blank.');
     }
     return null;
   }
@@ -409,15 +428,18 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
   }
 
   void _save() {
+    final s = S.of(context);
     final name = _name.text.trim();
     // 全量行内校验：名称空、任一数字非法都只亮对应行的报错，
     // 不 pop、不保存、不闪退。
     setState(() {
-      _nameError = name.isEmpty ? '请填写车辆名称。' : null;
-      _consumptionError = _numberError(_consumption.text, '百公里油耗');
-      _tankError = _numberError(_tank.text, '油箱容量');
-      _displacementError = _numberError(_displacement.text, '排量');
-      _weightError = _numberError(_weight.text, '车重');
+      _nameError = name.isEmpty ? s.t('请填写车辆名称。', 'Enter a vehicle name.') : null;
+      _consumptionError =
+          _numberError(_consumption.text, s.t('百公里油耗', 'Fuel consumption'), s);
+      _tankError = _numberError(_tank.text, s.t('油箱容量', 'Tank capacity'), s);
+      _displacementError =
+          _numberError(_displacement.text, s.t('排量', 'Displacement'), s);
+      _weightError = _numberError(_weight.text, s.t('车重', 'Weight'), s);
     });
     if (_nameError != null ||
         _consumptionError != null ||
@@ -427,8 +449,8 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
       return;
     }
     String? text(TextEditingController c) {
-      final s = c.text.trim();
-      return s.isEmpty ? null : s;
+      final v = c.text.trim();
+      return v.isEmpty ? null : v;
     }
 
     Navigator.pop(
@@ -456,6 +478,7 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
   // 即时清除/刷新该行报错；数字行只在值变合法时清错，非法时
   // 立即亮行内提示，不等点保存。
   Widget _field(
+    S s,
     TextEditingController c,
     String label, {
     TextInputType? keyboardType,
@@ -474,7 +497,7 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
             keyboardType: keyboardType,
             decoration: InputDecoration(
               labelText: label,
-              hintText: hint ?? '未填写（可不填）',
+              hintText: hint ?? s.t('未填写（可不填）', 'Not set (optional)'),
               suffixText: suffix,
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
@@ -604,26 +627,30 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.existing != null;
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
-        title: Text(editing ? '编辑车辆' : '新增车辆'),
+        title: Text(editing
+            ? s.t('编辑车辆', 'Edit vehicle')
+            : s.t('新增车辆', 'Add vehicle')),
       ),
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
         children: [
-          const Text(
-            '除名称外全部可空。',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+          Text(
+            s.t('除名称外全部可空。', 'Everything except the name is optional.'),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 16),
           // 基本信息：名称 + 模式大卡片二选一。
-          _section('基本信息', [
+          _section(s.t('基本信息', 'Basics'), [
             _field(
+              s,
               _name,
-              '名称 *',
-              hint: '如：家里的车',
+              s.t('名称 *', 'Name *'),
+              hint: s.t('如：家里的车', 'e.g. Family car'),
               error: _nameError,
               onChanged: (v) {
                 if (_nameError != null && v.trim().isNotEmpty) {
@@ -631,11 +658,11 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
                 }
               },
             ),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                '模式',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
+                s.t('模式', 'Mode'),
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
             ),
             Padding(
@@ -643,80 +670,90 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _modeCard(VehicleMode.car, Icons.directions_car, '汽车', '四轮车'),
+                  _modeCard(VehicleMode.car, Icons.directions_car,
+                      s.t('汽车', 'Car'), s.t('四轮车', 'Four wheels')),
                   const SizedBox(width: 12),
-                  _modeCard(VehicleMode.moto, Icons.motorcycle, '摩托', '两轮摩托'),
+                  _modeCard(VehicleMode.moto, Icons.motorcycle,
+                      s.t('摩托', 'Motorcycle'), s.t('两轮摩托', 'Two wheels')),
                 ],
               ),
             ),
           ]),
           // 动力档案：品牌型号 / 排量 / 车重 / 变速箱 / 驱动形式 / 燃油标号。
-          _section('动力档案', [
-            _field(_brand, '品牌'),
-            _field(_model, '型号'),
+          _section(s.t('动力档案', 'Powertrain'), [
+            _field(s, _brand, s.t('品牌', 'Brand')),
+            _field(s, _model, s.t('型号', 'Model')),
             _field(
+              s,
               _displacement,
-              '排量',
+              s.t('排量', 'Displacement'),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
               suffix: 'mL',
               error: _displacementError,
-              onChanged: (v) =>
-                  setState(() => _displacementError = _numberError(v, '排量')),
+              onChanged: (v) => setState(() => _displacementError =
+                  _numberError(v, s.t('排量', 'Displacement'), s)),
             ),
             _field(
+              s,
               _weight,
-              '车重',
+              s.t('车重', 'Weight'),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
               suffix: 'kg',
               error: _weightError,
-              onChanged: (v) =>
-                  setState(() => _weightError = _numberError(v, '车重')),
+              onChanged: (v) => setState(() => _weightError =
+                  _numberError(v, s.t('车重', 'Weight'), s)),
             ),
-            _field(_gearbox, '变速箱'),
-            _field(_drivetrain, '驱动形式'),
-            _field(_fuelGrade, '燃油标号'),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
+            _field(s, _gearbox, s.t('变速箱', 'Gearbox')),
+            _field(s, _drivetrain, s.t('驱动形式', 'Drivetrain')),
+            _field(s, _fuelGrade, s.t('燃油标号', 'Fuel grade')),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
               child: Text(
-                '排量与车重只作档案记录，不用于推算油耗。'
-                '排量单位 mL 与 cc 数值相同，不换算。',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
+                s.t(
+                  '排量与车重只作档案记录，不用于推算油耗。'
+                  '排量单位 mL 与 cc 数值相同，不换算。',
+                  'Displacement and weight are recorded for reference only, not used to estimate fuel use. Displacement in mL equals cc, with no conversion.',
+                ),
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ),
           ]),
           // 油耗：每车油耗 / 油箱容量。
-          _section('油耗', [
+          _section(s.t('油耗', 'Fuel'), [
             _field(
+              s,
               _consumption,
-              '每车油耗',
+              s.t('每车油耗', 'Fuel consumption'),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
               suffix: 'L/100km',
               error: _consumptionError,
-              onChanged: (v) =>
-                  setState(() => _consumptionError = _numberError(v, '百公里油耗')),
+              onChanged: (v) => setState(() => _consumptionError = _numberError(
+                  v, s.t('百公里油耗', 'Fuel consumption'), s)),
             ),
             _field(
+              s,
               _tank,
-              '油箱容量',
+              s.t('油箱容量', 'Tank capacity'),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
               suffix: 'L',
               error: _tankError,
-              onChanged: (v) =>
-                  setState(() => _tankError = _numberError(v, '油箱容量')),
+              onChanged: (v) => setState(() =>
+                  _tankError = _numberError(v, s.t('油箱容量', 'Tank capacity'), s)),
             ),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
               child: Text(
-                '未填写时行程油耗回退全局值。',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
+                s.t('未填写时行程油耗回退全局值。',
+                    'When blank, trips fall back to the global fuel consumption.'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ),
           ]),
@@ -729,7 +766,7 @@ class _VehicleEditPageState extends State<_VehicleEditPage> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               onPressed: _save,
-              child: const Text('保存', style: TextStyle(fontSize: 16)),
+              child: Text(s.t('保存', 'Save'), style: const TextStyle(fontSize: 16)),
             ),
           ),
         ],
@@ -777,19 +814,21 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
   }
 
   Future<void> _deleteLog(FuelLog log) async {
+    final s = S.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除这条加油记录？'),
-        content: const Text('删除后实测区间会重新计算。'),
+        title: Text(s.t('删除这条加油记录？', 'Delete this fuel log?')),
+        content: Text(s.t('删除后实测区间会重新计算。',
+            'Measured intervals will be recalculated after deleting.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(s.t('取消', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
+            child: Text(s.t('删除', 'Delete')),
           ),
         ],
       ),
@@ -801,34 +840,45 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final measured = measuredConsumption(_logs);
     final intervals = measuredIntervals(_logs);
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: Text('${widget.vehicle.name} · 加油记录')),
+      appBar: DtAppBar(
+          title: Text(s.t('${widget.vehicle.name} · 加油记录',
+              '${widget.vehicle.name} · Fuel logs'))),
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
         children: [
           Text(
             measured == null
-                ? '实测：暂无，需要两次满油记录'
-                : '实测：${_fmtNum(measured)} L/100km（${intervals.length} 段满油区间）',
+                ? s.t('实测：暂无，需要两次满油记录',
+                    'Measured: none yet, needs two full-tank logs')
+                : s.t(
+                    '实测：${_fmtNum(measured)} L/100km（${intervals.length} 段满油区间）',
+                    'Measured: ${_fmtNum(measured)} L/100km (${intervals.length} full-tank intervals)',
+                  ),
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
-          const Text(
-            '只有满油到满油的区间才算实测；不满油记录只记账。'
-            '满油区间要求起止两条记录都有里程表且后者大于前者。',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
+          Text(
+            s.t(
+              '只有满油到满油的区间才算实测；不满油记录只记账。'
+              '满油区间要求起止两条记录都有里程表且后者大于前者。',
+              'Only full-tank to full-tank intervals count as measured; partial fills are recorded only. A full-tank interval requires an odometer on both logs, with the later one higher.',
+            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 16),
           if (_logs.isEmpty)
-            const Card(
+            Card(
               child: Padding(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 child: Text(
-                  '还没有加油记录。点下方“新增加油记录”记第一笔。',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                  s.t('还没有加油记录。点下方“新增加油记录”记第一笔。',
+                      'No fuel logs yet. Tap "Add fuel log" below to record the first one.'),
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ),
             ),
@@ -837,20 +887,23 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 title: Text(
-                  '${_fmtDate(l.dateMs)} · ${_fmtNum(l.liters)} L${l.isFullTank ? ' · 加满' : ' · 未满油'}',
+                  '${_fmtDate(l.dateMs)} · ${_fmtNum(l.liters)} L${l.isFullTank ? s.t(' · 加满', ' · Full') : s.t(' · 未满油', ' · Partial')}',
                 ),
                 subtitle: Text(
                   [
                     if (l.odometerKm != null)
-                      '里程表 ${_fmtNum(l.odometerKm!)} km',
+                      s.t('里程表 ${_fmtNum(l.odometerKm!)} km',
+                          'Odometer ${_fmtNum(l.odometerKm!)} km'),
                     if (l.pricePerLiter != null)
-                      '单价 ${_fmtNum(l.pricePerLiter!)} 元/L',
+                      s.t('单价 ${_fmtNum(l.pricePerLiter!)} 元/L',
+                          'Price ¥${_fmtNum(l.pricePerLiter!)}/L'),
                     if (l.effectiveAmount != null)
-                      '金额 ${_fmtNum(l.effectiveAmount!)} 元',
+                      s.t('金额 ${_fmtNum(l.effectiveAmount!)} 元',
+                          'Amount ¥${_fmtNum(l.effectiveAmount!)}'),
                   ].join(' · '),
                 ),
                 trailing: Semantics(
-                  label: '删除记录',
+                  label: s.t('删除记录', 'Delete log'),
                   child: IconButton(
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () => _deleteLog(l),
@@ -862,7 +915,7 @@ class _FuelLogListPageState extends State<_FuelLogListPage> {
           FilledButton.icon(
             onPressed: _addLog,
             icon: const Icon(Icons.add),
-            label: const Text('新增加油记录'),
+            label: Text(s.t('新增加油记录', 'Add fuel log')),
           ),
         ],
       ),
@@ -898,18 +951,22 @@ class _FuelLogDialogState extends State<_FuelLogDialog> {
   }
 
   void _save() {
+    final s = S.of(context);
     if (!isVehicleNumberValid(_liters.text) ||
         parseVehicleNumber(_liters.text) == null) {
-      setState(() => _error = '升数必填，且必须是大于 0 的数字。');
+      setState(() => _error = s.t('升数必填，且必须是大于 0 的数字。',
+          'Liters are required and must be greater than 0.'));
       return;
     }
     for (final e in {
-      '单价': _price.text,
-      '金额': _amount.text,
-      '里程表': _odometer.text,
+      s.t('单价', 'Price'): _price.text,
+      s.t('金额', 'Amount'): _amount.text,
+      s.t('里程表', 'Odometer'): _odometer.text,
     }.entries) {
       if (!isVehicleNumberValid(e.value)) {
-        setState(() => _error = '${e.key}格式不对：只填大于 0 的数字，留空表示未填写。');
+        setState(() => _error = s.t(
+            '${e.key}格式不对：只填大于 0 的数字，留空表示未填写。',
+            '${e.key} is invalid: enter a number greater than 0, or leave it blank.'));
         return;
       }
     }
@@ -934,15 +991,16 @@ class _FuelLogDialogState extends State<_FuelLogDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return AlertDialog(
-      title: const Text('新增加油记录'),
+      title: Text(s.t('新增加油记录', 'Add fuel log')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('日期'),
+              title: Text(s.t('日期', 'Date')),
               trailing: Text(
                 _fmtDate(
                   DateTime(
@@ -967,9 +1025,9 @@ class _FuelLogDialogState extends State<_FuelLogDialog> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(
-                labelText: '升数（L）*',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: s.t('升数（L）*', 'Liters (L) *'),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
@@ -978,10 +1036,10 @@ class _FuelLogDialogState extends State<_FuelLogDialog> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(
-                labelText: '单价（元/L）',
-                hintText: '未填写',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: s.t('单价（元/L）', 'Price (CNY/L)'),
+                hintText: s.t('未填写', 'Not set'),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
@@ -990,10 +1048,10 @@ class _FuelLogDialogState extends State<_FuelLogDialog> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(
-                labelText: '金额（元）',
-                hintText: '未填写',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: s.t('金额（元）', 'Amount (CNY)'),
+                hintText: s.t('未填写', 'Not set'),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
@@ -1002,16 +1060,17 @@ class _FuelLogDialogState extends State<_FuelLogDialog> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(
-                labelText: '里程表（km）',
-                hintText: '未填写',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: s.t('里程表（km）', 'Odometer (km)'),
+                hintText: s.t('未填写', 'Not set'),
+                border: const OutlineInputBorder(),
               ),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('这次加满了'),
-              subtitle: const Text('只有满油到满油的区间才算实测；不满油只记账。'),
+              title: Text(s.t('这次加满了', 'Filled up this time')),
+              subtitle: Text(s.t('只有满油到满油的区间才算实测；不满油只记账。',
+                  'Only full-tank to full-tank intervals count as measured; partial fills are recorded only.')),
               value: _full,
               onChanged: (v) => setState(() => _full = v),
             ),
@@ -1026,9 +1085,10 @@ class _FuelLogDialogState extends State<_FuelLogDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(s.t('取消', 'Cancel')),
         ),
-        FilledButton(onPressed: _save, child: const Text('保存')),
+        FilledButton(
+            onPressed: _save, child: Text(s.t('保存', 'Save'))),
       ],
     );
   }

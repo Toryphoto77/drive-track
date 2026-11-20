@@ -1061,22 +1061,108 @@ class _HomePageState extends State<HomePage>
         _blediyFeed.reset();
         _blediyActive = false;
         rec.externalGpsActive = false;
+        connectedExternalGpsAddress.value = null;
+        if (externalGpsStatus.value.connected) {
+          updateExternalGpsStatus(ExternalGpsStatus.disconnected);
+        }
       }
       if (e['type'] == 'disconnected') {
         _blediyFeed.reset();
         _blediyActive = false;
         rec.externalGpsActive = false;
+        connectedExternalGpsAddress.value = null;
+        if (externalGpsStatus.value.connected) {
+          updateExternalGpsStatus(ExternalGpsStatus.disconnected);
+        }
       }
       rec.onBleData(e);
       if (e['type'] == 'connected') {
         bleConnected = e['address'] as String?;
         if (bleConnected != null) {
           unawaitedSaveBle(bleConnected!);
+          unawaited(
+            _onSavedDeviceConnected(
+              bleConnected!,
+              (e['name'] ?? '').toString(),
+            ),
+          );
         }
+      }
+      if (e['type'] == 'servicesDiscovered') {
+        // GATT 服务发现完成后补一次订阅：连接瞬间订阅常报 not_found。
+        unawaited(_resubscribeExternalGps());
       }
       if (e['type'] == 'disconnected') bleConnected = null;
       if (mounted) setState(() {});
     }, onError: (_) {});
+    // 开机自动重连：已配对（已保存）的外接设备只要在开机广告，进 App
+    // 就直接连上并订阅 NMEA，不必再走一遍扫描配对流程。
+    unawaited(_autoReconnectSavedDevice());
+  }
+
+  /// 已保存的外接设备连上后：写入全局连接状态（设备中心未打开时
+  /// 赛道门槛也能据此放行），并自动订阅 NMEA 特征。
+  Future<void> _onSavedDeviceConnected(String addr, String eventName) async {
+    try {
+      final saved = await DeviceCenterStore.load();
+      final hit = saved.where((d) => d.address == addr).toList();
+      // 只认设备中心登记过的外接设备；功率计 / 心率带等小配件不冒充 GPS。
+      if (hit.isEmpty) return;
+      final device = hit.first;
+      connectedExternalGpsAddress.value = addr;
+      if (!externalGpsStatus.value.connected) {
+        updateExternalGpsStatus(
+          ExternalGpsStatus(
+            connected: true,
+            deviceName: device.name.isNotEmpty
+                ? device.name
+                : (eventName.isNotEmpty ? eventName : addr),
+            channel: 'ble',
+          ),
+        );
+      }
+      await _subscribeSaved(device);
+    } catch (_) {}
+  }
+
+  Future<void> _subscribeSaved(SavedDevice device) async {
+    final addr = device.address;
+    if (addr == null || addr.isEmpty) return;
+    final service = device.serviceUuid.isNotEmpty
+        ? device.serviceUuid
+        : nordicUartServiceUuid;
+    final tx = device.characteristicUuid.isNotEmpty
+        ? device.characteristicUuid
+        : nordicUartTxUuid;
+    try {
+      await Native.subscribeBleCharacteristic(addr, service, tx);
+    } catch (_) {}
+  }
+
+  /// 服务发现完成 / 自动重连后补订阅；地址与已保存设备一致才订阅。
+  Future<void> _resubscribeExternalGps() async {
+    final addr = connectedExternalGpsAddress.value;
+    if (addr == null || addr.isEmpty) return;
+    try {
+      final saved = await DeviceCenterStore.load();
+      final hit = saved.where((d) => d.address == addr).toList();
+      if (hit.isEmpty) return;
+      await _subscribeSaved(hit.first);
+    } catch (_) {}
+  }
+
+  /// 开机自动重连已保存的外接设备（只试第一台，BLE 单连接）。
+  Future<void> _autoReconnectSavedDevice() async {
+    try {
+      final saved = await DeviceCenterStore.load();
+      final targets = saved.where((d) => (d.address ?? '').isNotEmpty).toList();
+      if (targets.isEmpty || externalGpsStatus.value.connected) return;
+      final snap = await Native.checkPermissions();
+      if (snap['bluetooth'] != true) return;
+      final device = targets.first;
+      await Native.setBleAutoReconnect(true);
+      await Native.connectBle(device.address!);
+    } catch (_) {}
   }
 
   /// 过线反馈：短震动 + 一帧全屏闪光（个人最佳绿、否则红）。
@@ -1595,7 +1681,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.11',
+          versionName: '1.7.13',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -1819,14 +1905,40 @@ class _HomePageState extends State<HomePage>
     await _fetchWeatherAt(lat, lon);
   }
 
+  /// 天气摘要的英文名：summary 存的是中文（weather_service 的 codeText），
+  /// 英文界面按天气代码重新取名，不把中文混进英文界面。
+  String _weatherSummaryText(WeatherInfo w) {
+    if (S.of(context).zh) return w.summary;
+    final c = w.code;
+    if (c == 0) return 'Clear';
+    if (c <= 2) return 'Cloudy';
+    if (c == 3) return 'Overcast';
+    if (c == 45 || c == 48) return 'Fog';
+    if (c >= 51 && c <= 67) return 'Rain';
+    if (c >= 71 && c <= 77) return 'Snow';
+    if (c >= 80 && c <= 82) return 'Showers';
+    if (c == 85 || c == 86) return 'Snow showers';
+    if (c >= 95) return 'Thunderstorm';
+    return 'Unknown';
+  }
+
   String get weatherText {
-    if (weather == null) return '天气未获取：定位后自动拉取（Open-Meteo）';
-    final alert = weather!.alert;
-    return '天气 ${weather!.summary} · 风 ${weather!.windSpeed.toStringAsFixed(0)} km/h ${weather!.windDir.toStringAsFixed(0)}°'
-        ' · 能见度 ${(weather!.visibility / 1000).toStringAsFixed(1)} km · 未来1小时降水 ${weather!.precipProb.toStringAsFixed(0)}%'
-        '${alert.isEmpty ? '' : ' · $alert'}'
-        '${weatherFromCache ? ' · 缓存数据' : ''}'
-        '${weatherStale ? ' · 更新失败，显示缓存' : ''}';
+    final s = S.of(context);
+    if (weather == null) {
+      return s.t(
+        '天气未获取：定位后自动拉取（Open-Meteo）',
+        'Weather unavailable — fetching after GPS fix (Open-Meteo)',
+      );
+    }
+    final w = weather!;
+    final alert = w.alert;
+    return '${s.t('天气', 'Weather')} ${_weatherSummaryText(w)}'
+        ' · ${s.t('风', 'Wind')} ${w.windSpeed.toStringAsFixed(0)} km/h ${w.windDir.toStringAsFixed(0)}°'
+        ' · ${s.t('能见度', 'Visibility')} ${(w.visibility / 1000).toStringAsFixed(1)} km'
+        ' · ${s.t('未来1小时降水', 'Rain next 1h')} ${w.precipProb.toStringAsFixed(0)}%'
+        '${alert.isEmpty || !s.zh ? '' : ' · $alert'}'
+        '${weatherFromCache ? ' · ${s.t('缓存数据', 'Cached')}' : ''}'
+        '${weatherStale ? ' · ${s.t('更新失败，显示缓存', 'Update failed — cached')}' : ''}';
   }
 
   // v0.1.1：接到分步授权 API，不再用旧打包请求。首屏已由 PermissionGate
@@ -2970,30 +3082,68 @@ class _HomePageState extends State<HomePage>
   }
 
   List<WeatherStripSegment> get _weatherSegments {
+    final s = S.of(context);
     if (weather == null) {
       // v0.1.9：加载中与已失败分开显示；未获取只在拉取失败后出现。
       if (weatherLoading) {
-        return [const WeatherStripSegment(Icons.cloud, '天气加载中…')];
+        return [
+          WeatherStripSegment(Icons.cloud, s.t('天气加载中…', 'Loading weather…')),
+        ];
       }
       return [
-        const WeatherStripSegment(Icons.cloud, '天气未获取：点按下方重试（Open-Meteo）'),
+        WeatherStripSegment(
+          Icons.cloud,
+          s.t(
+            '天气未获取：点按下方重试（Open-Meteo）',
+            'Weather unavailable — tap retry below (Open-Meteo)',
+          ),
+        ),
       ];
     }
-    IconData iconFor(String part) {
-      if (part.contains('雨') || part.contains('雪')) return Icons.umbrella;
-      if (part.contains('风')) return Icons.air;
-      if (part.contains('能见度') || part.contains('雾')) return Icons.visibility;
-      if (part.contains('降水')) return Icons.water_drop;
-      return Icons.cloud;
+    final w = weather!;
+    final segments = <WeatherStripSegment>[
+      WeatherStripSegment(
+        Icons.cloud,
+        '${s.t('天气', 'Weather')} ${_weatherSummaryText(w)}',
+      ),
+      WeatherStripSegment(
+        Icons.air,
+        '${s.t('风', 'Wind')} ${w.windSpeed.toStringAsFixed(0)} km/h '
+        '${w.windDir.toStringAsFixed(0)}°',
+      ),
+      WeatherStripSegment(
+        Icons.visibility,
+        '${s.t('能见度', 'Visibility')} '
+        '${(w.visibility / 1000).toStringAsFixed(1)} km',
+      ),
+      WeatherStripSegment(
+        Icons.water_drop,
+        '${s.t('未来1小时降水', 'Rain next 1h')} '
+        '${w.precipProb.toStringAsFixed(0)}%',
+      ),
+    ];
+    if (w.alert.isNotEmpty && s.zh) {
+      segments.add(WeatherStripSegment(Icons.warning_amber, w.alert));
     }
-
-    final segments = weatherText
-        .split(' · ')
-        .map((p) => WeatherStripSegment(iconFor(p), p))
-        .toList();
+    if (weatherFromCache) {
+      segments.add(
+        WeatherStripSegment(Icons.sd_storage, s.t('缓存数据', 'Cached')),
+      );
+    }
+    if (weatherStale) {
+      segments.add(
+        WeatherStripSegment(
+          Icons.refresh,
+          s.t('更新失败，显示缓存', 'Update failed — cached'),
+        ),
+      );
+    }
     // v0.1.9：已有天气时加载中不清空旧天气，追加“更新中…”段。
-    if (weatherLoading)
-      segments.add(const WeatherStripSegment(Icons.refresh, '更新中…'));
+    if (weatherLoading) {
+      segments.add(
+        WeatherStripSegment(Icons.refresh, s.t('更新中…', 'Updating…')),
+      );
+    }
     return segments;
   }
 
@@ -4573,8 +4723,10 @@ class _HomePageState extends State<HomePage>
         const SizedBox(height: 12),
         Center(
           child: Text(
-            '本次实时：${(rec.curSpeed * 3.6).toStringAsFixed(0)} km/h · G ${rec.curLongG.toStringAsFixed(2)} / ${rec.curLatG.toStringAsFixed(2)}',
-            style: const TextStyle(color: Colors.white70),
+            // 英文标识用 LIVE；数字用系统字体，避免 Orbitron 的方形“0”
+            // 被当成乱码方块（中文仍走系统 CJK 回退）。
+            '${S.of(context).t('本次实时：', 'LIVE ')}${(rec.curSpeed * 3.6).toStringAsFixed(0)} km/h · G ${rec.curLongG.toStringAsFixed(2)} / ${rec.curLatG.toStringAsFixed(2)}',
+            style: const TextStyle(color: Colors.white70, fontFamily: 'Roboto'),
           ),
         ),
       ],

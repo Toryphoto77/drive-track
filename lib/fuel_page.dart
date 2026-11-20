@@ -19,6 +19,7 @@
 
 import 'package:flutter/material.dart';
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'app_notice.dart';
 
 import 'models.dart';
@@ -270,50 +271,62 @@ class _FuelSettingsPageState extends State<FuelSettingsPage> {
   }
 
   void _save({bool clear = false}) {
+    final s = S.of(context);
     final cText = clear ? '' : _consumptionCtrl.text;
     final pText = clear ? '' : _priceCtrl.text;
     if (!isFuelInputValid(cText) || !isFuelInputValid(pText)) {
-      setState(() => _error = '格式不对：只填大于 0 的数字，留空表示未填写。');
+      setState(() => _error = s.t(
+          '格式不对：只填大于 0 的数字，留空表示未填写。',
+          'Invalid format: enter numbers greater than 0, or leave empty.'));
       return;
     }
     final c = parseFuelInput(cText);
     final p = parseFuelInput(pText);
     widget.onSaved?.call(c, p);
     if (mounted) {
-      showAppNotice(context, clear ? '已清空油耗设置' : '油耗设置已保存', AppNoticeKind.success);
+      showAppNotice(
+          context,
+          clear
+              ? s.t('已清空油耗设置', 'Fuel settings cleared')
+              : s.t('油耗设置已保存', 'Fuel settings saved'),
+          AppNoticeKind.success);
       Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     // 只填一项时仍可保存，但行程与汇总仍显示“未填写油耗/油价”，
     // 因为计算要求两项齐全——这条在页内写明，不静默按一项算。
     final bothFilled =
         _consumptionCtrl.text.trim().isNotEmpty && _priceCtrl.text.trim().isNotEmpty;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: const Text('油耗费用')),
+      appBar: DtAppBar(title: Text(s.t('油耗费用', 'Fuel & cost'))),
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
         children: [
-          const Text(
-            '仅汽车 / 摩托可用。',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+          Text(
+            s.t('仅汽车 / 摩托可用。', 'Cars and motorcycles only.'),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
-          const Text(
-            '两项默认都为空；两项都填了才计算，缺一项显示“未填写油耗/油价”。',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+          Text(
+            s.t(
+              '两项默认都为空；两项都填了才计算，缺一项显示“未填写油耗/油价”。',
+              'Both fields are empty by default. Values are calculated only when both are filled; otherwise it shows "fuel use/price not set".',
+            ),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _consumptionCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: '百公里油耗（L/100km）',
-              hintText: '未填写',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: s.t('百公里油耗（L/100km）', 'Fuel use (L/100km)'),
+              hintText: s.t('未填写', 'Not set'),
+              border: const OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() => _error = null),
           ),
@@ -321,10 +334,10 @@ class _FuelSettingsPageState extends State<FuelSettingsPage> {
           TextField(
             controller: _priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: '油价（元/L）',
-              hintText: '未填写',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: s.t('油价（元/L）', 'Fuel price (CNY/L)'),
+              hintText: s.t('未填写', 'Not set'),
+              border: const OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() => _error = null),
           ),
@@ -334,29 +347,36 @@ class _FuelSettingsPageState extends State<FuelSettingsPage> {
           ],
           const SizedBox(height: 8),
           if (!bothFilled)
-            const Text(
-              '缺一项时不计算，不按 0 或估算数显示。',
-              style: TextStyle(color: Colors.orange, fontSize: 12),
+            Text(
+              s.t('缺一项时不计算，不按 0 或估算数显示。',
+                  'Not calculated unless both are filled; never shows 0 or an estimate.'),
+              style: const TextStyle(color: Colors.orange, fontSize: 12),
             ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => _save(),
-            child: const Text('保存'),
+            child: Text(s.t('保存', 'Save')),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () => _save(clear: true),
-            child: const Text('清空（恢复未填写）'),
+            child: Text(s.t('清空（恢复未填写）', 'Clear (reset to empty)')),
           ),
           const SizedBox(height: 16),
-          const Text(
-            '计算公式：行程油耗量 = 里程 × 百公里油耗 / 100；油钱 = 油耗量 × 油价。',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+          Text(
+            s.t(
+              '计算公式：行程油耗量 = 里程 × 百公里油耗 / 100；油钱 = 油耗量 × 油价。',
+              'Formula: fuel used = distance × L/100km / 100; cost = fuel used × price.',
+            ),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 4),
-          const Text(
-            '按填写油耗估算，不是加油实测。单组全局设置，换车请手动改这里，改后历史估算值会随新值重算。',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
+          Text(
+            s.t(
+              '按填写油耗估算，不是加油实测。单组全局设置，换车请手动改这里，改后历史估算值会随新值重算。',
+              'Estimated from the values you enter, not measured at the pump. One global setting applies to all vehicles; change it here when you switch cars, and past estimates recalculate.',
+            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ],
       ),

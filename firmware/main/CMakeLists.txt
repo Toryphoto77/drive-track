@@ -5,10 +5,12 @@ idf_component_register(
         "dt_ota.c"
         "dt_gnss.c"
         "dt_imu.c"
+        "dt_baro.c"
         "dt_can.c"
         "dt_store.c"
         "dt_session.c"
         "dt_power.c"
+        "dt_sd.c"
     INCLUDE_DIRS
         "include"
     REQUIRES
@@ -24,6 +26,8 @@ idf_component_register(
         esp_partition
         nvs_flash
         spiffs
+        fatfs
+        esp_driver_sdspi
         mbedtls
         json
 )

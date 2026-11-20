@@ -62,6 +62,10 @@ static bool adc_setup(void)
 
 static int read_batt_mv(void)
 {
+    // ADC 没初始化成功时不能碰句柄，否则 adc_oneshot_read 会断言重启。
+    if (s_adc == NULL) {
+        return -1;
+    }
     int sum = 0;
     int n = 0;
     for (int i = 0; i < 8; i++) {
@@ -141,8 +145,9 @@ bool dt_power_start(void)
     gpio_set_level(DT_LED_BATT4_GPIO, 0);
 
     if (!adc_setup()) {
-        ESP_LOGE(TAG, "ADC 初始化失败，电量不可用");
-        return false;
+        // 指示灯和电源监控任务不能陪着 ADC 一起死：灯照常闪，电量显示"—"。
+        ESP_LOGW(TAG, "ADC 初始化失败，电量不可用（指示灯照常）");
+        s_batt_mv = -1;
     }
 
     xTaskCreate(power_task, "dt_power", 3072, NULL, 3, NULL);

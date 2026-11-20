@@ -388,6 +388,7 @@ class _MyPageState extends State<MyPage> {
   /// 邮箱移到头行下方通栏，不再挤进名字列把头像顶偏。分享钮改小、
   /// 放旁边：36 圆角图标钮，与“编辑”并排在头行右侧。
   Widget _profileCard() {
+    final s = S.of(context);
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,7 +424,7 @@ class _MyPageState extends State<MyPage> {
                 _iconButton(
                   icon: Icons.share,
                   onTap: widget.onShareInvite,
-                  tooltip: '分享',
+                  tooltip: s.t('分享', 'Share'),
                 ),
                 const SizedBox(width: 8),
               ],

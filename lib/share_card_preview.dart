@@ -20,6 +20,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'models.dart';
 import 'track_sector_data.dart';
 import 'track_timing.dart';
@@ -37,12 +38,19 @@ enum ShareCardStyle {
 }
 
 extension ShareCardStyleLabel on ShareCardStyle {
-  String get label => switch (this) {
-        ShareCardStyle.racing => '黑红赛车',
-        ShareCardStyle.sciFi => '深色科幻',
-        ShareCardStyle.minimal => '极简白底',
+  String label(S s) => switch (this) {
+        ShareCardStyle.racing => s.t('黑红赛车', 'Racing red'),
+        ShareCardStyle.sciFi => s.t('深色科幻', 'Sci-fi dark'),
+        ShareCardStyle.minimal => s.t('极简白底', 'Minimal white'),
       };
 }
+
+String _modeLabel(S s, TripMode mode) => switch (mode) {
+      TripMode.car => s.t('汽车', 'Car'),
+      TripMode.moto => s.t('摩托', 'Motorcycle'),
+      TripMode.kart => s.t('卡丁车', 'Kart'),
+      TripMode.bike => s.t('骑行', 'Bike'),
+    };
 
 String _fmtDur(int ms) {
   final s = ms ~/ 1000;
@@ -51,10 +59,12 @@ String _fmtDur(int ms) {
       '${(s % 60).toString().padLeft(2, '0')}';
 }
 
-String _fmtDate(int ms) {
+String _fmtDate(int ms, BuildContext context) {
   final d = DateTime.fromMillisecondsSinceEpoch(ms);
-  return '${d.year}年${d.month}月${d.day}日 '
+  final hm =
       '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  if (S.of(context).zh) return '${d.year}年${d.month}月${d.day}日 $hm';
+  return '${d.year}/${d.month}/${d.day} $hm';
 }
 
 /// 模式亮点：只用 Trip 自带事件 / 轨迹算出，不编造。
@@ -62,18 +72,23 @@ String _fmtDate(int ms) {
 /// 由详情页的标定门控另行把关，本预览不重复断言）；骑行取平均功率
 /// （估算时标注“估算”）。
 String shareCardHighlight(Trip trip) {
+  final s = S.current;
   switch (trip.mode) {
     case TripMode.car || TripMode.kart:
       final corners = trip.events.where((e) => e.kind == 'corner').toList();
-      if (corners.isEmpty) return '无偏急过弯';
+      if (corners.isEmpty) return s.t('无偏急过弯', 'No sharp corners');
       final c = corners.reduce(
           (a, b) => a.peakLatG.abs() > b.peakLatG.abs() ? a : b);
-      return '最快过弯：入弯 ${(c.entrySpeed * 3.6).toStringAsFixed(0)} km/h · '
-          '横向 ${c.peakLatG.abs().toStringAsFixed(2)}g';
+      return s.t(
+          '最快过弯：入弯 ${(c.entrySpeed * 3.6).toStringAsFixed(0)} km/h · '
+              '横向 ${c.peakLatG.abs().toStringAsFixed(2)}g',
+          'Fastest corner: entry ${(c.entrySpeed * 3.6).toStringAsFixed(0)} km/h · '
+              'lateral ${c.peakLatG.abs().toStringAsFixed(2)}g');
     case TripMode.moto:
       return trip.points.isEmpty
-          ? '暂无压弯数据'
-          : '最大压弯角：${trip.maxLean.toStringAsFixed(0)}°';
+          ? s.t('暂无压弯数据', 'No lean data yet')
+          : s.t('最大压弯角：${trip.maxLean.toStringAsFixed(0)}°',
+              'Max lean angle: ${trip.maxLean.toStringAsFixed(0)}°');
     case TripMode.bike:
       final powers =
           trip.points.where((p) => p.powerW != null).map((p) => p.powerW!).toList();
@@ -81,7 +96,9 @@ String shareCardHighlight(Trip trip) {
           ? 0.0
           : powers.reduce((a, b) => a + b) / powers.length;
       final est = trip.points.any((p) => p.powerEstimated);
-      return '平均功率 ${avgPow.toStringAsFixed(0)}W${est ? '（估算）' : ''}';
+      return s.t(
+          '平均功率 ${avgPow.toStringAsFixed(0)}W${est ? '（估算）' : ''}',
+          'Average power ${avgPow.toStringAsFixed(0)}W${est ? ' (estimated)' : ''}');
   }
 }
 
@@ -117,7 +134,8 @@ String? shareCardBestLapSectors(Trip trip, {bool? hasSectorPoints}) {
   for (var i = 0; i < best.sectorsMs.length; i++) {
     parts.add('S${i + 1} ${LapTimer.formatLapTime(best.sectorsMs[i])}');
   }
-  return '最佳圈分段 ${parts.join(' · ')}';
+  return S.current.t('最佳圈分段 ${parts.join(' · ')}',
+      'Best lap sectors ${parts.join(' · ')}');
 }
 
 /// 纯卡面（不带 Scaffold / 按钮组）：详情页如需把卡面嵌进已有页面
@@ -150,6 +168,7 @@ class ShareCardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final trip = this.trip;
     final dark = style != ShareCardStyle.minimal;
     final bg = switch (style) {
@@ -165,8 +184,8 @@ class ShareCardView extends StatelessWidget {
     final highlightColor =
         style == ShareCardStyle.minimal ? const Color(0xFFE10600) : const Color(0xFF7DD3FC);
     final dateWeather = trip.weatherSummary.isEmpty
-        ? _fmtDate(trip.startMs)
-        : '${_fmtDate(trip.startMs)} · ${trip.weatherSummary}';
+        ? _fmtDate(trip.startMs, context)
+        : '${_fmtDate(trip.startMs, context)} · ${trip.weatherSummary}';
     final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -180,12 +199,14 @@ class ShareCardView extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(
-            child: Text('驰迹 DriveTrack · ${trip.mode.label}',
+            child: Text(
+                '${s.t('驰迹 DriveTrack', 'DriveTrack')} · ${_modeLabel(s, trip.mode)}',
                 style: TextStyle(
                     fontSize: 18, fontWeight: FontWeight.bold, color: accent)),
           ),
           if (trip.score > 0 && !trip.isTrackMode)
-            Text('${trip.score.toStringAsFixed(0)} 分',
+            Text(s.t('${trip.score.toStringAsFixed(0)} 分',
+                '${trip.score.toStringAsFixed(0)} pts'),
                 style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -211,7 +232,7 @@ class ShareCardView extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Center(
-                      child: Text('轨迹缩略图占位',
+                      child: Text(s.t('轨迹缩略图占位', 'Track thumbnail placeholder'),
                           style:
                               TextStyle(color: subColor, fontSize: 13)),
                     ),
@@ -219,16 +240,20 @@ class ShareCardView extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Wrap(spacing: 14, runSpacing: 4, children: [
-          _kv('里程', '${(trip.distanceM / 1000).toStringAsFixed(2)} km',
+          _kv(s.t('里程', 'Distance'),
+              '${(trip.distanceM / 1000).toStringAsFixed(2)} km',
               titleColor, subColor),
-          _kv('时长', _fmtDur(trip.endMs - trip.startMs), titleColor, subColor),
-          _kv('最高', '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h',
+          _kv(s.t('时长', 'Duration'), _fmtDur(trip.endMs - trip.startMs),
               titleColor, subColor),
-          _kv('最大 G',
-              trip.points.isEmpty ? '暂无' : trip.maxG.toStringAsFixed(2),
+          _kv(s.t('最高', 'Top'),
+              '${(trip.maxSpeed * 3.6).toStringAsFixed(0)} km/h',
+              titleColor, subColor),
+          _kv(s.t('最大 G', 'Max G'),
+              trip.points.isEmpty ? s.t('暂无', 'N/A') : trip.maxG.toStringAsFixed(2),
               titleColor, subColor),
           if (!trip.isTrackMode)
-            _kv('评分', trip.score.toStringAsFixed(0), titleColor, subColor),
+            _kv(s.t('评分', 'Score'), trip.score.toStringAsFixed(0), titleColor,
+                subColor),
         ]),
         const SizedBox(height: 8),
         // v1.2.18 B 路：最佳圈分段行。只在赛道行程且最佳圈有分段
@@ -247,13 +272,16 @@ class ShareCardView extends StatelessWidget {
         Text(dateWeather, style: TextStyle(color: subColor, fontSize: 12)),
         if (videoPath != null) ...[
           const SizedBox(height: 4),
-          Text('含同步视频：${videoPath!.split('/').last}',
+          Text(s.t('含同步视频：${videoPath!.split('/').last}',
+              'Includes synced video: ${videoPath!.split('/').last}'),
               style: TextStyle(color: subColor, fontSize: 12)),
         ],
         if (trimPrivacy)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text('隐私：分享轨迹已截掉首尾',
+            child: Text(
+                s.t('隐私：分享轨迹已截掉首尾',
+                    'Privacy: shared track has its ends trimmed'),
                 style: TextStyle(color: subColor, fontSize: 12)),
           ),
       ]),
@@ -338,17 +366,18 @@ class _ShareCardPreviewPageState extends State<ShareCardPreviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: const Text('分享卡预览')),
+      appBar: DtAppBar(title: Text(s.t('分享卡预览', 'Share card preview'))),
       body: SingleChildScrollView(
         padding: withAppBarTopInset(context, const EdgeInsets.all(16)),
         child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SegmentedButton<ShareCardStyle>(
             segments: ShareCardStyle.values
-                .map((s) => ButtonSegment(value: s, label: Text(s.label)))
+                .map((v) => ButtonSegment(value: v, label: Text(v.label(s))))
                 .toList(),
             selected: {_style},
             onSelectionChanged: (v) => setState(() => _style = v.first),
@@ -381,8 +410,8 @@ class _ShareCardPreviewPageState extends State<ShareCardPreviewPage> {
           ),
           const SizedBox(height: 12),
           Row(children: [
-            const Text('截断首尾隐私',
-                style: TextStyle(color: Colors.white, fontSize: 14)),
+            Text(s.t('截断首尾隐私', 'Trim track ends'),
+                style: const TextStyle(color: Colors.white, fontSize: 14)),
             const Spacer(),
             Switch(
               value: widget.trimPrivacy,
@@ -390,34 +419,38 @@ class _ShareCardPreviewPageState extends State<ShareCardPreviewPage> {
             ),
           ]),
           if (widget.trimPrivacy)
-            const Text('开启后分享的轨迹将截掉首尾，统计数字仍为整趟',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            Text(
+                s.t('开启后分享的轨迹将截掉首尾，统计数字仍为整趟',
+                    'When on, shared tracks have their ends trimmed; stats still cover the whole trip'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, children: [
             if (widget.onShareImage != null)
               FilledButton.icon(
                   icon: const Icon(Icons.share),
-                  label: const Text('分享图片'),
+                  label: Text(s.t('分享图片', 'Share image')),
                   onPressed: widget.onShareImage),
             if (widget.onShareGpx != null)
               OutlinedButton.icon(
                   icon: const Icon(Icons.file_download),
-                  label: const Text('分享 GPX'),
+                  label: Text(s.t('分享 GPX', 'Share GPX')),
                   onPressed: widget.onShareGpx),
             if (widget.onShareCsv != null)
               OutlinedButton.icon(
                   icon: const Icon(Icons.file_download),
-                  label: const Text('分享 CSV'),
+                  label: Text(s.t('分享 CSV', 'Share CSV')),
                   onPressed: widget.onShareCsv),
             if (widget.onShareVideo != null && widget.videoPath != null)
               OutlinedButton.icon(
                   icon: const Icon(Icons.videocam),
-                  label: const Text('分享视频'),
+                  label: Text(s.t('分享视频', 'Share video')),
                   onPressed: widget.onShareVideo),
           ]),
           const SizedBox(height: 8),
-          const Text('分享走系统分享，不上传；CSV 为完整数据，请注意隐私。',
-              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          Text(
+              s.t('分享走系统分享，不上传；CSV 为完整数据，请注意隐私。',
+                  'Sharing uses the system share sheet and uploads nothing; the CSV contains full data, so mind your privacy.'),
+              style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ]),
       ),
     );

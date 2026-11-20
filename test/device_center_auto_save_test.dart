@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drive_track/device_center.dart';
+import 'package:drive_track/native.dart';
 
 void main() {
   const nativeChannel = MethodChannel('drivetrack/native');
@@ -92,5 +93,25 @@ void main() {
     });
     await tester.pump();
     expect(find.text('Test GPS'), findsOneWidget);
+
+    // “我的设备”不能只有名字：类型 / 连接状态 / 地址都要能看到。
+    expect(find.textContaining('外接GPS'), findsOneWidget);
+    expect(find.textContaining('已连接'), findsOneWidget);
+    expect(find.textContaining('AA:BB:CC:DD:EE:01'), findsOneWidget);
+  });
+
+  test('EventChannel 流缓存为单实例广播流，多页面不会互相顶掉原生订阅', () {
+    // 每次 getter 都新建 receiveBroadcastStream 会覆盖原生消息处理器，
+    // 后挂的页面顶掉先挂的页面（设备中心打开后全局 NMEA 断流）。
+    expect(identical(Native.bleDataStream, Native.bleDataStream), isTrue);
+    expect(Native.bleDataStream.isBroadcast, isTrue);
+    expect(identical(Native.bleDeviceStream, Native.bleDeviceStream), isTrue);
+    expect(Native.bleDeviceStream.isBroadcast, isTrue);
+    expect(identical(Native.locationStream, Native.locationStream), isTrue);
+    expect(Native.locationStream.isBroadcast, isTrue);
+    expect(
+      identical(Native.btGpsDeviceStream, Native.btGpsDeviceStream),
+      isTrue,
+    );
   });
 }

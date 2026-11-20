@@ -107,7 +107,10 @@ class _AboutPageState extends State<AboutPage> {
       }
     } catch (_) {}
     if (mounted) {
-      setState(() => _cacheMsg = count > 0 ? '已清除 $count 个缓存文件。' : '暂无可清除的缓存文件。');
+      final s = S.of(context);
+      setState(() => _cacheMsg = count > 0
+          ? s.t('已清除 $count 个缓存文件。', 'Cleared $count cache files.')
+          : s.t('暂无可清除的缓存文件。', 'No cache files to clear.'));
       showAppNotice(context, _cacheMsg!, appNoticeKindFromMessage(_cacheMsg!));
     }
   }
@@ -205,6 +208,9 @@ class _AboutPageState extends State<AboutPage> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final channel = widget.channelLabel == '正式版'
+        ? s.t('正式版', 'Release')
+        : widget.channelLabel;
     final check = _check;
     final accent = CardStyle.accent(context);
     final knownTotal = _downloadTotal != null && _downloadTotal! > 0;
@@ -248,7 +254,7 @@ class _AboutPageState extends State<AboutPage> {
                     border: Border.all(color: accent),
                   ),
                   child: Text(
-                    widget.channelLabel,
+                    channel,
                     style: TextStyle(
                         color: accent,
                         fontWeight: FontWeight.bold,
@@ -259,7 +265,10 @@ class _AboutPageState extends State<AboutPage> {
                 // v1.0.7：顶部大卡只留图标、App 名、正式版胶囊、版本号；
                 // 包名、图标说明、开发者、数据存储等分行说明全部删掉。
                 Text(
-                  '版本 ${widget.versionName} ${widget.channelLabel}',
+                  s.t(
+                    '版本 ${widget.versionName} $channel',
+                    'Version ${widget.versionName} · $channel',
+                  ),
                   style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
               ],

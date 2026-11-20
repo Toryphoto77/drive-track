@@ -180,6 +180,12 @@ const bool kHardwareGateBypass = bool.fromEnvironment(
 final ValueNotifier<ExternalGpsStatus> externalGpsStatus =
     ValueNotifier<ExternalGpsStatus>(ExternalGpsStatus.disconnected);
 
+/// 当前已连接外接设备的蓝牙地址（唯一写入方是 main.dart 的 BLE
+/// 事件总线，设备中心只读）。进设备中心时用它恢复“已连接”标记：
+/// 开机自动重连可能发生在本页创建之前，页内收不到那次 connected 事件。
+final ValueNotifier<String?> connectedExternalGpsAddress =
+    ValueNotifier<String?>(null);
+
 /// 设备中心在连接状态变化时调用（唯一写入入口）。
 void updateExternalGpsStatus(ExternalGpsStatus status) {
   externalGpsStatus.value = status;

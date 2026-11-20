@@ -252,6 +252,10 @@ class DeviceRuntimeStatus {
     this.bestLapMs,
     this.uptimeMs,
     this.freeHeap,
+    this.sdPresent,
+    this.sdState,
+    this.sdTotalKb,
+    this.sdFreeKb,
     this.supportsShutdown = false,
     this.supportsLaps = false,
   });
@@ -267,6 +271,14 @@ class DeviceRuntimeStatus {
   final int? bestLapMs;
   final int? uptimeMs;
   final int? freeHeap;
+
+  /// microSD 状态（固件 0.4.0+ 才上报，旧固件为 null → 界面不显示这一行）。
+  final bool? sdPresent;
+  final String? sdState; // ok / no_card / mount_fail
+  final int? sdTotalKb;
+  final int? sdFreeKb;
+
+  bool get sdMounted => sdPresent == true && (sdTotalKb ?? 0) > 0;
 
   /// 固件能力：旧固件不报 caps，对应按钮置灰并提示升级固件。
   final bool supportsShutdown;
@@ -303,6 +315,10 @@ class DeviceRuntimeStatus {
       bestLapMs: _intField(json, const ['bestLapMs', 'best_ms', 'bestLap']),
       uptimeMs: _intField(json, const ['uptimeMs', 'uptime_ms']),
       freeHeap: _intField(json, const ['freeHeap', 'free_heap']),
+      sdPresent: parseBool(json['sd'] ?? json['sdPresent'] ?? json['sdOk']),
+      sdState: json['sdState']?.toString() ?? json['sd_state']?.toString(),
+      sdTotalKb: _intField(json, const ['sdTotalKb', 'sd_total_kb']),
+      sdFreeKb: _intField(json, const ['sdFreeKb', 'sd_free_kb']),
       supportsShutdown: supports('shutdown', 'shutdown'),
       supportsLaps: supports('laps', 'lapsApi'),
     );

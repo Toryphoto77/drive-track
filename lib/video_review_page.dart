@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'app_bar_style.dart';
 import 'app_notice.dart';
 import 'package:flutter/services.dart';
+import 'app_locale.dart';
 import 'models.dart';
 import 'native.dart';
 import 'video_map_gauge.dart';
@@ -62,7 +63,7 @@ class _SegmentAlign {
   const _SegmentAlign(this.offsetMs, this.note);
 }
 
-_SegmentAlign _segmentAlign(Trip trip, String path, int index) {
+_SegmentAlign _segmentAlign(S s, Trip trip, String path, int index) {
   final duration = trip.endMs - trip.startMs;
   final base = path.split('/').last;
   final m = RegExp(r'trip_(\d+)\.mp4$').firstMatch(base);
@@ -72,15 +73,37 @@ _SegmentAlign _segmentAlign(Trip trip, String path, int index) {
       final off = fileMs - trip.startMs;
       if (off >= -10000 && off <= duration) {
         if (off < 0) {
-          return _SegmentAlign(0, '视频比轨迹早 ${(-off)}ms，已按 0 对齐');
+          return _SegmentAlign(
+              0, s.t('视频比轨迹早 ${(-off)}ms，已按 0 对齐',
+                  'Video starts ${(-off)}ms before the track; aligned to 0'));
         }
-        return _SegmentAlign(off, '按段文件名时间戳对齐');
+        return _SegmentAlign(
+            off, s.t('按段文件名时间戳对齐', 'Aligned by segment filename timestamp'));
       }
     }
   }
-  return _SegmentAlign(
-      index * 10 * 60 * 1000, '段起始按“段序号 × 10 分钟”估算');
+  return _SegmentAlign(index * 10 * 60 * 1000,
+      s.t('段起始按“段序号 × 10 分钟”估算', 'Segment start estimated as index × 10 minutes'));
 }
+
+/// 事件标签来自数据层（中文），英文界面在此转写。
+String _eventLabel(S s, TripEvent e) {
+  if (s.zh) return e.label;
+  return switch (e.kind) {
+    'corner' => 'Corner',
+    'harshAccel' => 'Hard accel',
+    'harshBrake' => 'Hard brake',
+    'sensorDrop' => 'Sensor lost',
+    _ => e.label,
+  };
+}
+
+String _modeName(S s, TripMode mode) => switch (mode) {
+      TripMode.car => s.t('汽车', 'Car'),
+      TripMode.moto => s.t('摩托', 'Moto'),
+      TripMode.kart => s.t('卡丁车', 'Kart'),
+      TripMode.bike => s.t('骑行', 'Ride'),
+    };
 
 class _VideoReviewPageState extends State<VideoReviewPage> {
   late int _segmentIndex;
@@ -104,7 +127,8 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
   String? get _currentPath => _videos.isEmpty ? null : _videos[_segmentIndex];
   _SegmentAlign get _align => _videos.isEmpty
       ? const _SegmentAlign(0, '')
-      : _segmentAlign(_trip, _videos[_segmentIndex], _segmentIndex);
+      : _segmentAlign(
+          S.of(context), _trip, _videos[_segmentIndex], _segmentIndex);
   bool get _segmentMissing {
     final p = _currentPath;
     if (p == null) return true;
@@ -196,8 +220,10 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
           });
         case 'onError':
           setState(() {
-            _playerError =
-                '应用内播放失败，请用系统播放器打开';
+            _playerError = S.of(context).t(
+              '应用内播放失败，请用系统播放器打开',
+              'In-app playback failed; open it with the system player',
+            );
             _playing = false;
           });
       }
@@ -288,20 +314,30 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
     });
   }
 
-  String _eventLine(TripEvent e) {
+  String _eventLine(S s, TripEvent e) {
     final tripOff = e.startMs - _trip.startMs;
-    final segIdx = _segmentIndexOfEvent(e);
-    final segMs = segIdx == null ? null : (e.startMs - _trip.startMs) - _segmentAlign(_trip, _videos[segIdx], segIdx).offsetMs;
-    return '- [${e.label}] 行程+${_mmss(tripOff)}'
-        '${segIdx == null ? '' : ' · 第 ${segIdx + 1} 段视频内 ${_mmss(segMs ?? 0)}（跳转落点为事件前 3 秒）'}'
-        ' · 纵向 ${e.peakLongG.toStringAsFixed(2)}g · 横向 ${e.peakLatG.toStringAsFixed(2)}g'
-        ' · 速度 ${(e.entrySpeed * 3.6).toStringAsFixed(0)}→${(e.exitSpeed * 3.6).toStringAsFixed(0)} km/h'
-        ' · 持续 ${(e.endMs - e.startMs) ~/ 1000} 秒';
+    final segIdx = _segmentIndexOfEvent(s, e);
+    final segMs = segIdx == null
+        ? null
+        : (e.startMs - _trip.startMs) -
+            _segmentAlign(s, _trip, _videos[segIdx], segIdx).offsetMs;
+    return s.t(
+      '- [${_eventLabel(s, e)}] 行程+${_mmss(tripOff)}'
+      '${segIdx == null ? '' : ' · 第 ${segIdx + 1} 段视频内 ${_mmss(segMs ?? 0)}（跳转落点为事件前 3 秒）'}'
+      ' · 纵向 ${e.peakLongG.toStringAsFixed(2)}g · 横向 ${e.peakLatG.toStringAsFixed(2)}g'
+      ' · 速度 ${(e.entrySpeed * 3.6).toStringAsFixed(0)}→${(e.exitSpeed * 3.6).toStringAsFixed(0)} km/h'
+      ' · 持续 ${(e.endMs - e.startMs) ~/ 1000} 秒',
+      '- [${_eventLabel(s, e)}] trip+${_mmss(tripOff)}'
+      '${segIdx == null ? '' : ' · in segment ${segIdx + 1} at ${_mmss(segMs ?? 0)} (jumps to 3 s before the event)'}'
+      ' · long ${e.peakLongG.toStringAsFixed(2)}g · lat ${e.peakLatG.toStringAsFixed(2)}g'
+      ' · speed ${(e.entrySpeed * 3.6).toStringAsFixed(0)}→${(e.exitSpeed * 3.6).toStringAsFixed(0)} km/h'
+      ' · lasts ${(e.endMs - e.startMs) ~/ 1000} s',
+    );
   }
 
-  int? _segmentIndexOfEvent(TripEvent e) {
+  int? _segmentIndexOfEvent(S s, TripEvent e) {
     for (var i = 0; i < _videos.length; i++) {
-      final off = _segmentAlign(_trip, _videos[i], i).offsetMs;
+      final off = _segmentAlign(s, _trip, _videos[i], i).offsetMs;
       final segMs = (e.startMs - _trip.startMs) - off;
       final cap = 10 * 60 * 1000;
       if (segMs >= 0 && segMs <= cap) return i;
@@ -310,18 +346,29 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
   }
 
   String _exportText() {
+    final s = S.of(context);
     final b = StringBuffer();
-    b.writeln('驰迹 DriveTrack · 事件时间戳清单');
-    b.writeln('行程：${_trip.mode.label} · ${_dateTime(_trip.startMs)} 开始 · ${_trip.id}');
-    b.writeln('视频段数：${_videos.length}（每段最长 10 分钟）');
-    b.writeln('对齐方式：段偏移优先取段文件名时间戳，否则按段序号 × 10 分钟估算；精度为秒级。');
-    b.writeln('本清单与 HUD、地图仪表仅为回放叠加，未烧录进原视频。');
-    b.writeln('点事件跳到该事件前约 3 秒。');
+    b.writeln(s.t('驰迹 DriveTrack · 事件时间戳清单',
+        'DriveTrack · Event timestamp list'));
+    b.writeln(s.t(
+      '行程：${_modeName(s, _trip.mode)} · ${_dateTime(_trip.startMs)} 开始 · ${_trip.id}',
+      'Trip: ${_modeName(s, _trip.mode)} · started ${_dateTime(_trip.startMs)} · ${_trip.id}',
+    ));
+    b.writeln(s.t('视频段数：${_videos.length}（每段最长 10 分钟）',
+        'Video segments: ${_videos.length} (up to 10 minutes each)'));
+    b.writeln(s.t(
+      '对齐方式：段偏移优先取段文件名时间戳，否则按段序号 × 10 分钟估算；精度为秒级。',
+      'Alignment: segment offset uses the filename timestamp when available, otherwise index × 10 minutes; second-level accuracy.',
+    ));
+    b.writeln(s.t('本清单与 HUD、地图仪表仅为回放叠加，未烧录进原视频。',
+        'This list, the HUD, and the map gauge are replay overlays only and are not burned into the original video.'));
+    b.writeln(s.t('点事件跳到该事件前约 3 秒。',
+        'Tap an event to jump to about 3 seconds before it.'));
     if (_trip.events.isEmpty) {
-      b.writeln('本行程无事件。');
+      b.writeln(s.t('本行程无事件。', 'This trip has no events.'));
     } else {
       for (final e in _trip.events) {
-        b.writeln(_eventLine(e));
+        b.writeln(_eventLine(s, e));
       }
     }
     return b.toString();
@@ -329,15 +376,19 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
 
   Future<void> _shareEventList() async {
     if (_exporting) return;
+    final s = S.of(context);
     setState(() => _exporting = true);
     try {
       final dir = await Native.getCacheDir();
       final file = File('$dir/drivetrack_events_${_trip.id}.txt');
       await file.writeAsString(_exportText());
-      await Native.shareFiles([file.path], 'text/plain', '驰迹事件时间戳清单');
+      await Native.shareFiles([file.path], 'text/plain',
+          s.t('驰迹事件时间戳清单', 'DriveTrack event timestamp list'));
     } catch (_) {
       if (mounted) {
-        showAppNotice(context, '导出失败，可改用“复制清单”', AppNoticeKind.error);
+        showAppNotice(context,
+            s.t('导出失败，可改用“复制清单”', 'Export failed; try Copy list instead'),
+            AppNoticeKind.error);
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -346,6 +397,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final trip = _trip;
     final point = _pointAt(_displayTripMs);
     final hasVideo = _currentPath != null && !_segmentMissing;
@@ -353,7 +405,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
     final events = _segmentEvents;
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: const Text('视频回顾')),
+      appBar: DtAppBar(title: Text(s.t('视频回顾', 'Video review'))),
       body: SingleChildScrollView(
         padding: withAppBarTopInset(context, EdgeInsets.zero),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -366,7 +418,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                   Padding(
                     padding: const EdgeInsets.all(4),
                     child: ChoiceChip(
-                      label: Text('第 ${i + 1} 段'),
+                      label: Text(s.t('第 ${i + 1} 段', 'Segment ${i + 1}')),
                       selected: i == _segmentIndex,
                       onSelected: (_) => _switchSegment(i),
                     ),
@@ -387,8 +439,9 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                     onPlatformViewCreated: _onPlatformViewCreated,
                   )
                 else
-                  const Center(
-                    child: Text('暂无可播放的视频段', style: TextStyle(color: Colors.white54)),
+                  Center(
+                    child: Text(s.t('暂无可播放的视频段', 'No playable video segment'),
+                        style: const TextStyle(color: Colors.white54)),
                   ),
                 // HUD 叠加层（IgnorePointer，不挡播放控制；下方另有一份同样数值）。
                 if (point != null)
@@ -402,13 +455,15 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                       Positioned(
                         right: 8,
                         top: 8,
-                        child: _hudChip('行程+${_mmss(_displayTripMs - trip.startMs)}'),
+                        child: _hudChip(s.t('行程+${_mmss(_displayTripMs - trip.startMs)}',
+                            'Trip+${_mmss(_displayTripMs - trip.startMs)}')),
                       ),
                       Positioned(
                         left: 8,
                         bottom: 8,
-                        child: _hudChip(
-                            '纵向 ${point.longG.toStringAsFixed(2)}g · 横向 ${point.latG.toStringAsFixed(2)}g'),
+                        child: _hudChip(s.t(
+                            '纵向 ${point.longG.toStringAsFixed(2)}g · 横向 ${point.latG.toStringAsFixed(2)}g',
+                            'Long ${point.longG.toStringAsFixed(2)}g · lat ${point.latG.toStringAsFixed(2)}g')),
                       ),
                     ]),
                   ),
@@ -432,13 +487,14 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                           _gaugeButton(
                             Icons.swap_horiz,
-                            '切换位置（当前${_gaugePosition.label}）',
+                            s.t('切换位置（当前${_gaugePositionName(s)}）',
+                                'Change position (now ${_gaugePositionName(s)})'),
                             () => setState(
                                 () => _gaugePosition = _gaugePosition.next),
                           ),
                           _gaugeButton(
                             Icons.visibility_off,
-                            '隐藏地图仪表',
+                            s.t('隐藏地图仪表', 'Hide map gauge'),
                             () => setState(() => _gaugeHidden = true),
                           ),
                         ]),
@@ -451,7 +507,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
                     top: 40,
                     child: _gaugeButton(
                       Icons.map,
-                      '显示地图仪表',
+                      s.t('显示地图仪表', 'Show map gauge'),
                       () => setState(() => _gaugeHidden = false),
                     ),
                   ),
@@ -461,7 +517,7 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
           // ---- 播放控制 ----
           Row(children: [
             Semantics(
-              label: _playing ? '暂停' : '播放',
+              label: _playing ? s.t('暂停', 'Pause') : s.t('播放', 'Play'),
               child: IconButton(
                 icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
                 onPressed: hasVideo && _prepared ? _togglePlay : null,
@@ -534,60 +590,86 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
               }),
             ),
           if (events.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('红点为本段事件，点即跳到事件前约 3 秒',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                  s.t('红点为本段事件，点即跳到事件前约 3 秒',
+                      'Red dots mark events in this segment; tap to jump about 3 s before'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
             ),
           // ---- HUD 数值（视频下方同步一份） ----
           Padding(
             padding: const EdgeInsets.all(12),
             child: point == null
-                ? const Text('无轨迹点，HUD 无数据')
+                ? Text(s.t('无轨迹点，HUD 无数据', 'No track points; no HUD data'))
                 : Wrap(spacing: 16, runSpacing: 8, children: [
-                    Text('速度 ${(point.speed * 3.6).toStringAsFixed(0)} km/h',
+                    Text(
+                        s.t('速度 ${(point.speed * 3.6).toStringAsFixed(0)} km/h',
+                            'Speed ${(point.speed * 3.6).toStringAsFixed(0)} km/h'),
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text('纵向 ${point.longG.toStringAsFixed(2)}g'),
-                    Text('横向 ${point.latG.toStringAsFixed(2)}g'),
-                    Text('合成 ${point.combinedG.toStringAsFixed(2)}g'),
-                    if (trip.mode == TripMode.moto) Text('侧倾 ${point.roll.toStringAsFixed(0)}°'),
-                    Text('行程 ${_dateTime(_displayTripMs)}'),
+                    Text(s.t('纵向 ${point.longG.toStringAsFixed(2)}g',
+                        'Long ${point.longG.toStringAsFixed(2)}g')),
+                    Text(s.t('横向 ${point.latG.toStringAsFixed(2)}g',
+                        'Lat ${point.latG.toStringAsFixed(2)}g')),
+                    Text(s.t('合成 ${point.combinedG.toStringAsFixed(2)}g',
+                        'Combined ${point.combinedG.toStringAsFixed(2)}g')),
+                    if (trip.mode == TripMode.moto)
+                      Text(s.t('侧倾 ${point.roll.toStringAsFixed(0)}°',
+                          'Lean ${point.roll.toStringAsFixed(0)}°')),
+                    Text(s.t('行程 ${_dateTime(_displayTripMs)}',
+                        'Trip ${_dateTime(_displayTripMs)}')),
                   ]),
           ),
           // ---- 边界情况明示 ----
           if (_videos.isEmpty)
-            const _WarnBanner('本行程未关联视频。下方仍可查看事件清单。'),
+            _WarnBanner(s.t('本行程未关联视频。下方仍可查看事件清单。',
+                'No video is linked to this trip. The event list below is still available.')),
           if (_videos.isNotEmpty && _segmentMissing)
-            const _WarnBanner('当前段视频文件已缺失，无法应用内播放；可切换其他段。'),
+            _WarnBanner(s.t('当前段视频文件已缺失，无法应用内播放；可切换其他段。',
+                'The current segment file is missing and cannot play in-app; switch to another segment.')),
           if (trip.points.length < 10)
-            const _WarnBanner('轨迹点过少（少于 10 个），HUD 与事件可能不完整。'),
+            _WarnBanner(s.t('轨迹点过少（少于 10 个），HUD 与事件可能不完整。',
+                'Too few track points (under 10); the HUD and events may be incomplete.')),
           if (_playerError != null) _WarnBanner(_playerError!),
           if (_videos.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text('对齐：${_align.note}；画面与数值可能有 ≤250ms 延迟；跳转落点可能差 <1 秒。',
+              child: Text(
+                  s.t('对齐：${_align.note}；画面与数值可能有 ≤250ms 延迟；跳转落点可能差 <1 秒。',
+                      'Alignment: ${_align.note}; video and values may lag by up to 250 ms; jumps may be off by under 1 s.'),
                   style: const TextStyle(color: Colors.white54, fontSize: 12)),
             ),
-          const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('HUD 与地图仪表仅本页回放时叠加，未烧录进原视频；同步精度为秒级。',
-                style: TextStyle(color: Colors.orange, fontSize: 12)),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+                s.t('HUD 与地图仪表仅本页回放时叠加，未烧录进原视频；同步精度为秒级。',
+                    'The HUD and map gauge are overlaid only during replay here and are not burned into the original video; sync is second-level.'),
+                style: const TextStyle(color: Colors.orange, fontSize: 12)),
           ),
           // ---- 本段事件 ----
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
-            child: Text('本段事件', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(s.t('本段事件', 'Events in this segment'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ),
           if (events.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('本段无事件', style: TextStyle(color: Colors.white54)),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(s.t('本段无事件', 'No events in this segment'),
+                  style: const TextStyle(color: Colors.white54)),
             ),
           for (final e in events)
             ListTile(
-              title: Text('${e.label} · 视频内 ${_mmss(_eventSegmentMs(e)!)}（跳转到前 3 秒）'),
-              subtitle: Text('纵向 ${e.peakLongG.toStringAsFixed(2)}g · 横向 ${e.peakLatG.toStringAsFixed(2)}g · '
-                  '速度 ${(e.entrySpeed * 3.6).toStringAsFixed(0)}→${(e.exitSpeed * 3.6).toStringAsFixed(0)} km/h'),
+              title: Text(s.t(
+                '${_eventLabel(s, e)} · 视频内 ${_mmss(_eventSegmentMs(e)!)}（跳转到前 3 秒）',
+                '${_eventLabel(s, e)} · at ${_mmss(_eventSegmentMs(e)!)} in video (jumps back 3 s)',
+              )),
+              subtitle: Text(s.t(
+                '纵向 ${e.peakLongG.toStringAsFixed(2)}g · 横向 ${e.peakLatG.toStringAsFixed(2)}g · '
+                '速度 ${(e.entrySpeed * 3.6).toStringAsFixed(0)}→${(e.exitSpeed * 3.6).toStringAsFixed(0)} km/h',
+                'Long ${e.peakLongG.toStringAsFixed(2)}g · lat ${e.peakLatG.toStringAsFixed(2)}g · '
+                'speed ${(e.entrySpeed * 3.6).toStringAsFixed(0)}→${(e.exitSpeed * 3.6).toStringAsFixed(0)} km/h',
+              )),
               trailing: const Icon(Icons.play_arrow),
               onTap: () => _jumpToEvent(e),
             ),
@@ -597,29 +679,36 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
             child: Wrap(spacing: 8, runSpacing: 8, children: [
               OutlinedButton.icon(
                 icon: const Icon(Icons.copy),
-                label: const Text('复制事件清单'),
+                label: Text(s.t('复制事件清单', 'Copy event list')),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: _exportText()));
-                  if (mounted) showAppNotice(context, '事件时间戳清单已复制', AppNoticeKind.success);
+                  if (mounted) {
+                    showAppNotice(context,
+                        s.t('事件时间戳清单已复制', 'Event timestamp list copied'),
+                        AppNoticeKind.success);
+                  }
                 },
               ),
               OutlinedButton.icon(
                 icon: const Icon(Icons.share),
-                label: Text(_exporting ? '导出中…' : '分享事件清单文件'),
+                label: Text(_exporting
+                    ? s.t('导出中…', 'Exporting…')
+                    : s.t('分享事件清单文件', 'Share event list file')),
                 onPressed: _exporting ? null : _shareEventList,
               ),
               if (_currentPath != null)
                 OutlinedButton.icon(
                   icon: const Icon(Icons.open_in_new),
-                  label: const Text('系统播放器播放'),
+                  label: Text(s.t('系统播放器播放', 'Open in system player')),
                   onPressed: () => Native.playVideo(_currentPath!),
                 ),
               if (_currentPath != null)
                 OutlinedButton.icon(
                   icon: const Icon(Icons.video_library),
-                  label: const Text('分享视频'),
-                  onPressed: () =>
-                      Native.shareFiles([_currentPath!], 'video/mp4', '驰迹行程视频'),
+                  label: Text(s.t('分享视频', 'Share video')),
+                  onPressed: () => Native.shareFiles(
+                      [_currentPath!], 'video/mp4',
+                      s.t('驰迹行程视频', 'DriveTrack trip video')),
                 ),
             ]),
           ),
@@ -642,6 +731,12 @@ class _VideoReviewPageState extends State<VideoReviewPage> {
 
   /// v1.3.6：地图仪表按当前位置定位（默认右上，位于 HUD 时间条下方，
   /// 不遮 HUD；右下位于 G 值条对侧，同样不遮 HUD）。
+  String _gaugePositionName(S s) => switch (_gaugePosition) {
+        VideoGaugePosition.topLeft => s.t('左上', 'Top left'),
+        VideoGaugePosition.topRight => s.t('右上', 'Top right'),
+        VideoGaugePosition.bottomRight => s.t('右下', 'Bottom right'),
+      };
+
   Widget _gaugePositioned({required Widget child}) {
     switch (_gaugePosition) {
       case VideoGaugePosition.topLeft:

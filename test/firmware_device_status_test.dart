@@ -105,6 +105,50 @@ void main() {
       expect(s.hasFix, isNull);
       expect(s.satellites, isNull);
     });
+
+    // 固件 0.4.0 起 /api/status 带 SD 字段
+    test('SD 已挂载：读出总容量与剩余容量', () {
+      final s = DeviceRuntimeStatus.fromJson({
+        'sd': 1,
+        'sdState': 'ok',
+        'sdTotalKb': 30515200,
+        'sdFreeKb': 24117248,
+        'caps': ['shutdown', 'storage'],
+      });
+      expect(s.sdPresent, true);
+      expect(s.sdState, 'ok');
+      expect(s.sdTotalKb, 30515200);
+      expect(s.sdFreeKb, 24117248);
+      expect(s.sdMounted, true);
+    });
+
+    test('未插卡 / 挂载失败：sd=false 且总量为 0，界面不能当可用', () {
+      final noCard = DeviceRuntimeStatus.fromJson({
+        'sd': 0,
+        'sdState': 'no_card',
+        'sdTotalKb': 0,
+        'sdFreeKb': 0,
+      });
+      expect(noCard.sdMounted, false);
+      expect(noCard.sdState, 'no_card');
+
+      final failed = DeviceRuntimeStatus.fromJson({
+        'sd': 0,
+        'sdState': 'mount_fail',
+        'sdTotalKb': 0,
+      });
+      expect(failed.sdMounted, false);
+      expect(failed.sdState, 'mount_fail');
+    });
+
+    test('0.3.0 旧固件没有 SD 字段 → 全为 null，界面隐藏该行', () {
+      final s = DeviceRuntimeStatus.fromJson({'battery': 80});
+      expect(s.sdPresent, isNull);
+      expect(s.sdState, isNull);
+      expect(s.sdTotalKb, isNull);
+      expect(s.sdFreeKb, isNull);
+      expect(s.sdMounted, false);
+    });
   });
 
   group('圈速导入存档', () {

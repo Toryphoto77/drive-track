@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'app_notice.dart';
 import 'my_page.dart';
 
@@ -81,7 +82,13 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 
   Future<void> _pickAvatar() async {
     if (widget.onPickAvatar == null) {
-      if (mounted) showAppNotice(context, '换头像暂不可用。', AppNoticeKind.info);
+      if (mounted) {
+        showAppNotice(
+          context,
+          S.of(context).t('换头像暂不可用。', 'Changing the avatar is unavailable.'),
+          AppNoticeKind.info,
+        );
+      }
       return;
     }
     if (_pickingAvatar) return;
@@ -93,7 +100,11 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       }
     } catch (e) {
       if (mounted) {
-        showAppNotice(context, '换头像失败：$e', AppNoticeKind.error);
+        showAppNotice(
+          context,
+          S.of(context).t('换头像失败：$e', 'Failed to change avatar: $e'),
+          AppNoticeKind.error,
+        );
       }
     } finally {
       if (mounted) setState(() => _pickingAvatar = false);
@@ -101,6 +112,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   }
 
   Future<void> _pickGender() async {
+    final s = S.of(context);
+    String labelOf(String g) => g == '男'
+        ? s.t('男', 'Male')
+        : g == '女'
+        ? s.t('女', 'Female')
+        : s.t('不填', 'Prefer not to say');
     final v = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: const Color(0xFF1E1E1E),
@@ -110,7 +127,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           children: [
             for (final g in const ['男', '女', '不填'])
               ListTile(
-                title: Text(g,
+                title: Text(labelOf(g),
                     style: TextStyle(
                         color: _gender == g ||
                                 (g == '不填' && _gender.isEmpty)
@@ -132,15 +149,16 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   }
 
   Future<void> _pickBirthday() async {
+    final s = S.of(context);
     final initial = DateTime.tryParse(_birthday) ?? DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
       firstDate: DateTime(1900, 1, 1),
       lastDate: DateTime.now(),
-      helpText: '选择生日',
-      cancelText: '取消',
-      confirmText: '确定',
+      helpText: s.t('选择生日', 'Select birthday'),
+      cancelText: s.t('取消', 'Cancel'),
+      confirmText: s.t('确定', 'OK'),
     );
     if (picked != null && mounted) {
       setState(() => _birthday =
@@ -149,23 +167,26 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   }
 
   void _save() {
+    final s = S.of(context);
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      setState(() => _error = '昵称不能为空，请填写后再保存。');
+      setState(() => _error = s.t('昵称不能为空，请填写后再保存。', 'Name cannot be empty.'));
       return;
     }
     if (name.length > 32) {
-      setState(() => _error = '昵称最多 32 个字。');
+      setState(() => _error = s.t('昵称最多 32 个字。', 'Name can be at most 32 characters.'));
       return;
     }
     if (_bioCtrl.text.trim().length > 200) {
-      setState(() => _error = '个人签名最多 200 个字。');
+      setState(() => _error = s.t('个人签名最多 200 个字。', 'Bio can be at most 200 characters.'));
       return;
     }
     final email = _emailCtrl.text.trim();
     if (email.isNotEmpty &&
         !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      setState(() => _error = '邮箱格式不对，请检查后再保存（可留空不填）。');
+      setState(() => _error = s.t(
+          '邮箱格式不对，请检查后再保存（可留空不填）。',
+          'Invalid email address. Check it or leave it empty.'));
       return;
     }
     setState(() => _error = null);
@@ -183,18 +204,32 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     if (mounted) Navigator.pop(context);
   }
 
+  String _genderText(S s) {
+    switch (_gender) {
+      case '男':
+        return s.t('男', 'Male');
+      case '女':
+        return s.t('女', 'Female');
+      case '':
+        return s.t('未填', 'Not set');
+      default:
+        return _gender;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final accent = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
-        title: const Text('编辑资料'),
+        title: Text(s.t('编辑资料', 'Edit profile')),
         actions: [
           TextButton(
             onPressed: _save,
-            child: Text('保存',
+            child: Text(s.t('保存', 'Save'),
                 style: TextStyle(
                     color: accent, fontWeight: FontWeight.bold, fontSize: 16)),
           ),
@@ -259,27 +294,27 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
             ),
             const SizedBox(height: 24),
             _row(
-              label: '昵称',
+              label: s.t('昵称', 'Name'),
               child: TextField(
                 controller: _nameCtrl,
                 maxLength: 32,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
                   counterText: '',
-                  hintText: '请输入昵称',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintText: s.t('请输入昵称', 'Enter a name'),
+                  hintStyle: const TextStyle(color: Colors.white38),
                 ),
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),
             ),
             _row(
-              label: '性别',
+              label: s.t('性别', 'Gender'),
               child: InkWell(
                 onTap: _pickGender,
                 child: Row(children: [
                   Expanded(
                     child: Text(
-                      _gender.isEmpty ? '未填' : _gender,
+                      _genderText(s),
                       style: TextStyle(
                           color: _gender.isEmpty ? Colors.white38 : Colors.white,
                           fontSize: 15),
@@ -291,13 +326,13 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               ),
             ),
             _row(
-              label: '生日',
+              label: s.t('生日', 'Birthday'),
               child: InkWell(
                 onTap: _pickBirthday,
                 child: Row(children: [
                   Expanded(
                     child: Text(
-                      _birthday.isEmpty ? '未填' : _birthday,
+                      _birthday.isEmpty ? s.t('未填', 'Not set') : _birthday,
                       style: TextStyle(
                           color:
                               _birthday.isEmpty ? Colors.white38 : Colors.white,
@@ -307,10 +342,10 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                   if (_birthday.isNotEmpty)
                     InkWell(
                       onTap: () => setState(() => _birthday = ''),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4),
-                        child: Text('清除',
-                            style: TextStyle(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(s.t('清除', 'Clear'),
+                            style: const TextStyle(
                                 color: Colors.white38, fontSize: 13)),
                       ),
                     ),
@@ -320,74 +355,78 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               ),
             ),
             _row(
-              label: '行业',
+              label: s.t('行业', 'Industry'),
               child: TextField(
                 controller: _industryCtrl,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
-                  hintText: '如：影视、电视、广播制作',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintText: s.t('如：影视、电视、广播制作', 'e.g. Film, TV, radio'),
+                  hintStyle: const TextStyle(color: Colors.white38),
                 ),
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),
             ),
             _row(
-              label: '个人签名',
+              label: s.t('个人签名', 'Bio'),
               child: TextField(
                 controller: _bioCtrl,
                 minLines: 1,
                 maxLines: 3,
                 maxLength: 200,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
                   counterText: '',
-                  hintText: '介绍一下自己',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintText: s.t('介绍一下自己', 'Tell us about yourself'),
+                  hintStyle: const TextStyle(color: Colors.white38),
                 ),
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),
             ),
             _row(
-              label: '座驾品牌',
+              label: s.t('座驾品牌', 'Vehicle make'),
               child: TextField(
                 controller: _brandCtrl,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
-                  hintText: '如：宝马',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintText: s.t('如：宝马', 'e.g. BMW'),
+                  hintStyle: const TextStyle(color: Colors.white38),
                 ),
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),
             ),
             _row(
-              label: '座驾型号',
+              label: s.t('座驾型号', 'Vehicle model'),
               child: TextField(
                 controller: _modelCtrl,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
-                  hintText: '如：M4',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintText: s.t('如：M4', 'e.g. M4'),
+                  hintStyle: const TextStyle(color: Colors.white38),
                 ),
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),
             ),
             _row(
-              label: '邮箱',
+              label: s.t('邮箱', 'Email'),
               child: TextField(
                 controller: _emailCtrl,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
-                  hintText: '仅存本机，用作反馈联系方式',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintText: s.t('仅存本机，用作反馈联系方式',
+                      'Stored on this device only, used for feedback'),
+                  hintStyle: const TextStyle(color: Colors.white38),
                 ),
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              '昵称、简介与头像保存后会同步到云端公开资料，他人打开你的公开资料页可见；邮箱仅存本机，不会发到服务器。',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+            Text(
+              s.t(
+                '昵称、简介与头像保存后会同步到云端公开资料，他人打开你的公开资料页可见；邮箱仅存本机，不会发到服务器。',
+                'Name, bio and avatar sync to your public profile after saving and are visible to others. Your email stays on this device and is never sent to the server.',
+              ),
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),

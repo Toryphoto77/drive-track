@@ -463,6 +463,9 @@ class _DeviceHardwareCardState extends State<DeviceHardwareCard> {
         s.t('卫星', 'Satellites'),
         status?.satellites == null ? '—' : '${status!.satellites}',
       ),
+      // 固件 0.4.0+ 才上报 SD 字段；旧固件整行不出现，避免显示成“0 GB”。
+      if (status?.sdTotalKb != null)
+        (s.t('存储卡', 'microSD'), _sdText(s, status!)),
       (
         s.t('已记录圈数', 'Laps recorded'),
         status?.lapCount == null ? '—' : '${status!.lapCount}',
@@ -494,6 +497,32 @@ class _DeviceHardwareCardState extends State<DeviceHardwareCard> {
         ],
       ],
     );
+  }
+
+  String _sdText(S s, DeviceRuntimeStatus st) {
+    final total = st.sdTotalKb ?? 0;
+    final free = st.sdFreeKb ?? 0;
+    if (!st.sdMounted) {
+      switch (st.sdState) {
+        case 'mount_fail':
+          return s.t('挂载失败', 'Mount failed');
+        case 'no_card':
+          return s.t('未插卡', 'No card');
+        default:
+          return s.t('不可用', 'Unavailable');
+      }
+    }
+    final used = (total - free).clamp(0, total);
+    return '${_size(used)} / ${_size(total)}'
+        '（${s.t('可用', 'free')} ${_size(free)}）';
+  }
+
+  String _size(int kb) {
+    if (kb >= 1024 * 1024) {
+      return '${(kb / 1024 / 1024).toStringAsFixed(1)} GB';
+    }
+    if (kb >= 1024) return '${(kb / 1024).toStringAsFixed(0)} MB';
+    return '$kb KB';
   }
 
   Widget _kv(S s, String label, String value) => Column(

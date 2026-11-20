@@ -16,47 +16,63 @@ class Native {
   static const EventChannel _tts = EventChannel('drivetrack/tts');
   static const EventChannel _obd = EventChannel('drivetrack/obd');
 
-  static Stream<Map<String, dynamic>> get locationStream => _loc
+  // 每个 EventChannel 只创建一次事件流并缓存：EventChannel 的
+  // receiveBroadcastStream 每次调用都会注册新的原生消息处理器，
+  // 后注册的会顶掉先注册的（Flutter 的实现是 setMessageHandler 覆盖），
+  // 多个页面各调一次 getter 时只有最后一个页面能收到事件，先注册的
+  // 页面取消订阅还会把原生 sink 置空，其它页面从此收不到任何事件。
+  // 缓存成单实例后所有监听方共享同一条广播流，互不顶掉。
+  static final Stream<Map<String, dynamic>> _locationStream = _loc
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
-  static Stream<Map<String, dynamic>> get sensorStream => _sen
+  static final Stream<Map<String, dynamic>> _sensorStream = _sen
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
-  static Stream<Map<String, dynamic>> get bleDeviceStream => _bleDev
+  static final Stream<Map<String, dynamic>> _bleDeviceStream = _bleDev
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
-  static Stream<Map<String, dynamic>> get bleDataStream => _bleData
+  static final Stream<Map<String, dynamic>> _bleDataStream = _bleData
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
+
+  static Stream<Map<String, dynamic>> get locationStream => _locationStream;
+  static Stream<Map<String, dynamic>> get sensorStream => _sensorStream;
+  static Stream<Map<String, dynamic>> get bleDeviceStream => _bleDeviceStream;
+  static Stream<Map<String, dynamic>> get bleDataStream => _bleDataStream;
 
   /// 外置蓝牙 GPS 专用发现流：无过滤 BLE 扫描与经典蓝牙发现的
   /// 结果（{type: 'ble'|'classic', address, name, rssi, serviceUuids}）。
   /// 与页级 bleDeviceStream 分离，避免 GPS 扫描结果污染页级
   /// “附近扫描结果”列表、造成同一设备出现两条。
-  static Stream<Map<String, dynamic>> get btGpsDeviceStream => _btGpsDev
+  static final Stream<Map<String, dynamic>> _btGpsDeviceStream = _btGpsDev
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
+  static Stream<Map<String, dynamic>> get btGpsDeviceStream =>
+      _btGpsDeviceStream;
 
   /// v0.1.4 GNSS 卫星事件流：原生 GnssStatus.Callback 上报的历元快照，
   /// {visible, used, avgCn0(-1 表示无 CN0 数据）, byConstellation,
   /// usedByConstellation, l5Seen, timeMs}。卫星数由 satellite_service.dart 解析。
-  static Stream<Map<String, dynamic>> get gnssStream => _gnss
+  static final Stream<Map<String, dynamic>> _gnssStream = _gnss
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
+  static Stream<Map<String, dynamic>> get gnssStream => _gnssStream;
 
   /// v0.1.4 TTS 完成事件流：{type: 'done'|'error', utteranceId}。
   /// 队列由 voice_service.dart 的 Dart 侧管理，原生只报单条完成。
-  static Stream<Map<String, dynamic>> get ttsStream => _tts
+  static final Stream<Map<String, dynamic>> _ttsStream = _tts
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
+  static Stream<Map<String, dynamic>> get ttsStream => _ttsStream;
 
   /// OBD（ELM327）事件流：原生 ObdManager 发出
   /// {type: 'obdConnected'|'obdLine'|'obdDisconnected',
   ///  address, line?, reason?}，obd_service.dart 的
   /// MethodChannelObdPlatform 分发到响应行 / 连通 / 断开三路。
-  static Stream<Map<String, dynamic>> get obdStream => _obd
+  static final Stream<Map<String, dynamic>> _obdStream = _obd
       .receiveBroadcastStream()
       .map((e) => Map<String, dynamic>.from(e as Map));
+  static Stream<Map<String, dynamic>> get obdStream => _obdStream;
 
   /// OBD：已配对经典蓝牙设备（ELM327 须先在系统蓝牙里配对），
   /// 连接 / 断开 / 发命令。连接结果与响应行走 obdStream，

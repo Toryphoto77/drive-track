@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_notice.dart';
 import 'app_bar_style.dart';
+import 'app_locale.dart';
 import 'glass_button.dart';
 import 'import_style.dart';
 import 'native.dart';
@@ -115,13 +116,18 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   }
 
   Future<void> _openTtsSettings() async {
+    final s = S.of(context);
     setState(() => _ttsSettingsBusy = true);
     final ok = await Native.openTtsSettings();
     if (mounted) {
       setState(() => _ttsSettingsBusy = false);
       if (!ok) {
-        showAppNotice(context, '该设备没有系统 TTS 设置页，请手动打开：系统设置 > 系统 > '
-              '语言与输入法 > 文字转语音输出，在里面选首选引擎并下载中文语音数据。', AppNoticeKind.warning);
+        showAppNotice(context, s.t(
+              '该设备没有系统 TTS 设置页，请手动打开：系统设置 > 系统 > '
+              '语言与输入法 > 文字转语音输出，在里面选首选引擎并下载中文语音数据。',
+              'This device has no system TTS settings page. Open Settings > System > '
+              'Languages & input > Text-to-speech output, choose a preferred engine and download Chinese voice data.',
+            ), AppNoticeKind.warning);
       }
     }
   }
@@ -151,7 +157,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
     await VoiceService.instance.updateCustomVoice(next);
     if (mounted) {
       setState(() {});
-      showAppNotice(context, '自定义语音服务配置已保存到本机。', AppNoticeKind.success);
+      showAppNotice(context, S.of(context).t('自定义语音服务配置已保存到本机。', 'Custom voice settings saved on this device.'), AppNoticeKind.success);
     }
   }
 
@@ -171,36 +177,45 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
   /// 状态标题：中文数据状态与引擎可用性分开说，不混成一句。
   /// v1.2.1：最终语言是原样代码（zh_CN/zh/zh_TW/系统默认代码），
   /// 中文当且仅当代码以 zh 开头；'zh'/'default' 是旧值，不再产生。
-  String _ttsStatusTitle() {
+  String _ttsStatusTitle(S s) {
     final svc = VoiceService.instance;
     if (svc.ttsAvailable == null || svc.ttsLanguage == null) {
-      return '语音引擎状态待探测';
+      return s.t('语音引擎状态待探测', 'Checking voice engine');
     }
     if (svc.ttsLanguage == 'none') {
-      return svc.ttsEngineList.isEmpty ? '无可用语音引擎' : '有引擎，但无可用语言';
+      return svc.ttsEngineList.isEmpty
+          ? s.t('无可用语音引擎', 'No voice engine available')
+          : s.t('有引擎，但无可用语言', 'Engine found, no usable language');
     }
-    if (svc.ttsChineseAvailable) return '语音可用 · 中文语音已安装';
-    return '语音可用，但中文语音未安装';
+    if (svc.ttsChineseAvailable) return s.t('语音可用 · 中文语音已安装', 'Voice ready · Chinese installed');
+    return s.t('语音可用，但中文语音未安装', 'Voice ready, Chinese not installed');
   }
 
 
   /// 无引擎时的明确原因：引擎列表空 / 非空、原生错误码分开写。
-  String _ttsCauseDetail() {
+  String _ttsCauseDetail(S s) {
     final svc = VoiceService.instance;
     if (svc.ttsEngineList.isEmpty) {
-      return '系统未装 TTS 引擎。先在系统 TTS 设置里安装 / 启用一个引擎（如 Google 文字转语音），再下载中文语音数据。';
+      return s.t(
+        '系统未装 TTS 引擎。先在系统 TTS 设置里安装 / 启用一个引擎（如 Google 文字转语音），再下载中文语音数据。',
+        'No TTS engine is installed. Install or enable one in system TTS settings (e.g. Google Text-to-speech), then download Chinese voice data.',
+      );
     }
-    return '已装引擎 ${svc.ttsEngineList.length} 个，但中文与默认语言都不可用。在系统 TTS 设置里换一个首选引擎，或为当前引擎下载中文语音数据，再回本页点“重新探测”。';
+    return s.t(
+      '已装引擎 ${svc.ttsEngineList.length} 个，但中文与默认语言都不可用。在系统 TTS 设置里换一个首选引擎，或为当前引擎下载中文语音数据，再回本页点“重新探测”。',
+      '${svc.ttsEngineList.length} engine(s) installed, but neither Chinese nor the default language works. Pick another preferred engine in system TTS settings, or download Chinese voice data for the current engine, then tap “Rescan”.',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final svc = VoiceService.instance;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: DtAppBar(
         leading: GlassButton.back(onPressed: () => Navigator.pop(context)),
-        title: const Text('语音设置'),
+        title: Text(s.t('语音设置', 'Voice')),
       ),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
@@ -211,34 +226,37 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                         context, const EdgeInsets.only(bottom: 24)),
                     children: [
                     SwitchListTile(
-                      title: const Text('语音播报总开关'),
-                      subtitle: const Text('关掉后所有语音播报都不出声'),
+                      title: Text(s.t('语音播报总开关', 'Voice announcements')),
+                      subtitle: Text(s.t('关掉后所有语音播报都不出声', 'Off: all announcements are muted')),
                       value: _s.enabled,
                       onChanged: (v) => _apply(_s.copyWith(enabled: v)),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Text(voiceMuteRuleNote, style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: Text(
+                          s.t(voiceMuteRuleNote,
+                              'Announcements still play in vibrate/silent mode; only zero media volume mutes them.'),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
                     ),
                     Card(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: Column(children: [
-                        SwitchListTile(title: const Text('事件播报'), subtitle: const Text('急加速、急刹车、过弯完成、压弯超阈值'), value: _s.announceEvents, onChanged: (v) => _apply(_s.copyWith(announceEvents: v))),
-                        SwitchListTile(title: const Text('圈速播报'), subtitle: const Text('每圈完成与最快圈，非最快圈追加与最快圈的差值'), value: _s.announceLaps, onChanged: (v) => _apply(_s.copyWith(announceLaps: v))),
-                        SwitchListTile(title: const Text('分段播报'), subtitle: const Text('赛道模式：过 S1、S2 分段点时播报本段快慢（仅真实分段点）'), value: _s.announceSectors, onChanged: (v) => _apply(_s.copyWith(announceSectors: v))),
-                        SwitchListTile(title: const Text('结束总结播报'), subtitle: const Text('里程、时长、评分、最快圈'), value: _s.announceSummary, onChanged: (v) => _apply(_s.copyWith(announceSummary: v))),
-                        SwitchListTile(title: const Text('开始语音'), subtitle: const Text('开始记录时播报安全注意事项，倒数时报数（3、2、1、开始）'), value: _s.announceStart, onChanged: (v) => _apply(_s.copyWith(announceStart: v))),
+                        SwitchListTile(title: Text(s.t('事件播报', 'Event alerts')), subtitle: Text(s.t('急加速、急刹车、过弯完成、压弯超阈值', 'Hard accel, hard braking, corner completion, lean over threshold')), value: _s.announceEvents, onChanged: (v) => _apply(_s.copyWith(announceEvents: v))),
+                        SwitchListTile(title: Text(s.t('圈速播报', 'Lap alerts')), subtitle: Text(s.t('每圈完成与最快圈，非最快圈追加与最快圈的差值', 'Each lap and best lap; non-best laps also read the delta')), value: _s.announceLaps, onChanged: (v) => _apply(_s.copyWith(announceLaps: v))),
+                        SwitchListTile(title: Text(s.t('分段播报', 'Sector alerts')), subtitle: Text(s.t('赛道模式：过 S1、S2 分段点时播报本段快慢（仅真实分段点）', 'Track mode: announce sector pace at S1/S2 points (real points only)')), value: _s.announceSectors, onChanged: (v) => _apply(_s.copyWith(announceSectors: v))),
+                        SwitchListTile(title: Text(s.t('结束总结播报', 'Summary alert')), subtitle: Text(s.t('里程、时长、评分、最快圈', 'Distance, duration, score, best lap')), value: _s.announceSummary, onChanged: (v) => _apply(_s.copyWith(announceSummary: v))),
+                        SwitchListTile(title: Text(s.t('开始语音', 'Start voice')), subtitle: Text(s.t('开始记录时播报安全注意事项，倒数时报数（3、2、1、开始）', 'Safety tips when recording starts, plus a 3-2-1-go countdown')), value: _s.announceStart, onChanged: (v) => _apply(_s.copyWith(announceStart: v))),
                       ]),
                     ),
                     // 街道模式更多播报（仅街道模式播报；赛道模式报圈速、分段与开始计时，不报超速）。
                     Card(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: Column(children: [
-                        SwitchListTile(title: const Text('GPS 信号播报'), subtitle: const Text('外接 GPS 断开回落、手机 GPS 信号丢失与恢复'), value: _s.announceGps, onChanged: (v) => _apply(_s.copyWith(announceGps: v))),
-                        SwitchListTile(title: const Text('起步提示'), subtitle: const Text('开始记录后第一次拿到有效定位时播报“定位已就绪”'), value: _s.announceFirstFix, onChanged: (v) => _apply(_s.copyWith(announceFirstFix: v))),
-                        SwitchListTile(title: const Text('超速提醒'), subtitle: const Text('仅街道模式：超过下方设定时速时播报，持续超速每 60 秒最多补报一次'), value: _s.announceSpeeding, onChanged: (v) => _apply(_s.copyWith(announceSpeeding: v))),
-                        SwitchListTile(title: const Text('里程与时间播报'), subtitle: const Text('每 5 公里、每 10 分钟各播报一次'), value: _s.announceMilestones, onChanged: (v) => _apply(_s.copyWith(announceMilestones: v))),
-                        SwitchListTile(title: const Text('低精度提醒'), subtitle: const Text('定位精度差（水平精度大于 50 米）时播报，精度恢复后不再重复'), value: _s.announceLowAccuracy, onChanged: (v) => _apply(_s.copyWith(announceLowAccuracy: v))),
+                        SwitchListTile(title: Text(s.t('GPS 信号播报', 'GPS signal alerts')), subtitle: Text(s.t('外接 GPS 断开回落、手机 GPS 信号丢失与恢复', 'External GPS drop-out; phone GPS signal loss and recovery')), value: _s.announceGps, onChanged: (v) => _apply(_s.copyWith(announceGps: v))),
+                        SwitchListTile(title: Text(s.t('起步提示', 'First fix prompt')), subtitle: Text(s.t('开始记录后第一次拿到有效定位时播报“定位已就绪”', 'Announce “Location ready” on the first valid fix')), value: _s.announceFirstFix, onChanged: (v) => _apply(_s.copyWith(announceFirstFix: v))),
+                        SwitchListTile(title: Text(s.t('超速提醒', 'Speeding alert')), subtitle: Text(s.t('仅街道模式：超过下方设定时速时播报，持续超速每 60 秒最多补报一次', 'Street mode only: announce above the limit below; repeats at most once every 60 s')), value: _s.announceSpeeding, onChanged: (v) => _apply(_s.copyWith(announceSpeeding: v))),
+                        SwitchListTile(title: Text(s.t('里程与时间播报', 'Distance & time alerts')), subtitle: Text(s.t('每 5 公里、每 10 分钟各播报一次', 'Every 5 km and every 10 minutes')), value: _s.announceMilestones, onChanged: (v) => _apply(_s.copyWith(announceMilestones: v))),
+                        SwitchListTile(title: Text(s.t('低精度提醒', 'Low accuracy alert')), subtitle: Text(s.t('定位精度差（水平精度大于 50 米）时播报，精度恢复后不再重复', 'Announce when horizontal accuracy is worse than 50 m; stops after recovery')), value: _s.announceLowAccuracy, onChanged: (v) => _apply(_s.copyWith(announceLowAccuracy: v))),
                       ]),
                     ),
                     Card(
@@ -246,26 +264,29 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         child: Row(children: [
-                          const SizedBox(width: 72, child: Text('超速阈值')),
+                          SizedBox(width: 72, child: Text(s.t('超速阈值', 'Speed limit'))),
                           Expanded(child: Slider(value: _s.speedLimitKmh, min: 20, max: 200, divisions: 36, onChanged: (v) => _apply(_s.copyWith(speedLimitKmh: v)))),
                           SizedBox(width: 64, child: Text('${_s.speedLimitKmh.round()} km/h', textAlign: TextAlign.right)),
                         ]),
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
-                      child: Text('以上五项只在街道模式播报；赛道模式只报圈速、分段与开始计时，不报超速。超速阈值默认 120 公里/小时，骑行一般用不到，可把超速提醒关掉。', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                      child: Text(s.t(
+                        '以上五项只在街道模式播报；赛道模式只报圈速、分段与开始计时，不报超速。超速阈值默认 120 公里/小时，骑行一般用不到，可把超速提醒关掉。',
+                        'The five items above only play in street mode; track mode only reports laps, sectors and the start countdown, not speeding. The limit defaults to 120 km/h and is rarely needed for cycling, so you can turn speeding alerts off.',
+                      ), style: const TextStyle(color: Colors.white54, fontSize: 12)),
                     ),
-                    _slider('语速', _s.rate, 0.5, 2.0, (v) => _apply(_s.copyWith(rate: v))),
-                    _slider('音调', _s.pitch, 0.5, 2.0, (v) => _apply(_s.copyWith(pitch: v))),
-                    _slider('音量', _s.volume, 0.0, 1.0, (v) => _apply(_s.copyWith(volume: v))),
+                    _slider(s.t('语速', 'Rate'), _s.rate, 0.5, 2.0, (v) => _apply(_s.copyWith(rate: v))),
+                    _slider(s.t('音调', 'Pitch'), _s.pitch, 0.5, 2.0, (v) => _apply(_s.copyWith(pitch: v))),
+                    _slider(s.t('音量', 'Volume'), _s.volume, 0.0, 1.0, (v) => _apply(_s.copyWith(volume: v))),
                     // 原生 TTS 引擎状态：当前引擎 + 中文数据状态 + 原因 + 下一步。
                     ImportCard(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('系统 TTS 引擎',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(s.t('系统 TTS 引擎', 'System TTS engine'),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 8),
-                        Text(_ttsStatusTitle(),
+                        Text(_ttsStatusTitle(s),
                             style: TextStyle(
                               color: svc.ttsChineseAvailable
                                   ? Colors.greenAccent
@@ -280,53 +301,67 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                         const SizedBox(height: 4),
                         Text(
                           svc.ttsChineseAvailable
-                              ? '当前引擎支持中文，播报走中文语音。'
+                              ? s.t('当前引擎支持中文，播报走中文语音。',
+                                  'The current engine supports Chinese; announcements use Chinese.')
                               : svc.ttsLanguage == 'none'
-                                  ? _ttsCauseDetail()
+                                  ? _ttsCauseDetail(s)
                                   : svc.ttsLanguage != null
-                                      ? '中文语音数据未安装，已回退默认语言播报，不一定是中文。按下面步骤装中文数据。'
-                                      : '正在探测系统 TTS 引擎与中文语音数据，点“重新探测”可再查一次。',
+                                      ? s.t(
+                                          '中文语音数据未安装，已回退默认语言播报，不一定是中文。按下面步骤装中文数据。',
+                                          'Chinese voice data is not installed; announcements fall back to the default language, which may not be Chinese. Follow the steps below to install it.',
+                                        )
+                                      : s.t('正在探测系统 TTS 引擎与中文语音数据，点“重新探测”可再查一次。',
+                                          'Checking the system TTS engine and Chinese voice data. Tap “Rescan” to check again.'),
                           style: const TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                         const SizedBox(height: 12),
                         ImportInnerCard(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(
-                              '当前引擎：${svc.ttsEngineCurrent ?? '系统默认'}',
+                              s.t('当前引擎：${svc.ttsEngineCurrent ?? '系统默认'}',
+                                  'Current engine: ${svc.ttsEngineCurrent ?? 'System default'}'),
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '已保存的首选引擎：${svc.preferredTtsEngine ?? '系统默认'}',
+                              s.t('已保存的首选引擎：${svc.preferredTtsEngine ?? '系统默认'}',
+                                  'Saved preferred engine: ${svc.preferredTtsEngine ?? 'System default'}'),
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '已装引擎：${svc.ttsEngineList.isEmpty ? '暂无' : '${svc.ttsEngineList.length} 个'}',
+                              s.t(
+                                '已装引擎：${svc.ttsEngineList.isEmpty ? '暂无' : '${svc.ttsEngineList.length} 个'}',
+                                'Installed engines: ${svc.ttsEngineList.isEmpty ? 'none' : svc.ttsEngineList.length}',
+                              ),
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '中文语音数据：${svc.ttsChineseAvailable ? '已安装' : svc.ttsLanguage == 'none' ? '不可用' : svc.ttsLanguage != null ? '未安装（已回退默认语言）' : '待探测'}',
+                              s.t(
+                                '中文语音数据：${svc.ttsChineseAvailable ? '已安装' : svc.ttsLanguage == 'none' ? '不可用' : svc.ttsLanguage != null ? '未安装（已回退默认语言）' : '待探测'}',
+                                'Chinese voice data: ${svc.ttsChineseAvailable ? 'installed' : svc.ttsLanguage == 'none' ? 'unavailable' : svc.ttsLanguage != null ? 'not installed (using fallback language)' : 'checking'}',
+                              ),
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                             if (svc.preferredEngineMissing) ...[
                               const SizedBox(height: 4),
-                              const Text('该引擎已卸载，已回退系统默认',
-                                  style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold)),
+                              Text(s.t('该引擎已卸载，已回退系统默认', 'This engine was uninstalled; fell back to system default'),
+                                  style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold)),
                             ],
                           ]),
                         ),
                         const SizedBox(height: 12),
                         if (svc.ttsEngineList.isEmpty)
-                          const Text('暂无引擎列表：请先点“重新探测”，或检查系统是否安装 TTS 引擎。',
-                              style: TextStyle(color: Colors.white54, fontSize: 12))
+                          Text(s.t('暂无引擎列表：请先点“重新探测”，或检查系统是否安装 TTS 引擎。',
+                              'No engine list yet. Tap “Rescan”, or check whether a TTS engine is installed.'),
+                              style: const TextStyle(color: Colors.white54, fontSize: 12))
                         else
                           DropdownButton<String>(
                             value: svc.ttsEngineList.contains(svc.ttsEngineCurrent)
                                 ? svc.ttsEngineCurrent
                                 : null,
-                            hint: const Text('选择系统已装引擎'),
+                            hint: Text(s.t('选择系统已装引擎', 'Choose an installed engine')),
                             isExpanded: true,
                             dropdownColor: const Color(0xFF2A2A2A),
                             items: svc.ttsEngineList
@@ -336,47 +371,54 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                               if (v == null) return;
                               final ok = await svc.setTtsEngine(v);
                               if (mounted && !ok) {
-                                showAppNotice(context, '引擎切换失败，已尝试恢复原引擎。', AppNoticeKind.error);
+                                showAppNotice(context, s.t('引擎切换失败，已尝试恢复原引擎。', 'Engine switch failed; the previous engine was restored.'), AppNoticeKind.error);
                               }
                             },
                           ),
                         const SizedBox(height: 8),
                         ImportSecondaryButton(
-                          label: '恢复系统默认引擎',
+                          label: s.t('恢复系统默认引擎', 'Restore system default engine'),
                           onPressed: () async {
                             await svc.clearPreferredEngine();
                             if (mounted) {
-                              showAppNotice(context, '已恢复系统默认引擎。', AppNoticeKind.success);
+                              showAppNotice(context, s.t('已恢复系统默认引擎。', 'System default engine restored.'), AppNoticeKind.success);
                               setState(() {});
                             }
                           },
                         ),
                         const SizedBox(height: 12),
                         ImportPrimaryButton(
-                          label: _ttsSettingsBusy ? '正在打开…' : '打开系统 TTS 设置',
+                          label: _ttsSettingsBusy ? s.t('正在打开…', 'Opening…') : s.t('打开系统 TTS 设置', 'Open system TTS settings'),
                           icon: Icons.settings_voice,
                           onPressed: _ttsSettingsBusy ? null : _openTtsSettings,
                         ),
                         const SizedBox(height: 8),
                         ImportSecondaryButton(
-                          label: _refreshing ? '探测中…' : '重新探测',
+                          label: _refreshing ? s.t('探测中…', 'Checking…') : s.t('重新探测', 'Rescan'),
                           onPressed: _refreshing ? null : _refreshTts,
                         ),
                         const SizedBox(height: 12),
-                        const Text(
-                          '在系统设置里这样配中文语音：\n'
-                          '1. 点上方按钮进“文字转语音输出”，把“首选引擎”选成你已装的引擎；\n'
-                          '2. 点该引擎右侧的设置 / 语音数据，下载“中文（普通话）”语音数据；\n'
-                          '3. 回到本页点“重新探测”，状态变“中文语音已安装”后再点“试听一句”。\n'
-                          '若没有“文字转语音输出”入口，说明未装 TTS 引擎，先从应用商店装一个（如 Google 文字转语音）再按上面步骤配。',
-                          style: TextStyle(color: Colors.white54, fontSize: 12),
+                        Text(
+                          s.t(
+                            '在系统设置里这样配中文语音：\n'
+                            '1. 点上方按钮进“文字转语音输出”，把“首选引擎”选成你已装的引擎；\n'
+                            '2. 点该引擎右侧的设置 / 语音数据，下载“中文（普通话）”语音数据；\n'
+                            '3. 回到本页点“重新探测”，状态变“中文语音已安装”后再点“试听一句”。\n'
+                            '若没有“文字转语音输出”入口，说明未装 TTS 引擎，先从应用商店装一个（如 Google 文字转语音）再按上面步骤配。',
+                            'To set up Chinese voice in system settings:\n'
+                            '1. Tap the button above to open “Text-to-speech output” and set “Preferred engine” to your installed engine;\n'
+                            '2. Tap that engine’s settings / voice data and download the “Chinese (Mandarin)” voice data;\n'
+                            '3. Return here, tap “Rescan”, and once it shows “Chinese installed”, tap “Play a sample”.\n'
+                            'If there is no “Text-to-speech output” entry, no TTS engine is installed. Install one from the app store (e.g. Google Text-to-speech) first.',
+                          ),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12),
                         ),
                       ]),
                     ),
                     Padding(
                       padding: const EdgeInsets.all(16),
                       child: ImportPrimaryButton(
-                        label: _testing ? '试听中…' : '试听一句',
+                        label: _testing ? s.t('试听中…', 'Playing…') : s.t('试听一句', 'Play a sample'),
                         icon: Icons.volume_up,
                         onPressed: _testing ? null : _test,
                       ),
@@ -397,29 +439,32 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                     // 协议 / 存储 / 白名单逻辑未动，只按统一导入画风换 UI。
                     ImportCard(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('自定义语音服务（可选，非默认）',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(s.t('自定义语音服务（可选，非默认）', 'Custom voice service (optional, not default)'),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 8),
-                        const Text(
-                          '默认走系统 TTS。自定义服务音质更好，但要用你自己的 Key、需联网、可能按量计费。' '未填时走系统 TTS；填了也要开下方开关才用，失败时回落系统 TTS。',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        Text(
+                          s.t(
+                            '默认走系统 TTS。自定义服务音质更好，但要用你自己的 Key、需联网、可能按量计费。' '未填时走系统 TTS；填了也要开下方开关才用，失败时回落系统 TTS。',
+                            'System TTS is used by default. A custom service sounds better but needs your own key, network access and may bill per use. ' 'Leave it blank to use system TTS; even when filled, the switch below must be on, and failures fall back to system TTS.',
+                          ),
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                         const SizedBox(height: 12),
                         DropdownButton<String>(
                           value: _provider,
                           isExpanded: true,
                           dropdownColor: const Color(0xFF2A2A2A),
-                          items: const [
-                            DropdownMenuItem(value: 'generic', child: Text('通用接口', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'mimo', child: Text('小米 MiMo（mimo-v2.5-tts）', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'openai', child: Text('OpenAI TTS（tts-1）', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'azure', child: Text('微软 Azure AI Speech', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'google', child: Text('Google Cloud TTS', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'minimax', child: Text('MiniMax T2A v2（speech-02-hd）', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'elevenlabs', child: Text('ElevenLabs（含克隆音色）', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'fish', child: Text('Fish Audio（含克隆音色）', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'doubao', child: Text('火山引擎豆包语音合成 V3', style: TextStyle(fontSize: 13))),
-                            DropdownMenuItem(value: 'cosyvoice', child: Text('阿里 CosyVoice（百炼）', style: TextStyle(fontSize: 13))),
+                          items: [
+                            DropdownMenuItem(value: 'generic', child: Text(s.t('通用接口', 'Generic API'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'mimo', child: Text(s.t('小米 MiMo（mimo-v2.5-tts）', 'Xiaomi MiMo (mimo-v2.5-tts)'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'openai', child: Text(s.t('OpenAI TTS（tts-1）', 'OpenAI TTS (tts-1)'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'azure', child: Text(s.t('微软 Azure AI Speech', 'Microsoft Azure AI Speech'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'google', child: Text(s.t('Google Cloud TTS', 'Google Cloud TTS'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'minimax', child: Text(s.t('MiniMax T2A v2（speech-02-hd）', 'MiniMax T2A v2 (speech-02-hd)'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'elevenlabs', child: Text(s.t('ElevenLabs（含克隆音色）', 'ElevenLabs (voice cloning)'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'fish', child: Text(s.t('Fish Audio（含克隆音色）', 'Fish Audio (voice cloning)'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'doubao', child: Text(s.t('火山引擎豆包语音合成 V3', 'Volcengine Doubao TTS V3'), style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 'cosyvoice', child: Text(s.t('阿里 CosyVoice（百炼）', 'Alibaba CosyVoice (Bailian)'), style: const TextStyle(fontSize: 13))),
                           ],
                           onChanged: (v) {
                             if (v == null) return;
@@ -434,20 +479,24 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _providerHint(),
+                          _providerHint(s),
                           style: const TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                         const SizedBox(height: 8),
                         if (_provider == 'mimo') ...[
-                          const Text(
-                            '固定接口：https://api.xiaomimimo.com/v1/chat/completions（无需手填）\n'
-                            'Key 在小米 MiMo 开放平台自行申请，只存本机；模型 mimo-v2.5-tts，失败时回落系统 TTS。',
-                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          Text(
+                            s.t(
+                              '固定接口：https://api.xiaomimimo.com/v1/chat/completions（无需手填）\n'
+                              'Key 在小米 MiMo 开放平台自行申请，只存本机；模型 mimo-v2.5-tts，失败时回落系统 TTS。',
+                              'Fixed endpoint: https://api.xiaomimimo.com/v1/chat/completions (no need to enter)\n'
+                              'Apply for a key on the Xiaomi MiMo platform; it is stored on this device only. Model mimo-v2.5-tts; falls back to system TTS on failure.',
+                            ),
+                            style: const TextStyle(color: Colors.white70, fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                           ImportBorderedTextField(
                             controller: _keyCtrl,
-                            label: 'MiMo API Key（只存本机，不上传）',
+                            label: s.t('MiMo API Key（只存本机，不上传）', 'MiMo API key (device only, never uploaded)'),
                             obscureText: true,
                           ),
                           const SizedBox(height: 8),
@@ -456,7 +505,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                             isExpanded: true,
                             dropdownColor: const Color(0xFF2A2A2A),
                             items: mimoTtsVoices
-                                .map((v) => DropdownMenuItem(value: v, child: Text('音色：$v', style: const TextStyle(fontSize: 13))))
+                                .map((v) => DropdownMenuItem(value: v, child: Text(s.t('音色：$v', 'Voice: $v'), style: const TextStyle(fontSize: 13))))
                                 .toList(),
                             onChanged: (v) {
                               if (v == null) return;
@@ -468,23 +517,24 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                             ImportBorderedTextField(
                               controller: _endpointCtrl,
                               label: _provider == 'azure'
-                                  ? '区域端点（如 https://<区域>.tts.speech.microsoft.com/cognitiveservices/v1）'
-                                  : '接口地址（你自己的服务地址）',
+                                  ? s.t('区域端点（如 https://<区域>.tts.speech.microsoft.com/cognitiveservices/v1）',
+                                      'Regional endpoint (e.g. https://<region>.tts.speech.microsoft.com/cognitiveservices/v1)')
+                                  : s.t('接口地址（你自己的服务地址）', 'Endpoint (your own service URL)'),
                             ),
                             const SizedBox(height: 8),
                           ],
                           ImportBorderedTextField(
                             controller: _keyCtrl,
-                            label: _keyLabel(),
+                            label: _keyLabel(s),
                             obscureText: true,
                           ),
                           const SizedBox(height: 8),
-                          _voiceField(),
+                          _voiceField(s),
                         ],
                         const SizedBox(height: 8),
                         SwitchListTile(
-                          title: const Text('启用自定义语音服务'),
-                          subtitle: const Text('关闭时完全走原生 TTS'),
+                          title: Text(s.t('启用自定义语音服务', 'Enable custom voice service')),
+                          subtitle: Text(s.t('关闭时完全走原生 TTS', 'Off: use native TTS only')),
                           value: svc.customVoice.enabled,
                           onChanged: (v) async {
                             await svc.updateCustomVoice(CustomVoiceConfig(
@@ -501,14 +551,14 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                         Row(children: [
                           Expanded(
                             child: ImportSecondaryButton(
-                              label: '保存到本机',
+                              label: s.t('保存到本机', 'Save to device'),
                               onPressed: _saveCustom,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: ImportPrimaryButton(
-                              label: _customTesting ? '测试中…' : '测试自定义服务',
+                              label: _customTesting ? s.t('测试中…', 'Testing…') : s.t('测试自定义服务', 'Test custom service'),
                               onPressed: _customTesting ? null : _testCustom,
                             ),
                           ),
@@ -521,9 +571,12 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
                           ),
                         ],
                         const SizedBox(height: 8),
-                        const Text(
-                          '各提供方协议不互通，选错提供方会明确报错；任一提供方失败时都回落系统 TTS，不会静默丢播报。Edge Read Aloud 未接：它没有公开接口，走的是浏览器内置 token 的 WebSocket，不符合接的标准。',
-                          style: TextStyle(color: Colors.white54, fontSize: 11),
+                        Text(
+                          s.t(
+                            '各提供方协议不互通，选错提供方会明确报错；任一提供方失败时都回落系统 TTS，不会静默丢播报。Edge Read Aloud 未接：它没有公开接口，走的是浏览器内置 token 的 WebSocket，不符合接的标准。',
+                            'Providers use different protocols, so a wrong choice reports a clear error. Any failure falls back to system TTS instead of silently dropping announcements. Edge Read Aloud is not supported: it has no public API and relies on a browser-internal token WebSocket.',
+                          ),
+                          style: const TextStyle(color: Colors.white54, fontSize: 11),
                         ),
                       ]),
                     ),
@@ -535,58 +588,79 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
 
   /// 各提供方的操作指导（去哪拿 Key、音色 ID 怎么来、有什么限制）：
   /// 只写已核实的官方口径，不编价格与额度。
-  String _providerHint() {
+  String _providerHint(S s) {
     switch (_provider) {
       case 'mimo':
-        return '小米 MiMo：Key 在小米 MiMo 开放平台申请，模型 mimo-v2.5-tts。';
+        return s.t('小米 MiMo：Key 在小米 MiMo 开放平台申请，模型 mimo-v2.5-tts。',
+            'Xiaomi MiMo: apply for a key on the Xiaomi MiMo platform; model mimo-v2.5-tts.');
       case 'openai':
-        return 'OpenAI TTS：Key 在 OpenAI 平台申请（platform.openai.com），模型 tts-1，接口固定，无需手填地址；需联网、可能按量计费。';
+        return s.t(
+            'OpenAI TTS：Key 在 OpenAI 平台申请（platform.openai.com），模型 tts-1，接口固定，无需手填地址；需联网、可能按量计费。',
+            'OpenAI TTS: apply for a key at platform.openai.com; model tts-1, fixed endpoint, no URL needed. Needs network; may bill per use.');
       case 'azure':
-        return 'Azure AI Speech：先在 Azure 门户建 Speech 资源，Key 与区域端点在该资源的“密钥和终结点”页复制；端点按自己资源的区域填，形如 https://<区域>.tts.speech.microsoft.com/cognitiveservices/v1；需联网、可能按量计费。';
+        return s.t(
+            'Azure AI Speech：先在 Azure 门户建 Speech 资源，Key 与区域端点在该资源的“密钥和终结点”页复制；端点按自己资源的区域填，形如 https://<区域>.tts.speech.microsoft.com/cognitiveservices/v1；需联网、可能按量计费。',
+            'Azure AI Speech: create a Speech resource in the Azure portal, then copy the key and regional endpoint from its Keys and Endpoint page. Fill the endpoint for your region, e.g. https://<region>.tts.speech.microsoft.com/cognitiveservices/v1. Needs network; may bill per use.');
       case 'google':
-        return 'Google Cloud TTS：先在 Google Cloud 控制台启用 Text-to-Speech API，再在“凭据”里建 API Key；接口固定，无需手填地址；需联网、可能按量计费。';
+        return s.t(
+            'Google Cloud TTS：先在 Google Cloud 控制台启用 Text-to-Speech API，再在“凭据”里建 API Key；接口固定，无需手填地址；需联网、可能按量计费。',
+            'Google Cloud TTS: enable the Text-to-Speech API in the Google Cloud console, then create an API key under Credentials. The endpoint is fixed; no URL needed. Needs network; may bill per use.');
       case 'minimax':
-        return 'MiniMax T2A v2：Key 在 MiniMax 开放平台申请，模型 speech-02-hd，接口固定；音色填系统音色名或自己的克隆 voice_id；需联网、可能按量计费。';
+        return s.t(
+            'MiniMax T2A v2：Key 在 MiniMax 开放平台申请，模型 speech-02-hd，接口固定；音色填系统音色名或自己的克隆 voice_id；需联网、可能按量计费。',
+            'MiniMax T2A v2: apply for a key on the MiniMax platform; model speech-02-hd, fixed endpoint. Enter a system voice name or your cloned voice_id. Needs network; may bill per use.');
       case 'elevenlabs':
-        return 'ElevenLabs：Key 在 ElevenLabs 控制台 API Keys 页申请；voice_id 在语音库点进音色详情复制，克隆音色先在网页控制台上传样本生成（Instant Voice Cloning）或用 Voice Design 设计，拿到 voice_id 填进来就能用；App 内不做训练；需联网、可能按量计费。';
+        return s.t(
+            'ElevenLabs：Key 在 ElevenLabs 控制台 API Keys 页申请；voice_id 在语音库点进音色详情复制，克隆音色先在网页控制台上传样本生成（Instant Voice Cloning）或用 Voice Design 设计，拿到 voice_id 填进来就能用；App 内不做训练；需联网、可能按量计费。',
+            'ElevenLabs: get a key from API Keys in the ElevenLabs console. Copy voice_id from the voice details; create cloned voices on the web (Instant Voice Cloning) or with Voice Design, then paste the voice_id. No training in the app. Needs network; may bill per use.');
       case 'fish':
-        return 'Fish Audio：Key 在 Fish Audio 应用内 API Keys 页申请；reference_id 是语音模型 _id，在 Fish Audio 网页端语音库或自己的模型里复制填进来，留空用模型默认音色；克隆请先在网页端建好模型；需联网、可能按量计费。';
+        return s.t(
+            'Fish Audio：Key 在 Fish Audio 应用内 API Keys 页申请；reference_id 是语音模型 _id，在 Fish Audio 网页端语音库或自己的模型里复制填进来，留空用模型默认音色；克隆请先在网页端建好模型；需联网、可能按量计费。',
+            'Fish Audio: get a key from API Keys in Fish Audio. reference_id is the model _id; copy it from the web voice library or your own models, or leave blank for the model default. Create cloned models on the web first. Needs network; may bill per use.');
       case 'doubao':
-        return '豆包语音合成 V3：Key 在火山引擎豆包语音控制台 API Key 管理处申请；音色 ID 在控制台音色库获取，声音复刻音色（S_ 开头）先在控制台生成再填进来；需联网、可能按量计费。';
+        return s.t(
+            '豆包语音合成 V3：Key 在火山引擎豆包语音控制台 API Key 管理处申请；音色 ID 在控制台音色库获取，声音复刻音色（S_ 开头）先在控制台生成再填进来；需联网、可能按量计费。',
+            'Doubao TTS V3: get a key from API Keys in the Volcengine Doubao voice console. Find the voice ID in the console library; for cloned voices (starting with S_) create them in the console first. Needs network; may bill per use.');
       case 'cosyvoice':
-        return 'CosyVoice（百炼）：Key 是阿里云百炼（DashScope）华北 2（北京）地域的 API Key，只能调北京端点，其他地域的 Key 会报 401；音色 ID 见百炼音色列表，克隆 / Voice Design 音色先在百炼控制台生成再填进来；需联网、可能按量计费。';
+        return s.t(
+            'CosyVoice（百炼）：Key 是阿里云百炼（DashScope）华北 2（北京）地域的 API Key，只能调北京端点，其他地域的 Key 会报 401；音色 ID 见百炼音色列表，克隆 / Voice Design 音色先在百炼控制台生成再填进来；需联网、可能按量计费。',
+            'CosyVoice (Bailian): use an API key from Alibaba Cloud Bailian (DashScope) in the China North 2 (Beijing) region; only the Beijing endpoint works, keys from other regions return 401. See the Bailian voice list for IDs; create cloned / Voice Design voices in the console first. Needs network; may bill per use.');
       default:
-        return '通用接口：POST JSON {"text": "..."}、Authorization: Bearer <Key>，期望返回音频流；协议不符时测试会明确报错。';
+        return s.t(
+            '通用接口：POST JSON {"text": "..."}、Authorization: Bearer <Key>，期望返回音频流；协议不符时测试会明确报错。',
+            'Generic API: POST JSON {"text": "..."} with Authorization: Bearer <Key>, expecting an audio stream; protocol mismatches show a clear test error.');
     }
   }
 
-  String _keyLabel() {
+  String _keyLabel(S s) {
     switch (_provider) {
       case 'openai':
-        return 'OpenAI API Key（只存本机，不上传）';
+        return s.t('OpenAI API Key（只存本机，不上传）', 'OpenAI API key (device only, never uploaded)');
       case 'azure':
-        return 'Azure 资源 Key（只存本机，不上传）';
+        return s.t('Azure 资源 Key（只存本机，不上传）', 'Azure resource key (device only, never uploaded)');
       case 'google':
-        return 'Google Cloud API Key（只存本机，不上传）';
+        return s.t('Google Cloud API Key（只存本机，不上传）', 'Google Cloud API key (device only, never uploaded)');
       case 'minimax':
-        return 'MiniMax API Key（只存本机，不上传）';
+        return s.t('MiniMax API Key（只存本机，不上传）', 'MiniMax API key (device only, never uploaded)');
       case 'elevenlabs':
-        return 'ElevenLabs API Key（只存本机，不上传）';
+        return s.t('ElevenLabs API Key（只存本机，不上传）', 'ElevenLabs API key (device only, never uploaded)');
       case 'fish':
-        return 'Fish Audio API Key（只存本机，不上传）';
+        return s.t('Fish Audio API Key（只存本机，不上传）', 'Fish Audio API key (device only, never uploaded)');
       case 'doubao':
-        return '豆包语音 API Key（X-Api-Key，只存本机，不上传）';
+        return s.t('豆包语音 API Key（X-Api-Key，只存本机，不上传）',
+            'Doubao TTS API key (X-Api-Key; device only, never uploaded)');
       case 'cosyvoice':
-        return 'DashScope API Key（华北 2 北京地域，只存本机，不上传）';
+        return s.t('DashScope API Key（华北 2 北京地域，只存本机，不上传）',
+            'DashScope API key (China North 2, Beijing; device only, never uploaded)');
       default:
-        return 'API Key（只存本机，不上传）';
+        return s.t('API Key（只存本机，不上传）', 'API key (device only, never uploaded)');
     }
   }
 
   /// 各提供方的音色字段：OpenAI / Google / Azure 用下拉（官方音色表），
   /// MiniMax / ElevenLabs / Fish / 豆包 / CosyVoice 用手填（音色 ID
   /// 来自各家控制台，克隆音色也是填 ID；留空用各家默认音色）。
-  Widget _voiceField() {
+  Widget _voiceField(S s) {
     const lists = {
       'openai': openAiTtsVoices,
       'google': googleTtsVoices,
@@ -602,7 +676,7 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
         dropdownColor: const Color(0xFF2A2A2A),
         items: list
             .map((v) => DropdownMenuItem(
-                value: v, child: Text('音色：$v', style: const TextStyle(fontSize: 13))))
+                value: v, child: Text(s.t('音色：$v', 'Voice: $v'), style: const TextStyle(fontSize: 13))))
             .toList(),
         onChanged: (v) {
           if (v == null) return;
@@ -614,27 +688,32 @@ class _VoiceSettingsPageState extends State<VoiceSettingsPage> {
       case 'minimax':
         return ImportBorderedTextField(
           controller: _voiceCtrl,
-          label: '音色 ID（留空用 male-qn-qingse，克隆音色填自己的 voice_id）',
+          label: s.t('音色 ID（留空用 male-qn-qingse，克隆音色填自己的 voice_id）',
+              'Voice ID (blank uses male-qn-qingse; enter your cloned voice_id)'),
         );
       case 'elevenlabs':
         return ImportBorderedTextField(
           controller: _voiceCtrl,
-          label: 'voice_id（留空用默认音色 Rachel，克隆音色填自己的 voice_id）',
+          label: s.t('voice_id（留空用默认音色 Rachel，克隆音色填自己的 voice_id）',
+              'voice_id (blank uses the default Rachel voice; enter your cloned voice_id)'),
         );
       case 'fish':
         return ImportBorderedTextField(
           controller: _voiceCtrl,
-          label: 'reference_id（留空用模型默认音色，克隆音色填模型 _id）',
+          label: s.t('reference_id（留空用模型默认音色，克隆音色填模型 _id）',
+              'reference_id (blank uses the model default; enter your cloned model _id)'),
         );
       case 'doubao':
         return ImportBorderedTextField(
           controller: _voiceCtrl,
-          label: '音色 ID（留空用 zh_female_vv_uranus_bigtts，复刻音色填 S_ 开头的 ID）',
+          label: s.t('音色 ID（留空用 zh_female_vv_uranus_bigtts，复刻音色填 S_ 开头的 ID）',
+              'Voice ID (blank uses zh_female_vv_uranus_bigtts; cloned voices start with S_)'),
         );
       case 'cosyvoice':
         return ImportBorderedTextField(
           controller: _voiceCtrl,
-          label: '音色 ID（留空用 longanyang，克隆音色填自己的 voice）',
+          label: s.t('音色 ID（留空用 longanyang，克隆音色填自己的 voice）',
+              'Voice ID (blank uses longanyang; enter your cloned voice)'),
         );
       default:
         return const SizedBox.shrink();

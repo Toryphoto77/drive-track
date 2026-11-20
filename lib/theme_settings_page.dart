@@ -5,6 +5,7 @@ import 'app_notice.dart';
 
 import 'app_bar_style.dart';
 import 'app_icon_choice.dart';
+import 'app_locale.dart';
 import 'models.dart';
 import 'vehicle_markers.dart';
 
@@ -85,24 +86,25 @@ Color? parseHexColor(String? raw) {
 class ThemePreset {
   final String id;
   final String name;
+  final String nameEn;
   final Color color;
-  const ThemePreset(this.id, this.name, this.color);
+  const ThemePreset(this.id, this.name, this.nameEn, this.color);
 }
 
 /// F1 车队主题色预设（自设近似色，非官方配色表；无官方 Logo）。
 class F1ThemePresets {
   static const List<ThemePreset> all = [
-    ThemePreset('ferrari', '法拉利红', Color(0xFFE10600)),
-    ThemePreset('mclaren', '迈凯伦木瓜橙', Color(0xFFFF8000)),
-    ThemePreset('redbull', '红牛深蓝', Color(0xFF12184A)),
-    ThemePreset('mercedes', '梅赛德斯绿松', Color(0xFF00A19B)),
-    ThemePreset('astonmartin', '阿斯顿马丁绿', Color(0xFF006F62)),
-    ThemePreset('alpine', 'Alpine 蓝', Color(0xFF0090FF)),
-    ThemePreset('williams', '威廉姆斯蓝', Color(0xFF002654)),
-    ThemePreset('racingbulls', 'Racing Bulls', Color(0xFF6A9ED6)),
-    ThemePreset('haas', '哈斯', Color(0xFF8A8D8F)),
-    ThemePreset('sauber', '索伯/奥迪', Color(0xFF52E252)),
-    ThemePreset('cadillac', '凯迪拉克', Color(0xFFD9B45B)),
+    ThemePreset('ferrari', '法拉利红', 'Ferrari Red', Color(0xFFE10600)),
+    ThemePreset('mclaren', '迈凯伦木瓜橙', 'McLaren Papaya', Color(0xFFFF8000)),
+    ThemePreset('redbull', '红牛深蓝', 'Red Bull Navy', Color(0xFF12184A)),
+    ThemePreset('mercedes', '梅赛德斯绿松', 'Mercedes Teal', Color(0xFF00A19B)),
+    ThemePreset('astonmartin', '阿斯顿马丁绿', 'Aston Martin Green', Color(0xFF006F62)),
+    ThemePreset('alpine', 'Alpine 蓝', 'Alpine Blue', Color(0xFF0090FF)),
+    ThemePreset('williams', '威廉姆斯蓝', 'Williams Blue', Color(0xFF002654)),
+    ThemePreset('racingbulls', 'Racing Bulls', 'Racing Bulls', Color(0xFF6A9ED6)),
+    ThemePreset('haas', '哈斯', 'Haas', Color(0xFF8A8D8F)),
+    ThemePreset('sauber', '索伯/奥迪', 'Sauber/Audi', Color(0xFF52E252)),
+    ThemePreset('cadillac', '凯迪拉克', 'Cadillac', Color(0xFFD9B45B)),
   ];
 
   static ThemePreset? byId(String id) {
@@ -240,14 +242,41 @@ class _VehicleMarkerSettingsSectionState
     widget.onChanged?.call(_sel);
   }
 
-  String _blurbFor(String key) => switch (_tab) {
-    TripMode.car => CarMarkerStyleLabel.fromKey(key).blurb,
-    TripMode.moto => MotoMarkerStyleLabel.fromKey(key).blurb,
-    TripMode.kart => CarMarkerStyleLabel.fromKey(key).blurb,
-    TripMode.bike => BikeMarkerStyleLabel.fromKey(key).blurb,
+  /// 车标名称与副文案随界面语言切换；模型层枚举仍只存中文，不改。
+  String _markerName(S s, String key) => switch (key) {
+    'sedan' => s.t('轿车', 'Sedan'),
+    'sport' => s.t('跑车', 'Sports car'),
+    'suv' => s.t('SUV', 'SUV'),
+    'pickup' => s.t('皮卡', 'Pickup'),
+    'offroad' => s.t('越野车', 'Off-road'),
+    'ducati' => s.t('杜卡迪风格', 'Ducati style'),
+    'yamaha' => s.t('雅马哈风格', 'Yamaha style'),
+    'honda' => s.t('本田风格', 'Honda style'),
+    'kawasaki' => s.t('川崎风格', 'Kawasaki style'),
+    'road' => s.t('公路', 'Road'),
+    'mountain' => s.t('山地', 'Mountain'),
+    'city' => s.t('城市', 'City'),
+    _ => key,
+  };
+
+  String _blurbFor(S s, String key) => switch (key) {
+    'sedan' => s.t('三厢 · 修长车顶', 'Sedan · long roofline'),
+    'sport' => s.t('低趴 · 尾翼', 'Low stance · spoiler'),
+    'suv' => s.t('高车身 · 方正轮廓 · 行李架', 'Tall · boxy · roof rack'),
+    'pickup' => s.t('驾驶舱 + 开放货斗', 'Cab + open bed'),
+    'offroad' => s.t('粗轮胎 · 行李架 · 前杠', 'Fat tires · rack · bumper'),
+    'ducati' => s.t('仿赛 · 宽整流罩', 'Sport · wide fairing'),
+    'yamaha' => s.t('仿赛 · 均衡车身', 'Sport · balanced body'),
+    'honda' => s.t('街车 · 窄车身', 'Naked · slim body'),
+    'kawasaki' => s.t('仿赛 · 尖鼻', 'Sport · sharp nose'),
+    'road' => s.t('弯把 · 细胎', 'Drop bars · thin tires'),
+    'mountain' => s.t('宽胎 · 平把', 'Wide tires · flat bars'),
+    'city' => s.t('上翘把 · 通勤', 'Upright bars · commuter'),
+    _ => '',
   };
 
   Widget _optionCard({
+    required S s,
     required String key,
     required String label,
     required bool selected,
@@ -255,7 +284,7 @@ class _VehicleMarkerSettingsSectionState
     return Semantics(
       button: true,
       selected: selected,
-      label: '$label车标',
+      label: s.t('$label车标', '$label marker'),
       child: Material(
         color: selected ? const Color(0xFF29232A) : const Color(0xFF15171C),
         shape: RoundedRectangleBorder(
@@ -305,7 +334,7 @@ class _VehicleMarkerSettingsSectionState
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _blurbFor(key),
+                  _blurbFor(s, key),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 10, color: Colors.white38),
@@ -320,22 +349,23 @@ class _VehicleMarkerSettingsSectionState
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final options = switch (_tab) {
       TripMode.car =>
         CarMarkerStyle.values
-            .map((e) => (key: e.key, label: e.label, sel: _sel.car.key))
+            .map((e) => (key: e.key, sel: _sel.car.key))
             .toList(),
       TripMode.moto =>
         MotoMarkerStyle.values
-            .map((e) => (key: e.key, label: e.label, sel: _sel.moto.key))
+            .map((e) => (key: e.key, sel: _sel.moto.key))
             .toList(),
       TripMode.kart =>
         CarMarkerStyle.values
-            .map((e) => (key: e.key, label: e.label, sel: _sel.car.key))
+            .map((e) => (key: e.key, sel: _sel.car.key))
             .toList(),
       TripMode.bike =>
         BikeMarkerStyle.values
-            .map((e) => (key: e.key, label: e.label, sel: _sel.bike.key))
+            .map((e) => (key: e.key, sel: _sel.bike.key))
             .toList(),
     };
     return Card(
@@ -371,21 +401,24 @@ class _VehicleMarkerSettingsSectionState
                     ),
                   ),
                 ),
-                segments: const [
-                  ButtonSegment(value: TripMode.car, label: Text('汽车')),
-                  ButtonSegment(value: TripMode.moto, label: Text('摩托')),
-                  ButtonSegment(value: TripMode.kart, label: Text('卡丁车')),
+                segments: [
+                  ButtonSegment(value: TripMode.car, label: Text(s.t('汽车', 'Car'))),
+                  ButtonSegment(value: TripMode.moto, label: Text(s.t('摩托', 'Moto'))),
+                  ButtonSegment(value: TripMode.kart, label: Text(s.t('卡丁车', 'Kart'))),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (v) => setState(() => _tab = v.first),
               ),
             ),
             if (_tab == TripMode.moto)
-              const Padding(
-                padding: EdgeInsets.only(top: 12, bottom: 12),
+              Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 12),
                 child: Text(
-                  '品牌名仅作风格区分，非官方授权模型；车标为自绘轮廓，不使用官方 Logo。',
-                  style: TextStyle(fontSize: 12, color: Colors.white54),
+                  s.t(
+                    '品牌名仅作风格区分，非官方授权模型；车标为自绘轮廓，不使用官方 Logo。',
+                    'Brand names only describe styles; these are not licensed models. Markers are hand-drawn outlines with no official logos.',
+                  ),
+                  style: const TextStyle(fontSize: 12, color: Colors.white54),
                 ),
               )
             else
@@ -404,17 +437,21 @@ class _VehicleMarkerSettingsSectionState
                 itemBuilder: (context, index) {
                   final option = options[index];
                   return _optionCard(
+                    s: s,
                     key: option.key,
-                    label: option.label,
+                    label: _markerName(s, option.key),
                     selected: option.sel == option.key,
                   );
                 },
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              '选择只存本机，不上传；车标为通用自绘车型，不使用品牌 Logo。',
-              style: TextStyle(fontSize: 11, color: Colors.white38),
+            Text(
+              s.t(
+                '选择只存本机，不上传；车标为通用自绘车型，不使用品牌 Logo。',
+                'Saved on this device only. Markers are generic hand-drawn shapes with no brand logos.',
+              ),
+              style: const TextStyle(fontSize: 11, color: Colors.white38),
             ),
           ],
         ),
@@ -502,7 +539,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     final c = parseHexColor(_hexCtrl.text);
     if (c == null) {
       // 非法值只报错、不崩溃、不改当前主题色。
-      setState(() => _hexError = '格式不对：请输入 #RRGGBB，如 #E10600');
+      setState(() => _hexError = S.current.t('格式不对：请输入 #RRGGBB，如 #E10600', 'Invalid format: enter #RRGGBB, e.g. #E10600'));
       return;
     }
     _setAccent(c, 'custom');
@@ -513,13 +550,24 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   /// 与提示；不另起第三张、不含旧转速表图。
   void _pickAppIcon(String key) {
     if (_appIcon == key) return;
+    final s = S.of(context);
     setState(() => _appIcon = key);
     widget.onAppIconChanged?.call(key);
-    showAppNotice(context, '桌面图标已切换，若桌面未立即刷新请稍等或重启启动器', AppNoticeKind.success);
+    showAppNotice(context, s.t('桌面图标已切换，若桌面未立即刷新请稍等或重启启动器', 'App icon switched. If the launcher has not refreshed, wait a moment or restart it.'), AppNoticeKind.success);
   }
 
+  String _iconLabel(S s, String key) =>
+      AppIconChoice.normalize(key) == AppIconChoice.checkered
+          ? s.t('方格旗', 'Checkered flag')
+          : s.t('方向盘', 'Steering wheel');
+
+  String _iconDesc(S s, String key) =>
+      AppIconChoice.normalize(key) == AppIconChoice.checkered
+          ? s.t('方格旗（炭灰底、飘动黑白方格旗、红速度线）', 'Checkered flag (charcoal base, waving flag, red speed lines)')
+          : s.t('方向盘（法拉利红底、深灰盘圈、白三辐）', 'Steering wheel (Ferrari-red base, dark rim, white spokes)');
+
   /// v1.0.3 APP 图标分区卡：图标并排（小图 + 名称），点选即切换。
-  Widget _appIconOption(String key) {
+  Widget _appIconOption(S s, String key) {
     final selected = _appIcon == key;
     return Expanded(
       child: GestureDetector(
@@ -549,7 +597,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    AppIconChoice.labelFor(key),
+                    _iconLabel(s, key),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -563,7 +611,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               ),
               const SizedBox(height: 2),
               Text(
-                AppIconChoice.descriptionFor(key),
+                _iconDesc(s, key),
                 style: const TextStyle(fontSize: 11, color: Colors.white54),
                 textAlign: TextAlign.center,
               ),
@@ -650,21 +698,22 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     // v0.1.9：去掉主题预览功能——不再渲染预览卡/预览图，也不再用
     // Theme 包住本页做页内预览；选色即通过 onAccentChanged 写回
     // AppPrefs 并在整个 App 内实时生效，返回首页即可看到新主题色。
     // 每项只留名称与一行必要说明，不再堆描述文字。
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: DtAppBar(title: const Text('主题设置')),
+      appBar: DtAppBar(title: Text(s.t('主题设置', 'Theme'))),
       body: ListView(
         padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 24)),
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: Text('全局黑色，只换主题色。', style: TextStyle(fontSize: 12)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+            child: Text(s.t('全局黑色，只换主题色。', 'Black UI; only the accent color changes.'), style: const TextStyle(fontSize: 12)),
           ),
-          _sectionTitle('主题色'),
+          _sectionTitle(s.t('主题色', 'Accent color')),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Padding(
@@ -700,7 +749,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                               SizedBox(
                                 width: 64,
                                 child: Text(
-                                  p.name,
+                                  s.t(p.name, p.nameEn),
                                   style: const TextStyle(fontSize: 11),
                                   textAlign: TextAlign.center,
                                 ),
@@ -711,12 +760,12 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text('近似色，非官方配色表。', style: TextStyle(fontSize: 11)),
+                  Text(s.t('近似色，非官方配色表。', 'Approximate colors; not an official palette.'), style: const TextStyle(fontSize: 11)),
                 ],
               ),
             ),
           ),
-          _sectionTitle('自定义颜色'),
+          _sectionTitle(s.t('自定义颜色', 'Custom color')),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Padding(
@@ -755,7 +804,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: const Color(0xFF121212),
-                            labelText: '十六进制颜色（#RRGGBB）',
+                            labelText: s.t('十六进制颜色（#RRGGBB）', 'Hex color (#RRGGBB)'),
                             labelStyle: const TextStyle(
                               color: Colors.white54,
                               fontSize: 13,
@@ -838,14 +887,17 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                             vertical: 12,
                           ),
                         ),
-                        child: const Text('应用'),
+                        child: Text(s.t('应用', 'Apply')),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '输入 #RRGGBB 后点应用，非法值只提示、不改当前主题色。',
-                    style: TextStyle(fontSize: 11, color: Colors.white54),
+                  Text(
+                    s.t(
+                      '输入 #RRGGBB 后点应用，非法值只提示、不改当前主题色。',
+                      'Enter #RRGGBB and tap Apply. Invalid values only show an error; the current accent stays.',
+                    ),
+                    style: const TextStyle(fontSize: 11, color: Colors.white54),
                   ),
                 ],
               ),
@@ -853,7 +905,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
           ),
           // v1.0.3：APP 图标分区。图标删减后只剩方向盘 / 方格旗两项，
           // 同一行并排；IntrinsicHeight 让两张卡等高，预览图同为 72×72。
-          _sectionTitle('APP 图标'),
+          _sectionTitle(s.t('APP 图标', 'App icon')),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Padding(
@@ -865,40 +917,49 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _appIconOption(AppIconChoice.steering),
+                        _appIconOption(s, AppIconChoice.steering),
                         const SizedBox(width: 12),
-                        _appIconOption(AppIconChoice.checkered),
+                        _appIconOption(s, AppIconChoice.checkered),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    '点选即切换桌面图标与 App 内图标。若桌面未立即刷新，稍等或重启启动器。',
-                    style: TextStyle(fontSize: 12, color: Colors.white54),
+                  Text(
+                    s.t(
+                      '点选即切换桌面图标与 App 内图标。若桌面未立即刷新，稍等或重启启动器。',
+                      'Tap to switch the launcher and in-app icon. If the launcher does not refresh, wait or restart it.',
+                    ),
+                    style: const TextStyle(fontSize: 12, color: Colors.white54),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    '若切换后启动异常，从系统设置的应用信息里清除启动器缓存或重装本应用。',
-                    style: TextStyle(fontSize: 12, color: Colors.white54),
+                  Text(
+                    s.t(
+                      '若切换后启动异常，从系统设置的应用信息里清除启动器缓存或重装本应用。',
+                      'If the app fails to start after switching, clear the launcher cache in system app info or reinstall the app.',
+                    ),
+                    style: const TextStyle(fontSize: 12, color: Colors.white54),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    '若桌面仍显示旧图标，长按删除桌面图标后从应用列表重新添加。',
-                    style: TextStyle(fontSize: 12, color: Colors.white54),
+                  Text(
+                    s.t(
+                      '若桌面仍显示旧图标，长按删除桌面图标后从应用列表重新添加。',
+                      'If the old icon remains, remove it from the home screen and add it again from the app list.',
+                    ),
+                    style: const TextStyle(fontSize: 12, color: Colors.white54),
                   ),
                 ],
               ),
             ),
           ),
           // v1.0.2：第 8 项——地图车标分区（原设置首页入口已删，功能在此）。
-          _sectionTitle('地图车标'),
+          _sectionTitle(s.t('地图车标', 'Map markers')),
           VehicleMarkerSettingsSection(
             initial: widget.vehicleMarkerInitial,
             onChanged: widget.onVehicleMarkerChanged,
             accentColor: _accent,
           ),
           // 英文与数字提供两款内置赛车字体；中文固定使用思源黑体 Bold。
-          _sectionTitle('字体'),
+          _sectionTitle(s.t('字体', 'Font')),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Padding(
@@ -914,7 +975,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                           key: 'orbitron',
                           selected: _latinFont == 'orbitron',
                           title: 'Orbitron',
-                          subtitle: '几何科技风格',
+                          subtitle: s.t('几何科技风格', 'Geometric tech style'),
                           preview: const Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -948,7 +1009,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                           key: 'racingSansOne',
                           selected: _latinFont == 'racingSansOne',
                           title: 'Racing Sans One',
-                          subtitle: '赛车斜体风格',
+                          subtitle: s.t('赛车斜体风格', 'Racing italic style'),
                           preview: const Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -981,9 +1042,12 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    '英文与数字可切换；中文固定使用思源黑体 Bold。',
-                    style: TextStyle(fontSize: 12, color: Colors.white54),
+                  Text(
+                    s.t(
+                      '英文与数字可切换；中文固定使用思源黑体 Bold。',
+                      'English and numbers can switch; Chinese stays on Noto Sans CJK Bold.',
+                    ),
+                    style: const TextStyle(fontSize: 12, color: Colors.white54),
                   ),
                 ],
               ),

@@ -392,7 +392,12 @@ ExternalGpsKind gpsProfileKindForDevice(Map<String, dynamic> dev) {
 /// - 原生单 GATT：一次只能连一台 BLE 设备，连新设备会断开旧的；
 ///   SPP 不占 GATT 名额，可与 BLE 传感器共存。
 class ExternalGpsSection extends StatefulWidget {
-  const ExternalGpsSection({super.key});
+  const ExternalGpsSection({super.key, this.onPaired});
+
+  /// 设备真正连上（BLE / SPP）时回调一次：把这次连接的服务 / 特征
+  /// UUID 与名称交给设备中心落盘，供“我的设备”展示和开机自动重连。
+  /// 设备中心是唯一的持久化写入方，本区不自己写文件。
+  final void Function(SavedDevice device)? onPaired;
 
   @override
   State<ExternalGpsSection> createState() => _ExternalGpsSectionState();
@@ -515,6 +520,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _connectingAddress = null;
         });
         _publishGpsStatus();
+        _notifyPaired();
         _detectHardware();
         final pending = _pendingSubscribe;
         if (pending != null && pending.address == addr) {
@@ -550,6 +556,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           _notice = 'SPP 已连接，行程改用外接 GPS。';
         });
         _publishGpsStatus();
+        _notifyPaired();
         _detectHardware();
       } else if (type == 'sppDisconnected') {
         if (_connectedChannel != 'spp') return;
@@ -650,6 +657,26 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
       if (mounted) setState(() => _permNotice = '权限检查失败：$e');
       return false;
     }
+  }
+
+  /// 把刚连上的设备交给设备中心落盘（“我的设备”）。
+  /// BLE 保存当前生效的服务 / 特征 UUID，SPP 没有 UUID 只存地址；
+  /// 这样下次开机自动重连时能直接订阅 NMEA，不必再走一遍配对。
+  void _notifyPaired() {
+    final addr = _connectedAddress;
+    if (addr == null || addr.isEmpty) return;
+    final uuids = _effectiveUuids;
+    final rawName = _connectedName?.trim() ?? '';
+    final tail = addr.length >= 5 ? addr.substring(addr.length - 5) : addr;
+    widget.onPaired?.call(
+      SavedDevice(
+        name: rawName.isNotEmpty ? rawName : 'GPS $tail',
+        serviceUuid: uuids?.service ?? '',
+        characteristicUuid: uuids?.tx ?? '',
+        type: '外接GPS',
+        address: addr,
+      ),
+    );
   }
 
   /// 把本区连接状态同步到共享源（gps_source.dart 的
@@ -1519,6 +1546,10 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
   final Map<String, DeviceLinkStatus> _statusByAddress = {};
   String? _notice;
 
+  /// 从“我的设备”点重连时记下待订阅的服务 / 特征；连接与
+  /// 服务发现事件到达后自动订阅，避免重连后仍无定位。
+  ({String address, String service, String tx})? _resubscribe;
+
   StreamSubscription<Map<String, dynamic>>? _dataSub;
 
   final BleDiyGpsFeed _gpsFeed = BleDiyGpsFeed();
@@ -1531,6 +1562,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       final type = (e['type'] ?? '').toString();
       final addr = (e['address'] ?? '').toString();
       if (type == 'connected' && addr.isNotEmpty) {
+        connectedExternalGpsAddress.value = addr;
         SavedDevice? newlySaved;
         setState(() {
           _statusByAddress[addr] = DeviceLinkStatus.connected;
@@ -1552,13 +1584,18 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           }
         });
         if (newlySaved != null) {
-          _persist();
+          _persist(silent: true);
           widget.onSavedDeviceConnected?.call(newlySaved!);
         } else {
           final hit = _saved.where((d) => d.address == addr);
           if (hit.isNotEmpty) widget.onSavedDeviceConnected?.call(hit.first);
         }
+        unawaited(_tryResubscribe(addr));
+      } else if (type == 'servicesDiscovered') {
+        // GATT 服务发现完成：连接瞬间订阅常报 not_found，这里再试一次。
+        unawaited(_tryResubscribe((e['address'] ?? '').toString()));
       } else if (type == 'disconnected') {
+        connectedExternalGpsAddress.value = null;
         setState(() {
           for (final k in _statusByAddress.keys) {
             _statusByAddress[k] = DeviceLinkStatus.disconnected;
@@ -1579,11 +1616,48 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     final list = await DeviceCenterStore.load();
     if (!mounted) return;
     setState(() => _saved = list);
+    // 开机自动重连等连接可能发生在本页创建之前：进页按共享地址
+    // 恢复一次“已连接”标记，不必再等下一次连接事件。
+    final live = connectedExternalGpsAddress.value;
+    if (live != null && live.isNotEmpty) {
+      setState(() => _statusByAddress[live] = DeviceLinkStatus.connected);
+    }
   }
 
-  Future<void> _persist() async {
+  /// 把刚配对成功的设备并入“我的设备”（按地址去重）。
+  /// 同一台设备重连时用新拿到的名称 / UUID 补全旧记录的空字段，
+  /// 绝不新增重复行。
+  void _rememberDevice(SavedDevice device) {
+    final addr = device.address;
+    if (addr == null || addr.isEmpty) return;
+    final index = _saved.indexWhere((d) => d.address == addr);
+    setState(() {
+      if (index < 0) {
+        _saved = [..._saved, device];
+      } else {
+        final old = _saved[index];
+        final next = [..._saved];
+        next[index] = SavedDevice(
+          name: old.name.isNotEmpty ? old.name : device.name,
+          serviceUuid: device.serviceUuid.isNotEmpty
+              ? device.serviceUuid
+              : old.serviceUuid,
+          characteristicUuid: device.characteristicUuid.isNotEmpty
+              ? device.characteristicUuid
+              : old.characteristicUuid,
+          type: old.type.isNotEmpty ? old.type : device.type,
+          address: addr,
+        );
+        _saved = next;
+      }
+    });
+    unawaited(_persist(silent: true));
+  }
+
+  Future<void> _persist({bool silent = false}) async {
     final ok = await DeviceCenterStore.save(_saved);
     if (!mounted) return;
+    if (silent && ok) return;
     setState(() => _notice = ok ? '已保存到本机。' : '保存失败：本机文件写入失败。');
   }
 
@@ -1593,19 +1667,44 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       setState(() => _notice = '“${device.name}”未保存蓝牙地址，无法重连，请重新扫描连接。');
       return;
     }
+    final service = device.serviceUuid.isNotEmpty
+        ? device.serviceUuid
+        : nordicUartServiceUuid;
+    final tx = device.characteristicUuid.isNotEmpty
+        ? device.characteristicUuid
+        : nordicUartTxUuid;
     try {
       setState(() => _statusByAddress[addr] = DeviceLinkStatus.connecting);
+      // 记下待订阅的 UUID：connected / servicesDiscovered 事件到达时
+      // 自动订阅 NMEA 特征，重连后直接出定位，不再要求去扫描页手工订阅。
+      _resubscribe = (address: addr, service: service, tx: tx);
       await Native.setBleAutoReconnect(true);
       await Native.connectBle(addr);
-      setState(
-        () => _notice = '正在连接“${device.name}”…重连后仍需在外接 GPS 区订阅 NMEA 特征。',
-      );
+      setState(() => _notice = '正在连接“${device.name}”…');
     } catch (e) {
       setState(() {
         _statusByAddress[addr] = DeviceLinkStatus.disconnected;
         _notice = '连接失败：$e';
       });
     }
+  }
+
+  /// 连上（或服务发现完成）后按待订阅项自动订阅 NMEA 特征。
+  Future<void> _tryResubscribe(String addr) async {
+    final pending = _resubscribe;
+    if (pending == null || pending.address != addr) return;
+    try {
+      final r = await Native.subscribeBleCharacteristic(
+        pending.address,
+        pending.service,
+        pending.tx,
+      );
+      if ((r['ok'] as bool?) == true) {
+        _resubscribe = null;
+        if (!mounted) return;
+        setState(() => _notice = '已连接并订阅定位数据。');
+      }
+    } catch (_) {}
   }
 
   @override
@@ -1714,15 +1813,18 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         ),
       );
     }
-    return _panel(
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          for (var i = 0; i < _saved.length; i++) ...[
-            if (i > 0) _dividerLine(left: 62),
-            _savedDeviceTile(_saved[i]),
+    return ValueListenableBuilder<ExternalGpsStatus>(
+      valueListenable: externalGpsStatus,
+      builder: (context, st, _) => _panel(
+        padding: EdgeInsets.zero,
+        child: Column(
+          children: [
+            for (var i = 0; i < _saved.length; i++) ...[
+              if (i > 0) _dividerLine(left: 62),
+              _savedDeviceTile(_saved[i], st),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1965,7 +2067,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                 child: SingleChildScrollView(
                   controller: controller,
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  child: const ExternalGpsSection(),
+                  child: ExternalGpsSection(onPaired: _rememberDevice),
                 ),
               ),
             ],
@@ -2036,7 +2138,35 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     ),
   );
 
-  Widget _savedDeviceTile(SavedDevice device) {
+  /// 我的设备行摘要：连接状态之外，已连接时补上定位是否在出数，
+  /// 避免“只看到名字，其它信息都没有”。
+  String _savedDeviceDetail(
+    SavedDevice device,
+    DeviceLinkStatus status,
+    ExternalGpsStatus st,
+  ) {
+    final parts = <String>[device.type, status.label];
+    if (status == DeviceLinkStatus.connected && st.connected) {
+      final ageMs = st.lastFixAtMs > 0
+          ? DateTime.now().millisecondsSinceEpoch - st.lastFixAtMs
+          : -1;
+      if (st.binaryOnly) {
+        parts.add('不出定位');
+      } else if (ageMs >= 0 && ageMs <= 5000) {
+        final hz = st.sampleRateHz > 0
+            ? ' ${st.sampleRateHz.toStringAsFixed(0)}Hz'
+            : '';
+        parts.add('定位中$hz');
+      } else {
+        parts.add('等待定位');
+      }
+    }
+    final addr = device.address;
+    if (addr != null && addr.isNotEmpty) parts.add(addr);
+    return parts.join(' · ');
+  }
+
+  Widget _savedDeviceTile(SavedDevice device, ExternalGpsStatus st) {
     final s = S.of(context);
     final addr = device.address;
     final status = addr == null
@@ -2081,7 +2211,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${device.type} · ${status.label}',
+                  _savedDeviceDetail(device, status, st),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white38, fontSize: 12),

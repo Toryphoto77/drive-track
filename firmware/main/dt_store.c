@@ -14,6 +14,7 @@
 
 #include "dt_ble.h"
 #include "dt_config.h"
+#include "dt_sd.h"
 
 static const char *TAG = "dt_store";
 
@@ -23,6 +24,9 @@ static const char *TAG = "dt_store";
 
 static bool s_mounted;
 static bool s_recording;
+static bool s_using_sd;
+static char s_path[64];
+static uint64_t s_sd_free;
 static FILE *s_fp;
 static size_t s_size;
 static size_t s_cursor;
@@ -69,23 +73,35 @@ bool dt_store_init(void)
         s_nvs = 0;
     }
 
-    esp_vfs_spiffs_conf_t conf = {
-        .base_path = DT_STORE_MOUNT_POINT,
-        .partition_label = "storage",
-        .max_files = 4,
-        .format_if_mount_failed = true,
-    };
-    esp_err_t err = esp_vfs_spiffs_register(&conf);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "SPIFFS 挂载失败 %s", esp_err_to_name(err));
-        return false;
+    // 优先用 SD：容量大、掉电不伤片内 Flash；挂不上再回落 SPIFFS。
+    if (dt_sd_init()) {
+        s_using_sd = true;
+        strncpy(s_path, DT_SD_FILE, sizeof(s_path) - 1);
+        s_sd_free = dt_sd_free_bytes();
+        s_partition_bytes = (size_t)dt_sd_total_kb() * 1024;
+        s_mounted = true;
+    } else {
+        esp_vfs_spiffs_conf_t conf = {
+            .base_path = DT_STORE_MOUNT_POINT,
+            .partition_label = "storage",
+            .max_files = 4,
+            .format_if_mount_failed = true,
+        };
+        esp_err_t err = esp_vfs_spiffs_register(&conf);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "SPIFFS 挂载失败 %s", esp_err_to_name(err));
+            return false;
+        }
+        s_mounted = true;
+        strncpy(s_path, DT_STORE_FILE, sizeof(s_path) - 1);
+        size_t used = 0;
+        esp_spiffs_info("storage", &s_partition_bytes, &used);
+        ESP_LOGI(TAG, "SD 不可用，改用片内缓存：%u/%u 字节已用",
+                 (unsigned)used, (unsigned)s_partition_bytes);
     }
-    s_mounted = true;
+    s_path[sizeof(s_path) - 1] = '\0';
 
-    size_t used = 0;
-    esp_spiffs_info("storage", &s_partition_bytes, &used);
-
-    FILE *fp = fopen(DT_STORE_FILE, "r");
+    FILE *fp = fopen(s_path, "r");
     if (fp != NULL) {
         fseek(fp, 0, SEEK_END);
         s_size = (size_t)ftell(fp);
@@ -95,8 +111,9 @@ bool dt_store_init(void)
     if (s_cursor > s_size) {
         s_cursor = s_size;
     }
-    ESP_LOGI(TAG, "缓存就绪：%u/%u 字节已用，游标 %u", (unsigned)used,
-             (unsigned)s_partition_bytes, (unsigned)s_cursor);
+    ESP_LOGI(TAG, "缓存就绪（%s）：%u 字节，游标 %u",
+             s_using_sd ? "SD" : "SPIFFS", (unsigned)s_size,
+             (unsigned)s_cursor);
     return true;
 }
 
@@ -128,17 +145,30 @@ bool dt_store_write_line(const char *line)
 
     bool ok = false;
     if (s_fp == NULL) {
-        s_fp = fopen(DT_STORE_FILE, "a");
+        s_fp = fopen(s_path, "a");
     }
     if (s_fp != NULL) {
         size_t len = strlen(line);
-        if (s_size + len + 1 > s_partition_bytes) {
+        // SD 每 256 行刷新一次剩余空间，避免每行都走一遍 VFS。
+        if (s_using_sd && (s_writes % 256 == 0)) {
+            dt_sd_refresh();
+            s_sd_free = dt_sd_free_bytes();
+        }
+        const uint64_t room =
+            s_using_sd ? s_sd_free
+                       : (uint64_t)(s_size < s_partition_bytes
+                                        ? s_partition_bytes - s_size
+                                        : 0);
+        if ((uint64_t)(len + 1) > room) {
             ESP_LOGW(TAG, "缓存已满，停止落盘");
             s_recording = false;
             fclose(s_fp);
             s_fp = NULL;
         } else if (fprintf(s_fp, "%s\n", line) > 0) {
             s_size += len + 1;
+            if (s_using_sd) {
+                s_sd_free = s_sd_free > len + 1 ? s_sd_free - (len + 1) : 0;
+            }
             ok = true;
             if (++s_writes % FLUSH_EVERY == 0) {
                 fflush(s_fp);
@@ -172,7 +202,7 @@ size_t dt_store_sync_step(size_t max_bytes)
     }
 
     size_t sent = 0;
-    FILE *fp = fopen(DT_STORE_FILE, "r");
+    FILE *fp = fopen(s_path, "r");
     if (fp != NULL) {
         fseek(fp, (long)s_cursor, SEEK_SET);
         char line[400];
@@ -214,7 +244,7 @@ void dt_store_clear(void)
         fclose(s_fp);
         s_fp = NULL;
     }
-    remove(DT_STORE_FILE);
+    remove(s_path);
     s_size = 0;
     s_cursor = 0;
     save_cursor(true);

@@ -192,7 +192,9 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           _connectingAddress = null;
           _awaitingVersion = false;
         });
-        showAppNotice(context, 'GoPro 已断开。', AppNoticeKind.info);
+        showAppNotice(
+            context, S.of(context).t('GoPro 已断开。', 'GoPro disconnected.'),
+            AppNoticeKind.info);
       } else if (type == 'bleNotification') {
         // GoPro 响应特征 GP-0073：收到响应并解析通过才算连上，
         // 之前只算“已下发查询”。
@@ -225,9 +227,14 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         });
         showAppNotice(
           context,
-          resp.ok
-              ? 'GoPro 已连接。'
-              : 'GoPro 响应解析失败：${resp.error ?? '未知原因'}。',
+          S.of(context).t(
+            resp.ok
+                ? 'GoPro 已连接。'
+                : 'GoPro 响应解析失败：${resp.error ?? '未知原因'}。',
+            resp.ok
+                ? 'GoPro connected.'
+                : 'Failed to parse GoPro response: ${resp.error ?? 'unknown reason'}.',
+          ),
           resp.ok ? AppNoticeKind.success : AppNoticeKind.error,
         );
       } else if (type == 'battery' && addr.isNotEmpty) {
@@ -261,17 +268,23 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       .toList();
 
   String _scanSummary() {
+    final s = S.of(context);
     final cams = _cameras.length;
-    if (_scanned.isEmpty) return S.current.t('尚未扫描，点「扫描相机」。', 'Not scanned. Tap Scan cameras.');
-    if (cams == 0) {
-      return '已扫描 ${_scanned.length} 台设备，未发现运动相机。';
+    if (_scanned.isEmpty) {
+      return s.t('尚未扫描，点「扫描相机」。', 'Not scanned. Tap Scan cameras.');
     }
-    return '已扫描 ${_scanned.length} 台设备，找到 $cams 台可识别的运动相机。';
+    if (cams == 0) {
+      return s.t('已扫描 ${_scanned.length} 台设备，未发现运动相机。',
+          'Scanned ${_scanned.length} devices; no action cameras found.');
+    }
+    return s.t('已扫描 ${_scanned.length} 台设备，找到 $cams 台可识别的运动相机。',
+        'Scanned ${_scanned.length} devices; found $cams action cameras.');
   }
 
   /// 蓝牙 + 定位权限按系统流程申请（分步 requestStep），拒绝时
   /// 给明确提示 + 系统设置入口，不崩溃、不静默失败。
   Future<bool> _ensureBtPermissions() async {
+    final s = S.of(context);
     try {
       final snap = await Native.checkPermissions();
       var btOk = snap['bluetooth'] == true;
@@ -287,11 +300,13 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       if (!mounted) return false;
       setState(() => _permNotice = (btOk && locOk)
           ? null
-          : '需要蓝牙与定位权限：请在系统设置里为本 App 打开蓝牙与定位权限后重试。');
+          : s.t('需要蓝牙与定位权限：请在系统设置里为本 App 打开蓝牙与定位权限后重试。',
+              'Bluetooth and location permissions are required. Enable them for this app in system settings and retry.'));
       return btOk && locOk;
     } catch (_) {
       if (mounted) {
-        setState(() => _permNotice = '权限检查失败：请确认蓝牙已打开且权限已授予。');
+        setState(() => _permNotice = s.t('权限检查失败：请确认蓝牙已打开且权限已授予。',
+            'Permission check failed: make sure Bluetooth is on and permissions are granted.'));
       }
       return false;
     }
@@ -301,13 +316,15 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
   /// 走无过滤扫描按名称识别；结果进同一列表，按地址去重。
   /// 原生单 GATT 与扫描说明见 device_center.dart。
   Future<void> _toggleScan() async {
+    final s = S.of(context);
     if (_scanning) {
       try {
         await Native.stopBleScan();
       } catch (_) {}
       if (!mounted) return;
       setState(() => _scanning = false);
-      showAppNotice(context, '已停止扫描。', AppNoticeKind.info);
+      showAppNotice(context, s.t('已停止扫描。', 'Scan stopped.'),
+          AppNoticeKind.info);
       return;
     }
     if (!await _ensureBtPermissions()) {
@@ -326,7 +343,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      showAppNotice(context, '扫描失败：$e', AppNoticeKind.error);
+      showAppNotice(context, s.t('扫描失败：$e', 'Scan failed: $e'),
+          AppNoticeKind.error);
     }
   }
 
@@ -356,6 +374,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
   /// 只读查询（[0x01, 0x51]），绝不用快门命令作探测；收到响应并
   /// 解析通过后状态才变“已连接”。
   Future<void> _connectGoPro(ScannedCamera cam) async {
+    final s = S.of(context);
     final address = cam.address;
     if (address.isEmpty) return;
     if (_goproAddress == address &&
@@ -389,7 +408,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
     });
     showAppNotice(
       context,
-      '正在连接 GoPro（$address）…',
+      s.t('正在连接 GoPro（$address）…', 'Connecting to GoPro ($address)…'),
       AppNoticeKind.info,
     );
     try {
@@ -409,7 +428,10 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         });
         showAppNotice(
           context,
-          'GoPro 响应订阅失败：${sub['error'] ?? 'unknown'}。请确认相机已开机。',
+          s.t(
+            'GoPro 响应订阅失败：${sub['error'] ?? 'unknown'}。请确认相机已开机。',
+            'Failed to subscribe to GoPro responses: ${sub['error'] ?? 'unknown'}. Make sure the camera is on.',
+          ),
           AppNoticeKind.error,
         );
         return;
@@ -425,7 +447,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         setState(() => _awaitingVersion = true);
         showAppNotice(
           context,
-          '正在等待 GoPro 响应，收到后才算连上。',
+          s.t('正在等待 GoPro 响应，收到后才算连上。',
+              'Waiting for the GoPro response; it counts as connected only after that.'),
           AppNoticeKind.info,
         );
         Future.delayed(const Duration(seconds: 15), () {
@@ -433,8 +456,12 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
           if (_awaitingVersion && _goproAddress == address) {
             showAppNotice(
               context,
-              '仍未收到 GoPro 响应：请确认相机已开机、蓝牙已打开'
-              '且未被其它 App 占用；可点“断开”后重试。',
+              S.of(context).t(
+                '仍未收到 GoPro 响应：请确认相机已开机、蓝牙已打开'
+                '且未被其它 App 占用；可点“断开”后重试。',
+                'Still no GoPro response: make sure the camera is on and Bluetooth is enabled, '
+                'and the camera is not in use by another app. Tap Disconnect and retry.',
+              ),
               AppNoticeKind.warning,
             );
           }
@@ -447,7 +474,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         });
         showAppNotice(
           context,
-          'GoPro 查询下发失败：${r['error'] ?? 'unknown'}。',
+          s.t('GoPro 查询下发失败：${r['error'] ?? 'unknown'}。',
+              'Failed to send GoPro query: ${r['error'] ?? 'unknown'}.'),
           AppNoticeKind.error,
         );
       }
@@ -458,7 +486,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         _connectingAddress = null;
         _awaitingVersion = false;
       });
-      showAppNotice(context, 'GoPro 连接失败：$e', AppNoticeKind.error);
+      showAppNotice(context, s.t('GoPro 连接失败：$e', 'GoPro connection failed: $e'),
+          AppNoticeKind.error);
     }
   }
 
@@ -474,7 +503,8 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       _connectingAddress = null;
       _awaitingVersion = false;
     });
-    showAppNotice(context, '已断开 GoPro。', AppNoticeKind.info);
+    showAppNotice(context, S.of(context).t('已断开 GoPro。', 'GoPro disconnected.'),
+        AppNoticeKind.info);
   }
 
   /// “开始同步录像”占位：目前没有可复用的外接相机同步录像入口。
@@ -483,8 +513,12 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
   void _syncRecordingPlaceholder() {
     showAppNotice(
       context,
-      '同步录像尚未接入：同步视频目前只录手机后置摄像头。'
-      'Insta360 / DJI 请在品牌 App 内录像。',
+      S.of(context).t(
+        '同步录像尚未接入：同步视频目前只录手机后置摄像头。'
+        'Insta360 / DJI 请在品牌 App 内录像。',
+        'Synced recording is not available yet: synced video currently records only the phone\'s rear camera. '
+        'Use the branded app to record on Insta360 / DJI.',
+      ),
       AppNoticeKind.warning,
     );
   }
@@ -556,10 +590,10 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          '已连接相机',
-                          style: TextStyle(
+                          s.t('已连接相机', 'Connected camera'),
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                           ),
@@ -567,7 +601,7 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
                       ),
                       TextButton(
                         onPressed: _disconnectGoPro,
-                        child: const Text('断开'),
+                        child: Text(s.t('断开', 'Disconnect')),
                       ),
                     ],
                   ),
@@ -581,17 +615,17 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
                   const SizedBox(height: 4),
                   Text(
                     _goproBattery == null
-                        ? '电量：—'
-                        : '电量：$_goproBattery%',
+                        ? s.t('电量：—', 'Battery: —')
+                        : s.t('电量：$_goproBattery%', 'Battery: $_goproBattery%'),
                     style: const TextStyle(
                       color: Colors.white54,
                       fontSize: 12,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    '连接状态：已连接。',
-                    style: TextStyle(color: Colors.greenAccent, fontSize: 12),
+                  Text(
+                    s.t('连接状态：已连接。', 'Status: connected.'),
+                    style: const TextStyle(color: Colors.greenAccent, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -599,13 +633,14 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
                     child: FilledButton.icon(
                       onPressed: _syncRecordingPlaceholder,
                       icon: const Icon(Icons.fiber_manual_record, size: 18),
-                      label: const Text('开始同步录像（待接入）'),
+                      label: Text(s.t('开始同步录像（待接入）', 'Start synced recording (coming soon)')),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    '同步录像尚未接入：同步视频目前只录手机后置摄像头。',
-                    style: TextStyle(color: Colors.white54, fontSize: 11),
+                  Text(
+                    s.t('同步录像尚未接入：同步视频目前只录手机后置摄像头。',
+                        'Synced recording is not available yet: synced video currently records only the phone\'s rear camera.'),
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                 ],
               ),
@@ -619,10 +654,14 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            '一次只能连一台蓝牙设备，连新设备会断开旧的；'
-            'Insta360 / DJI 是否连上以系统 Wi-Fi 与品牌 App 显示为准。',
-            style: TextStyle(color: Colors.white54, fontSize: 11),
+          Text(
+            s.t(
+              '一次只能连一台蓝牙设备，连新设备会断开旧的；'
+              'Insta360 / DJI 是否连上以系统 Wi-Fi 与品牌 App 显示为准。',
+              'Only one Bluetooth device can be connected at a time; connecting a new one disconnects the old. '
+              'For Insta360 / DJI, rely on the system Wi-Fi and the branded app.',
+            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
           ),
       ],
     );
@@ -658,14 +697,17 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
         : null;
     // 行卡片走共用极简组件：名称 + 一行（品牌 / 信号 / 地址）+ 一个动作按钮。
     final s = S.of(context);
+    final brandLabel = cam.brand == CameraBrand.unknown
+        ? s.t('未知品牌', 'Unknown brand')
+        : cameraBrandLabel(cam.brand);
     return DeviceScanRow(
-      title: cam.name.isEmpty ? cameraBrandLabel(cam.brand) : cam.name,
-      badgeLabel: cameraConnectionLabel(cam.brand),
+      title: cam.name.isEmpty ? brandLabel : cam.name,
+      badgeLabel: _connectionBadge(s, cam.brand),
       badgeIsWarning: isGuide,
       detail: isGuide ? (guide?.connectionSummary ?? '') : '',
-      meta: '${cameraBrandLabel(cam.brand)}'
-          '${cam.rssi != null ? ' · 信号 ${cam.rssi}' : ''}'
-          '${isGuide ? ' · 需向导' : ' · 可直连'}',
+      meta: '$brandLabel'
+          '${cam.rssi != null ? s.t(' · 信号 ${cam.rssi}', ' · signal ${cam.rssi}') : ''}'
+          '${isGuide ? s.t(' · 需向导', ' · guide') : s.t(' · 可直连', ' · direct')}',
       actionLabel: isGuide ? s.t('配对', 'Pair') : s.t('连接', 'Connect'),
       actionIsOutline: isGuide,
       isConnecting: isConnecting,
@@ -673,4 +715,12 @@ class _CameraConnectPageState extends State<CameraConnectPage> {
       onTap: () => _connectCamera(cam),
     );
   }
+
+  String _connectionBadge(S s, CameraBrand brand) => switch (brand) {
+        CameraBrand.gopro => s.t('BLE 直连', 'BLE direct'),
+        CameraBrand.insta360 ||
+        CameraBrand.dji =>
+          s.t('向导连接', 'Guided'),
+        CameraBrand.unknown => s.t('未知品牌', 'Unknown brand'),
+      };
 }
