@@ -520,6 +520,13 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         if (pending != null && pending.address == addr) {
           await _doSubscribe(pending.address, pending.service, pending.tx);
         }
+      } else if (type == 'servicesDiscovered') {
+        // GATT 服务发现完成：connected 时立刻订阅通常拿不到特征
+        //（characteristic_not_found），在这里重试一次即可成功。
+        final pending = _pendingSubscribe;
+        if (pending != null) {
+          await _doSubscribe(pending.address, pending.service, pending.tx);
+        }
       } else if (type == 'disconnected') {
         if (_connectedChannel != 'ble') return;
         setState(() {

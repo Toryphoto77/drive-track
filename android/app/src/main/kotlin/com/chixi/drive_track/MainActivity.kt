@@ -462,6 +462,12 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     }
                 }
             }
+            // v1.7.11：服务发现是异步的，Dart 侧在 connected 事件里立即订阅
+            // 会拿到 characteristic_not_found。这里补发发现完成事件，供 Dart 重试。
+            val uuids = gatt.services.map { it.uuid.toString() }
+            emitOnMain {
+                bleDataSink?.success(mapOf("type" to "servicesDiscovered", "uuids" to uuids))
+            }
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) {

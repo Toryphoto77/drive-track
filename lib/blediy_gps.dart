@@ -1,6 +1,8 @@
 /// BleDIY 协议 GPS 的纯 Dart 逻辑：NMEA 语句解析与合并。
 ///
-/// 不依赖 Flutter widget，可直接单元测试。传输层不在本文件：
+import 'dart:convert';
+
+
 /// BleDIY 类设备走 BLE 串口（Nordic UART 风格），订阅后把字节流按行
 /// 交给 [BleDiyGpsFeed] 即可；字节从哪来、特征订阅怎么做，见回执里的
 /// 原生方法规格表（现有 MainActivity.kt 没有 UART 订阅能力）。
@@ -13,9 +15,9 @@
 ///   为准（可用 device_center.dart 的通用 BLE 表单登记），不得硬说
 ///   NUS 就是 BleDIY 的官方值。
 /// - 解析本身与传输无关：只要拿到的是 NMEA 文本行，下面逻辑就适用。
-const String nordicUartServiceUuid = '6e400001-b5a3-f393-e0a9-e50e24dcca';
-const String nordicUartRxUuid = '6e400002-b5a3-f393-e0a9-e50e24dcca';
-const String nordicUartTxUuid = '6e400003-b5a3-f393-e0a9-e50e24dcca';
+const String nordicUartServiceUuid = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const String nordicUartRxUuid = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const String nordicUartTxUuid = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
 /// 外部 GPS 输出的统一结构。速度单位统一为米/秒，方向为真北度数。
 class ExternalGpsFix {
@@ -354,7 +356,8 @@ class BleDiyGpsFeed {
 
   /// 最新定位的卫星数：GGA 卫星数优先，GSA 参与解算数兜底；
   /// 两者皆无时 null（调用方显示“—”，不得补 0）。
-  int? get satelliteCount => _latest?.satellites ?? _latest?.usedSatellites;
+  int? get satelliteCount =>
+      _latest?.satellites ?? _latest?.usedSatellites ?? _lastUsedSats;
 
   /// 是否应回落手机 GPS：从未拿到有效位置，或超过超时无新定位。
   /// 回落逻辑（调用方责任，见下方说明）：
@@ -397,6 +400,11 @@ class BleDiyGpsFeed {
     if (line.isEmpty) return _latest;
     final at = now ?? DateTime.now();
     _pruneHz(at);
+    // 自研硬件 DriveTrack 走 NDJSON 私有协议（NUS 上逐行发 {"t":"gps",...}），
+    // 与下方 NMEA 解析并行；设备只会用其中一种，互不冲突。
+    if (line.startsWith('{')) {
+      return _feedDriveTrackJson(line, at);
+    }
     if (line.contains('GGA')) {
       final gga = parseGga(line);
       if (gga == null) {
@@ -474,6 +482,43 @@ class BleDiyGpsFeed {
     // GGA/RMC/VTG/GSA 之外的语句（如 GSV/GLL）不在本期处理范围，
     // 直接忽略，不计入丢弃（它们不是错误语句）。
     return _latest;
+  }
+
+  /// 解析自研硬件的 NDJSON 状态行（NUS 逐行发送）。当前只取 GPS 帧：
+  /// {"t":"gps","fix":1,"sats":12,"lat":..,"lon":..,"alt":..,"spd":..,"cog":..,"hdop":..}
+  /// 速度单位米/秒、方向为真北度数，与 [ExternalGpsFix] 一致；
+  /// 无定位（fix=0）时只更新星数，不输出 (0,0) 假点。
+  ExternalGpsFix? _feedDriveTrackJson(String line, DateTime at) {
+    Map<String, dynamic> obj;
+    try {
+      final v = jsonDecode(line);
+      if (v is! Map) return _latest;
+      obj = v.cast<String, dynamic>();
+    } catch (_) {
+      droppedCount++;
+      return null;
+    }
+    if ((obj['t'] ?? '').toString() != 'gps') return _latest;
+    final sats = (obj['sats'] as num?)?.toInt();
+    final fix = (obj['fix'] as num?)?.toInt() ?? 0;
+    final lat = (obj['lat'] as num?)?.toDouble();
+    final lon = (obj['lon'] as num?)?.toDouble();
+    if (sats != null) _lastUsedSats = sats;
+    if (fix <= 0 || lat == null || lon == null) {
+      return _latest;
+    }
+    _lastFixQuality = 1;
+    return _emit(
+      lat: lat,
+      lon: lon,
+      speedMps: (obj['spd'] as num?)?.toDouble(),
+      bearingDeg: (obj['cog'] as num?)?.toDouble(),
+      satellites: sats,
+      hdop: (obj['hdop'] as num?)?.toDouble(),
+      altitudeM: (obj['alt'] as num?)?.toDouble(),
+      at: at,
+      countForHz: true,
+    );
   }
 
   ExternalGpsFix _emit({

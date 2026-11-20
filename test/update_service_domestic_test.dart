@@ -3,7 +3,7 @@
 /// 覆盖：
 /// - 配置值：jsDelivr 清单地址、回落 GitHub 地址均指向
 ///   Toryphoto77/drive-track（旧账号链接已清掉）；
-/// - 仓库根 update-manifest.json：当前已发布版 1.7.10+79、apkUrl 指向 CloudBase
+/// - 仓库根 update-manifest.json：当前已发布版 1.7.11+80、apkUrl 指向 CloudBase
 ///   国内 CDN（GitHub Release 地址保留在 apks.&lt;abi&gt;.url 兜底）；
 /// - 本地 HttpServer 编排：清单成功时不走回落；清单失败时回落
 ///   GitHub 接口；两路都失败时返回 error、绝不谎称最新。
@@ -59,14 +59,14 @@ void main() {
       final file = File('update-manifest.json');
       expect(file.existsSync(), isTrue);
       final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-      expect(json['versionName'], '1.7.10');
-      expect(json['versionCode'], 79);
+      expect(json['versionName'], '1.7.11');
+      expect(json['versionCode'], 80);
       final apkUrl = json['apkUrl'] as String;
-      expect(apkUrl, contains('/apk/1.7.10/'));
-      expect(apkUrl, endsWith('DriveTrack-v1.7.10-release-arm64-v8a.apk'));
+      expect(apkUrl, contains('/apk/1.7.11/'));
+      expect(apkUrl, endsWith('DriveTrack-v1.7.11-release-arm64-v8a.apk'));
       final apks = json['apks'] as Map<String, dynamic>;
       expect(apks['arm64-v8a']['url'],
-          'https://github.com/Toryphoto77/drive-track/releases/download/v1.7.10/DriveTrack-v1.7.10-release-arm64-v8a.apk');
+          'https://github.com/Toryphoto77/drive-track/releases/download/v1.7.11/DriveTrack-v1.7.11-release-arm64-v8a.apk');
       expect(json['notes'], isA<String>());
     });
   });

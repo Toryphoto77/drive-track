@@ -369,4 +369,37 @@ void main() {
       expect(feed.hz, 10);
     });
   });
+
+  // v1.7.11：自研硬件 DriveTrack 在 NUS 上发 NDJSON，App 需与 NMEA 并行解析。
+  group('DriveTrack NDJSON（私有协议）', () {
+    test('gps 帧有定位 → 输出经纬度 / 速度 / 星数', () {
+      final feed = BleDiyGpsFeed();
+      final fix = feed.feedLine(
+          '{"t":"gps","fix":1,"sats":12,"lat":31.2304,"lon":121.4737,'
+          '"alt":4.2,"spd":12.5,"cog":90.0,"hdop":0.8}');
+      expect(fix, isNotNull);
+      expect(fix!.lat, closeTo(31.2304, 1e-6));
+      expect(fix.lon, closeTo(121.4737, 1e-6));
+      expect(fix.speedMps, closeTo(12.5, 1e-6));
+      expect(fix.bearingDeg, closeTo(90.0, 1e-6));
+      expect(fix.satellites, 12);
+      expect(feed.satelliteCount, 12);
+    });
+
+    test('fix=0 只更新星数，绝不出假定位', () {
+      final feed = BleDiyGpsFeed();
+      final fix = feed.feedLine('{"t":"gps","fix":0,"sats":5}');
+      expect(fix, isNull);
+      expect(feed.latest, isNull);
+      expect(feed.satelliteCount, 5);
+    });
+
+    test('非 gps 帧（dev/imu）与坏 JSON 不影响定位', () {
+      final feed = BleDiyGpsFeed();
+      expect(feed.feedLine('{"t":"dev","batt":88,"battMv":4020}'), isNull);
+      expect(feed.feedLine('{"t":"imu","pitch":1.0}'), isNull);
+      expect(feed.feedLine('{bad json'), isNull);
+      expect(feed.latest, isNull);
+    });
+  });
 }
