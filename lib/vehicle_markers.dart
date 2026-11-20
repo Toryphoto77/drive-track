@@ -318,13 +318,16 @@ class VehicleMarkerPainter extends CustomPainter {
       }
       path.close();
       canvas.drawPath(path, Paint()..color = color);
-      if (size.shortestSide >= 40) {
+      // 车身靠连续光照分面，不描黑边，避免预览呈现“线框网格”；
+      // 玻璃、轮胎与机械细节保留很淡的轮廓来提高小尺寸辨识度。
+      if (size.shortestSide >= 40 &&
+          face.source.material != Vehicle3DMaterial.body) {
         canvas.drawPath(
           path,
           Paint()
-            ..color = Colors.black.withValues(alpha: 0.24)
+            ..color = Colors.black.withValues(alpha: 0.16)
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 0.55,
+            ..strokeWidth = 0.45,
         );
       }
     }
@@ -334,7 +337,18 @@ class VehicleMarkerPainter extends CustomPainter {
     final w = size.width, h = size.height;
     final cx = w * 0.5;
     _shadow(canvas, size, 0.34, 0.92);
-    final body = Paint()..color = bodyColor ?? const Color(0xFF212121);
+    final baseColor = bodyColor ?? const Color(0xFF37474F);
+    final body = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.lerp(baseColor, Colors.white, 0.24)!,
+          baseColor,
+          Color.lerp(baseColor, Colors.black, 0.38)!,
+        ],
+        stops: const [0, 0.46, 1],
+      ).createShader(Rect.fromLTWH(w * 0.30, h * 0.28, w * 0.40, h * 0.52));
     final accent = Paint()..color = style.accent;
     final tyre = Paint()..color = const Color(0xFF111111);
     final hair = math.max(1.0, w * 0.018);
@@ -493,6 +507,24 @@ class VehicleMarkerPainter extends CustomPainter {
     };
     _extrude(canvas, fairing, h * 0.03);
     canvas.drawPath(fairing, body);
+    canvas.drawPath(
+      fairing,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.16)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = hair,
+    );
+    // 深色风挡与车头分层，俯视也能辨认摩托的前方与座舱。
+    final windscreen = Path()
+      ..moveTo(cx, h * 0.285)
+      ..quadraticBezierTo(w * 0.56, h * 0.30, w * 0.555, h * 0.355)
+      ..quadraticBezierTo(cx, h * 0.33, w * 0.445, h * 0.355)
+      ..quadraticBezierTo(w * 0.44, h * 0.30, cx, h * 0.285)
+      ..close();
+    canvas.drawPath(
+      windscreen,
+      Paint()..color = const Color(0xFF78909C).withValues(alpha: 0.72),
+    );
     // 前灯：鼻尖下方淡黄小块（朝向可辨）。
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -523,6 +555,38 @@ class VehicleMarkerPainter extends CustomPainter {
       Offset(cx, h * 0.44),
       math.max(1.2, w * 0.018),
       Paint()..color = Colors.white.withValues(alpha: 0.50),
+    );
+    // 发动机箱体、散热片与单侧排气：保留俯视轮廓，同时补足机械层次。
+    final engineRect = Rect.fromCenter(
+      center: Offset(cx, h * 0.565),
+      width: w * 0.23,
+      height: h * 0.14,
+    );
+    canvas.drawOval(engineRect, Paint()..color = const Color(0xFF252B30));
+    canvas.drawOval(
+      engineRect,
+      Paint()
+        ..color = const Color(0xFF90A4AE).withValues(alpha: 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = hair,
+    );
+    final engineDetail = Paint()
+      ..color = const Color(0xFF90A4AE).withValues(alpha: 0.65)
+      ..strokeWidth = hair;
+    for (final y in [0.535, 0.565, 0.595]) {
+      canvas.drawLine(
+        Offset(w * 0.43, h * y),
+        Offset(w * 0.57, h * y),
+        engineDetail,
+      );
+    }
+    canvas.drawLine(
+      Offset(w * 0.615, h * 0.54),
+      Offset(w * 0.585, h * 0.74),
+      Paint()
+        ..color = const Color(0xFFB0BEC5)
+        ..strokeWidth = math.max(1.5, w * 0.025)
+        ..strokeCap = StrokeCap.round,
     );
     // 品牌色点缀条（仅一小块色条，不是 Logo；位于座垫上方，不被座垫盖住）。
     canvas.drawRRect(

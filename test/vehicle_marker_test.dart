@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 const _painters = <VehicleMarkerPainter>[
   VehicleMarkerPainter(mode: TripMode.car, styleKey: 'sedan'),
   VehicleMarkerPainter(mode: TripMode.car, styleKey: 'sport'),
+  VehicleMarkerPainter(mode: TripMode.kart, styleKey: 'sport'),
   VehicleMarkerPainter(mode: TripMode.moto, styleKey: 'ducati'),
   VehicleMarkerPainter(mode: TripMode.moto, styleKey: 'yamaha'),
   VehicleMarkerPainter(mode: TripMode.moto, styleKey: 'honda'),
@@ -39,7 +40,7 @@ Future<List<int>> _rgba(ui.Image img) async {
 
 void main() {
   group('vehicle marker smoke (v1.3.8)', () {
-    test('all 9 styles paint without throwing at 40/48/64px', () {
+    test('all car, kart, moto and bike styles paint at 40/48/64px', () {
       for (final p in _painters) {
         for (final s in [40.0, 48.0, 64.0]) {
           final recorder = ui.PictureRecorder();

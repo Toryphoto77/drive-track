@@ -205,8 +205,7 @@ class _CountdownPageState extends State<CountdownPage> {
                 child: Text(
                   isGo ? 'GO' : '$_remaining',
                   key: ValueKey<int>(_remaining),
-                  // 继承主题字体（DriveTrackSans / 自带字体覆盖时为
-                  // DriveTrackCustom），不硬编码 fontFamily。
+                  // 继承当前 Orbitron / Racing Sans One 与中文回退，不硬编码字体。
                   style: Theme.of(context).textTheme.displayLarge?.copyWith(
                         fontSize: 140,
                         fontWeight: FontWeight.bold,

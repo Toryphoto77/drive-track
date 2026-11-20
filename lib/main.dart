@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
@@ -102,7 +103,6 @@ import 'card_style.dart';
 import 'disclaimer_page.dart';
 import 'video_hud_page.dart';
 import 'video_review_page.dart';
-import 'video_import_match.dart';
 import 'data_export_page.dart';
 import 'fuel_page.dart';
 import 'update_service.dart';
@@ -115,6 +115,20 @@ import 'performance_challenge.dart';
 import 'cloud_auth_page.dart';
 import 'cloud_service.dart';
 
+void _registerFontLicenses() {
+  const fonts = [
+    ('Orbitron', 'assets/fonts/Orbitron-OFL.txt'),
+    ('Racing Sans One', 'assets/fonts/RacingSansOne-OFL.txt'),
+    ('Source Han Sans SC', 'assets/fonts/SourceHanSansSC-LICENSE.txt'),
+  ];
+  for (final (package, asset) in fonts) {
+    LicenseRegistry.addLicense(() async* {
+      final text = await rootBundle.loadString(asset);
+      yield LicenseEntryWithLineBreaks([package], text);
+    });
+  }
+}
+
 void main() {
   // v1.6.1：全局兜底。后台闪退最常见的两类原因——
   // 1) 未捕获的异步异常（定位流 / 定时器 / 原生回调里抛出）；
@@ -124,6 +138,7 @@ void main() {
   runZonedGuarded(
     () {
       WidgetsFlutterBinding.ensureInitialized();
+      _registerFontLicenses();
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
         CrashLog.record(details.exception, details.stack, tag: 'flutter');
@@ -166,8 +181,7 @@ class AppPrefs extends ChangeNotifier {
   String vehicleBrand = '';
   String vehicleModel = '';
   String? avatarPath;
-  String? customFontPath;
-  bool customFontLoaded = false;
+  String latinFont = 'orbitron';
   bool countdownVibration = true; // v0.1.3：倒计时震动提醒开关（设置页）
   // v0.1.4：主题预设/车标/直连卫星（存 profile.json）
   // v0.1.7：全局黑色，无昼夜档位；旧 themeMode 档位键不再读写。
@@ -218,10 +232,13 @@ class AppPrefs extends ChangeNotifier {
   /// 启动页据此决定是否已经可以按用户选择画图标（见 splash_page.dart）。
   bool get loaded => _loaded;
 
+  static String normalizeLatinFont(String? key) =>
+      key == 'racingSansOne' ? 'racingSansOne' : 'orbitron';
+
   String get fontFamily =>
-      customFontLoaded ? 'DriveTrackCustom' : 'DriveTrackSans';
-  String get displayFont =>
-      customFontLoaded ? 'DriveTrackCustom' : 'DriveTrackDisplay';
+      latinFont == 'racingSansOne' ? 'RacingSansOne' : 'Orbitron';
+  String get displayFont => fontFamily;
+  List<String> get fontFamilyFallback => const ['DriveTrackCJK'];
 
   static const List<(String, Color)> presets = [
     ('法拉利红', Color(0xFFE10600)),
@@ -274,7 +291,7 @@ class AppPrefs extends ChangeNotifier {
         vehicleBrand = (j['vehicleBrand'] as String?) ?? '';
         vehicleModel = (j['vehicleModel'] as String?) ?? '';
         avatarPath = j['avatarPath'] as String?;
-        customFontPath = j['customFontPath'] as String?;
+        latinFont = normalizeLatinFont(j['latinFont'] as String?);
       }
       // 用户 ID 改为纯数字（旧版前缀 DT-）。空或仍是旧 DT- 格式的，
       // 都重新生成纯数字 ID 并持久化；ID 仅本机展示，无云端绑定。
@@ -283,9 +300,6 @@ class AppPrefs extends ChangeNotifier {
         final rand = math.Random().nextInt(900000) + 100000; // 6 位随机尾号
         userId = '$secs$rand';
         await save();
-      }
-      if (customFontPath != null && await File(customFontPath!).exists()) {
-        await _loadCustomFontFile(customFontPath!);
       }
     } catch (_) {}
     _loaded = true;
@@ -297,22 +311,6 @@ class AppPrefs extends ChangeNotifier {
       await Native.setAppIcon(appIcon);
     } catch (_) {}
     notifyListeners();
-  }
-
-  Future<void> _loadCustomFontFile(String path) async {
-    try {
-      final bytes = await File(path).readAsBytes();
-      final loader = FontLoader('DriveTrackCustom');
-      loader.addFont(
-        Future.value(
-          bytes.buffer.asByteData(bytes.offsetInBytes, bytes.lengthInBytes),
-        ),
-      );
-      await loader.load();
-      customFontLoaded = true;
-    } catch (_) {
-      customFontLoaded = false;
-    }
   }
 
   Future<void> save() async {
@@ -332,7 +330,7 @@ class AppPrefs extends ChangeNotifier {
           'vehicleBrand': vehicleBrand,
           'vehicleModel': vehicleModel,
           'avatarPath': avatarPath,
-          'customFontPath': customFontPath,
+          'latinFont': latinFont,
           'countdownVibration': countdownVibration,
           'themePreset': themePreset,
           'vehicleMarkerCar': vehicleCar,
@@ -454,16 +452,8 @@ class AppPrefs extends ChangeNotifier {
     await save();
   }
 
-  Future<void> applyCustomFont(String path) async {
-    customFontPath = path;
-    await _loadCustomFontFile(path);
-    notifyListeners();
-    await save();
-  }
-
-  Future<void> clearCustomFont() async {
-    customFontPath = null;
-    customFontLoaded = false;
+  Future<void> setLatinFont(String key) async {
+    latinFont = normalizeLatinFont(key);
     notifyListeners();
     await save();
   }
@@ -531,8 +521,16 @@ class _DriveTrackAppState extends State<DriveTrackApp> {
             child: child ?? const SizedBox.shrink(),
           ),
           // v0.1.7 全局黑色：两套都传黑色、档位固定 dark，不随系统变浅。
-          theme: DriveTrackTheme.dark(accent),
-          darkTheme: DriveTrackTheme.dark(accent),
+          theme: DriveTrackTheme.dark(
+            accent,
+            fontFamily: appPrefs.fontFamily,
+            fontFamilyFallback: appPrefs.fontFamilyFallback,
+          ),
+          darkTheme: DriveTrackTheme.dark(
+            accent,
+            fontFamily: appPrefs.fontFamily,
+            fontFamilyFallback: appPrefs.fontFamilyFallback,
+          ),
           themeMode: ThemeMode.dark,
           // v1.0.2 开屏闪页修法：启动第一帧只能是启动页。
           // 根因见 splash_page.dart：旧写法把 HomePage 作为实参
@@ -1584,7 +1582,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.7',
+          versionName: '1.7.8',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -2652,6 +2650,7 @@ class _HomePageState extends State<HomePage>
                   'DriveTrack',
                   style: TextStyle(
                     fontFamily: appPrefs.displayFont,
+                    fontFamilyFallback: appPrefs.fontFamilyFallback,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -4093,21 +4092,8 @@ class _HomePageState extends State<HomePage>
             await appPrefs.setAppIcon(key);
             await Native.setAppIcon(key);
           },
-          // v1.0.4：字体设置从设置首页移入主题设置页（同一功能，不新建）。
-          hasCustomFont: appPrefs.customFontPath != null,
-          onImportFont: () async {
-            final path = await Native.pickFile('font');
-            if (path != null) {
-              await appPrefs.applyCustomFont(path);
-              if (mounted) setState(() {});
-            }
-          },
-          onClearFont: appPrefs.customFontPath == null
-              ? null
-              : () async {
-                  await appPrefs.clearCustomFont();
-                  if (mounted) setState(() {});
-                },
+          latinFontInitial: appPrefs.latinFont,
+          onLatinFontChanged: appPrefs.setLatinFont,
         ),
       ),
     );
@@ -6364,19 +6350,6 @@ class _TripDetailPageState extends State<TripDetailPage> {
         : Theme.of(context).colorScheme.primary;
   }
 
-  /// v1.7.x 记录 → 视频（双向入口之一）：从本行程直接选视频，
-  /// 关联后进入视频编辑页（与设备中心入口同一条结果链）。
-  Future<void> _addVideoToTrip() async {
-    final t = trip;
-    if (t == null) return;
-    final updated = await openVideoSyncFlow(
-      context,
-      store: widget.store,
-      preselectedTrip: t,
-    );
-    if (updated != null && mounted) setState(() => trip = updated);
-  }
-
   /// 解除某段视频与行程的关联（仅移除链接，不删文件，避免误删素材）。
   Future<void> _removeVideoLink(String vp) async {
     final t = trip;
@@ -7425,19 +7398,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       ),
                     ),
                     for (final vp in t.videoPaths)
-                      ListTile(
-                        leading: const Icon(Icons.videocam),
-                        title: Text(vp.split('/').last),
-                        // v0.1.7 追加项 3：首选应用内视频回顾（画面叠加 HUD），
-                        // 系统播放器与分享作为备用入口保留；HUD 未烧录进视频文件。
-                        subtitle: Text(
-                          s.t(
-                            '点回顾进应用内播放，画面叠加速度/G 值',
-                            'Opens in-app playback with speed and G on the picture',
-                          ),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Semantics(
                               label: '视频回顾（应用内叠加）',
@@ -7510,12 +7474,6 @@ class _TripDetailPageState extends State<TripDetailPage> {
                         ),
                       ),
                   ],
-                  // v1.7.x：记录 → 视频。选素材并关联后进入视频编辑页。
-                  _pillButton(
-                    '添加视频',
-                    Icons.video_library_outlined,
-                    _addVideoToTrip,
-                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [

@@ -75,7 +75,6 @@ class WeatherPage extends StatelessWidget {
       child: Text(
         '来源：$weatherSourceName · 更新：${_updatedLabel(w?.fetchedAt)}',
         style: const TextStyle(
-          fontFamily: 'DriveTrackSans',
           fontSize: 11,
           color: Colors.white54,
         ),
@@ -104,8 +103,7 @@ class WeatherPage extends StatelessWidget {
               Text(
                 title,
                 style: const TextStyle(
-                  fontFamily: 'DriveTrackSans',
-                  fontSize: 16,
+                          fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
                 ),
@@ -129,14 +127,14 @@ class WeatherPage extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             label,
-            style: const TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white70),
+            style: const TextStyle(fontSize: 13, color: Colors.white70),
           ),
           const Spacer(),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white),
+              style: const TextStyle(fontSize: 13, color: Colors.white),
             ),
           ),
         ],
@@ -153,7 +151,7 @@ class WeatherPage extends StatelessWidget {
       appBar: DtAppBar(
         title: const Text(
           '天气',
-          style: TextStyle(fontFamily: 'DriveTrackDisplay', fontWeight: FontWeight.w700, color: Colors.white),
+          style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
         ),
         actions: [
           if (onRefresh != null)
@@ -167,11 +165,11 @@ class WeatherPage extends StatelessWidget {
                 children: [
                   const Icon(Icons.cloud_off, size: 40, color: Colors.white54),
                   const SizedBox(height: 12),
-                  const Text('暂无天气数据', style: TextStyle(fontFamily: 'DriveTrackSans', color: Colors.white, fontSize: 15)),
+                  const Text('暂无天气数据', style: TextStyle(color: Colors.white, fontSize: 15)),
                   const SizedBox(height: 6),
                   Text(
                     '来源：$weatherSourceName · 更新：暂无',
-                    style: const TextStyle(fontFamily: 'DriveTrackSans', fontSize: 12, color: Colors.white54),
+                    style: const TextStyle(fontSize: 12, color: Colors.white54),
                   ),
                   if (onRefresh != null) ...[
                     const SizedBox(height: 16),
@@ -196,7 +194,6 @@ class WeatherPage extends StatelessWidget {
                             Text(
                               w.temperature == null ? '暂无' : '${w.temperature!.toStringAsFixed(0)}°C',
                               style: const TextStyle(
-                                fontFamily: 'DriveTrackDisplay',
                                 fontSize: 44,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.white,
@@ -206,7 +203,7 @@ class WeatherPage extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               w.conditionText,
-                              style: const TextStyle(fontFamily: 'DriveTrackSans', fontSize: 15, color: Colors.white),
+                              style: const TextStyle(fontSize: 15, color: Colors.white),
                             ),
                           ],
                         ),
@@ -241,7 +238,7 @@ class WeatherPage extends StatelessWidget {
                           padding: EdgeInsets.only(top: 4),
                           child: Text(
                             '未提供行进方向，未计算侧风。',
-                            style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 12, color: Colors.white54),
+                            style: TextStyle(fontSize: 12, color: Colors.white54),
                           ),
                         );
                       }
@@ -274,7 +271,7 @@ class WeatherPage extends StatelessWidget {
                           Expanded(
                             child: Text(
                               '结冰风险：低温高湿，路面可能结冰，谨慎驾驶。',
-                              style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white),
+                              style: TextStyle(fontSize: 13, color: Colors.white),
                             ),
                           ),
                         ],
@@ -287,7 +284,7 @@ class WeatherPage extends StatelessWidget {
                 ], w),
                 _section(context, '未来 24 小时（逐小时）', [
                   if (w.hourly24.isEmpty)
-                    const Text('暂无', style: TextStyle(fontFamily: 'DriveTrackSans', color: Colors.white))
+                    const Text('暂无', style: TextStyle(color: Colors.white))
                   else
                     SizedBox(
                       height: 96,
@@ -301,14 +298,14 @@ class WeatherPage extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(_hhmm(h.time),
-                                  style: const TextStyle(fontFamily: 'DriveTrackSans', fontSize: 12, color: Colors.white70)),
+                                  style: const TextStyle(fontSize: 12, color: Colors.white70)),
                               const SizedBox(height: 4),
                               Icon(_iconForCode(h.weatherCode), size: 18, color: Colors.white),
                               const SizedBox(height: 4),
                               Text(h.temperature == null ? '暂无' : '${h.temperature!.toStringAsFixed(0)}°',
-                                  style: const TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white)),
+                                  style: const TextStyle(fontSize: 13, color: Colors.white)),
                               Text(h.precipitationProbability == null ? '暂无' : '${h.precipitationProbability!.toStringAsFixed(0)}%',
-                                  style: const TextStyle(fontFamily: 'DriveTrackSans', fontSize: 11, color: Colors.white54)),
+                                  style: const TextStyle(fontSize: 11, color: Colors.white54)),
                             ],
                           );
                         },
@@ -317,7 +314,7 @@ class WeatherPage extends StatelessWidget {
                 ], w),
                 _section(context, '未来 7 天', [
                   if (w.daily7.isEmpty)
-                    const Text('暂无', style: TextStyle(fontFamily: 'DriveTrackSans', color: Colors.white))
+                    const Text('暂无', style: TextStyle(color: Colors.white))
                   else
                     for (final d in w.daily7)
                       _row(
@@ -333,17 +330,17 @@ class WeatherPage extends StatelessWidget {
                     padding: EdgeInsets.only(top: 2, bottom: 8),
                     child: Text(
                       '预报接口不提供官方预警文本。',
-                      style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 12, color: Colors.white54),
+                      style: TextStyle(fontSize: 12, color: Colors.white54),
                     ),
                   ),
                   const Text(
                     '驾驶提示（非官方预警）：',
-                    style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white70),
+                    style: TextStyle(fontSize: 13, color: Colors.white70),
                   ),
                   const SizedBox(height: 6),
                   if (w.drivingAlerts.isEmpty)
                     const Text('暂无恶劣天气驾驶提示。',
-                        style: TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white))
+                        style: TextStyle(fontSize: 13, color: Colors.white))
                   else
                     for (final a in w.drivingAlerts)
                       Padding(
@@ -356,7 +353,7 @@ class WeatherPage extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 '${a.title}：${a.advice}',
-                                style: const TextStyle(fontFamily: 'DriveTrackSans', fontSize: 13, color: Colors.white),
+                                style: const TextStyle(fontSize: 13, color: Colors.white),
                               ),
                             ),
                           ],

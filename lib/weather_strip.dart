@@ -58,8 +58,7 @@ class _WeatherStripState extends State<WeatherStrip>
   static const double _copyGap = 48;
   static const String _separator = '   •   ';
 
-  static const TextStyle _textStyle = TextStyle(
-    fontFamily: 'DriveTrackSans',
+  TextStyle _textStyle = const TextStyle(
     fontSize: 13,
     color: Colors.white,
   );
@@ -84,6 +83,19 @@ class _WeatherStripState extends State<WeatherStrip>
   @override
   void didUpdateWidget(covariant WeatherStrip oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _remeasure();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final style = DefaultTextStyle.of(
+      context,
+    ).style.copyWith(fontSize: 13, color: Colors.white);
+    if (style != _textStyle) {
+      _textStyle = style;
+      _segmentsKey = '';
+    }
     _remeasure();
   }
 
@@ -150,11 +162,11 @@ class _WeatherStripState extends State<WeatherStrip>
   Widget build(BuildContext context) {
     // 内容为空时不滚动、不复制，只显示一份占位文字。
     final effectiveRow = widget.segments.isEmpty
-        ? const Row(
+        ? Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.cloud_off, size: _iconSize, color: Colors.white),
-              SizedBox(width: _iconTextGap),
+              const Icon(Icons.cloud_off, size: _iconSize, color: Colors.white),
+              const SizedBox(width: _iconTextGap),
               Text('暂无天气', style: _textStyle, maxLines: 1, softWrap: false),
             ],
           )

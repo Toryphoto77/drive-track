@@ -369,15 +369,20 @@ Vehicle3DMesh _buildCar(String styleKey) {
       ? -0.70
       : -0.78;
 
+  // 多截面收腰车身：前后保险杠收窄、轮拱处外扩，避免一块长方体
+  // 贯穿全车；各车型仍由车长、车宽、座舱和附加结构区分。
   b.loft([
-    _BodySection(-length / 2, width * 0.43, 0.25, bodyTop * 0.88),
-    _BodySection(-length * 0.34, width * 0.50, 0.24, bodyTop),
-    _BodySection(length * 0.30, width * 0.50, 0.24, bodyTop),
+    _BodySection(-length / 2, width * 0.36, 0.30, bodyTop * 0.72),
+    _BodySection(-length * 0.43, width * 0.44, 0.26, bodyTop * 0.88),
+    _BodySection(-length * 0.31, width * 0.50, 0.23, bodyTop),
+    _BodySection(0, width * 0.47, 0.23, bodyTop * 0.98),
+    _BodySection(length * 0.30, width * 0.50, 0.23, bodyTop),
+    _BodySection(length * 0.43, width * 0.43, 0.26, bodyTop * 0.88),
     _BodySection(
       length / 2,
-      width * (sport ? 0.35 : 0.43),
-      0.28,
-      bodyTop * (sport ? 0.74 : 0.90),
+      width * (sport ? 0.32 : 0.37),
+      0.30,
+      bodyTop * (sport ? 0.68 : 0.82),
     ),
   ]);
   b.cabin(
@@ -389,6 +394,31 @@ Vehicle3DMesh _buildCar(String styleKey) {
     roofFrontZ: roofFront,
     roofRearZ: roofRear,
   );
+  if (!pickup) {
+    // 车顶玻璃与细面板分割线让俯视车标也能读出座舱，而非一块平顶。
+    b.box(
+      0,
+      cabinTop + 0.012,
+      (roofFront + roofRear) / 2,
+      width * (sport ? 0.42 : 0.48),
+      0.024,
+      (roofFront - roofRear) * (suv || offroad ? 0.46 : 0.58),
+      Vehicle3DMaterial.glass,
+      part: Vehicle3DPart.cabin,
+    );
+  }
+  for (final z in [-length * 0.39, length * 0.39]) {
+    b.box(
+      0,
+      bodyTop + 0.012,
+      z,
+      width * 0.62,
+      0.022,
+      0.025,
+      Vehicle3DMaterial.dark,
+      part: Vehicle3DPart.body,
+    );
+  }
 
   final tyreWidth = offroad
       ? 0.30
@@ -554,9 +584,11 @@ Vehicle3DMesh _buildKart(String styleKey) {
   final offroad = styleKey == 'offroad';
   final noseWidth = sport ? 0.28 : 0.36;
   b.loft([
-    _BodySection(-0.95, 0.34, 0.16, 0.38),
-    _BodySection(0.42, 0.30, 0.16, 0.40),
-    _BodySection(1.28, noseWidth, 0.17, sport ? 0.27 : 0.32),
+    _BodySection(-1.02, 0.28, 0.18, 0.34),
+    _BodySection(-0.72, 0.36, 0.16, 0.40),
+    _BodySection(0.28, 0.31, 0.16, 0.40),
+    _BodySection(0.92, 0.27, 0.17, sport ? 0.29 : 0.34),
+    _BodySection(1.32, noseWidth, 0.18, sport ? 0.25 : 0.30),
   ]);
   for (final x in [-0.48, 0.48]) {
     b.box(
@@ -622,6 +654,12 @@ Vehicle3DMesh _buildKart(String styleKey) {
   );
   final frontRadius = offroad ? 0.31 : 0.27;
   final rearRadius = offroad ? 0.36 : 0.32;
+  for (final z in [0.82, -0.79]) {
+    b.box(0, 0.27, z, 1.52, 0.08, 0.09, Vehicle3DMaterial.metal);
+  }
+  for (final z in [-1.02, -0.91, -0.80]) {
+    b.box(0, 0.69, z, 0.46, 0.035, 0.035, Vehicle3DMaterial.dark);
+  }
   for (final x in [-0.83, 0.83]) {
     b.wheel(x, 0.82, frontRadius, 0.27);
     b.wheel(x, -0.79, rearRadius, 0.31);

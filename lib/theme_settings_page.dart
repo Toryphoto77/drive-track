@@ -117,13 +117,19 @@ class F1ThemePresets {
 class DriveTrackTheme {
   DriveTrackTheme._();
 
-  static ThemeData dark(Color accent) {
+  static ThemeData dark(
+    Color accent, {
+    String fontFamily = 'Orbitron',
+    List<String> fontFamilyFallback = const ['DriveTrackCJK'],
+  }) {
     const bg = Color(0xFF121212);
     const card = Color(0xFF1E1E1E);
     const text = Color(0xFFFFFFFF);
     const secondary = Color(0xFFFFFFFF70);
     return ThemeData(
       brightness: Brightness.dark,
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
       colorScheme: ColorScheme.dark(
         primary: accent,
         onSurface: text,
@@ -275,11 +281,16 @@ class _VehicleMarkerSettingsSectionState
                     color: selected ? widget.accentColor : Colors.white24,
                   ),
                 ),
-                VehicleMarkerPreviewTile(
-                  selection: _selectionForRow(key),
-                  mode: _tab,
-                  selected: selected,
-                  accentColor: widget.accentColor,
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: VehicleMarkerPreviewTile(
+                      selection: _selectionForRow(key),
+                      mode: _tab,
+                      selected: selected,
+                      accentColor: widget.accentColor,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Text(
@@ -334,31 +345,51 @@ class _VehicleMarkerSettingsSectionState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SegmentedButton<TripMode>(
-              segments: const [
-                ButtonSegment(value: TripMode.car, label: Text('汽车')),
-                ButtonSegment(value: TripMode.moto, label: Text('摩托')),
-                ButtonSegment(value: TripMode.kart, label: Text('卡丁车')),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (v) => setState(() => _tab = v.first),
+            Center(
+              child: SegmentedButton<TripMode>(
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.selected)
+                        ? widget.accentColor.withValues(alpha: 0.18)
+                        : Colors.transparent,
+                  ),
+                  foregroundColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.selected)
+                        ? widget.accentColor
+                        : Colors.white70,
+                  ),
+                  iconColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.selected)
+                        ? widget.accentColor
+                        : Colors.white54,
+                  ),
+                  side: WidgetStateProperty.resolveWith(
+                    (states) => BorderSide(
+                      color: states.contains(WidgetState.selected)
+                          ? widget.accentColor
+                          : Colors.white12,
+                    ),
+                  ),
+                ),
+                segments: const [
+                  ButtonSegment(value: TripMode.car, label: Text('汽车')),
+                  ButtonSegment(value: TripMode.moto, label: Text('摩托')),
+                  ButtonSegment(value: TripMode.kart, label: Text('卡丁车')),
+                ],
+                selected: {_tab},
+                onSelectionChanged: (v) => setState(() => _tab = v.first),
+              ),
             ),
-            const SizedBox(height: 12),
-            if (_tab == TripMode.car || _tab == TripMode.kart)
-              _InteractiveVehicleMarkerPreview(
-                key: ValueKey('interactive-${_tab.name}'),
-                selection: _sel,
-                mode: _tab,
-                accentColor: widget.accentColor,
-              )
-            else
+            if (_tab == TripMode.moto)
               const Padding(
-                padding: EdgeInsets.only(bottom: 12),
+                padding: EdgeInsets.only(top: 12, bottom: 12),
                 child: Text(
-                  '品牌名仅作风格区分，非官方授权模型；车标为自绘矢量轮廓，不使用官方 Logo。',
+                  '品牌名仅作风格区分，非官方授权模型；车标为自绘轮廓，不使用官方 Logo。',
                   style: TextStyle(fontSize: 12, color: Colors.white54),
                 ),
-              ),
+              )
+            else
+              const SizedBox(height: 12),
             LayoutBuilder(
               builder: (context, constraints) => GridView.builder(
                 shrinkWrap: true,
@@ -382,185 +413,11 @@ class _VehicleMarkerSettingsSectionState
             ),
             const SizedBox(height: 10),
             const Text(
-              '选择只存本机，不上传。三维造型为通用车型，不代表品牌授权精确车模。',
+              '选择只存本机，不上传；车标为通用自绘车型，不使用品牌 Logo。',
               style: TextStyle(fontSize: 11, color: Colors.white38),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _InteractiveVehicleMarkerPreview extends StatefulWidget {
-  final VehicleMarkerSelection selection;
-  final TripMode mode;
-  final Color accentColor;
-
-  const _InteractiveVehicleMarkerPreview({
-    super.key,
-    required this.selection,
-    required this.mode,
-    required this.accentColor,
-  });
-
-  @override
-  State<_InteractiveVehicleMarkerPreview> createState() =>
-      _InteractiveVehicleMarkerPreviewState();
-}
-
-class _InteractiveVehicleMarkerPreviewState
-    extends State<_InteractiveVehicleMarkerPreview> {
-  static const _initialHeading = 30.0;
-  static const _initialPitch = 32.0;
-  double _heading = _initialHeading;
-  double _pitch = _initialPitch;
-  double _zoom = 1;
-  double _zoomAtStart = 1;
-
-  void _resetView() {
-    setState(() {
-      _heading = _initialHeading;
-      _pitch = _initialPitch;
-      _zoom = 1;
-      _zoomAtStart = 1;
-    });
-  }
-
-  void _updateView(ScaleUpdateDetails details) {
-    setState(() {
-      if (details.pointerCount >= 2) {
-        _zoom = (_zoomAtStart * details.scale).clamp(0.7, 1.8).toDouble();
-      } else {
-        _heading = (_heading + details.focalPointDelta.dx * 0.65) % 360;
-        if (_heading < 0) _heading += 360;
-        _pitch = (_pitch - details.focalPointDelta.dy * 0.30)
-            .clamp(16.0, 72.0)
-            .toDouble();
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final style = CarMarkerStyleLabel.fromKey(
-      widget.selection.keyFor(widget.mode),
-    );
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF202630), Color(0xFF0E1117)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: widget.accentColor.withValues(alpha: 0.45)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(Icons.view_in_ar, size: 19, color: widget.accentColor),
-              const SizedBox(width: 7),
-              const Expanded(
-                child: Text(
-                  '真车风格 · 三维网格',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-              ),
-              Text(
-                style.label,
-                style: TextStyle(fontSize: 12, color: widget.accentColor),
-              ),
-              IconButton(
-                key: const Key('vehicle-marker-reset'),
-                onPressed: _resetView,
-                tooltip: '复位视角',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.restart_alt, size: 20),
-              ),
-            ],
-          ),
-          GestureDetector(
-            key: const Key('vehicle-marker-interactive-preview'),
-            behavior: HitTestBehavior.opaque,
-            onScaleStart: (details) => _zoomAtStart = _zoom,
-            onScaleUpdate: _updateView,
-            onDoubleTap: _resetView,
-            child: Container(
-              height: 172,
-              decoration: BoxDecoration(
-                color: const Color(0xFF0B0E13),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white10),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CustomPaint(
-                    key: const Key('vehicle-marker-3d-canvas'),
-                    painter: VehicleMarkerPainter(
-                      mode: widget.mode,
-                      styleKey: style.key,
-                      headingDeg: _heading,
-                      pitchDeg: _pitch,
-                      zoom: _zoom,
-                    ),
-                  ),
-                  const Positioned(
-                    left: 10,
-                    top: 8,
-                    child: Text(
-                      '车身 / 座舱 / 独立轮组',
-                      style: TextStyle(fontSize: 10, color: Colors.white30),
-                    ),
-                  ),
-                  Positioned(
-                    right: 9,
-                    bottom: 7,
-                    child: Icon(
-                      Icons.threed_rotation,
-                      size: 17,
-                      color: widget.accentColor.withValues(alpha: 0.65),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '方位 ${_heading.round()}° · 俯仰 ${_pitch.round()}°',
-                  key: const Key('vehicle-marker-view-angle'),
-                  style: const TextStyle(fontSize: 11, color: Colors.white60),
-                ),
-              ),
-              Text(
-                '${_zoom.toStringAsFixed(1)}×',
-                key: const Key('vehicle-marker-view-zoom'),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: widget.accentColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '拖动旋转 · 双指缩放 · 双击复位',
-              style: TextStyle(fontSize: 11, color: Colors.white38),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -582,10 +439,9 @@ class ThemeSettingsPage extends StatefulWidget {
   final String appIconInitial;
   final ValueChanged<String>? onAppIconChanged;
 
-  /// v1.0.4：字体设置（从设置首页移入）：导入/清除回调与当前状态。
-  final VoidCallback? onImportFont;
-  final VoidCallback? onClearFont;
-  final bool hasCustomFont;
+  /// 英文与数字字体；中文始终由 DriveTrackCJK（思源黑体 Bold）回退。
+  final String latinFontInitial;
+  final ValueChanged<String>? onLatinFontChanged;
 
   const ThemeSettingsPage({
     super.key,
@@ -595,9 +451,8 @@ class ThemeSettingsPage extends StatefulWidget {
     this.onVehicleMarkerChanged,
     this.appIconInitial = AppIconChoice.steering,
     this.onAppIconChanged,
-    this.onImportFont,
-    this.onClearFont,
-    this.hasCustomFont = false,
+    this.latinFontInitial = 'orbitron',
+    this.onLatinFontChanged,
   });
 
   @override
@@ -608,6 +463,9 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   late Color _accent = widget.initial.accent;
   late String _presetId = widget.initial.presetId;
   late String _appIcon = AppIconChoice.normalize(widget.appIconInitial);
+  late String _latinFont = widget.latinFontInitial == 'racingSansOne'
+      ? 'racingSansOne'
+      : 'orbitron';
   late final TextEditingController _hexCtrl = TextEditingController(
     text:
         '#${widget.initial.accent.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
@@ -716,22 +574,23 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     );
   }
 
-  /// v1.0.4 字体选项卡：与 APP 图标选项同一视觉语言（深色卡、圆角 16、
-  /// 选中时 accent 色 2px 描边 + 对勾）。预览用对应字体渲染示例文字；
-  /// 未导入自带字体时不伪造预览，只写明导入后才显示效果。
-  /// 点选即切换：内置卡在已导入时点选等于清除恢复内置；自带卡在未导入
-  /// 时点选等于导入。实际导入/清除走传入的回调（main.dart 里
-  /// pickFile('font') + FontLoader），本页不另做 setState、不闪烁。
+  void _pickLatinFont(String key) {
+    if (_latinFont == key) return;
+    setState(() => _latinFont = key);
+    widget.onLatinFontChanged?.call(key);
+  }
+
   Widget _fontOption({
+    required String key,
     required bool selected,
     required String title,
     required String subtitle,
     required Widget preview,
-    required VoidCallback? onTap,
-    Widget? action,
+    required VoidCallback onTap,
   }) {
     return Expanded(
       child: GestureDetector(
+        key: Key('font-option-$key'),
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(12),
@@ -749,11 +608,15 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -768,7 +631,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 subtitle,
                 style: const TextStyle(fontSize: 11, color: Colors.white54),
               ),
-              if (action != null) ...[const SizedBox(height: 8), action],
             ],
           ),
         ),
@@ -1035,9 +897,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
             onChanged: widget.onVehicleMarkerChanged,
             accentColor: _accent,
           ),
-          // v1.0.4：字体分区（从设置首页移入，功能不变）。
-          // 两张等大选项卡并排：内置字体 / 自带字体，选中态为 accent
-          // 描边 + 对勾；各卡内用对应字体渲染示例文字作预览。
+          // 英文与数字提供两款内置赛车字体；中文固定使用思源黑体 Bold。
           _sectionTitle('字体'),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1051,123 +911,82 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _fontOption(
-                          selected: !widget.hasCustomFont,
-                          title: '内置字体',
-                          subtitle: widget.hasCustomFont
-                              ? '点选恢复内置字体'
-                              : '当前使用内置字体',
-                          preview: Column(
+                          key: 'orbitron',
+                          selected: _latinFont == 'orbitron',
+                          title: 'Orbitron',
+                          subtitle: '几何科技风格',
+                          preview: const Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
+                            children: [
                               Text(
                                 '驰迹',
                                 style: TextStyle(
-                                  fontFamily: 'DriveTrackDisplay',
+                                  fontFamily: 'DriveTrackCJK',
                                   fontSize: 22,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,
                                 ),
                               ),
-                              SizedBox(height: 2),
-                              Text(
-                                'DriveTrack 0123456789',
-                                style: TextStyle(
-                                  fontFamily: 'DriveTrackSans',
-                                  fontSize: 12,
-                                  color: Colors.white70,
+                              SizedBox(height: 4),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'DriveTrack 0123456789',
+                                  style: TextStyle(
+                                    fontFamily: 'Orbitron',
+                                    fontFamilyFallback: ['DriveTrackCJK'],
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          onTap: widget.hasCustomFont
-                              ? widget.onClearFont
-                              : null,
+                          onTap: () => _pickLatinFont('orbitron'),
                         ),
                         const SizedBox(width: 12),
                         _fontOption(
-                          selected: widget.hasCustomFont,
-                          title: '自带字体',
-                          subtitle: widget.hasCustomFont
-                              ? '已导入自定义字体'
-                              : '导入自己合法取得的 .ttf/.otf',
-                          preview: widget.hasCustomFont
-                              ? Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: const [
-                                    Text(
-                                      '驰迹',
-                                      style: TextStyle(
-                                        fontFamily: 'DriveTrackCustom',
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      'DriveTrack 0123456789',
-                                      style: TextStyle(
-                                        fontFamily: 'DriveTrackCustom',
-                                        fontSize: 12,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : const Text(
-                                  '导入后此处显示该字体效果',
+                          key: 'racingSansOne',
+                          selected: _latinFont == 'racingSansOne',
+                          title: 'Racing Sans One',
+                          subtitle: '赛车斜体风格',
+                          preview: const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '驰迹',
+                                style: TextStyle(
+                                  fontFamily: 'DriveTrackCJK',
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'DriveTrack 0123456789',
                                   style: TextStyle(
-                                    fontFamily: 'DriveTrackSans',
+                                    fontFamily: 'RacingSansOne',
+                                    fontFamilyFallback: ['DriveTrackCJK'],
                                     fontSize: 12,
-                                    color: Colors.white38,
+                                    color: Colors.white70,
                                   ),
                                 ),
-                          onTap: widget.hasCustomFont
-                              ? null
-                              : widget.onImportFont,
-                          action: widget.hasCustomFont
-                              ? SizedBox(
-                                  width: double.infinity,
-                                  child: TextButton(
-                                    onPressed: widget.onClearFont,
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 4,
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      '清除，恢复内置字体',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                )
-                              : SizedBox(
-                                  width: double.infinity,
-                                  child: FilledButton(
-                                    onPressed: widget.onImportFont,
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: _accent,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 8,
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      '导入字体文件',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                ),
+                              ),
+                            ],
+                          ),
+                          onTap: () => _pickLatinFont('racingSansOne'),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    '导入后立即生效，清除后恢复内置字体。',
+                    '英文与数字可切换；中文固定使用思源黑体 Bold。',
                     style: TextStyle(fontSize: 12, color: Colors.white54),
                   ),
                 ],

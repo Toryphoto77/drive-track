@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_bar_style.dart';
 import 'card_style.dart';
 import 'native.dart';
 
@@ -71,6 +72,39 @@ class S {
   static S get current => S(LocaleController.instance.isZh);
 
   String t(String zhText, String enText) => zh ? zhText : enText;
+}
+
+/// 设置里的语言二级页：普通列表便于后续追加语言，当前项显示对勾。
+class LanguageSettingsPage extends StatelessWidget {
+  const LanguageSettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final controller = LocaleScope.of(context);
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
+        title: Text(s.t('选择界面语言', 'Choose app language')),
+      ),
+      body: ListView(
+        padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 24)),
+        children: [
+          for (final value in AppLang.values)
+            ListTile(
+              title: Text(switch (value) {
+                AppLang.zh => '中文',
+                AppLang.en => 'English',
+              }),
+              trailing: controller.lang == value
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => controller.setLang(value),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// 语言开关。两个标签固定写「中文 / English」，不随当前语言改名，

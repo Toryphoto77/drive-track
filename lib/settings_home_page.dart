@@ -405,10 +405,18 @@ class SettingsHomePage extends StatelessWidget {
         padding: withAppBarTopInset(context, const EdgeInsets.only(bottom: 28)),
         children: [
           const SizedBox(height: 8),
-          // v1.7.0：语言入口改为设置页标准分组行（不再单独一张风格
-          // 不同的卡），登录页仍用独立卡片（LanguageSwitch 默认样式）。
           group(s.t('通用', 'General'), [
-            const LanguageSwitch(rowStyle: true),
+            settingsGroupRow(
+              context,
+              icon: Icons.translate,
+              title: s.t('语言', 'Language'),
+              subtitle: LocaleScope.of(context).lang == AppLang.zh
+                  ? '中文'
+                  : 'English',
+              onTap: () => Navigator.of(context).push(
+                DtPageRoute(builder: (_) => const LanguageSettingsPage()),
+              ),
+            ),
             const AccountSettingsRow(),
             settingsGroupRow(
               context,
