@@ -1,26 +1,26 @@
 {
     "_comment":  "DriveTrack 在线更新清单（国内优先通道）。每次发版必须同步 versionName / versionCode / apkUrl / notes；推到 main 后须刷新 jsDelivr 缓存：https://purge.jsdelivr.net/gh/Toryphoto77/drive-track@main/update-manifest.json。apkUrl 是旧版 App 读取的 arm64 下载地址，指向 CloudBase 国内 CDN；新客户端按 apks.\u003cabi\u003e 选择架构，cdnUrl 国内优先，url 保留 GitHub Release 兜底。每个包必须按实际 APK 计算 sha256。1.7.7 三 ABI 使用 apk/1.7.7/ 前缀，由 tools/upload_cdn.ps1 上传并验证。",
-    "versionName":  "1.7.13",
-    "versionCode":  82,
-    "apkUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.13/DriveTrack-v1.7.13-release-arm64-v8a.apk",
-    "sha256":  "12fe77da2533f0ca56a6954c3f35f86fcf19edca4fc24b5302aa76ec994194bb",
+    "versionName":  "1.7.14",
+    "versionCode":  83,
+    "apkUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.14/DriveTrack-v1.7.14-release-arm64-v8a.apk",
+    "sha256":  "394bc0294ae26dbf2caefadf8e1c915f34272fa2947477809d4b3c265d8a816e",
     "apks":  {
                  "arm64-v8a":  {
-                                   "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.13/DriveTrack-v1.7.13-release-arm64-v8a.apk",
-                                   "sha256":  "12fe77da2533f0ca56a6954c3f35f86fcf19edca4fc24b5302aa76ec994194bb",
-                                   "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.13/DriveTrack-v1.7.13-release-arm64-v8a.apk"
+                                   "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.14/DriveTrack-v1.7.14-release-arm64-v8a.apk",
+                                   "sha256":  "394bc0294ae26dbf2caefadf8e1c915f34272fa2947477809d4b3c265d8a816e",
+                                   "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.14/DriveTrack-v1.7.14-release-arm64-v8a.apk"
                                },
                  "armeabi-v7a":  {
-                                     "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.13/DriveTrack-v1.7.13-release-armeabi-v7a.apk",
-                                     "sha256":  "54466d64fca176b64e4875596dadef1967cc3123b58bf20a11d322f644e6e216",
-                                     "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.13/DriveTrack-v1.7.13-release-armeabi-v7a.apk"
+                                     "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.14/DriveTrack-v1.7.14-release-armeabi-v7a.apk",
+                                     "sha256":  "8d052164e2459aebcfa3074fc061c158cb65859d1e11cda677929828208c4b54",
+                                     "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.14/DriveTrack-v1.7.14-release-armeabi-v7a.apk"
                                  },
                  "x86_64":  {
-                                "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.13/DriveTrack-v1.7.13-release-x86_64.apk",
-                                "sha256":  "4da4eb026ebcf9f42ad021af5f378e828258d729460345556688396b2a8dbbcc",
-                                "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.13/DriveTrack-v1.7.13-release-x86_64.apk"
+                                "url":  "https://github.com/Toryphoto77/drive-track/releases/download/v1.7.14/DriveTrack-v1.7.14-release-x86_64.apk",
+                                "sha256":  "e09c4019d1fc411bf0ac3424c09eb128ec3ecd6387738fe4f07e36cf2736b98f",
+                                "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.14/DriveTrack-v1.7.14-release-x86_64.apk"
                             }
              },
-    "notes":  "1.7.13：已配对设备开机自动重连并自动订阅 NMEA，重连后直接出定位；设备中心新增 microSD 状态显示（固件 0.4.0+）；修复多页面事件流互相覆盖、英文界面天气与 LIVE 显示；固件 0.4.0 build 10 修复 IMU 与 SD 总线冲突。",
-    "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.13/DriveTrack-v1.7.13-release-arm64-v8a.apk"
+    "notes":  "1.7.14：设备中心改为可点按的大设备卡，新增完整设备管理页；展示 IMU、气压计、GNSS、BLE 信号、电量与 microSD 总容量/已用/剩余空间，缺失信息统一显示“—”；修复 DriveTrack 开机自动重连误触 PIN 配对；固件 0.4.1 build 11 增加传感器状态上报。",
+    "cdnUrl":  "https://6472-drive-track-d6gpv6d2863f6eabe-1527215761.tcb.qcloud.la/apk/1.7.14/DriveTrack-v1.7.14-release-arm64-v8a.apk"
 }

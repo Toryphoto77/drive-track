@@ -65,6 +65,7 @@ static float s_bias_gz;
 
 static spi_device_handle_t s_accel;
 static spi_device_handle_t s_gyro;
+static bool s_ready;
 
 // 读：地址最高位置 1，随后丢弃 1 个 dummy 字节。
 static esp_err_t bus_read(spi_device_handle_t dev, uint8_t reg, uint8_t *out,
@@ -411,7 +412,16 @@ bool dt_imu_start(void)
 
     calibrate_gyro();
 
-    xTaskCreate(imu_task, "dt_imu", 4096, NULL, 4, NULL);
+    s_ready = xTaskCreate(imu_task, "dt_imu", 4096, NULL, 4, NULL) == pdPASS;
+    if (!s_ready) {
+        ESP_LOGE(TAG, "IMU 采样任务创建失败");
+        return false;
+    }
     ESP_LOGI(TAG, "BMI088 已启动 %d Hz（±6 g / ±2000 dps）", DT_IMU_HZ);
     return true;
+}
+
+bool dt_imu_ready(void)
+{
+    return s_ready;
 }

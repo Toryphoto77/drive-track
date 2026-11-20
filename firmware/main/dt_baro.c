@@ -304,6 +304,11 @@ bool dt_baro_read(dt_baro_sample_t *out)
     return true;
 }
 
+bool dt_baro_ready(void)
+{
+    return s_ready;
+}
+
 #else
 
 bool dt_baro_start(void)
@@ -314,6 +319,11 @@ bool dt_baro_start(void)
 bool dt_baro_read(dt_baro_sample_t *out)
 {
     (void)out;
+    return false;
+}
+
+bool dt_baro_ready(void)
+{
     return false;
 }
 

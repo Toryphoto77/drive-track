@@ -1161,7 +1161,9 @@ class _HomePageState extends State<HomePage>
       if (snap['bluetooth'] != true) return;
       final device = targets.first;
       await Native.setBleAutoReconnect(true);
-      await Native.connectBle(device.address!);
+      // 自动重连绝不能主动拉系统配对框；只有用户手动连接时才允许
+      // 请求配对，避免设备开机进 App 就弹“PIN 码或配对密钥不正确”。
+      await Native.connectBle(device.address!, requestBond: false);
     } catch (_) {}
   }
 
@@ -1681,7 +1683,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.13',
+          versionName: '1.7.14',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,

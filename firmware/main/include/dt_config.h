@@ -11,8 +11,8 @@
 
 // ---------------- 固件身份 ----------------
 // 改功能就同时抬高版本号；App 按 build 判断是否需要升级。
-#define DT_FW_VERSION "0.4.0"
-#define DT_FW_BUILD 10
+#define DT_FW_VERSION "0.4.1"
+#define DT_FW_BUILD 11
 #define DT_DEVICE_MODEL "DT-BOX-1"
 #define DT_BOARD_NAME "DriveTrack V4.6"
 

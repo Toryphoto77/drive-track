@@ -24,6 +24,8 @@
 
 #include "dt_config.h"
 #include "dt_gnss.h"
+#include "dt_baro.h"
+#include "dt_imu.h"
 #include "dt_power.h"
 #include "dt_sd.h"
 #include "dt_session.h"
@@ -83,19 +85,20 @@ static esp_err_t info_get(httpd_req_t *req)
 // App 的硬件管理卡每 3 秒轮询一次，字段缺失时界面显示“—”。
 static esp_err_t status_get(httpd_req_t *req)
 {
-    char body[384];
+    char body[448];
     dt_sd_refresh();
     int n = snprintf(
         body, sizeof(body),
         "{\"model\":\"%s\",\"fw\":\"%s\",\"build\":%d,"
         "\"battery\":%d,\"battMv\":%d,\"recording\":%d,"
-        "\"fix\":%d,\"sats\":%d,\"uptimeMs\":%lld,"
-        "\"freeHeap\":%u,\"sd\":%d,\"sdState\":\"%s\","
+        "\"fix\":%d,\"sats\":%d,\"imu\":%d,\"baro\":%d,"
+        "\"uptimeMs\":%lld,\"freeHeap\":%u,\"sd\":%d,\"sdState\":\"%s\","
         "\"sdTotalKb\":%llu,\"sdFreeKb\":%llu,"
-        "\"caps\":[\"shutdown\",\"storage\"]}",
+        "\"caps\":[\"shutdown\",\"storage\",\"sensors\"]}",
         DT_DEVICE_MODEL, DT_FW_VERSION, DT_FW_BUILD, dt_power_batt_percent(),
         dt_power_batt_mv(), dt_session_active() ? 1 : 0,
         dt_gnss_last_fix() ? 1 : 0, dt_gnss_last_sats(),
+        dt_imu_ready() ? 1 : 0, dt_baro_ready() ? 1 : 0,
         (long long)(esp_timer_get_time() / 1000),
         (unsigned)esp_get_free_heap_size(), dt_sd_ready() ? 1 : 0,
         dt_sd_state_text(), (unsigned long long)dt_sd_total_kb(),

@@ -149,9 +149,26 @@ class Native {
   static Future<void> stopSensors() => _m.invokeMethod('stopSensors');
   static Future<void> startBleScan() => _m.invokeMethod('startBleScan');
   static Future<void> stopBleScan() => _m.invokeMethod('stopBleScan');
-  static Future<void> connectBle(String address) =>
-      _m.invokeMethod('connectBle', {'address': address});
+  static Future<void> connectBle(String address, {bool requestBond = true}) =>
+      _m.invokeMethod('connectBle', {
+        'address': address,
+        'requestBond': requestBond,
+      });
   static Future<void> disconnectBle() => _m.invokeMethod('disconnectBle');
+
+  /// 当前 BLE 连接的真实信号强度；未连接、读取失败或原生未回调时返回 null。
+  /// 超时兜底防止详情页的状态轮询被一次异常读取永久卡住。
+  static Future<int?> readBleRssi() async {
+    try {
+      final value = await _m
+          .invokeMethod('readBleRssi')
+          .timeout(const Duration(seconds: 2));
+      return (value as num?)?.toInt();
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> setBleAutoReconnect(bool v) =>
       _m.invokeMethod('setBleAutoReconnect', {'value': v});
   static Future<void> zeroCalibrate() => _m.invokeMethod('zeroCalibrate');

@@ -1,7 +1,16 @@
 {
   "channel": "stable",
-  "updatedAt": "2026-11-19T00:00:00Z",
+  "updatedAt": "2026-11-21T00:00:00Z",
   "releases": [
+    {
+      "version": "0.4.1",
+      "build": 11,
+      "model": "DT-BOX-1",
+      "url": "https://cdn.jsdelivr.net/gh/Toryphoto77/drive-track@main/firmware/bin/drivetrack-box-0.4.1.bin",
+      "sha256": "c676a6bd5ce3dfd0130abe5ed1fcde5d532f56b0104a339db51e0f088967e21c",
+      "size": 1232544,
+      "notes": "新增 IMU、气压计就绪状态和 sensors 能力上报，供 App 设备管理页展示真实硬件状态。"
+    },
     {
       "version": "0.3.0",
       "build": 3,

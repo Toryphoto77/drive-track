@@ -1,6 +1,27 @@
 import 'package:drive_track/device_hardware_card.dart';
 import 'package:drive_track/firmware_update_service.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _PartialStorageService extends FirmwareUpdateService {
+  @override
+  Future<FirmwareDeviceInfo?> probeDevice({
+    Duration timeout = const Duration(seconds: 4),
+  }) async => const FirmwareDeviceInfo(
+    model: 'DT-BOX-1',
+    version: '0.4.1',
+    build: 11,
+  );
+
+  @override
+  Future<DeviceRuntimeStatus?> readStatus({
+    Duration timeout = const Duration(seconds: 3),
+  }) async => DeviceRuntimeStatus.fromJson({
+    'sd': 1,
+    'sdState': 'ok',
+    'sdTotalKb': 30515200,
+  });
+}
 
 void main() {
   group('电量解析', () {
@@ -106,6 +127,18 @@ void main() {
       expect(s.satellites, isNull);
     });
 
+    test('0.4.1 传感器工作状态：IMU 正常、气压计异常要如实区分', () {
+      final s = DeviceRuntimeStatus.fromJson({'imu': 1, 'baro': 0});
+      expect(s.imuReady, true);
+      expect(s.baroReady, false);
+    });
+
+    test('旧固件未上报传感器状态时保持 null，不冒充正常', () {
+      final s = DeviceRuntimeStatus.fromJson({'battery': 80});
+      expect(s.imuReady, isNull);
+      expect(s.baroReady, isNull);
+    });
+
     // 固件 0.4.0 起 /api/status 带 SD 字段
     test('SD 已挂载：读出总容量与剩余容量', () {
       final s = DeviceRuntimeStatus.fromJson({
@@ -167,5 +200,32 @@ void main() {
       expect(restored.laps.map((l) => l.timeMs), [61000, 60000]);
       expect(restored.laps.map((l) => l.index), [1, 2]);
     });
+  });
+
+  testWidgets('存储容量缺字段时显示占位符，不伪造成 0 KB', (tester) async {
+    tester.view.physicalSize = const Size(800, 2600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DeviceManagementPage(
+          deviceName: 'DriveTrack-56F6',
+          address: 'AA:BB:CC:DD:56:F6',
+          deviceType: '外接GPS',
+          service: _PartialStorageService(),
+          pollInterval: const Duration(hours: 1),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('硬件存储'), findsOneWidget);
+    expect(find.text('总容量'), findsOneWidget);
+    expect(find.text('已用空间'), findsOneWidget);
+    expect(find.text('可用空间'), findsOneWidget);
+    expect(find.text('0 KB'), findsNothing);
   });
 }

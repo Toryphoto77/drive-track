@@ -303,6 +303,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     private var scanServiceFilter: List<String>? = null
     private var pendingReadResult: MethodChannel.Result? = null
     private var pendingReadUuid: String? = null
+    private var pendingRssiResult: MethodChannel.Result? = null
 
     private lateinit var sensorManager: SensorManager
     private lateinit var locationManager: LocationManager
@@ -447,6 +448,11 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     }, 5000)
                 }
             }
+        }
+
+        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            pendingRssiResult?.success(if (status == BluetoothGatt.GATT_SUCCESS) rssi else null)
+            pendingRssiResult = null
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -1056,16 +1062,16 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                     }
                     "connectBle" -> {
                         val addr = call.argument<String>("address")
+                        // 开机自动重连传 false：直接 connectGatt，绝不主动 createBond
+                        // 拉系统 PIN 配对框；用户手动连接仍保持原配对流程。
+                        val requestBond = call.argument<Boolean>("requestBond") ?: true
                         if (addr != null) {
                             lastBleAddress = addr
                             reconnectAttempts = 0
                             val dev = bluetoothAdapter?.getRemoteDevice(addr)
                             gatt?.close()
                             if (dev != null) {
-                                // v1.7.9：未系统配对的设备先 createBond，配对完成再连；
-                                // 已配对设备直接连。createBond 是异步的，连接由
-                                // bondThenConnect 内部在配对完成 / 8s 兜底后发起。
-                                if (dev.bondState == BluetoothDevice.BOND_BONDED) {
+                                if (!requestBond || dev.bondState == BluetoothDevice.BOND_BONDED) {
                                     connectGattForDevice(dev)
                                 } else {
                                     bondThenConnect(dev, addr)
@@ -1074,6 +1080,24 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             }
                         }
                         result.success(null)
+                    }
+                    "readBleRssi" -> {
+                        val current = gatt
+                        if (current == null) {
+                            result.success(null)
+                        } else {
+                            pendingRssiResult?.success(null)
+                            pendingRssiResult = result
+                            try {
+                                if (!current.readRemoteRssi()) {
+                                    pendingRssiResult = null
+                                    result.success(null)
+                                }
+                            } catch (_: Exception) {
+                                pendingRssiResult = null
+                                result.success(null)
+                            }
+                        }
                     }
                     "disconnectBle" -> {
                         lastBleAddress = null

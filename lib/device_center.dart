@@ -15,6 +15,7 @@ import 'bt_gps_receiver.dart';
 import 'camera_connect_page.dart';
 import 'device_icons.dart';
 import 'device_scan_card.dart';
+import 'dt_page_route.dart';
 import 'firmware_update_service.dart';
 import 'gps_source.dart';
 import 'native.dart';
@@ -838,7 +839,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
             _pendingSubscribe = null;
           });
           await Native.setBleAutoReconnect(true);
-          await Native.connectBle(addr);
+          await Native.connectBle(
+            addr,
+            requestBond: !isDriveTrackHardwareName(_connectedName ?? ''),
+          );
         } catch (e) {
           setState(() {
             _connectingAddress = null;
@@ -862,7 +866,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
           );
         });
         await Native.setBleAutoReconnect(true);
-        await Native.connectBle(addr);
+        await Native.connectBle(
+          addr,
+          requestBond: !isDriveTrackHardwareName(_connectedName ?? ''),
+        );
       } catch (e) {
         setState(() {
           _connectingAddress = null;
@@ -883,7 +890,10 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
         );
       });
       await Native.setBleAutoReconnect(true);
-      await Native.connectBle(addr);
+      await Native.connectBle(
+        addr,
+        requestBond: !isDriveTrackHardwareName(_connectedName ?? ''),
+      );
       // GATT 服务发现完成前订阅可能报 not_found，connected 事件里会再试一次。
       await _doSubscribe(addr, uuids.service, uuids.tx);
     } catch (e) {
@@ -1001,10 +1011,7 @@ class _ExternalGpsSectionState extends State<ExternalGpsSection> {
     // 空态 / 扫描中 / 有结果（无可适配时也在这里说清，不另起文案）。
     final adaptable = _scanned.where(gpsDeviceIsAdaptable).toList();
     final scanStatusLine = _adaptScanning
-        ? s.t(
-            '正在扫描附近的 GPS 模块…',
-            'Scanning nearby GPS modules…',
-          )
+        ? s.t('正在扫描附近的 GPS 模块…', 'Scanning nearby GPS modules…')
         : _scanned.isEmpty
         ? s.t('尚未扫描，点「扫描适配设备」。', 'Not scanned. Tap Scan devices.')
         : adaptable.isEmpty
@@ -1679,7 +1686,10 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
       // 自动订阅 NMEA 特征，重连后直接出定位，不再要求去扫描页手工订阅。
       _resubscribe = (address: addr, service: service, tx: tx);
       await Native.setBleAutoReconnect(true);
-      await Native.connectBle(addr);
+      await Native.connectBle(
+        addr,
+        requestBond: !isDriveTrackHardwareName(device.name),
+      );
       setState(() => _notice = '正在连接“${device.name}”…');
     } catch (e) {
       setState(() {
@@ -1687,6 +1697,29 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
         _notice = '连接失败：$e';
       });
     }
+  }
+
+  Future<void> _disconnectSaved(SavedDevice device) async {
+    final addr = device.address;
+    try {
+      await Native.setBleAutoReconnect(false);
+      await Native.disconnectBle();
+    } catch (e) {
+      if (mounted) setState(() => _notice = '断开失败：$e');
+      return;
+    }
+    _resubscribe = null;
+    _gpsFeed.reset();
+    if (connectedExternalGpsAddress.value == addr) {
+      connectedExternalGpsAddress.value = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      if (addr != null) {
+        _statusByAddress[addr] = DeviceLinkStatus.disconnected;
+      }
+      _notice = '已断开“${device.name}”。';
+    });
   }
 
   /// 连上（或服务发现完成）后按待订阅项自动订阅 NMEA 特征。
@@ -1775,7 +1808,27 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     );
   }
 
-  /// “我的设备”卡：已保存的 BLE 设备（传感器 / GPS）。
+  Future<void> _openDeviceManagement(SavedDevice device) async {
+    final addr = device.address;
+    final connected =
+        addr != null && _statusByAddress[addr] == DeviceLinkStatus.connected;
+    await Navigator.of(context).push(
+      DtPageRoute(
+        builder: (_) => DeviceManagementPage(
+          deviceName: device.name,
+          address: addr,
+          deviceType: device.type,
+          serviceUuid: device.serviceUuid,
+          characteristicUuid: device.characteristicUuid,
+          connected: connected,
+          onConnect: () => _connectSaved(device),
+          onDisconnect: () => _disconnectSaved(device),
+        ),
+      ),
+    );
+  }
+
+  /// “我的设备”：每台已保存设备使用独立大卡，整卡进入完整管理页。
   Widget _myDevicesCard() {
     final s = S.of(context);
     if (_saved.isEmpty) {
@@ -1801,10 +1854,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                       '连接传感器或外接 GPS 后在这里管理',
                       'Connected sensors and GPS show up here',
                     ),
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.white38, fontSize: 12),
                   ),
                 ],
               ),
@@ -1815,16 +1865,14 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     }
     return ValueListenableBuilder<ExternalGpsStatus>(
       valueListenable: externalGpsStatus,
-      builder: (context, st, _) => _panel(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            for (var i = 0; i < _saved.length; i++) ...[
-              if (i > 0) _dividerLine(left: 62),
-              _savedDeviceTile(_saved[i], st),
-            ],
-          ],
-        ),
+      builder: (context, st, _) => Column(
+        children: [
+          for (final device in _saved)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _savedDeviceTile(device, st),
+            ),
+        ],
       ),
     );
   }
@@ -1998,10 +2046,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        s.t(
-                          '扫描设备',
-                          'Scan devices',
-                        ),
+                        s.t('扫描设备', 'Scan devices'),
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -2145,7 +2190,7 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     DeviceLinkStatus status,
     ExternalGpsStatus st,
   ) {
-    final parts = <String>[device.type, status.label];
+    final parts = <String>[];
     if (status == DeviceLinkStatus.connected && st.connected) {
       final ageMs = st.lastFixAtMs > 0
           ? DateTime.now().millisecondsSinceEpoch - st.lastFixAtMs
@@ -2163,79 +2208,168 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     }
     final addr = device.address;
     if (addr != null && addr.isNotEmpty) parts.add(addr);
-    return parts.join(' · ');
+    return parts.isEmpty ? '未保存蓝牙地址' : parts.join(' · ');
   }
 
   Widget _savedDeviceTile(SavedDevice device, ExternalGpsStatus st) {
     final s = S.of(context);
+    final accent = Theme.of(context).colorScheme.primary;
     final addr = device.address;
     final status = addr == null
         ? DeviceLinkStatus.disconnected
         : (_statusByAddress[addr] ?? DeviceLinkStatus.disconnected);
     final connected = status == DeviceLinkStatus.connected;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
-      child: Row(
+    final connecting = status == DeviceLinkStatus.connecting;
+    final ownHardware = isDriveTrackHardwareName(device.name);
+    return DriveTrackCard(
+      padding: const EdgeInsets.all(18),
+      borderColor: connected ? accent.withValues(alpha: 0.55) : null,
+      onTap: () => _openDeviceManagement(device),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _iconTile(Icons.sensors, size: 36),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            children: [
+              _iconTile(ownHardware ? Icons.memory : Icons.sensors, size: 48),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: connected
-                            ? const Color(0xFF34C759)
-                            : Colors.white24,
-                        shape: BoxShape.circle,
+                    Text(
+                      device.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        device.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    const SizedBox(height: 5),
+                    Text(
+                      device.type,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  _savedDeviceDetail(device, status, st),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
+                decoration: BoxDecoration(
+                  color: connected
+                      ? const Color(0xFF34C759).withValues(alpha: 0.14)
+                      : Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  status.label,
+                  style: TextStyle(
+                    color: connected ? Colors.greenAccent : Colors.white54,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _savedDeviceDetail(device, status, st),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 14),
+          DriveTrackInnerCard(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.t('查看设备详情与管理', 'Device details & management'),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        ownHardware
+                            ? s.t(
+                                '传感器、卫星、固件、电池与硬件存储',
+                                'Sensors, GNSS, firmware, battery & storage',
+                              )
+                            : s.t(
+                                '连接、信号与设备信息',
+                                'Connection, signal & device information',
+                              ),
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: accent),
               ],
             ),
           ),
-          TextButton(
-            onPressed: addr == null ? null : () => _connectSaved(device),
-            child: Text(
-              connected
-                  ? s.t('重连', 'Reconnect')
-                  : s.t('连接', 'Connect'),
-            ),
-          ),
-          IconButton(
-            tooltip: s.t('删除', 'Delete'),
-            onPressed: () async {
-              setState(
-                () => _saved = _saved.where((d) => d != device).toList(),
-              );
-              await _persist();
-            },
-            icon: const Icon(Icons.close, size: 16, color: Colors.white30),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: addr == null || connecting
+                      ? null
+                      : () async {
+                          if (connected) {
+                            await _disconnectSaved(device);
+                          } else {
+                            await _connectSaved(device);
+                          }
+                        },
+                  icon: Icon(
+                    connected ? Icons.bluetooth_disabled : Icons.bluetooth,
+                    size: 18,
+                  ),
+                  label: Text(
+                    connecting
+                        ? s.t('连接中…', 'Connecting…')
+                        : connected
+                        ? s.t('断开', 'Disconnect')
+                        : s.t('连接', 'Connect'),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: s.t('删除', 'Delete'),
+                onPressed: () async {
+                  setState(
+                    () => _saved = _saved.where((d) => d != device).toList(),
+                  );
+                  await _persist();
+                },
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 20,
+                  color: Colors.white38,
+                ),
+              ),
+            ],
           ),
         ],
       ),

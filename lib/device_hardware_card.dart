@@ -5,7 +5,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_locale.dart';
+import 'app_bar_style.dart';
 import 'app_notice.dart';
+import 'card_style.dart';
 import 'dt_page_route.dart';
 import 'firmware_update_page.dart';
 import 'firmware_update_service.dart';
@@ -559,6 +561,739 @@ class _DeviceHardwareCardState extends State<DeviceHardwareCard> {
       style: const TextStyle(color: Colors.white54, fontSize: 11.5),
     );
   }
+}
+
+/// 广播名仅用于识别自研硬件；第三方设备不会进入硬件管理数据通道。
+bool isDriveTrackHardwareName(String name) =>
+    name.trim().toLowerCase().contains('drivetrack');
+
+/// 已保存设备的完整管理页（v1.7.14）。
+///
+/// 蓝牙连接与 RSSI 来自原生通道；自研硬件的电量、传感器、卫星、
+/// 固件与 microSD 来自设备热点接口。任何字段未上报都显示“—”，
+/// 不用缓存值或默认值冒充实测状态。
+class DeviceManagementPage extends StatefulWidget {
+  const DeviceManagementPage({
+    super.key,
+    required this.deviceName,
+    required this.address,
+    required this.deviceType,
+    this.serviceUuid = '',
+    this.characteristicUuid = '',
+    this.connected = false,
+    this.onConnect,
+    this.onDisconnect,
+    this.service,
+    this.pollInterval = const Duration(seconds: 3),
+  });
+
+  final String deviceName;
+  final String? address;
+  final String deviceType;
+  final String serviceUuid;
+  final String characteristicUuid;
+  final bool connected;
+  final Future<void> Function()? onConnect;
+  final Future<void> Function()? onDisconnect;
+  final FirmwareUpdateService? service;
+  final Duration pollInterval;
+
+  @override
+  State<DeviceManagementPage> createState() => _DeviceManagementPageState();
+}
+
+class _DeviceManagementPageState extends State<DeviceManagementPage> {
+  late final FirmwareUpdateService _service =
+      widget.service ?? FirmwareUpdateService();
+  late bool _connected = widget.connected;
+
+  Timer? _timer;
+  StreamSubscription<Map<String, dynamic>>? _dataSub;
+  bool _refreshing = false;
+  bool _probing = true;
+  bool _reachable = false;
+  bool _poweredOff = false;
+  bool _busy = false;
+  int? _rssi;
+  FirmwareDeviceInfo? _info;
+  DeviceRuntimeStatus? _status;
+
+  bool get _ownHardware => isDriveTrackHardwareName(widget.deviceName);
+  S get _s => S.of(context);
+
+  @override
+  void initState() {
+    super.initState();
+    _dataSub = Native.bleDataStream.listen((event) {
+      final type = (event['type'] ?? '').toString();
+      final address = (event['address'] ?? '').toString();
+      if (!mounted) return;
+      if (type == 'connected' && address == widget.address) {
+        setState(() => _connected = true);
+        _refresh();
+      } else if (type == 'disconnected') {
+        setState(() {
+          _connected = false;
+          _rssi = null;
+        });
+      }
+    }, onError: (_) {});
+    _refresh();
+    _timer = Timer.periodic(widget.pollInterval, (_) => _refresh());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _dataSub?.cancel();
+    if (widget.service == null) _service.close();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    if (_refreshing || !mounted) return;
+    _refreshing = true;
+    try {
+      final rssi = _connected ? await Native.readBleRssi() : null;
+      if (!_ownHardware) {
+        if (mounted) setState(() => _rssi = rssi);
+        return;
+      }
+      final info = await _service.probeDevice(
+        timeout: const Duration(seconds: 3),
+      );
+      final status = info == null ? null : await _service.readStatus();
+      if (!mounted) return;
+      setState(() {
+        _rssi = rssi;
+        _probing = false;
+        _reachable = info != null;
+        if (info != null) _poweredOff = false;
+        _info = info;
+        _status = status;
+      });
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  String _v(String? value) => (value == null || value.isEmpty) ? '—' : value;
+
+  String _uptime(int? ms) {
+    if (ms == null || ms <= 0) return '—';
+    final seconds = ms ~/ 1000;
+    if (seconds < 60) return '${seconds}s';
+    final minutes = seconds ~/ 60;
+    if (minutes < 60) return '${minutes}m ${seconds % 60}s';
+    return '${minutes ~/ 60}h ${minutes % 60}m';
+  }
+
+  String _size(int kb) {
+    if (kb >= 1024 * 1024) {
+      return '${(kb / 1024 / 1024).toStringAsFixed(1)} GB';
+    }
+    if (kb >= 1024) return '${(kb / 1024).toStringAsFixed(0)} MB';
+    return '$kb KB';
+  }
+
+  String _signalText() {
+    if (!_connected) return '—';
+    final rssi = _rssi;
+    if (rssi == null) return _s.t('读取中…', 'Reading…');
+    final quality = rssi >= -60
+        ? _s.t('良好', 'Good')
+        : rssi >= -80
+        ? _s.t('一般', 'Fair')
+        : _s.t('较弱', 'Weak');
+    return '$rssi dBm · $quality';
+  }
+
+  String _sensorText(bool? ready) => switch (ready) {
+    true => _s.t('工作正常', 'Ready'),
+    false => _s.t('未就绪 / 异常', 'Not ready'),
+    null => '—',
+  };
+
+  Future<void> _toggleConnection() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      if (_connected) {
+        await widget.onDisconnect?.call();
+      } else {
+        await widget.onConnect?.call();
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _upgrade() async {
+    await Navigator.of(
+      context,
+    ).push(DtPageRoute(builder: (_) => FirmwareUpdatePage(service: _service)));
+    if (mounted) _refresh();
+  }
+
+  Future<void> _shutdown() async {
+    final s = _s;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text(s.t('关闭硬件电源', 'Power off device')),
+        content: Text(
+          s.t(
+            '关机后设备会断开蓝牙与热点，只能按机身按键重新开机。确认关机？',
+            'This disconnects Bluetooth and the hotspot. Use the physical button to power on again. Continue?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.t('取消', 'Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              s.t('关机', 'Power off'),
+              style: const TextStyle(color: Colors.orangeAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await _service.shutdown();
+      if (!mounted) return;
+      setState(() {
+        _poweredOff = true;
+        _reachable = false;
+        _connected = false;
+        _info = null;
+        _status = null;
+        _rssi = null;
+      });
+      showAppNotice(
+        context,
+        s.t('已发送关机指令', 'Power-off command sent'),
+        AppNoticeKind.success,
+      );
+    } catch (error) {
+      if (mounted) {
+        showAppNotice(
+          context,
+          s.t('关机失败：$error', 'Power off failed: $error'),
+          AppNoticeKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _showPairingPassword() async {
+    final s = _s;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text(s.t('更改配对密码', 'Change pairing PIN')),
+        content: Text(
+          _ownHardware
+              ? s.t(
+                  '当前硬件固件使用 BLE 直连，未启用可修改的数字配对 PIN，因此这里不能设置新密码。自动重连已改为不再主动请求系统配对；若系统里残留旧配对，可先在系统蓝牙中忽略此设备，再手动连接。',
+                  'This firmware uses direct BLE and has no configurable numeric pairing PIN. Automatic reconnect no longer requests bonding. If an old bond remains, forget it in system Bluetooth and reconnect manually.',
+                )
+              : s.t(
+                  '配对密码由设备厂商固件管理，DriveTrack 不能修改第三方设备的 PIN。',
+                  'The manufacturer firmware owns pairing. DriveTrack cannot change a third-party device PIN.',
+                ),
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(s.t('知道了', 'OK')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _s;
+    final accent = Theme.of(context).colorScheme.primary;
+    final battery = _status?.batteryPercent ?? _info?.batteryPercent;
+    final charging = _status?.charging ?? _info?.charging;
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      extendBodyBehindAppBar: true,
+      appBar: DtAppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: Text(
+          s.t('设备管理', 'Device management'),
+          style: const TextStyle(color: Colors.white),
+        ),
+        actions: [
+          IconButton(
+            tooltip: s.t('刷新', 'Refresh'),
+            onPressed: _refreshing ? null : _refresh,
+            icon: const Icon(Icons.refresh, color: Colors.white54),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: withAppBarTopInset(
+          context,
+          const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        ),
+        children: [
+          DriveTrackCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: Icon(
+                        _ownHardware ? Icons.memory : Icons.sensors,
+                        size: 34,
+                        color: accent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.deviceName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            _poweredOff
+                                ? s.t('已关机', 'Powered off')
+                                : _connected
+                                ? s.t('蓝牙已连接', 'Bluetooth connected')
+                                : s.t('蓝牙未连接', 'Bluetooth disconnected'),
+                            style: TextStyle(
+                              color: _connected
+                                  ? Colors.greenAccent
+                                  : Colors.white54,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (_ownHardware) ...[
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Icon(
+                        charging == true
+                            ? Icons.battery_charging_full
+                            : Icons.battery_full,
+                        color: battery != null && battery <= 20
+                            ? Colors.orangeAccent
+                            : Colors.greenAccent,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        s.t('电池电量', 'Battery'),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        battery == null
+                            ? '—'
+                            : '$battery%${charging == true ? ' · ${s.t('充电中', 'Charging')}' : ''}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: battery == null
+                          ? 0
+                          : (battery / 100).clamp(0.0, 1.0),
+                      minHeight: 5,
+                      backgroundColor: Colors.white12,
+                      color: battery != null && battery <= 20
+                          ? Colors.orangeAccent
+                          : accent,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          _section(
+            s.t('连接与信号', 'Connection & signal'),
+            Column(
+              children: [
+                _row(
+                  s.t('连接状态', 'Connection'),
+                  _connected
+                      ? s.t('已连接', 'Connected')
+                      : s.t('未连接', 'Disconnected'),
+                  valueColor: _connected ? Colors.greenAccent : Colors.white54,
+                ),
+                _row(s.t('信号强度', 'Signal'), _signalText()),
+                _row(s.t('蓝牙地址', 'Address'), _v(widget.address)),
+                _row(s.t('设备类型', 'Type'), _v(widget.deviceType)),
+                if (widget.serviceUuid.isNotEmpty)
+                  _row(s.t('服务 UUID', 'Service UUID'), widget.serviceUuid),
+                if (widget.characteristicUuid.isNotEmpty)
+                  _row(
+                    s.t('特征 UUID', 'Characteristic UUID'),
+                    widget.characteristicUuid,
+                  ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        (_busy ||
+                            (!_connected &&
+                                (widget.onConnect == null ||
+                                    (widget.address ?? '').isEmpty)))
+                        ? null
+                        : _toggleConnection,
+                    icon: Icon(
+                      _connected ? Icons.bluetooth_disabled : Icons.bluetooth,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _connected
+                          ? s.t('断开连接', 'Disconnect')
+                          : s.t('连接设备', 'Connect'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_ownHardware) ...[
+            if (!_reachable)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  _poweredOff
+                      ? s.t(
+                          '设备已关机，按机身按键可重新开机。',
+                          'Device is off. Use the physical button to power it on.',
+                        )
+                      : _probing
+                      ? s.t('正在读取硬件状态…', 'Reading hardware status…')
+                      : s.t(
+                          '蓝牙可传输定位；电量、传感器、固件与存储详情需连接设备热点 ${FirmwareUpdateService.accessPointPrefix}-XXXX（密码 ${FirmwareUpdateService.accessPointPassword}）。',
+                          'Bluetooth carries GPS. Join ${FirmwareUpdateService.accessPointPrefix}-XXXX (password ${FirmwareUpdateService.accessPointPassword}) for battery, sensors, firmware and storage.',
+                        ),
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11.5,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            _section(
+              s.t('传感器状态', 'Sensors'),
+              Column(
+                children: [
+                  _row('IMU（BMI088）', _sensorText(_status?.imuReady)),
+                  _row(
+                    s.t('气压计（BMP388/390）', 'Barometer (BMP388/390)'),
+                    _sensorText(_status?.baroReady),
+                  ),
+                ],
+              ),
+            ),
+            _section(
+              s.t('卫星与定位', 'GNSS & positioning'),
+              Column(
+                children: [
+                  _row(
+                    s.t('搜星状态', 'Fix status'),
+                    _status?.hasFix == true
+                        ? s.t('已定位', 'Fix acquired')
+                        : _status?.hasFix == false
+                        ? s.t('搜星中 / 未定位', 'Searching / no fix')
+                        : '—',
+                    valueColor: _status?.hasFix == true
+                        ? Colors.greenAccent
+                        : Colors.white70,
+                  ),
+                  _row(
+                    s.t('卫星数量', 'Satellites'),
+                    _status?.satellites == null
+                        ? '—'
+                        : s.t(
+                            '${_status!.satellites} 颗',
+                            '${_status!.satellites}',
+                          ),
+                  ),
+                  _row(
+                    s.t('记录状态', 'Recording'),
+                    _status?.recording == true
+                        ? s.t('记录中', 'Recording')
+                        : _status?.recording == false
+                        ? s.t('待机', 'Idle')
+                        : '—',
+                  ),
+                ],
+              ),
+            ),
+            _section(
+              s.t('固件信息', 'Firmware'),
+              Column(
+                children: [
+                  _row(s.t('设备名称', 'Device name'), widget.deviceName),
+                  _row(s.t('设备型号', 'Model'), _v(_info?.model)),
+                  _row(s.t('固件版本', 'Version'), _v(_info?.version)),
+                  _row(
+                    'Build',
+                    _info?.build == null || _info!.build <= 0
+                        ? '—'
+                        : '${_info!.build}',
+                  ),
+                  _row(
+                    s.t('运行时长', 'Uptime'),
+                    _uptime(_status?.uptimeMs ?? _info?.uptimeMs),
+                  ),
+                  _row(
+                    s.t('空闲内存', 'Free heap'),
+                    _status?.freeHeap == null && _info?.freeHeap == null
+                        ? '—'
+                        : '${_status?.freeHeap ?? _info!.freeHeap} B',
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _upgrade,
+                      icon: const Icon(Icons.system_update_alt, size: 18),
+                      label: Text(s.t('固件升级', 'Firmware update')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _section(s.t('硬件存储', 'Hardware storage'), _storageSection()),
+            _section(
+              s.t('电源管理', 'Power'),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: (_busy || _status?.supportsShutdown != true)
+                          ? null
+                          : _shutdown,
+                      icon: const Icon(Icons.power_settings_new, size: 18),
+                      label: Text(
+                        _status?.supportsShutdown == true
+                            ? s.t('关闭硬件电源', 'Power off device')
+                            : s.t(
+                                '关机（连接热点并升级固件后可用）',
+                                'Power off (connect hotspot / upgrade firmware)',
+                              ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orangeAccent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    s.t(
+                      '硬件不支持远程开机；关机后需按机身按键开机。',
+                      'Remote power-on is unsupported. Use the physical button after power-off.',
+                    ),
+                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                s.t(
+                  '第三方设备没有 DriveTrack 硬件管理接口，本页只展示实际可读取的蓝牙信息。',
+                  'This third-party device has no DriveTrack hardware API; only readable Bluetooth data is shown.',
+                ),
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
+          _section(
+            s.t('配对与安全', 'Pairing & security'),
+            DriveTrackEntryCard(
+              icon: Icons.password,
+              title: s.t('更改配对密码', 'Change pairing PIN'),
+              subtitle: _ownHardware
+                  ? s.t(
+                      '当前固件未启用可修改的配对 PIN',
+                      'No configurable pairing PIN in current firmware',
+                    )
+                  : s.t('由设备厂商固件管理', 'Managed by device firmware'),
+              onTap: _showPairingPassword,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _storageSection() {
+    final s = _s;
+    final status = _status;
+    final hasStorage =
+        status != null &&
+        (status.sdPresent != null ||
+            status.sdState != null ||
+            status.sdTotalKb != null);
+    if (!hasStorage) {
+      return Text(
+        status == null
+            ? s.t(
+                '连接设备热点后读取 microSD 状态、总容量与可用空间。',
+                'Connect to the device hotspot to read microSD status and capacity.',
+              )
+            : s.t(
+                '当前固件未上报存储信息，请升级固件。',
+                'Current firmware does not report storage. Upgrade firmware.',
+              ),
+        style: const TextStyle(
+          color: Colors.white54,
+          fontSize: 12,
+          height: 1.5,
+        ),
+      );
+    }
+    final total = status.sdTotalKb;
+    final free = status.sdFreeKb;
+    final int? used = total == null || free == null
+        ? null
+        : (total - free).clamp(0, total);
+    final state = status.sdMounted
+        ? s.t('已挂载', 'Mounted')
+        : switch (status.sdState) {
+            'no_card' => s.t('未插卡', 'No card'),
+            'mount_fail' => s.t('挂载失败', 'Mount failed'),
+            _ => s.t('不可用', 'Unavailable'),
+          };
+    return Column(
+      children: [
+        _row(
+          'microSD',
+          state,
+          valueColor: status.sdMounted
+              ? Colors.greenAccent
+              : Colors.orangeAccent,
+        ),
+        if (status.sdMounted) ...[
+          _row(s.t('总容量', 'Total'), total == null ? '—' : _size(total)),
+          _row(s.t('已用空间', 'Used'), used == null ? '—' : _size(used)),
+          _row(s.t('可用空间', 'Free'), free == null ? '—' : _size(free)),
+          if (total != null && total > 0 && used != null) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: (used / total).clamp(0.0, 1.0),
+                minHeight: 5,
+                backgroundColor: Colors.white12,
+              ),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _section(String title, Widget child) => Padding(
+    padding: const EdgeInsets.only(bottom: 18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        if (child is DriveTrackEntryCard)
+          child
+        else
+          DriveTrackCard(child: child),
+      ],
+    ),
+  );
+
+  Widget _row(String label, String value, {Color? valueColor}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 112,
+          child: Text(
+            label,
+            style: const TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: valueColor ?? Colors.white,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _LapSheet extends StatelessWidget {

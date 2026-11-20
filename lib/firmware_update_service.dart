@@ -245,6 +245,8 @@ class DeviceRuntimeStatus {
     this.charging,
     this.recording,
     this.hasFix,
+    this.imuReady,
+    this.baroReady,
     this.satellites,
     this.lapCount,
     this.currentLapMs,
@@ -264,6 +266,10 @@ class DeviceRuntimeStatus {
   final bool? charging;
   final bool? recording;
   final bool? hasFix;
+
+  /// 传感器初始化与采样任务状态；旧固件未上报时为 null。
+  final bool? imuReady;
+  final bool? baroReady;
   final int? satellites;
   final int? lapCount;
   final int? currentLapMs;
@@ -303,6 +309,8 @@ class DeviceRuntimeStatus {
       charging: parseBool(json['charging']),
       recording: recording,
       hasFix: fix,
+      imuReady: parseBool(json['imuReady'] ?? json['imu']),
+      baroReady: parseBool(json['baroReady'] ?? json['baro']),
       satellites: _intField(json, const ['sats', 'satellites', 'sat']),
       lapCount: _intField(json, const ['laps', 'lapCount', 'lap_count']),
       currentLapMs: _intField(json, const [

@@ -15,3 +15,6 @@ bool dt_baro_start(void);
 
 // 取最近一次读数（未启动或尚未采到时返回 false）
 bool dt_baro_read(dt_baro_sample_t *out);
+
+// 初始化与采样任务是否已启动，供 /api/status 如实上报。
+bool dt_baro_ready(void);
