@@ -1523,18 +1523,42 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
     _dataSub = Native.bleDataStream.listen((e) {
       final type = (e['type'] ?? '').toString();
       final addr = (e['address'] ?? '').toString();
-      setState(() {
-        if (type == 'connected' && addr.isNotEmpty) {
+      if (type == 'connected' && addr.isNotEmpty) {
+        SavedDevice? newlySaved;
+        setState(() {
           _statusByAddress[addr] = DeviceLinkStatus.connected;
+          // v1.7.9：连接成功即加入「我的设备」，按地址去重后持久化，
+          // 下次进页面可直接点重连。无 name 时用地址尾段兜底显示。
+          if (_saved.every((d) => d.address != addr)) {
+            final rawName = (e['name'] ?? '').toString();
+            final tail = addr.length >= 5
+                ? addr.substring(addr.length - 5)
+                : addr;
+            newlySaved = SavedDevice(
+              name: rawName.isNotEmpty ? rawName : 'GPS $tail',
+              serviceUuid: '',
+              characteristicUuid: '',
+              type: '外接GPS',
+              address: addr,
+            );
+            _saved = [..._saved, newlySaved!];
+          }
+        });
+        if (newlySaved != null) {
+          _persist();
+          widget.onSavedDeviceConnected?.call(newlySaved!);
+        } else {
           final hit = _saved.where((d) => d.address == addr);
           if (hit.isNotEmpty) widget.onSavedDeviceConnected?.call(hit.first);
-        } else if (type == 'disconnected') {
+        }
+      } else if (type == 'disconnected') {
+        setState(() {
           for (final k in _statusByAddress.keys) {
             _statusByAddress[k] = DeviceLinkStatus.disconnected;
           }
           _gpsFeed.reset();
-        }
-      });
+        });
+      }
     }, onError: (_) {});
   }
 

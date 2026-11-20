@@ -119,7 +119,6 @@ void _registerFontLicenses() {
   const fonts = [
     ('Orbitron', 'assets/fonts/Orbitron-OFL.txt'),
     ('Racing Sans One', 'assets/fonts/RacingSansOne-OFL.txt'),
-    ('Source Han Sans SC', 'assets/fonts/SourceHanSansSC-LICENSE.txt'),
   ];
   for (final (package, asset) in fonts) {
     LicenseRegistry.addLicense(() async* {
@@ -238,7 +237,7 @@ class AppPrefs extends ChangeNotifier {
   String get fontFamily =>
       latinFont == 'racingSansOne' ? 'RacingSansOne' : 'Orbitron';
   String get displayFont => fontFamily;
-  List<String> get fontFamilyFallback => const ['DriveTrackCJK'];
+  List<String> get fontFamilyFallback => const [];
 
   static const List<(String, Color)> presets = [
     ('法拉利红', Color(0xFFE10600)),
@@ -516,10 +515,21 @@ class _DriveTrackAppState extends State<DriveTrackApp> {
         return MaterialApp(
           title: '驰迹 DriveTrack',
           debugShowCheckedModeBanner: false,
-          builder: (context, child) => LocaleScope(
-            controller: LocaleController.instance,
-            child: child ?? const SizedBox.shrink(),
-          ),
+          builder: (context, child) {
+            // v1.7.9：中文回退到系统默认字体，全局字号减小一号。
+            // 在系统字体缩放基础上再乘 0.9，保留无障碍大字体偏好。
+            final mq = MediaQuery.of(context);
+            final sysFactor = mq.textScaler.scale(14) / 14.0;
+            return MediaQuery(
+              data: mq.copyWith(
+                textScaler: TextScaler.linear(sysFactor * 0.9),
+              ),
+              child: LocaleScope(
+                controller: LocaleController.instance,
+                child: child ?? const SizedBox.shrink(),
+              ),
+            );
+          },
           // v0.1.7 全局黑色：两套都传黑色、档位固定 dark，不随系统变浅。
           theme: DriveTrackTheme.dark(
             accent,
@@ -882,6 +892,9 @@ class _HomePageState extends State<HomePage>
     await VoiceService.instance.load();
     _showTrackDelta = (await TrackSettingsStore.load()).showDelta;
     SatelliteService.instance.start();
+    // v1.7.9：进入记录页即拉一次原生缓存快照，卫星药丸不必等实时流首帧
+    // 才显示颗数（此前进页常显示“—”）。
+    SatelliteService.instance.refreshSnapshot();
     if (appPrefs.directSatellite) SatelliteService.instance.setDirectMode(true);
     await store.init();
     await appPrefs.load();
@@ -1582,7 +1595,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.7.8',
+          versionName: '1.7.10',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,

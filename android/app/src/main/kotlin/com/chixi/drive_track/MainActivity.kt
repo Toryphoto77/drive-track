@@ -19,9 +19,11 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -321,6 +323,8 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
     private var lastBleAddress: String? = null
     private var autoReconnect = true
     private var reconnectAttempts = 0
+    // v1.7.9：BLE 连接前若未系统配对，先 createBond；此 receiver 监听配对完成。
+    private var bondReceiver: BroadcastReceiver? = null
     private val handler = Handler(Looper.getMainLooper())
     private var prevCrankRevs: Int? = null
     private var prevCrankTime: Int? = null
@@ -381,12 +385,55 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         }
     }
 
+    // v1.7.9：需要配对的 BLE 设备先 createBond，系统配对完成（BOND_BONDED）
+    // 后再 connectGatt；8s 内未完成也兜底直连，避免不要求配对的设备被阻塞。
+    private fun connectGattForDevice(dev: BluetoothDevice) {
+        gatt = dev.connectGatt(this, false, gattCallback)
+    }
+
+    private fun clearBondReceiver() {
+        bondReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+        }
+        bondReceiver = null
+    }
+
+    private fun bondThenConnect(dev: BluetoothDevice, addr: String) {
+        clearBondReceiver()
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
+                @Suppress("DEPRECATION")
+                val device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) as? BluetoothDevice
+                if (device?.address != addr) return
+                if (intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+                    == BluetoothDevice.BOND_BONDED) {
+                    clearBondReceiver()
+                    connectGattForDevice(dev)
+                }
+            }
+        }
+        bondReceiver = receiver
+        registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+        handler.postDelayed({
+            if (bondReceiver === receiver) {
+                clearBondReceiver()
+                connectGattForDevice(dev)
+            }
+        }, 8000)
+    }
+
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 reconnectAttempts = 0
                 val addr = gatt.device.address
-                emitOnMain { bleDataSink?.success(mapOf("type" to "connected", "address" to addr)) }
+                val name = gatt.device.name ?: ""
+                emitOnMain {
+                    bleDataSink?.success(
+                        mapOf("type" to "connected", "address" to addr, "name" to name)
+                    )
+                }
                 gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 emitOnMain { bleDataSink?.success(mapOf("type" to "disconnected")) }
@@ -1008,12 +1055,23 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                             reconnectAttempts = 0
                             val dev = bluetoothAdapter?.getRemoteDevice(addr)
                             gatt?.close()
-                            gatt = dev?.connectGatt(this, false, gattCallback)
+                            if (dev != null) {
+                                // v1.7.9：未系统配对的设备先 createBond，配对完成再连；
+                                // 已配对设备直接连。createBond 是异步的，连接由
+                                // bondThenConnect 内部在配对完成 / 8s 兜底后发起。
+                                if (dev.bondState == BluetoothDevice.BOND_BONDED) {
+                                    connectGattForDevice(dev)
+                                } else {
+                                    bondThenConnect(dev, addr)
+                                    dev.createBond()
+                                }
+                            }
                         }
                         result.success(null)
                     }
                     "disconnectBle" -> {
                         lastBleAddress = null
+                        clearBondReceiver()
                         try { gatt?.disconnect() } catch (_: Exception) {}
                         try { gatt?.close() } catch (_: Exception) {}
                         gatt = null
@@ -2176,6 +2234,7 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
             try { releaseVideoRecording() } catch (_: Exception) {}
             try { bluetoothAdapter?.bluetoothLeScanner?.stopScan(bleScanCallback) } catch (_: Exception) {}
             lastBleAddress = null
+            clearBondReceiver()
             try { gatt?.close() } catch (_: Exception) {}
             gatt = null
             try { btGpsManager?.stopUnfilteredScan() } catch (_: Exception) {}

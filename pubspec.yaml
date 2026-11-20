@@ -1,7 +1,7 @@
 name: drive_track
 description: "驰迹 DriveTrack：极简风轨迹记录 App（汽车 / 摩托 / 卡丁车）"
 publish_to: 'none'
-version: 1.7.8+77
+version: 1.7.10+79
 
 environment:
   sdk: ^3.13.7
@@ -33,7 +33,6 @@ flutter:
     - data/packages/
     - assets/fonts/Orbitron-OFL.txt
     - assets/fonts/RacingSansOne-OFL.txt
-    - assets/fonts/SourceHanSansSC-LICENSE.txt
   # v1.7.6：移除底栏液态玻璃折射 shader（BackdropFilter 下几何对不上，
   # 会产生紫边色散与顶部暗角），底栏改为纯高斯模糊 + 低透明度染色。
   fonts:
@@ -43,7 +42,3 @@ flutter:
     - family: RacingSansOne
       fonts:
         - asset: assets/fonts/RacingSansOne-Regular.ttf
-    - family: DriveTrackCJK
-      fonts:
-        - asset: assets/fonts/SourceHanSansSC-Bold.otf
-          weight: 700

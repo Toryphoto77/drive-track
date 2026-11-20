@@ -120,7 +120,7 @@ class DriveTrackTheme {
   static ThemeData dark(
     Color accent, {
     String fontFamily = 'Orbitron',
-    List<String> fontFamilyFallback = const ['DriveTrackCJK'],
+    List<String> fontFamilyFallback = const [],
   }) {
     const bg = Color(0xFF121212);
     const card = Color(0xFF1E1E1E);
@@ -439,7 +439,7 @@ class ThemeSettingsPage extends StatefulWidget {
   final String appIconInitial;
   final ValueChanged<String>? onAppIconChanged;
 
-  /// 英文与数字字体；中文始终由 DriveTrackCJK（思源黑体 Bold）回退。
+  /// 英文与数字字体；中文始终由系统默认字体回退（v1.7.9 起不再内嵌思源黑体）。
   final String latinFontInitial;
   final ValueChanged<String>? onLatinFontChanged;
 
@@ -921,7 +921,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                               Text(
                                 '驰迹',
                                 style: TextStyle(
-                                  fontFamily: 'DriveTrackCJK',
                                   fontSize: 22,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,
@@ -935,7 +934,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                                   'DriveTrack 0123456789',
                                   style: TextStyle(
                                     fontFamily: 'Orbitron',
-                                    fontFamilyFallback: ['DriveTrackCJK'],
                                     fontSize: 12,
                                     color: Colors.white70,
                                   ),
@@ -957,7 +955,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                               Text(
                                 '驰迹',
                                 style: TextStyle(
-                                  fontFamily: 'DriveTrackCJK',
                                   fontSize: 22,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,
@@ -971,7 +968,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                                   'DriveTrack 0123456789',
                                   style: TextStyle(
                                     fontFamily: 'RacingSansOne',
-                                    fontFamilyFallback: ['DriveTrackCJK'],
                                     fontSize: 12,
                                     color: Colors.white70,
                                   ),

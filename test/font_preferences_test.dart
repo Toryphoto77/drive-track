@@ -61,11 +61,11 @@ void main() {
   });
 
   test(
-    'dark theme applies Latin font and fixed Simplified Chinese fallback',
+    'dark theme applies Latin font and no bundled CJK fallback (system default)',
     () {
       final theme = DriveTrackTheme.dark(const Color(0xFFE10600));
       expect(theme.textTheme.bodyMedium?.fontFamily, 'Orbitron');
-      expect(theme.textTheme.bodyMedium?.fontFamilyFallback, ['DriveTrackCJK']);
+      expect(theme.textTheme.bodyMedium?.fontFamilyFallback, isEmpty);
     },
   );
 

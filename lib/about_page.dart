@@ -234,7 +234,6 @@ class _AboutPageState extends State<AboutPage> {
                   'DriveTrack',
                   style: TextStyle(
                     fontFamily: widget.displayFont,
-                    fontFamilyFallback: const ['DriveTrackCJK'],
                     fontSize: 40,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
@@ -346,7 +345,7 @@ class _AboutPageState extends State<AboutPage> {
           _linkCard(
             icon: Icons.font_download_outlined,
             title: s.t('字体与开源许可', 'Fonts & open-source licenses'),
-            subtitle: 'Orbitron · Racing Sans One · 思源黑体',
+            subtitle: 'Orbitron · Racing Sans One',
             onTap: () => showLicensePage(
               context: context,
               applicationName: 'DriveTrack',
