@@ -25,12 +25,17 @@ import 'checkered_flag.dart';
 /// - 赛道选择器：赛道态下展开在分段控件正下方（间距 8），由
 ///   调用方以 [trackSelector] 传入，本组件只负责切换本身。
 
-/// 街道 / 赛道：一段式，不与汽车 / 摩托 / 骑行（TripMode）混淆。
-enum DriveSurface { street, track }
+/// 街道 / 自定义道路 / 赛道，不与汽车 / 摩托 / 骑行（TripMode）混淆。
+enum DriveSurface { street, custom, track }
+
+/// 只有封闭赛道需要 LapTimer；跑山与普通道路始终连续记录。
+bool surfaceUsesLapTiming(DriveSurface surface) =>
+    surface == DriveSurface.track;
 
 extension DriveSurfaceLabel on DriveSurface {
   String get label => switch (this) {
         DriveSurface.street => '街道',
+        DriveSurface.custom => '自定义',
         DriveSurface.track => '赛道',
       };
 }
@@ -104,9 +109,11 @@ class _ModeSwitchState extends State<ModeSwitch>
     final isTrack = widget.surface == DriveSurface.track;
     Widget segment(DriveSurface surface) {
       final selected = widget.surface == surface;
-      final label = surface == DriveSurface.street
-          ? strings.t('街道', 'Street')
-          : strings.t('赛道', 'Track');
+      final label = switch (surface) {
+        DriveSurface.street => strings.t('街道', 'Street'),
+        DriveSurface.custom => strings.t('自定义', 'Road'),
+        DriveSurface.track => strings.t('赛道', 'Track'),
+      };
       return Expanded(
         child: InkWell(
           borderRadius: BorderRadius.circular(999),
@@ -174,13 +181,17 @@ class _ModeSwitchState extends State<ModeSwitch>
         ),
         child: Stack(
           children: [
-            // 滑动滑块：200ms easeOutCubic，左右两段各占一半。
+            // 三段滑块：街道 / 自定义 / 赛道。
             AnimatedAlign(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
-              alignment: isTrack ? Alignment.centerRight : Alignment.centerLeft,
+              alignment: switch (widget.surface) {
+                DriveSurface.street => Alignment.centerLeft,
+                DriveSurface.custom => Alignment.center,
+                DriveSurface.track => Alignment.centerRight,
+              },
               child: FractionallySizedBox(
-                widthFactor: 0.5,
+                widthFactor: 1 / DriveSurface.values.length,
                 child: Container(
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.22),
@@ -192,6 +203,7 @@ class _ModeSwitchState extends State<ModeSwitch>
             ),
             Row(children: [
               segment(DriveSurface.street),
+              segment(DriveSurface.custom),
               segment(DriveSurface.track),
             ]),
           ],
@@ -255,6 +267,14 @@ class ModeSwitchSection extends StatelessWidget {
               child: Text(
                 '示意轮廓，非官方测绘',
                 style: TextStyle(color: Colors.white38, fontSize: 10),
+              ),
+            ),
+          if (surface == DriveSurface.custom)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                '跑山 / 道路连续记录 · 不生成单圈',
+                style: TextStyle(color: Colors.white60, fontSize: 12),
               ),
             ),
         ],

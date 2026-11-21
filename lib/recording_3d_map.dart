@@ -1043,6 +1043,14 @@ class Recording3dMap extends StatefulWidget {
   // 外层已按朝向旋转，避免双重旋转）；为空时回落旧三角车体。
   final CustomPainter? vehicleMarkerPainter;
 
+  /// 赛道中心线（lat, lon）。赛道记录页用它当底图走线，不依赖
+  /// Overpass 路网；为空时只画实时轨迹。
+  final List<(double, double)> trackLine;
+
+  /// 是否拉取 OSM 路网 / 地理图层。赛道模式传 false：中心线已足够，
+  /// 避免国内拉不到 Overpass 时的长时间等待与失败文案。
+  final bool fetchRoads;
+
   /// 初始俯仰角（度，默认 65°，与旧视角一字相同）；点角度按钮后
   /// 由本组件内部状态接管，不回写调用方（调用方如需持久化，
   /// 用 [onPitchChanged] 接）。
@@ -1067,6 +1075,8 @@ class Recording3dMap extends StatefulWidget {
     required this.accentColor,
     required this.vehicleColor,
     this.vehicleMarkerPainter,
+    this.trackLine = const [],
+    this.fetchRoads = true,
     this.initialPitchDeg = perspectiveDefaultPitchDeg,
     this.onPitchChanged,
   });
@@ -1128,6 +1138,9 @@ class _Recording3dMapState extends State<Recording3dMap> {
 
   void _maybeFetch({bool force = false}) {
     if (!mounted) return;
+    // 赛道记录页不拉路网：中心线由赛道包提供，Overpass 在国内大多
+    // 不可达，省掉等待与角标。
+    if (!widget.fetchRoads) return;
     if (widget.centerLat == 0 && widget.centerLon == 0) return;
     // 图层与路网独立触发：路网拉取进行中也不挡住图层。
     _maybeFetchLayers(force: force);
@@ -1265,6 +1278,7 @@ class _Recording3dMapState extends State<Recording3dMap> {
             roadWays: _roads,
             layers: _layers,
             roadsDimmed: _roadNeighborCache,
+            trackLine: widget.trackLine,
             is3d: widget.is3d,
             headingUp: widget.headingUp,
             zoom: widget.zoom,
@@ -1278,21 +1292,23 @@ class _Recording3dMapState extends State<Recording3dMap> {
       // 左上角：路网状态小字，点按可手动重拉；失败原因分档显示，
       // 不再只写“路网未加载”。缓存路网时注明“缓存路网”，邻格
       // 缓存注明“附近缓存路网”，缓存与新失败并存时两者都写明。
-      Positioned(
-        top: 12,
-        left: 12,
-        child: GestureDetector(
-          onTap: _manualRefresh,
-          child: DecoratedBox(
-            decoration: const BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.all(Radius.circular(6))),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Text(_roadLabel,
-                  style: const TextStyle(color: Colors.white54, fontSize: 10)),
+      // 赛道模式不拉路网（fetchRoads=false），不显示这行角标。
+      if (widget.fetchRoads)
+        Positioned(
+          top: 12,
+          left: 12,
+          child: GestureDetector(
+            onTap: _manualRefresh,
+            child: DecoratedBox(
+              decoration: const BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.all(Radius.circular(6))),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text(_roadLabel,
+                    style: const TextStyle(color: Colors.white54, fontSize: 10)),
+              ),
             ),
           ),
         ),
-      ),
       // 右上角控制：指南针 / 缩放 / 3D-2D 切换（回退开关）/ 俯仰角。
       // M3：地图矮时（横屏记录页）控制列改横排，避免底部按钮被裁。
       Positioned(
@@ -1386,6 +1402,7 @@ class _Recording3dPainter extends CustomPainter {
   final List<PhotoPoint> photoPoints;
   final List<RoadWay> roadWays;
   final MapLayers layers;
+  final List<(double, double)> trackLine;
 
   /// 邻格缓存路网是否正被显示：为 true 时道路画暗一档，与实时
   /// 拉取的路网肉眼可分，避免把 1~2 公里外邻格的路当成本地路。
@@ -1403,6 +1420,7 @@ class _Recording3dPainter extends CustomPainter {
     required this.photoPoints,
     this.roadWays = const [],
     this.layers = const MapLayers.empty(),
+    this.trackLine = const [],
     this.roadsDimmed = false,
     required this.is3d,
     required this.headingUp,
@@ -1714,6 +1732,36 @@ class _Recording3dPainter extends CustomPainter {
       }
     }
 
+    // 赛道中心线：赛道记录页的底图走线（暗色描边 + 半透明白线），
+    // 压在实时轨迹之下，不抢速度着色的视觉层级。
+    if (trackLine.length >= 2) {
+      final proj = <Offset>[];
+      for (final (lat, lon) in trackLine) {
+        final fr = _toForwardRight(lat, lon);
+        proj.add(_project(size, fr.$1, fr.$2, pxPerM));
+      }
+      for (var i = 1; i < proj.length; i++) {
+        final a = proj[i - 1], b = proj[i];
+        if (_sameSideOutside(a, b, size)) continue;
+        canvas.drawLine(
+            a,
+            b,
+            Paint()
+              ..color = const Color(0xFF2C2C2C)
+              ..strokeWidth = 7
+              ..strokeCap = StrokeCap.round
+              ..style = PaintingStyle.stroke);
+        canvas.drawLine(
+            a,
+            b,
+            Paint()
+              ..color = Colors.white.withValues(alpha: 0.55)
+              ..strokeWidth = 2.4
+              ..strokeCap = StrokeCap.round
+              ..style = PaintingStyle.stroke);
+      }
+    }
+
     // 轨迹：先投影 + 按屏幕距离抽稀，再分段绘制（同侧出视野跳过）。
     final projected = <_Proj>[];
     for (final p in points) {
@@ -1847,9 +1895,82 @@ class _Recording3dPainter extends CustomPainter {
       old.roadsDimmed != roadsDimmed ||
       old.points != points ||
       old.photoPoints != photoPoints ||
+      old.trackLine != trackLine ||
       old.is3d != is3d ||
       old.headingUp != headingUp ||
       old.pitchDeg != pitchDeg ||
       old.vehicleMarkerPainter != vehicleMarkerPainter ||
       old.zoom != zoom;
+}
+
+/// 赛道记录主视图：全屏 3D 地图（车头朝上、车辆居中跟随），
+/// 底图只用赛道包中心线，不拉 Overpass 路网。
+///
+/// 与街道模式的分工：
+/// - 街道有真实路网需求 → 高德 JS 深色底图（NearbyDarkMap）；
+/// - 赛道只有一条闭合中心线 → 自绘 3D 透视更贴近竞品的“3D 走线”。
+/// 仍是 CustomPainter 伪 3D（透视投影），不是真 3D 模型渲染。
+class Track3dLiveView extends StatefulWidget {
+  const Track3dLiveView({
+    super.key,
+    required this.centerLat,
+    required this.centerLon,
+    required this.headingDeg,
+    required this.zoom,
+    required this.points,
+    this.trackLine = const [],
+    this.headingUp = true,
+    required this.accentColor,
+    required this.vehicleColor,
+    this.vehicleMarkerPainter,
+    required this.onZoomChanged,
+    required this.onCompassTap,
+    this.initialPitchDeg = 55,
+  });
+
+  final double centerLat;
+  final double centerLon;
+  final double headingDeg;
+  final double zoom;
+  final List<Recording3dPoint> points;
+  final List<(double, double)> trackLine;
+  final bool headingUp;
+  final Color accentColor;
+  final Color vehicleColor;
+  final CustomPainter? vehicleMarkerPainter;
+  final ValueChanged<double> onZoomChanged;
+  final VoidCallback onCompassTap;
+
+  /// 默认 55°：比街道的 65° 更接近俯视，弯道走向更容易读，
+  /// 同时保留近大远小的 3D 感。
+  final double initialPitchDeg;
+
+  @override
+  State<Track3dLiveView> createState() => _Track3dLiveViewState();
+}
+
+class _Track3dLiveViewState extends State<Track3dLiveView> {
+  bool _is3d = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Recording3dMap(
+      centerLat: widget.centerLat,
+      centerLon: widget.centerLon,
+      headingDeg: widget.headingDeg,
+      points: widget.points,
+      trackLine: widget.trackLine,
+      fetchRoads: false,
+      is3d: _is3d,
+      onModeChanged: (v) => setState(() => _is3d = v),
+      zoom: widget.zoom,
+      onZoomChanged: widget.onZoomChanged,
+      headingUp: widget.headingUp,
+      onCompassTap: widget.onCompassTap,
+      accentColor: widget.accentColor,
+      vehicleColor: widget.vehicleColor,
+      vehicleMarkerPainter: widget.vehicleMarkerPainter,
+      initialPitchDeg: widget.initialPitchDeg,
+    );
+  }
 }

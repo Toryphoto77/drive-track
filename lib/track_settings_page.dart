@@ -78,14 +78,6 @@ class TrackSettings {
   /// 赛道图配色键，默认 'red'（见 [TrackColorSchemes.presets]）。
   final String trackColorKey;
 
-  /// 定位采样率（Hz）：10 / 20 / 25 三档，默认 25（DEXIAN D1 与
-  /// 自研硬件 NEO-M9N 最高都是 25Hz）。
-  /// 注意：目前只保存设置、暂未生效——采样率要等固件支持：
-  /// D1 走二进制协议、包格式待实测抓包才解析，自研硬件尚未组装
-  /// 调试；手机 GPS 采样率也不受本项控制。界面必须如实标注
-  /// “待固件支持”，不得谎称改了就生效。
-  final int sampleRateHz;
-
   const TrackSettings({
     required this.crossingRadiusM,
     required this.dwellThresholdSec,
@@ -95,7 +87,6 @@ class TrackSettings {
     required this.bestLapVibration,
     required this.showDelta,
     required this.trackColorKey,
-    required this.sampleRateHz,
   });
 
   static const defaults = TrackSettings(
@@ -107,7 +98,6 @@ class TrackSettings {
     bestLapVibration: true,
     showDelta: true,
     trackColorKey: 'red',
-    sampleRateHz: 25,
   );
 
   TrackSettings copyWith({
@@ -119,7 +109,6 @@ class TrackSettings {
     bool? bestLapVibration,
     bool? showDelta,
     String? trackColorKey,
-    int? sampleRateHz,
   }) =>
       TrackSettings(
         crossingRadiusM: (crossingRadiusM ?? this.crossingRadiusM)
@@ -133,20 +122,12 @@ class TrackSettings {
         bestLapVibration: bestLapVibration ?? this.bestLapVibration,
         showDelta: showDelta ?? this.showDelta,
         trackColorKey: trackColorKey ?? this.trackColorKey,
-        sampleRateHz: _snapSampleRate(sampleRateHz ?? this.sampleRateHz),
       );
-
-  /// 采样率只认 10 / 20 / 25 三档，其余值就近归档。
-  static int _snapSampleRate(int v) {
-    if (v <= 15) return 10;
-    if (v <= 22) return 20;
-    return 25;
-  }
 
   /// 本机存储键名（track_settings.json 的 JSON 键，固定不变）：
   /// crossing_radius_m / dwell_threshold_sec / dwell_speed_ms /
   /// sector_mode / best_lap_voice / best_lap_vibration / show_delta /
-  /// track_color / sample_rate_hz。
+  /// track_color。旧 sample_rate_hz 读取时直接忽略。
   Map<String, dynamic> toJson() => {
         'crossing_radius_m': crossingRadiusM,
         'dwell_threshold_sec': dwellThresholdSec,
@@ -156,7 +137,6 @@ class TrackSettings {
         'best_lap_vibration': bestLapVibration,
         'show_delta': showDelta,
         'track_color': trackColorKey,
-        'sample_rate_hz': sampleRateHz,
       };
 
   static TrackSettings fromJson(Map<String, dynamic> j) => TrackSettings(
@@ -174,8 +154,6 @@ class TrackSettings {
         bestLapVibration: (j['best_lap_vibration'] as bool?) ?? true,
         showDelta: (j['show_delta'] as bool?) ?? true,
         trackColorKey: (j['track_color'] as String?) ?? 'red',
-        sampleRateHz: _snapSampleRate(
-            (j['sample_rate_hz'] as num?)?.toInt() ?? 25),
       );
 
   /// 给 LapTimer 构造用的阈值（record 解构，字段名与 LapTimer 构造参数一致）。
@@ -433,28 +411,13 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
                   onTap: widget.onOpenSensorCalibration,
                 ),
                 const SizedBox(height: 8),
-                Text(s.t('定位采样率（待固件支持）', 'Location sample rate (pending firmware)'),
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(
-                  s.t(
-                    '仅保存设置，暂未生效：采样率要等固件支持——D1 走二进制协议，包格式待设备回来抓包确认后才解析；自研硬件尚未组装调试。当前仍按设备实际输出采样；手机 GPS 采样率不受本项控制。',
-                    'Saved only; not active yet. The rate needs firmware support: D1 uses a binary protocol whose packet format is pending on-device capture, and our own hardware is not assembled yet. Sampling continues at the device output rate; phone GPS rate is unaffected.',
-                  ),
-                  style: const TextStyle(color: Colors.grey, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final hz in [10, 20, 25])
-                      ChoiceChip(
-                        label: Text('$hz Hz'),
-                        selected: _s.sampleRateHz == hz,
-                        onSelected: (_) =>
-                            _apply(_s.copyWith(sampleRateHz: hz)),
-                      ),
-                  ],
+                ListTile(
+                  leading: const Icon(Icons.speed),
+                  title: Text(s.t('定位输出频率', 'Location output rate')),
+                  subtitle: Text(s.t(
+                    '自研硬件支持 10 / 20 / 25 Hz，请在设备中心 → 我的设备 → 设备详情中调整。手机 GPS 频率不受此设置控制。',
+                    'DriveTrack hardware supports 10 / 20 / 25 Hz. Adjust it in Devices → My device → Device details. Phone GPS rate is unaffected.',
+                  )),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -562,6 +525,5 @@ class _TrackSettingsPageState extends State<TrackSettingsPage> {
 /// - 连接状态不由本页维护：device_center.dart 的 ExternalGpsSection
 ///   在连接 / 断开事件里写 gps_source.dart 的 externalGpsStatus，
 ///   本页只监听显示。
-/// - sampleRateHz 目前只持久化到 track_settings.json，不接任何
-///   采样逻辑：D1 二进制包未解析、自研硬件未组装，固件支持后再由
-///   总协调接线；接线前不得去掉“待固件支持”的标注。
+/// - 自研硬件 GNSS 频率在设备详情的 FirmwareUpdateService.setGnssRate
+///   中真正下发；本页不再保存 sample_rate_hz 假设置。

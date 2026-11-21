@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
 import 'native.dart';
 import 'recorder.dart';
+import 'sensor_fusion.dart';
 
 /// 性能测试挑战（v1.0.2，第 7 项）。
 ///
@@ -56,6 +58,20 @@ extension ChallengeTypeLabel on ChallengeType {
   bool get requiresOwnHardware => this == ChallengeType.accel0400;
 }
 
+/// 加速成绩的标准大气估算（15°C、101325 Pa）。
+///
+/// 使用 ET²/ρ 守恒的一阶近似，只用于比较不同天气下的同一车辆；
+/// 它不是赛道认证成绩，也不会覆盖实测 [ChallengeRunRecord.durationMs]。
+int? normalizeAccelerationDurationMs({
+  required int durationMs,
+  required double airDensityKgM3,
+}) {
+  if (durationMs <= 0 || airDensityKgM3 <= 0) return null;
+  return (durationMs *
+          math.sqrt(standardAirDensityKgM3 / airDensityKgM3))
+      .round();
+}
+
 /// 一次 GPS 速度样本。时间用调用方给定的毫秒时间戳（Recorder 路径
 /// 用收到样本时的本地时间）；精度字段缺失时为 null，缺失不等于
 /// 精度好，见 [PerformanceChallengeEngine] 的未验证判定。
@@ -65,6 +81,8 @@ class SpeedSample {
     required this.speedKmh,
     this.hAccM,
     this.speedAccMps,
+    this.pressurePa,
+    this.temperatureC,
   });
 
   final int timeMs;
@@ -75,6 +93,10 @@ class SpeedSample {
 
   /// 速度精度（米/秒），null = 本次样本无精度信息。
   final double? speedAccMps;
+
+  /// 与本次速度同时读到的气压/温度；缺任一值都不做天气归一化。
+  final double? pressurePa;
+  final double? temperatureC;
 
   bool get hasAnyAccuracy => hAccM != null || speedAccMps != null;
 }
@@ -91,6 +113,9 @@ class ChallengeOutcome {
     this.invalidReason,
     this.maxSpeedKmh,
     this.badSampleCount = 0,
+    this.airDensityKgM3,
+    this.densityAltitudeM,
+    this.normalizedDurationMs,
   });
 
   final ChallengeType type;
@@ -99,6 +124,9 @@ class ChallengeOutcome {
   final String? invalidReason;
   final double? maxSpeedKmh;
   final int badSampleCount;
+  final double? airDensityKgM3;
+  final double? densityAltitudeM;
+  final int? normalizedDurationMs;
 
   bool get valid => phase == ChallengePhase.finished && durationMs != null;
 
@@ -153,6 +181,9 @@ class PerformanceChallengeEngine {
   bool _hasReachedTarget = false;
   bool _accuracySeenInRun = false;
   SpeedSample? _last;
+  double _airDensitySum = 0;
+  double _densityAltitudeSum = 0;
+  int _environmentCount = 0;
 
   void arm() {
     phase = ChallengePhase.armed;
@@ -164,6 +195,9 @@ class PerformanceChallengeEngine {
     _hasReachedTarget = false;
     _accuracySeenInRun = false;
     _last = null;
+    _airDensitySum = 0;
+    _densityAltitudeSum = 0;
+    _environmentCount = 0;
   }
 
   void cancel() {
@@ -255,6 +289,25 @@ class PerformanceChallengeEngine {
           _finish(s.timeMs);
         }
     }
+    if (startMs != null &&
+        (phase == ChallengePhase.running || phase == ChallengePhase.finished)) {
+      final pressure = s.pressurePa;
+      final temperature = s.temperatureC;
+      if (pressure != null && temperature != null) {
+        final density = airDensityKgM3(
+          pressurePa: pressure,
+          temperatureC: temperature,
+        );
+        if (density > 0) {
+          _airDensitySum += density;
+          _densityAltitudeSum += densityAltitudeM(
+            pressurePa: pressure,
+            temperatureC: temperature,
+          );
+          _environmentCount++;
+        }
+      }
+    }
     return phase;
   }
 
@@ -267,18 +320,36 @@ class PerformanceChallengeEngine {
     finishMs = atMs;
   }
 
-  ChallengeOutcome get outcome => ChallengeOutcome(
-        type: type,
-        phase: phase,
-        durationMs: (phase == ChallengePhase.finished &&
-                startMs != null &&
-                finishMs != null)
-            ? finishMs! - startMs!
-            : null,
-        invalidReason: invalidReason,
-        maxSpeedKmh: maxSpeedKmh,
-        badSampleCount: badSampleCount,
-      );
+  ChallengeOutcome get outcome {
+    final duration = phase == ChallengePhase.finished &&
+            startMs != null &&
+            finishMs != null
+        ? finishMs! - startMs!
+        : null;
+    final density = _environmentCount == 0
+        ? null
+        : _airDensitySum / _environmentCount;
+    final altitude = _environmentCount == 0
+        ? null
+        : _densityAltitudeSum / _environmentCount;
+    return ChallengeOutcome(
+      type: type,
+      phase: phase,
+      durationMs: duration,
+      invalidReason: invalidReason,
+      maxSpeedKmh: maxSpeedKmh,
+      badSampleCount: badSampleCount,
+      airDensityKgM3: density,
+      densityAltitudeM: altitude,
+      normalizedDurationMs:
+          duration != null && density != null && type != ChallengeType.brake1000
+              ? normalizeAccelerationDurationMs(
+                  durationMs: duration,
+                  airDensityKgM3: density,
+                )
+              : null,
+    );
+  }
 
   /// 刹停待命期的 UI 提示：是否已见 ≥ 100 km/h。
   bool get hasReachedTarget => _hasReachedTarget;
@@ -292,12 +363,18 @@ class ChallengeRunRecord {
     required this.createdMs,
     this.maxSpeedKmh,
     this.source = 'unknown',
+    this.airDensityKgM3,
+    this.densityAltitudeM,
+    this.normalizedDurationMs,
   });
 
   final ChallengeType type;
   final int durationMs;
   final int createdMs;
   final double? maxSpeedKmh;
+  final double? airDensityKgM3;
+  final double? densityAltitudeM;
+  final int? normalizedDurationMs;
 
   /// 'phone' / 'external' / 'unknown'：调用方传入的来源标注，
   /// 本页不推断（Recorder 路径无法区分时写 unknown，不冒充）。
@@ -310,6 +387,10 @@ class ChallengeRunRecord {
         'durationMs': durationMs,
         'createdMs': createdMs,
         if (maxSpeedKmh != null) 'maxSpeedKmh': maxSpeedKmh,
+        if (airDensityKgM3 != null) 'airDensityKgM3': airDensityKgM3,
+        if (densityAltitudeM != null) 'densityAltitudeM': densityAltitudeM,
+        if (normalizedDurationMs != null)
+          'normalizedDurationMs': normalizedDurationMs,
         'source': source,
       };
 
@@ -328,6 +409,9 @@ class ChallengeRunRecord {
       durationMs: durationMs,
       createdMs: createdMs,
       maxSpeedKmh: (json['maxSpeedKmh'] as num?)?.toDouble(),
+      airDensityKgM3: (json['airDensityKgM3'] as num?)?.toDouble(),
+      densityAltitudeM: (json['densityAltitudeM'] as num?)?.toDouble(),
+      normalizedDurationMs: (json['normalizedDurationMs'] as num?)?.toInt(),
       source: (json['source'] ?? 'unknown').toString(),
     );
   }
@@ -394,6 +478,7 @@ class PerformanceChallengePage extends StatefulWidget {
     this.recorder,
     this.speedSampleStream,
     this.hardwareCheck,
+    this.environmentReader,
   });
 
   /// 返回上一页的回调；不传则用 Navigator.maybePop。
@@ -414,6 +499,9 @@ class PerformanceChallengePage extends StatefulWidget {
   /// 用回调而不是 bool：页面停留期间用户可能才把硬件连上。
   final bool Function()? hardwareCheck;
 
+  /// 自研硬件最近一次气压/温度；没有气压计时返回 null，不归一化。
+  final BaroSample? Function()? environmentReader;
+
   @override
   State<PerformanceChallengePage> createState() =>
       _PerformanceChallengePageState();
@@ -429,6 +517,8 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
   double? _curSpeedKmh;
   double? _curHAccM;
   double? _curSpeedAccMps;
+  double? _curAirDensityKgM3;
+  double? _curDensityAltitudeM;
   int _badSamples = 0;
   String? _notice;
   StreamSubscription<SpeedSample>? _streamSub;
@@ -472,6 +562,7 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
     // 外接 GPS 未更新时），必须映射为 null，绝不能把 999 当成 999 米
     // 精度或当成有效精度用。
     final hAcc = rec.curHAcc == 999 ? null : rec.curHAcc;
+    final environment = widget.environmentReader?.call();
     _onSample(SpeedSample(
       timeMs: DateTime.now().millisecondsSinceEpoch,
       speedKmh: rec.curSpeed * 3.6,
@@ -479,6 +570,8 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
       // Recorder 未保留 sAcc：此处恒为 null，精度门槛只看 hAcc；
       // 若 hAcc 亦为 null，本次成绩将判未验证（见引擎注释）。
       speedAccMps: null,
+      pressurePa: environment?.pressurePa,
+      temperatureC: environment?.temperatureC,
     ));
   }
 
@@ -486,10 +579,19 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
     if (!mounted) return;
     final before = _engine.phase;
     final after = _engine.feed(s);
+    final pressure = s.pressurePa;
+    final temperature = s.temperatureC;
+    final density = pressure == null || temperature == null
+        ? null
+        : airDensityKgM3(pressurePa: pressure, temperatureC: temperature);
     setState(() {
       _curSpeedKmh = s.speedKmh;
       _curHAccM = s.hAccM;
       _curSpeedAccMps = s.speedAccMps;
+      _curAirDensityKgM3 = density != null && density > 0 ? density : null;
+      _curDensityAltitudeM = density != null && density > 0
+          ? densityAltitudeM(pressurePa: pressure!, temperatureC: temperature!)
+          : null;
       _badSamples = _engine.badSampleCount;
     });
     if (before != after &&
@@ -512,6 +614,9 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
       durationMs: outcome.durationMs!,
       createdMs: DateTime.now().millisecondsSinceEpoch,
       maxSpeedKmh: outcome.maxSpeedKmh,
+      airDensityKgM3: outcome.airDensityKgM3,
+      densityAltitudeM: outcome.densityAltitudeM,
+      normalizedDurationMs: outcome.normalizedDurationMs,
       // Recorder 路径无法可靠区分手机 / 外接来源时写 unknown，
       // 不冒充来源；调用方若能确定来源，可在后续版本经参数传入。
       source: 'unknown',
@@ -672,15 +777,18 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                 const SizedBox(height: 4),
                 const Text(performanceChallengeSafetyDetail,
                     style: TextStyle(color: Colors.white70, fontSize: 12)),
-                CheckboxListTile(
-                  value: _safetyConfirmed,
-                  onChanged: (v) =>
-                      setState(() => _safetyConfirmed = v ?? false),
-                  title: const Text('我已阅读并确认仅在封闭场地测试',
-                      style: TextStyle(color: Colors.white, fontSize: 13)),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: accent,
+                Material(
+                  type: MaterialType.transparency,
+                  child: CheckboxListTile(
+                    value: _safetyConfirmed,
+                    onChanged: (v) =>
+                        setState(() => _safetyConfirmed = v ?? false),
+                    title: const Text('我已阅读并确认仅在封闭场地测试',
+                        style: TextStyle(color: Colors.white, fontSize: 13)),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    activeColor: accent,
+                  ),
                 ),
               ],
             ),
@@ -791,6 +899,14 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                   '${_badSamples > 0 ? ' · 超门槛样本 $_badSamples 条' : ''}',
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  _curAirDensityKgM3 == null
+                      ? '空气密度 / 密度高度：等待气压与温度'
+                      : '空气密度 ${_curAirDensityKgM3!.toStringAsFixed(3)} kg/m³ · '
+                          '密度高度 ${_curDensityAltitudeM!.round()} m',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
                 const SizedBox(height: 12),
                 Row(children: [
                   Expanded(
@@ -839,6 +955,15 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                             : Colors.orangeAccent,
                         fontSize: 13),
                   ),
+                  if (_lastOutcome!.normalizedDurationMs != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '标准天气估算：${(_lastOutcome!.normalizedDurationMs! / 1000).toStringAsFixed(2)} 秒 · '
+                      '平均空气密度 ${_lastOutcome!.airDensityKgM3!.toStringAsFixed(3)} kg/m³ · '
+                      '密度高度 ${_lastOutcome!.densityAltitudeM!.round()} m（实测成绩不变）',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -891,6 +1016,17 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
                       Text('${_formatDate(r.createdMs)} · 来源 ${r.source}',
                           style: const TextStyle(
                               color: Colors.white54, fontSize: 12)),
+                      if (r.normalizedDurationMs != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            '标准天气估算 ${(r.normalizedDurationMs! / 1000).toStringAsFixed(2)} 秒 · '
+                            '空气密度 ${r.airDensityKgM3!.toStringAsFixed(3)} kg/m³ · '
+                            '密度高度 ${r.densityAltitudeM!.round()} m',
+                            style: const TextStyle(
+                                color: Colors.white54, fontSize: 12),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -927,12 +1063,22 @@ class _PerformanceChallengePageState extends State<PerformanceChallengePage> {
           child: Text(label,
               style: const TextStyle(color: Colors.white)),
         ),
-        Text(
-          best == null
-              ? '—'
-              : '${best.durationSeconds.toStringAsFixed(2)} 秒',
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              best == null
+                  ? '—'
+                  : '${best.durationSeconds.toStringAsFixed(2)} 秒',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            if (best?.normalizedDurationMs != null)
+              Text(
+                '标准天气估算 ${(best!.normalizedDurationMs! / 1000).toStringAsFixed(2)} 秒',
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+          ],
         ),
       ]),
     );

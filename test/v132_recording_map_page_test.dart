@@ -214,7 +214,7 @@ void main() {
       await _pumpPage(
         tester,
         const RecordingMapPage(
-          isTrack: false,
+          isTrack: true,
           centerline: [],
           start: null,
           finish: null,
@@ -358,18 +358,26 @@ void main() {
       final tileUrls = _tileUrls(tester);
       expect(tileUrls, isNotEmpty);
       for (final url in tileUrls) {
-        expect(url, startsWith('https://webrd01.is.autonavi.com/'));
+        // v1.8.1：高德深色影像路网，四台主机轮转。
+        expect(url, startsWith('https://webrd0'));
+        expect(url, contains('style=8'));
       }
       expect(find.text(amapTileAttribution), findsOneWidget);
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
       expect(painter.centerline, isEmpty);
       expect(painter.trail.length, 3);
-      // 街道仍走高德 GCJ-02，不能随赛道卫星图一起改掉。
-      expect(painter.trail.first.lat, closeTo(_gcj(_p1).lat, 1e-9));
-      expect(painter.trail.first.lon, closeTo(_gcj(_p1).lon, 1e-9));
-      expect(painter.curLat, closeTo(_gcj(_p2).lat, 1e-9));
-      expect(painter.curLon, closeTo(_gcj(_p2).lon, 1e-9));
+      // v1.8.1：叠加层坐标必须与当前底图源一致——高德源（GCJ-02）
+      // 做偏移，整幅切到 CARTO / OSM（WGS-84）时用回原始坐标。
+      // 测试环境的瓦片请求会失败并触发切源，故先看当前渲染的是哪一源。
+      final settledUrls = _tileUrls(tester);
+      final usesGcj = settledUrls.any((u) => u.contains('autonavi.com'));
+      final first = usesGcj ? _gcj(_p1) : _p1;
+      final cur = usesGcj ? _gcj(_p2) : _p2;
+      expect(painter.trail.first.lat, closeTo(first.lat, 1e-9));
+      expect(painter.trail.first.lon, closeTo(first.lon, 1e-9));
+      expect(painter.curLat, closeTo(cur.lat, 1e-9));
+      expect(painter.curLon, closeTo(cur.lon, 1e-9));
       expect(painter.start, isNull);
       expect(painter.finish, isNull);
       expect(painter.sectorPoints, isEmpty);

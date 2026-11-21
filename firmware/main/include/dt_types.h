@@ -13,6 +13,7 @@ typedef struct {
     float speed_kph;
     float course_deg;     // 航向，正北 0，顺时针
     float hdop;
+    int64_t ts_us;        // 统一时基：收到该帧时的 esp_timer 微秒数
 } dt_gps_sample_t;
 
 typedef struct {
@@ -20,6 +21,7 @@ typedef struct {
     float gx, gy, gz;     // 角速度，单位 deg/s
     float roll_deg;
     float pitch_deg;
+    int64_t ts_us;        // 统一时基：采样时的 esp_timer 微秒数
 } dt_imu_sample_t;
 
 typedef struct {

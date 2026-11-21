@@ -27,17 +27,19 @@ import 'perspective_projection.dart';
 import 'track_analysis_geo.dart';
 import 'video_map_gauge.dart';
 
-/// 回放倍速。
-enum ReplaySpeed { x1, x2, x4 }
+/// 回放倍速（0.5×–4×：慢放看走线，4× 快速过整段）。
+enum ReplaySpeed { x05, x1, x2, x4 }
 
 extension ReplaySpeedLabel on ReplaySpeed {
   double get factor => switch (this) {
+        ReplaySpeed.x05 => 0.5,
         ReplaySpeed.x1 => 1,
         ReplaySpeed.x2 => 2,
         ReplaySpeed.x4 => 4,
       };
 
   String get label => switch (this) {
+        ReplaySpeed.x05 => '0.5x',
         ReplaySpeed.x1 => '1x',
         ReplaySpeed.x2 => '2x',
         ReplaySpeed.x4 => '4x',
@@ -185,6 +187,10 @@ class _Replay3dViewState extends State<Replay3dView> {
   int _elapsedMs = 0;
   bool _playing = false;
   ReplaySpeed _speed = ReplaySpeed.x1;
+
+  /// 相机模式：true = 跟随车头（默认，与记录页一致）；false = 全程俯瞰
+  /// （整条轨迹固定入画，便于看整体走线）。
+  bool _follow = true;
   Timer? _timer;
 
   int get _totalMs => replayTotalMs(widget.points);
@@ -258,10 +264,23 @@ class _Replay3dViewState extends State<Replay3dView> {
         ),
       );
     }
+    final totalMs = _totalMs;
+    if (totalMs <= 0) {
+      return SizedBox(
+        height: widget.height,
+        child: const Center(
+          child: Text(
+            '轨迹时长无效，无法 3D 回放',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     final current = _current;
     final speedKmh =
         current == null ? null : videoGaugeSpeedKmh(current);
-    final totalMs = _totalMs;
+    final g = current == null ? null : current.combinedG;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -272,10 +291,11 @@ class _Replay3dViewState extends State<Replay3dView> {
             painter: _Replay3dPainter(
               points: widget.points,
               currentIndex: _index,
+              follow: _follow,
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Row(
           children: [
             IconButton(
@@ -299,26 +319,14 @@ class _Replay3dViewState extends State<Replay3dView> {
                     : null,
               ),
             ),
-            for (final s in ReplaySpeed.values)
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: ChoiceChip(
-                  key: ValueKey('replay-3d-speed-${s.label}'),
-                  label: Text(s.label),
-                  selected: _speed == s,
-                  onSelected: (_) => setState(() => _speed = s),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-          ],
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
             Text(
               '${replayTimeLabel(_elapsedMs)} / ${replayTimeLabel(totalMs)}',
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
+          ],
+        ),
+        Row(
+          children: [
             // 速度无效时不显示速度，不编数。
             if (speedKmh != null)
               Text(
@@ -328,6 +336,40 @@ class _Replay3dViewState extends State<Replay3dView> {
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+            if (g != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 10),
+                child: Text(
+                  'G ${g.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            const Spacer(),
+            ChoiceChip(
+              key: const ValueKey('replay-3d-follow'),
+              label: Text(_follow ? '跟随' : '全程'),
+              selected: _follow,
+              onSelected: (v) => setState(() => _follow = v),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            for (final s in ReplaySpeed.values)
+              ChoiceChip(
+                key: ValueKey('replay-3d-speed-${s.label}'),
+                label: Text(s.label),
+                selected: _speed == s,
+                onSelected: (_) => setState(() => _speed = s),
+                visualDensity: VisualDensity.compact,
               ),
           ],
         ),
@@ -340,7 +382,15 @@ class _Replay3dPainter extends CustomPainter {
   final List<TrackPoint> points;
   final int currentIndex;
 
-  _Replay3dPainter({required this.points, required this.currentIndex});
+  /// true = 跟随车头（相机随当前点旋转，与记录页 3D 同观感）；
+  /// false = 全程俯瞰（整条轨迹固定入画，北朝上）。
+  final bool follow;
+
+  _Replay3dPainter({
+    required this.points,
+    required this.currentIndex,
+    this.follow = true,
+  });
 
   bool _sameSideOutside(Offset a, Offset b, Size size) {
     const m = 60.0;
@@ -355,26 +405,85 @@ class _Replay3dPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(
         Offset.zero & size, Paint()..color = const Color(0xFF121212));
-    final center = replayProjectionCenter(points);
-    if (center == null) return;
-    final pxPerM = replayPxPerM(
-      size: size,
-      points: points,
-      centerLat: center.centerLat,
-      centerLon: center.centerLon,
-    );
+
+    final TrackPoint? cur =
+        (currentIndex >= 0 && currentIndex < points.length)
+            ? points[currentIndex]
+            : null;
+
+    late final double centerLat;
+    late final double centerLon;
+    late final double headingDeg;
+    late final bool headingUp;
+    late final double pxPerM;
+
+    if (follow && cur != null) {
+      // 跟随车头：相机中心放在车后 60 m（沿车头方向），车标落在画面
+      // 约 55% 高度，前方留出可视区。旧版固定整段入画，长直道会被
+      // 透视压缩成地平线上一条细线，看着像“没渲染出来”。
+      final h = videoGaugeHeadingDeg(points, currentIndex) ?? 0;
+      final c = forwardRightToLatLon(
+        centerLat: cur.lat,
+        centerLon: cur.lon,
+        headingDeg: h,
+        headingUp: true,
+        forward: -60,
+        right: 0,
+      );
+      centerLat = c.lat;
+      centerLon = c.lon;
+      headingDeg = h;
+      headingUp = true;
+      pxPerM = size.width / 170;
+    } else {
+      final center = replayProjectionCenter(points);
+      if (center == null) return;
+      centerLat = center.centerLat;
+      centerLon = center.centerLon;
+      headingDeg = 0;
+      headingUp = false;
+      pxPerM = replayPxPerM(
+        size: size,
+        points: points,
+        centerLat: centerLat,
+        centerLon: centerLon,
+      );
+    }
 
     Offset project(TrackPoint p) => perspectiveProjectLatLon(
           size: size,
-          centerLat: center.centerLat,
-          centerLon: center.centerLon,
-          headingDeg: 0,
-          headingUp: false,
+          centerLat: centerLat,
+          centerLon: centerLon,
+          headingDeg: headingDeg,
+          headingUp: headingUp,
           lat: p.lat,
           lon: p.lon,
           pxPerM: pxPerM,
           is3d: true,
         );
+
+    /// 场景坐标（前进 / 右偏，米）→ 屏幕点，网格与轨迹共用同一相机。
+    Offset scene(double forward, double right) {
+      final ll = forwardRightToLatLon(
+        centerLat: centerLat,
+        centerLon: centerLon,
+        headingDeg: headingDeg,
+        headingUp: headingUp,
+        forward: forward,
+        right: right,
+      );
+      return perspectiveProjectLatLon(
+        size: size,
+        centerLat: centerLat,
+        centerLon: centerLon,
+        headingDeg: headingDeg,
+        headingUp: headingUp,
+        lat: ll.lat,
+        lon: ll.lon,
+        pxPerM: pxPerM,
+        is3d: true,
+      );
+    }
 
     // 远处地平线微光（与记录页 3D 地图同式，固定屏幕位置的装饰）。
     final horizonY = size.height * perspectiveHorizonFraction;
@@ -390,22 +499,31 @@ class _Replay3dPainter extends CustomPainter {
       ).createShader(Rect.fromLTWH(0, horizonY - 30, size.width, 60));
     canvas.drawRect(Rect.fromLTWH(0, horizonY - 30, size.width, 60), glow);
 
-    // 透视网格地面（与记录页 3D 地图同式，风格化网格线，非路网）。
+    // 透视网格地面（跟随模式下随车头一起转，不再固定北向）。
     final gridPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.10)
       ..strokeWidth = 1;
-    for (final d in [0.0, 25.0, 50.0, 100.0, 200.0, 400.0, 800.0]) {
-      final y = perspectiveProject(
-              size: size, forward: d, right: 0, pxPerM: pxPerM, is3d: true)
-          .dy;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    for (final d in [
+      -100.0,
+      -50.0,
+      0.0,
+      25.0,
+      50.0,
+      100.0,
+      200.0,
+      400.0,
+      800.0
+    ]) {
+      final a = scene(d, -200);
+      final b = scene(d, 200);
+      if (_sameSideOutside(a, b, size)) continue;
+      canvas.drawLine(a, b, gridPaint);
     }
     for (final r in [-200.0, -100.0, -50.0, 0.0, 50.0, 100.0, 200.0]) {
       final path = Path();
       var first = true;
-      for (var d = 0.0; d <= 1000; d += 100) {
-        final p = perspectiveProject(
-            size: size, forward: d, right: r, pxPerM: pxPerM, is3d: true);
+      for (var d = -100.0; d <= 1000; d += 100) {
+        final p = scene(d, r);
         if (first) {
           path.moveTo(p.dx, p.dy);
           first = false;
@@ -461,14 +579,16 @@ class _Replay3dPainter extends CustomPainter {
     canvas.drawCircle(projected.last, 5, Paint()..color = Colors.white);
 
     // 当前位置：朝向箭头（相邻实测点算出，算不出时只画圆点、不编方向）
-    // + 白点红环（与视频地图仪表同式）。
+    // + 白点红环（与视频地图仪表同式）。跟随模式下场景已按车头旋转，
+    // 箭头固定朝上（-90°），避免二次旋转。
     if (currentIndex >= 0 && currentIndex < points.length) {
       final pos = projected[currentIndex];
       final heading = videoGaugeHeadingDeg(points, currentIndex);
-      if (heading != null) {
-        final rad = heading * math.pi / 180;
-        final dir = Offset(math.sin(rad), -math.cos(rad));
-        final angle = math.atan2(dir.dy, dir.dx);
+      if (follow || heading != null) {
+        final angle = follow
+            ? -math.pi / 2
+            : math.atan2(-math.cos(heading! * math.pi / 180),
+                math.sin(heading * math.pi / 180));
         canvas.save();
         canvas.translate(pos.dx, pos.dy);
         canvas.rotate(angle);
@@ -494,5 +614,7 @@ class _Replay3dPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _Replay3dPainter old) =>
-      old.points != points || old.currentIndex != currentIndex;
+      old.points != points ||
+      old.currentIndex != currentIndex ||
+      old.follow != follow;
 }

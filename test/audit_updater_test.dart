@@ -54,9 +54,15 @@ void main() {
     });
 
     test('check() returns error (not a wrong-ABI package) for 32-bit device on legacy manifest', () async {
+      // 远端版本必须高于当前版本，否则会先走“已是最新”分支，测不到 ABI 判定。
+      // 1.8.0 起当前 versionCode 为 5000，这里显式抬高远端版本。
+      final newerLegacy = {
+        ...legacy,
+        'versionCode': UpdateService.currentVersionCode + 1,
+      };
       final server = await HttpServer.bind('127.0.0.1', 0);
       server.listen((req) async {
-        req.response.write(jsonEncode(legacy));
+        req.response.write(jsonEncode(newerLegacy));
         await req.response.close();
       });
       final r = await UpdateService.check(

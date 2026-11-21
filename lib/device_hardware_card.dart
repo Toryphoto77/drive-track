@@ -614,12 +614,91 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
   bool _reachable = false;
   bool _poweredOff = false;
   bool _busy = false;
+  bool _backhauling = false;
+  String? _backhaulText;
   int? _rssi;
   FirmwareDeviceInfo? _info;
   DeviceRuntimeStatus? _status;
+  bool _hotspotJoining = false;
+  String? _hotspotNote;
+  bool _hotspotOk = false;
+  // 自动重试：设备刚开机时热点往往还没起来，只试一次必然失败。
+  // 失败后按 5s / 15s / 30s 退避重试，最多 4 次自动请求；
+  // 等待系统确认框超时不重复弹框，交给用户手动点。
+  int _hotspotAutoAttempts = 0;
+  Timer? _hotspotRetryTimer;
+  bool _hotspotSyncing = false;
+  // 成功序号：轮询查询与“刚连上”可能并发，序号变化说明查询结果已过期，
+  // 不能拿旧的“未连接”把刚成功的状态又改回去。
+  int _hotspotSuccessSeq = 0;
+  // 热点连上后只自动拉一次蓝牙，避免失败时反复重连。
+  bool _bleAutoConnectTried = false;
+  bool _autoBackhaulTried = false;
+  int? _settingGnssRateHz;
+
+  static const int _hotspotMaxAutoAttempts = 4;
+  static const List<Duration> _hotspotRetryDelays = [
+    Duration(seconds: 5),
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+  ];
 
   bool get _ownHardware => isDriveTrackHardwareName(widget.deviceName);
   S get _s => S.of(context);
+
+  /// 把设备 SD 上的整场记录逐个回传到 App 私有目录。
+  /// 已存在同名文件时覆盖；任一场失败即停止并显示原因，
+  /// 不把部分成功说成全部成功。
+  Future<void> _backhaulAll() async {
+    if (_backhauling) return;
+    final s = _s;
+    setState(() {
+      _backhauling = true;
+      _backhaulText = null;
+    });
+    try {
+      final files = await _service.listRecordings();
+      if (files.isEmpty) {
+        if (mounted) {
+          setState(() => _backhaulText =
+              s.t('设备上没有可回传的记录。', 'No recordings on device.'));
+        }
+        return;
+      }
+      final directory =
+          Directory('${await Native.getFilesDir()}/backhaul');
+      var done = 0;
+      for (final file in files) {
+        final target = File('${directory.path}/${file.name}');
+        // 已回传且大小一致的文件直接跳过，回到 pits 重复打开不会重复拉取。
+        try {
+          if (await target.exists() && await target.length() == file.size) {
+            done++;
+            continue;
+          }
+        } catch (_) {}
+        await _service.downloadRecording(file.name, directory: directory);
+        done++;
+        if (mounted) {
+          setState(() => _backhaulText = s.t(
+              '已同步 $done / ${files.length}',
+              'Synced $done / ${files.length}'));
+        }
+      }
+      if (mounted) {
+        setState(() => _backhaulText = s.t(
+            '已同步 $done 个文件到 ${directory.path}',
+            'Synced $done file(s) to ${directory.path}'));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _backhaulText =
+            s.t('回传失败：$e', 'Backhaul failed: $e'));
+      }
+    } finally {
+      if (mounted) setState(() => _backhauling = false);
+    }
+  }
 
   @override
   void initState() {
@@ -640,20 +719,162 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
     }, onError: (_) {});
     _refresh();
     _timer = Timer.periodic(widget.pollInterval, (_) => _refresh());
+    // 进入设备中心就尝试连设备热点，省去用户去系统 Wi-Fi 里翻找。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoJoinHotspot());
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _hotspotRetryTimer?.cancel();
     _dataSub?.cancel();
     if (widget.service == null) _service.close();
+    // 解除热点绑定，离开设备中心后恢复手机默认上网网络（更新检查等）。
+    unawaited(Native.disconnectDeviceHotspot());
     super.dispose();
+  }
+
+  /// 自动连接设备热点。manual=true 表示用户主动点“重新连接”，
+  /// 会清空重试计数并立即再请求一次。
+  Future<void> _autoJoinHotspot({bool manual = false}) async {
+    if (!_ownHardware || _hotspotJoining) return;
+    if (manual) {
+      _hotspotAutoAttempts = 0;
+      _hotspotRetryTimer?.cancel();
+      _hotspotRetryTimer = null;
+      if (mounted) setState(() => _hotspotNote = null);
+    } else if (_hotspotAutoAttempts >= _hotspotMaxAutoAttempts) {
+      if (mounted && _hotspotNote == null) {
+        setState(() => _hotspotNote = '自动连接未成功，可点下方按钮重试');
+      }
+      return;
+    }
+    // 用户可能已在系统 Wi-Fi 里手动连上设备热点，先按当前 SSID 直接判定。
+    try {
+      final ssid = await Native.getConnectedWifiSsid();
+      if (ssid != null &&
+          ssid.startsWith(FirmwareUpdateService.accessPointPrefix)) {
+        _markHotspotConnected();
+        return;
+      }
+    } catch (_) {}
+    if (!mounted || _hotspotJoining) return;
+    _hotspotAutoAttempts++;
+    setState(() => _hotspotJoining = true);
+    Map<String, dynamic> r;
+    try {
+      r = await Native.connectDeviceHotspot(
+        password: FirmwareUpdateService.accessPointPassword,
+      );
+    } catch (e) {
+      r = {'ok': false, 'reason': e.toString()};
+    }
+    if (!mounted) return;
+    final ok = r['ok'] == true;
+    final reason = (r['reason'] ?? '').toString();
+    if (ok) {
+      _markHotspotConnected();
+      return;
+    }
+    setState(() {
+      _hotspotJoining = false;
+      _hotspotOk = false;
+      _hotspotNote = switch (reason) {
+        'unsupported' => '系统版本较低，请在 Wi-Fi 设置里连接设备热点',
+        'wifi_off' => '手机 Wi-Fi 未开启，请先打开 Wi-Fi',
+        'unavailable' => '没搜到设备热点，确认设备已开机并在附近',
+        'timeout' => '等待系统确认超时，可重试',
+        _ => '热点未连接，可重试',
+      };
+    });
+    // 没搜到时自动退避重试；等待用户点系统确认框超时的场景不重复弹框，
+    // 原生请求仍然有效，稍后确认成功由轮询补判。
+    if (reason != 'timeout' &&
+        reason != 'unsupported' &&
+        _hotspotAutoAttempts < _hotspotMaxAutoAttempts) {
+      _scheduleHotspotRetry();
+    }
+  }
+
+  void _scheduleHotspotRetry() {
+    if (_hotspotRetryTimer != null || !mounted) return;
+    final index =
+        (_hotspotAutoAttempts - 1).clamp(0, _hotspotRetryDelays.length - 1);
+    _hotspotRetryTimer = Timer(_hotspotRetryDelays[index], () {
+      _hotspotRetryTimer = null;
+      if (mounted && !_hotspotOk) unawaited(_autoJoinHotspot());
+    });
+  }
+
+  /// 热点确认可用：更新状态、补一次设备探测，并自动拉起蓝牙。
+  void _markHotspotConnected() {
+    _hotspotRetryTimer?.cancel();
+    _hotspotRetryTimer = null;
+    _hotspotAutoAttempts = 0;
+    _hotspotSuccessSeq++;
+    if (mounted && (!_hotspotOk || _hotspotNote != null || _hotspotJoining)) {
+      setState(() {
+        _hotspotJoining = false;
+        _hotspotOk = true;
+        _hotspotNote = null;
+      });
+    }
+    unawaited(_refresh());
+    unawaited(_autoConnectBleAfterHotspot());
+  }
+
+  /// 热点连上后自动连接蓝牙：设备热点与 BLE 是两条链路，
+  /// 用户不该再回设备中心手动点一次“连接”。
+  Future<void> _autoConnectBleAfterHotspot() async {
+    if (_connected || _bleAutoConnectTried) return;
+    final connect = widget.onConnect;
+    if (connect == null) return;
+    _bleAutoConnectTried = true;
+    try {
+      await connect();
+    } catch (_) {
+      // 热点仍在时允许下一轮轮询再补一次，不做无限重连。
+      _bleAutoConnectTried = false;
+    }
+  }
+
+  /// 轮询原生热点状态：系统确认框晚点被点、或热点中途掉线，
+  /// 都在这里同步，避免界面一直停在“尚未连接”。
+  Future<void> _syncHotspotState() async {
+    if (!_ownHardware || _hotspotSyncing) return;
+    _hotspotSyncing = true;
+    try {
+      final seqAtStart = _hotspotSuccessSeq;
+      final available = await Native.isDeviceHotspotConnected();
+      if (!mounted) return;
+      if (available && !_hotspotOk) {
+        _markHotspotConnected();
+      } else if (!available &&
+          _hotspotOk &&
+          seqAtStart == _hotspotSuccessSeq) {
+        // 查询期间刚连上过（序号变了）就忽略这次过期结果。
+        setState(() {
+          _hotspotOk = false;
+          _hotspotNote = '设备热点已断开，正在重连…';
+        });
+        _bleAutoConnectTried = false;
+        if (!_hotspotJoining &&
+            _hotspotAutoAttempts < _hotspotMaxAutoAttempts) {
+          unawaited(_autoJoinHotspot());
+        }
+      }
+    } finally {
+      _hotspotSyncing = false;
+    }
   }
 
   Future<void> _refresh() async {
     if (_refreshing || !mounted) return;
     _refreshing = true;
     try {
+      // 先对齐热点真实状态：确认框晚点被点、热点掉线都靠这里补判。
+      // 不阻塞设备信息探测，两条链路互不等待。
+      if (_ownHardware) unawaited(_syncHotspotState());
       final rssi = _connected ? await Native.readBleRssi() : null;
       if (!_ownHardware) {
         if (mounted) setState(() => _rssi = rssi);
@@ -672,6 +893,17 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
         _info = info;
         _status = status;
       });
+      // 回到 pits 连上热点后自动同步一次：SD 上有整场记录才触发，
+      // 失败只显示原因，不阻塞设备信息轮询。
+      if (info != null &&
+          status != null &&
+          status.sdMounted &&
+          status.supportsFileBackhaul &&
+          !_backhauling &&
+          !_autoBackhaulTried) {
+        _autoBackhaulTried = true;
+        unawaited(_backhaulAll());
+      }
     } finally {
       _refreshing = false;
     }
@@ -713,6 +945,55 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
     false => _s.t('未就绪 / 异常', 'Not ready'),
     null => '—',
   };
+
+  /// 自动标定状态：true=已完成，false=进行中/未完成，null=旧固件不报。
+  String _calText(bool? done) => switch (done) {
+    true => _s.t('已完成（自动）', 'Done (auto)'),
+    false => _s.t('进行中 / 未完成', 'Pending'),
+    null => '—',
+  };
+
+  Color? _calColor(bool? done) => switch (done) {
+    true => Colors.greenAccent,
+    false => Colors.amberAccent,
+    null => null,
+  };
+
+  /// 三轴读数：任一轴缺失则整体显示“—”，不把缺失补成 0。
+  String _vectorText(List<double?> values, String unit) {
+    if (values.any((v) => v == null)) return '—';
+    return values.map((v) => v!.toStringAsFixed(2)).join(' / ') + unit;
+  }
+
+  String _scalarText(double? value, String unit, {int digits = 1}) {
+    if (value == null) return '—';
+    return value.toStringAsFixed(digits) + unit;
+  }
+
+  Future<void> _setGnssRate(int hz) async {
+    if (_settingGnssRateHz != null || _status?.supportsGnssRate != true) return;
+    setState(() => _settingGnssRateHz = hz);
+    try {
+      await _service.setGnssRate(hz);
+      if (!mounted) return;
+      showAppNotice(
+        context,
+        _s.t('定位频率已设为 $hz Hz', 'GNSS rate set to $hz Hz'),
+        AppNoticeKind.success,
+      );
+      await _refresh();
+    } catch (error) {
+      if (mounted) {
+        showAppNotice(
+          context,
+          _s.t('频率设置失败：$error', 'Failed to set GNSS rate: $error'),
+          AppNoticeKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _settingGnssRateHz = null);
+    }
+  }
 
   Future<void> _toggleConnection() async {
     if (_busy) return;
@@ -1031,10 +1312,62 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
               s.t('传感器状态', 'Sensors'),
               Column(
                 children: [
-                  _row('IMU（BMI088）', _sensorText(_status?.imuReady)),
                   _row(
-                    s.t('气压计（BMP388/390）', 'Barometer (BMP388/390)'),
+                    s.t('IMU 状态', 'IMU status'),
+                    _sensorText(_status?.imuReady),
+                  ),
+                  _row(
+                    s.t('自动标定', 'Auto calibration'),
+                    _calText(_status?.imuCalibrated),
+                    valueColor: _calColor(_status?.imuCalibrated),
+                  ),
+                  _row(
+                    s.t('加速度 X/Y/Z', 'Acceleration X/Y/Z'),
+                    _vectorText([
+                      _status?.imuAx,
+                      _status?.imuAy,
+                      _status?.imuAz,
+                    ], ' g'),
+                  ),
+                  _row(
+                    s.t('角速度 X/Y/Z', 'Angular rate X/Y/Z'),
+                    _vectorText([
+                      _status?.imuGx,
+                      _status?.imuGy,
+                      _status?.imuGz,
+                    ], ' °/s'),
+                  ),
+                  _row(
+                    s.t('姿态 横滚/俯仰', 'Attitude roll/pitch'),
+                    _vectorText([
+                      _status?.imuRollDeg,
+                      _status?.imuPitchDeg,
+                    ], '°'),
+                  ),
+                  _row(
+                    s.t('气压计状态', 'Barometer status'),
                     _sensorText(_status?.baroReady),
+                  ),
+                  _row(
+                    s.t('自动零点标定', 'Auto zero calibration'),
+                    _calText(_status?.baroCalibrated),
+                    valueColor: _calColor(_status?.baroCalibrated),
+                  ),
+                  _row(
+                    s.t('气压计温度', 'Barometer temperature'),
+                    _scalarText(_status?.baroTempC, ' °C', digits: 1),
+                  ),
+                  _row(
+                    s.t('气压', 'Pressure'),
+                    _scalarText(_status?.baroPressPa, ' Pa', digits: 0),
+                  ),
+                  _row(
+                    s.t('气压高度', 'Barometric altitude'),
+                    _scalarText(_status?.baroAltM, ' m', digits: 1),
+                  ),
+                  _row(
+                    s.t('相对零点高差', 'Relative altitude'),
+                    _scalarText(_status?.baroRelAltM, ' m', digits: 2),
                   ),
                 ],
               ),
@@ -1063,6 +1396,43 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
                             '${_status!.satellites}',
                           ),
                   ),
+                  _row(
+                    s.t('定位输出频率', 'GNSS output rate'),
+                    _status?.gnssRateHz == null
+                        ? '—'
+                        : '${_status!.gnssRateHz} Hz',
+                  ),
+                  if (_status?.supportsGnssRate == true)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 4),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final hz in const [10, 20, 25])
+                            ChoiceChip(
+                              label: Text('$hz Hz'),
+                              selected: _status?.gnssRateHz == hz,
+                              onSelected: _settingGnssRateHz == null
+                                  ? (_) => _setGnssRate(hz)
+                                  : null,
+                            ),
+                        ],
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, bottom: 4),
+                      child: Text(
+                        s.t(
+                          '当前固件不支持在线调频，请升级固件；硬件最高 25 Hz。',
+                          'Online rate control needs a firmware update. Hardware supports up to 25 Hz.',
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
                   _row(
                     s.t('记录状态', 'Recording'),
                     _status?.recording == true
@@ -1110,6 +1480,74 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
               ),
             ),
             _section(s.t('硬件存储', 'Hardware storage'), _storageSection()),
+            if (_status?.sdMounted == true)
+              _section(
+                s.t('记录回传', 'Recordings'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.t(
+                        '设备在 SD 卡上逐场完整记录，手机没电或没连蓝牙时也不中断。'
+                        '连接设备热点后可把整场原始数据回传到手机。',
+                        'Every session is recorded in full on the device microSD, '
+                        'even without the phone. Join the hotspot to pull the '
+                        'raw recordings to the phone.',
+                      ),
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11.5,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed:
+                            (_backhauling ||
+                                !_reachable ||
+                                _status?.supportsFileBackhaul != true)
+                            ? null
+                            : _backhaulAll,
+                        icon: const Icon(Icons.download_rounded, size: 18),
+                        label: Text(
+                          _backhauling
+                              ? s.t('正在回传…', 'Receiving…')
+                              : s.t('回传全部记录', 'Receive all recordings'),
+                        ),
+                      ),
+                    ),
+                    if (_status?.supportsFileBackhaul != true)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          s.t(
+                            '当前固件不支持回传，请升级固件。',
+                            'Current firmware has no backhaul API. Update firmware.',
+                          ),
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        ),
+                      )
+                    else if (_backhaulText != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          _backhaulText!,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11.5,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            _hotspotSection(),
             _section(
               s.t('电源管理', 'Power'),
               Column(
@@ -1241,6 +1679,58 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
         ],
       ],
     );
+  }
+
+  Widget _hotspotSection() {
+    final s = _s;
+    return _section(
+      s.t('设备热点', 'Device hotspot'),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _row(
+            s.t('连接状态', 'Connection'),
+            _hotspotJoining
+                ? s.t('正在连接…', 'Connecting…')
+                : (_hotspotOk
+                      ? s.t('已连接（自动）', 'Connected (auto)')
+                      : (_hotspotNote ??
+                          s.t('尚未连接', 'Not connected'))),
+            valueColor: _hotspotOk
+                ? Colors.greenAccent
+                : (_hotspotNote == null ? null : Colors.amberAccent),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            s.t(
+              '进入本页会自动连接 ${FirmwareUpdateService.accessPointPrefix}-XXXX 热点；'
+              'Android 10 及以上首次会弹一次系统确认框，点“连接”即可。'
+              '没搜到会自动重试，热点连上后蓝牙也会自动重连。',
+              'The ${FirmwareUpdateService.accessPointPrefix}-XXXX hotspot is joined '
+              'automatically (Android 10+ shows a one-time confirmation). '
+              'It retries when not found, and Bluetooth reconnects once the '
+              'hotspot is up.',
+            ),
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          if (!_hotspotOk) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _hotspotJoining ? null : _retryHotspot,
+                icon: const Icon(Icons.wifi, size: 18),
+                label: Text(s.t('重新连接设备热点', 'Reconnect hotspot')),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _retryHotspot() async {
+    await _autoJoinHotspot(manual: true);
   }
 
   Widget _section(String title, Widget child) => Padding(

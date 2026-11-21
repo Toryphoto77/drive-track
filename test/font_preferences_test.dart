@@ -34,6 +34,29 @@ void main() {
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
+  test('账号 ID 新生成为 8 位数字，旧的超长 ID 自动迁移', () async {
+    final fresh = AppPrefs();
+    await fresh.load();
+    expect(fresh.userId, matches(RegExp(r'^\d{8}$')));
+
+    await File('${tempDir.path}/profile.json').writeAsString(
+      jsonEncode({'userId': '1763539200123456'}),
+    );
+    final migrated = AppPrefs();
+    await migrated.load();
+    expect(migrated.userId, '00123456');
+    expect(migrated.userId.length, 8);
+  });
+
+  test('不超过 8 位的纯数字账号 ID 保持不变', () async {
+    await File(
+      '${tempDir.path}/profile.json',
+    ).writeAsString(jsonEncode({'userId': '123456'}));
+    final prefs = AppPrefs();
+    await prefs.load();
+    expect(prefs.userId, '123456');
+  });
+
   test(
     'default and persisted Latin font use the two bundled families',
     () async {

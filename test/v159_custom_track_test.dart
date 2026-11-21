@@ -68,6 +68,46 @@ void main() {
       expect(external3DFixReady(null, 9000, nowMs: 10000), isFalse);
     });
 
+    test('自研硬件 NDJSON 定位带 fixMode=3，可用于现场实测', () {
+      // 自研固件不发 GSA（GSA/GSV 已在模块侧关闭），fixMode 只能来自
+      // 私有协议；此前一律为 null，导致已连接硬件仍点不了“开始 3D 定位实测”。
+      final feed = BleDiyGpsFeed();
+      final fix = feed.feedLine(
+        '{"t":"gps","fix":1,"sats":18,"lat":31.2304,"lon":121.4737,'
+        '"alt":12.5,"spd":0.0,"cog":0.0,"hdop":0.8,"ts":12345678}',
+      );
+      expect(fix, isNotNull);
+      expect(fix!.fixMode, 3);
+      expect(fix.fixQuality, isNotNull);
+      expect(fix.deviceTsUs, 12345678);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      expect(external3DFixReady(fix, now), isTrue);
+    });
+
+    test('NDJSON 无定位时不得伪造 3D', () {
+      final feed = BleDiyGpsFeed();
+      final fix = feed.feedLine(
+        '{"t":"gps","fix":0,"sats":3,"lat":0,"lon":0,"alt":0}',
+      );
+      expect(fix, isNull);
+      expect(external3DFixReady(feed.latest, 0), isFalse);
+    });
+
+    test('NDJSON 模式下忽略并行 NMEA，避免频率与轨迹翻倍', () {
+      final feed = BleDiyGpsFeed();
+      final fix = feed.feedLine(
+        '{"t":"gps","fix":1,"sats":18,"lat":31.2304,"lon":121.4737,'
+        '"alt":12.5,"spd":0,"cog":0,"hdop":0.8}',
+      );
+      expect(fix, isNotNull);
+      final accepted = feed.acceptedCount;
+      final ignored = feed.feedLine(
+        r'$GNGGA,100000.00,3113.8240,N,12128.4220,E,1,18,0.8,12.5,M,0.0,M,,*4C',
+      );
+      expect(ignored, same(fix));
+      expect(feed.acceptedCount, accepted);
+    });
+
     test('卡丁必须选择同时有中心线和起终点的赛道', () {
       expect(kartTrackProblem(null), isNotNull);
       expect(

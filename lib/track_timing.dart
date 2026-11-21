@@ -41,16 +41,34 @@
 import 'dart:math' as math;
 
 /// 计时用的最小轨迹点：时间（ms）、经纬度、速度（m/s）。
+///
+/// 以下传感器字段均可选：不提供时圈速判定行为与旧版本完全一致，
+/// 绝不把缺失值当成 0。提供后才参与过线辅助判定。
 class TimedPoint {
   final int timeMs;
   final double lat;
   final double lon;
   final double speed;
+
+  /// 车身纵向加速度（g，正 = 加速）。
+  final double? longG;
+
+  /// 姿态角（度），用于过滤翻车/装歪导致的异常点。
+  final double? rollDeg;
+  final double? pitchDeg;
+
+  /// 气压/融合高度（m），用于校验过线点高度一致性。
+  final double? altM;
+
   const TimedPoint({
     required this.timeMs,
     required this.lat,
     required this.lon,
     required this.speed,
+    this.longG,
+    this.rollDeg,
+    this.pitchDeg,
+    this.altM,
   });
 }
 
@@ -367,6 +385,22 @@ class LapTimer {
   /// 中心线是否按行车反方向排序（起终点 / 分段线与维修区线
   /// 的切线已取反纠正；见 [_tangentsReversed]）。
   final bool _centerlineReversed;
+
+  /// 过线辅助判定阈值（起终点线专用）。
+  /// - [assistAccelJumpG]：补判所需的 IMU 纵向加速度单步突变（g）；
+  /// - [maxAttitudeJumpDeg]：roll / pitch 单步跳变上限，超过视为不可信；
+  /// - [maxBaroJumpM]：与上次有效过线高度的最大允许差，超过视为多路径；
+  /// - [assistRadiusFactor]：补判时线段到计时线的距离上限占半径比例。
+  static const double assistAccelJumpG = 0.3;
+  static const double maxAttitudeJumpDeg = 25;
+  static const double maxBaroJumpM = 8;
+  static const double assistRadiusFactor = 0.6;
+
+  /// 上一次有效过线时的气压/融合高度；null = 尚无可比基准。
+  double? _lastCrossingAltM;
+
+  /// 最近一次过线辅助判定说明（拒绝原因或补判依据），供界面提示。
+  String? lastCrossingNote;
 
   LapTimer({
     required this.startFinish,
@@ -805,7 +839,8 @@ class LapTimer {
 
     // 3) 起终点穿越判定：有切线时为越线检测（返回插值过线时刻），
     // 无切线时回落半径法（返回当前点时刻，与旧行为一致）。
-    final crossMs = _crossingTimeMs(_boundaries[0], prev, p);
+    final crossMs =
+        _crossingTimeMs(_boundaries[0], prev, p, assist: true);
     // 离开起终点 2 倍半径之外后，才重新获得穿越资格。
     if (_distanceM(p, startFinish) > crossingRadiusM * 2) {
       _canCross = true;
@@ -816,11 +851,13 @@ class LapTimer {
         // 第一次穿越：发车圈结束，开始第 1 圈计时。
         _startLap(crossMs, 1);
         _canCross = false;
+        _lastCrossingAltM = p.altM ?? _lastCrossingAltM;
       } else if (crossMs - _lapStartMs! >= minLapMs) {
         // 完成一圈，立即开始下一圈（穿越点归属新圈）。
         _closeLap(crossMs);
         _startLap(crossMs, _currentLapNumber + 1);
         _canCross = false;
+        _lastCrossingAltM = p.altM ?? _lastCrossingAltM;
       }
       // 30 秒内的再次穿越：忽略（GPS 抖动），不关闭、不重启。
     }
@@ -869,19 +906,78 @@ class LapTimer {
   /// - 有切线：越线检测（见 [_lineCrossingMs]），时刻为两点间插值；
   /// - 无切线：半径法回落（线段到边界点最短距离 < 半径即命中），
   ///   时刻取当前点时间，与 v1.2.13 及之前行为一致。
-  int? _crossingTimeMs(_Boundary b, TimedPoint? prev, TimedPoint cur) {
+  ///
+  /// [assist] 为 true 时（仅起终点线）叠加传感器辅助：
+  /// 1. 几何命中后校验气压高度一致性，突变视为多路径并拒绝；
+  /// 2. 几何未命中但贴近计时线、IMU 纵向加速度突变、姿态稳定、
+  ///    气压一致时补判过线，降低漏触发。
+  int? _crossingTimeMs(_Boundary b, TimedPoint? prev, TimedPoint cur,
+      {bool assist = false}) {
+    int? hit;
     if (b.tangent == null) {
-      final hit = prev == null
+      final near = prev == null
           ? _distanceM(cur, b.point) < crossingRadiusM
           : _segmentDistanceM(prev, cur, b.point) < crossingRadiusM;
-      return hit ? cur.timeMs : null;
-    }
-    if (prev == null) {
+      hit = near ? cur.timeMs : null;
+    } else if (prev == null) {
       // 首点无法判定越线（无前一点）：只记下带符号距离，供下一段比较。
       b.prevSignedM = _signedDistanceM(cur, b.point, b.tangent!);
+      hit = null;
+    } else {
+      hit = _lineCrossingMs(b, prev, cur);
+    }
+    if (!assist) return hit;
+
+    if (hit != null) {
+      if (_baroInconsistent(cur)) {
+        lastCrossingNote = '气压高度突变，疑似多路径，本次过线未计入';
+        return null;
+      }
+      lastCrossingNote = null;
+      return hit;
+    }
+    return _assistedCrossingMs(b, prev, cur);
+  }
+
+  /// 气压高度一致性：与上一次有效过线高度相差超过
+  /// [maxBaroJumpM] 时视为 GPS 多路径跳点。缺数据时不判。
+  bool _baroInconsistent(TimedPoint cur) {
+    final alt = cur.altM;
+    final last = _lastCrossingAltM;
+    return alt != null && last != null && (alt - last).abs() > maxBaroJumpM;
+  }
+
+  /// 姿态跳变：roll / pitch 单步变化超过阈值，说明点不可信。
+  bool _attitudeJumped(TimedPoint a, TimedPoint b) {
+    final r0 = a.rollDeg, r1 = b.rollDeg;
+    final p0 = a.pitchDeg, p1 = b.pitchDeg;
+    if (r0 != null && r1 != null && (r1 - r0).abs() > maxAttitudeJumpDeg) {
+      return true;
+    }
+    if (p0 != null && p1 != null && (p1 - p0).abs() > maxAttitudeJumpDeg) {
+      return true;
+    }
+    return false;
+  }
+
+  /// 漏触发补判：GPS 未变号，但线段已贴近计时线，且 IMU 纵向
+  /// 加速度出现突变、姿态稳定、气压高度一致。缺任一证据都不补判。
+  int? _assistedCrossingMs(_Boundary b, TimedPoint? prev, TimedPoint cur) {
+    final t = b.tangent;
+    if (prev == null || t == null) return null;
+    if (_segmentDistanceM(prev, cur, b.point) >=
+        crossingRadiusM * assistRadiusFactor) {
       return null;
     }
-    return _lineCrossingMs(b, prev, cur);
+    if (!_movingForward(prev, cur, t)) return null;
+    final g0 = prev.longG, g1 = cur.longG;
+    if (g0 == null || g1 == null || (g1 - g0).abs() < assistAccelJumpG) {
+      return null;
+    }
+    if (_attitudeJumped(prev, cur)) return null;
+    if (_baroInconsistent(cur)) return null;
+    lastCrossingNote = 'GPS 未变号，IMU/姿态/气压辅助确认过线';
+    return cur.timeMs;
   }
 
   /// 越线检测：连续两定位点到计时线的带符号距离变号，且位移方向

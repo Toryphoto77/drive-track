@@ -193,7 +193,15 @@ void main() {
     await pushBleData({'type': 'disconnected'});
     await tester.pump();
 
-    await tester.tap(find.widgetWithText(TextButton, '连接'));
+    expect(find.widgetWithText(FilledButton, '连接'), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.text('查看设备详情与管理'),
+        matching: find.byType(ButtonStyleButton),
+      ),
+      findsNothing,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '连接'));
     await tester.pump();
 
     final connect = calls.lastWhere((call) => call.method == 'connectBle');

@@ -51,18 +51,23 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'ai_analysis_service.dart';
 import 'ai_settings_page.dart';
+import 'amap_service.dart';
 import 'app_bar_style.dart';
 import 'app_locale.dart';
+import 'app_notice.dart';
 import 'corner_analysis.dart';
 import 'dt_page_route.dart';
+import 'elevation_profile.dart';
 import 'lap_speed_delta.dart';
 import 'logic.dart';
 import 'models.dart';
 import 'replay_3d.dart';
 import 'satellite_tiles.dart';
+import 'terrain_analysis.dart';
 import 'track_analysis_geo.dart';
 import 'trip_detail_modules.dart';
 import 'track_catalog.dart';
@@ -393,6 +398,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     final catalogOutline = (catalog != null && catalog.outline.length >= 3)
         ? catalog.outline
         : null;
+    // 走线卡补充：弯段坡度复用“赛道高差剖面”同一算法（入弯/出弯海拔），
+    // 只展示前 6 个弯，完整列表仍在那张卡里，不另造数据。
+    final cornerGrades = pts.length >= 2
+        ? buildCornerGrades(pts, analyzeCorners(pts))
+        : const <CornerGrade>[];
     return [
       Text(
         s.t('本节行程总览 · 传感器实测', 'Session overview · measured'),
@@ -455,7 +465,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                   ),
                   _stat(
                     s.t('最大合成 G', 'Max combined G'),
-                    pts.isEmpty ? s.t('暂无', 'None') : '${trip.maxG.toStringAsFixed(2)}g',
+                    pts.isEmpty
+                        ? s.t('暂无', 'None')
+                        : '${trip.maxG.toStringAsFixed(2)}g',
                   ),
                 ],
               ),
@@ -486,7 +498,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         _hideAltitude,
         (v) => setState(() => _hideAltitude = v),
       ),
-      if (!_hideAltitude) TripAltitudeCard(points: pts),
+      if (!_hideAltitude) ...[
+        TripAltitudeCard(points: pts),
+        const SizedBox(height: 12),
+        _elevationProfileCard(pts),
+      ],
       const SizedBox(height: 12),
       _sectionHeader(
         s.t('轨迹走线图', 'Track line'),
@@ -594,22 +610,88 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               const SizedBox(height: 6),
               Text(
                 _replay3d
-                    ? s.t('3D 透视回放：仅作复盘示意，不用于计时判定',
-                        '3D replay: review only, not for timing')
+                    ? s.t(
+                        '3D 透视回放：仅作复盘示意，不用于计时判定',
+                        '3D replay: review only, not for timing',
+                      )
                     : _catalogView
-                    ? s.t('与赛道库同一轮廓数据源（按公开布局重绘的示意图，非官网原图）',
-                        'Same outline source as the track library (redrawn schematic, not the official map)')
-                    : s.t('走线按速度着色，仅作复盘示意，不用于计时判定',
-                        'Line colored by speed; review only, not for timing'),
+                    ? s.t(
+                        '与赛道库同一轮廓数据源（按公开布局重绘的示意图，非官网原图）',
+                        'Same outline source as the track library (redrawn schematic, not the official map)',
+                      )
+                    : s.t(
+                        '走线按速度着色，仅作复盘示意，不用于计时判定',
+                        'Line colored by speed; review only, not for timing',
+                      ),
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
+              // 起终点图例与弯段坡度：与走线画在同一张卡里，避免和
+              // 下方列表挤在一起；坡度口径与“赛道高差剖面”完全一致。
+              if (!_replay3d && !_catalogView) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    _LegendDot(_kGreen, s.t('S 起点', 'S start')),
+                    const SizedBox(width: 12),
+                    _LegendDot(_kRed, s.t('F 终点', 'F finish')),
+                  ],
+                ),
+                if (cornerGrades.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    s.t(
+                      '弯段坡度（同高差剖面口径）',
+                      'Corner grades (same as elevation profile)',
+                    ),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [
+                      for (final g in cornerGrades.take(6))
+                        Text(
+                          '${s.t('弯', 'C')}${g.cornerIndex} '
+                          '${_signedPct(g.gradePct)}',
+                          style: TextStyle(
+                            color: g.gradePct >= 0
+                                ? _kGreen
+                                : const Color(0xFFFF7043),
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      if (cornerGrades.length > 6)
+                        Text(
+                          s.t(
+                            '其余 ${cornerGrades.length - 6} 个弯略',
+                            '${cornerGrades.length - 6} more omitted',
+                          ),
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
               // 示意地图叠加赛道库轮廓时说明灰线来源。
-              if (!_replay3d && !_catalogView && catalogOutline != null && !_satelliteMap)
+              if (!_replay3d &&
+                  !_catalogView &&
+                  catalogOutline != null &&
+                  !_satelliteMap)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    s.t('灰色细线 = 赛道库轮廓（与赛道库同一数据源）',
-                        'Thin gray line = track library outline (same source)'),
+                    s.t(
+                      '灰色细线 = 赛道库轮廓（与赛道库同一数据源）',
+                      'Thin gray line = track library outline (same source)',
+                    ),
                     style: const TextStyle(color: Colors.white38, fontSize: 11),
                   ),
                 ),
@@ -620,8 +702,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    s.t('青色 = 参照圈（第 $refLapNumber 圈）',
-                        'Cyan = reference lap (lap $refLapNumber)'),
+                    s.t(
+                      '青色 = 参照圈（第 $refLapNumber 圈）',
+                      'Cyan = reference lap (lap $refLapNumber)',
+                    ),
                     style: const TextStyle(color: _kGhostCyan, fontSize: 11),
                   ),
                 ),
@@ -651,8 +735,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
               Text(
-                s.t('仅手机固定在车上且标定后可信；未确认固定时仅作参考。',
-                    'Reliable only with the phone mounted and calibrated; otherwise a guide.'),
+                s.t(
+                  '仅手机固定在车上且标定后可信；未确认固定时仅作参考。',
+                  'Reliable only with the phone mounted and calibrated; otherwise a guide.',
+                ),
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
             ],
@@ -681,8 +767,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               const SizedBox(height: 6),
               if (splits.isEmpty)
                 Text(
-                  s.t('不足 1 公里，暂无整公里配速分段',
-                      'Under 1 km; no whole-kilometer splits'),
+                  s.t(
+                    '不足 1 公里，暂无整公里配速分段',
+                    'Under 1 km; no whole-kilometer splits',
+                  ),
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                 )
               else
@@ -736,8 +824,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           const SizedBox(height: 6),
           if (corners.isEmpty)
             Text(
-              s.t('本趟未识别到弯道：轨迹点不足，或全程为直道。',
-                  'No corners detected: too few points or a straight route.'),
+              s.t(
+                '本趟未识别到弯道：轨迹点不足，或全程为直道。',
+                'No corners detected: too few points or a straight route.',
+              ),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             )
           else ...[
@@ -760,8 +850,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              s.t('最慢弯心（入弯 → 弯心 → 出弯）',
-                  'Slowest apex (entry → apex → exit)'),
+              s.t('最慢弯心（入弯 → 弯心 → 出弯）', 'Slowest apex (entry → apex → exit)'),
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
             const SizedBox(height: 2),
@@ -771,15 +860,15 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 child: Text(
                   s.t(
                     '第 ${c.index} 弯 ${c.direction == CornerDirection.right ? '右' : '左'}：'
-                    '${c.entryKmh.toStringAsFixed(0)} → '
-                    '${c.apexKmh.toStringAsFixed(0)} → '
-                    '${c.exitKmh.toStringAsFixed(0)} km/h · '
-                    '弯长 ${c.lengthM.toStringAsFixed(0)} m',
+                        '${c.entryKmh.toStringAsFixed(0)} → '
+                        '${c.apexKmh.toStringAsFixed(0)} → '
+                        '${c.exitKmh.toStringAsFixed(0)} km/h · '
+                        '弯长 ${c.lengthM.toStringAsFixed(0)} m',
                     'Corner ${c.index} ${c.direction == CornerDirection.right ? 'right' : 'left'}: '
-                    '${c.entryKmh.toStringAsFixed(0)} → '
-                    '${c.apexKmh.toStringAsFixed(0)} → '
-                    '${c.exitKmh.toStringAsFixed(0)} km/h · '
-                    'length ${c.lengthM.toStringAsFixed(0)} m',
+                        '${c.entryKmh.toStringAsFixed(0)} → '
+                        '${c.apexKmh.toStringAsFixed(0)} → '
+                        '${c.exitKmh.toStringAsFixed(0)} km/h · '
+                        'length ${c.lengthM.toStringAsFixed(0)} m',
                   ),
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
@@ -787,8 +876,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           ],
           const SizedBox(height: 4),
           Text(
-            s.t('弯道由轨迹曲率与航向变化识别；横向 G 仅在传感器标定后显示。',
-                'Corners are detected from track curvature and heading change; lateral G shows only after calibration.'),
+            s.t(
+              '弯道由轨迹曲率与航向变化识别；横向 G 仅在传感器标定后显示。',
+              'Corners are detected from track curvature and heading change; lateral G shows only after calibration.',
+            ),
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ],
@@ -843,8 +934,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            tr.t('通道：车速 / 转速 / 油门 / 水温（ELM327 实测采样）',
-                'Channels: speed / RPM / throttle / coolant (ELM327 samples)'),
+            tr.t(
+              '通道：车速 / 转速 / 油门 / 水温（ELM327 实测采样）',
+              'Channels: speed / RPM / throttle / coolant (ELM327 samples)',
+            ),
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           if (!hasSamples)
@@ -853,8 +946,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               child: Text(
                 widget.obdConnected
                     ? tr.t('OBD 已连接，暂无数据', 'OBD connected, no data yet')
-                    : tr.t('未连接 OBD，暂无此通道',
-                        'OBD not connected; channel unavailable'),
+                    : tr.t(
+                        '未连接 OBD，暂无此通道',
+                        'OBD not connected; channel unavailable',
+                      ),
                 style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
             )
@@ -885,8 +980,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             ),
             const SizedBox(height: 8),
             _chartTitle(
-                tr.t('OBD 车速（实测采样，未连接时段无曲线）',
-                    'OBD speed (measured samples; no curve when disconnected)')),
+              tr.t(
+                'OBD 车速（实测采样，未连接时段无曲线）',
+                'OBD speed (measured samples; no curve when disconnected)',
+              ),
+            ),
             _SeriesChart(
               xs: xs,
               series: [_Series(values: speeds, color: const Color(0xFF38BDF8))],
@@ -1147,15 +1245,23 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            s.t('只把本页的实测摘要发给 AI（圈速、分段、速度/G 极值、弯角、速度差），不含账号与轨迹原始点。',
-                'Only the measured summary on this page is sent (laps, sectors, speed/G extremes, corners, speed delta); no account or raw track points.'),
-            style: const TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+            s.t(
+              '只把本页的实测摘要发给 AI（圈速、分段、速度/G 极值、弯角、速度差），不含账号与轨迹原始点。',
+              'Only the measured summary on this page is sent (laps, sectors, speed/G extremes, corners, speed delta); no account or raw track points.',
+            ),
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 10),
           if (!configured) ...[
             Text(
-              s.t('尚未配置 AI 服务。配置 Base URL、API Key 与模型后即可在这里生成分析。',
-                  'AI is not configured. Set the base URL, API key, and model to generate an analysis here.'),
+              s.t(
+                '尚未配置 AI 服务。配置 Base URL、API Key 与模型后即可在这里生成分析。',
+                'AI is not configured. Set the base URL, API key, and model to generate an analysis here.',
+              ),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
             const SizedBox(height: 8),
@@ -1228,8 +1334,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           ],
           const SizedBox(height: 8),
           Text(
-            s.t('AI 只依据上面这些实测值回答；未接入的通道会标注“无数据”，不会编造。结果仅供参考。',
-                'AI answers only from the measured values above. Missing channels are marked "no data"; nothing is invented. Results are for reference only.'),
+            s.t(
+              'AI 只依据上面这些实测值回答；未接入的通道会标注“无数据”，不会编造。结果仅供参考。',
+              'AI answers only from the measured values above. Missing channels are marked "no data"; nothing is invented. Results are for reference only.',
+            ),
             style: const TextStyle(
               color: Colors.white38,
               fontSize: 10.5,
@@ -1320,6 +1428,58 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             refSpeedsKmh: refSlice.points.map((p) => p.speed * 3.6).toList(),
           )
         : null;
+    // 最快 / 最慢分段高亮：只有真实分段点（sectorData 有边界）且本圈
+    // 三段用时齐全时才画。比较优先用“本圈 − 参照圈”，无参照圈时退回
+    // 本圈各段绝对用时；没有分段数据的赛道不画，避免编造。
+    final lapBands = <_LineBand>[];
+    String? bandLegend;
+    final refSectors = reference?.sectorsMs;
+    if (selected != null &&
+        selected.sectorsMs.length == 3 &&
+        sectorData != null &&
+        sectorData.hasBoundaries) {
+      final compareToRef = refSectors != null && refSectors.length == 3;
+      final values = <int>[
+        for (var i = 0; i < 3; i++)
+          compareToRef
+              ? selected.sectorsMs[i] - refSectors[i]
+              : selected.sectorsMs[i],
+      ];
+      var fastest = 0;
+      var slowest = 0;
+      for (var i = 1; i < 3; i++) {
+        if (values[i] < values[fastest]) fastest = i;
+        if (values[i] > values[slowest]) slowest = i;
+      }
+      if (fastest != slowest) {
+        final fastRange = sectorFractionRange(sectorData, fastest);
+        final slowRange = sectorFractionRange(sectorData, slowest);
+        if (fastRange != null) {
+          lapBands.add(
+            _LineBand(
+              start: fastRange.start,
+              end: fastRange.end,
+              color: _kGreen,
+            ),
+          );
+        }
+        if (slowRange != null) {
+          lapBands.add(
+            _LineBand(start: slowRange.start, end: slowRange.end, color: _kRed),
+          );
+        }
+        if (lapBands.isNotEmpty) {
+          bandLegend = s.t(
+            '绿 = 本圈最快分段 ${sectorData.sectorLabels[fastest]} · '
+                '红 = 最慢分段 ${sectorData.sectorLabels[slowest]}'
+                '（${compareToRef ? '相对参照圈' : '本圈用时'}）',
+            'Green = fastest sector ${sectorData.sectorLabels[fastest]} · '
+                'red = slowest ${sectorData.sectorLabels[slowest]} '
+                '(${compareToRef ? 'vs reference lap' : 'lap time'})',
+          );
+        }
+      }
+    }
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -1328,8 +1488,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         title: Text(
           widget.trip.trackName.isEmpty
               ? s.t('赛道分析', 'Track analysis')
-              : s.t('${widget.trip.trackName} · 赛道分析',
-                  '${widget.trip.trackName} · Track analysis'),
+              : s.t(
+                  '${widget.trip.trackName} · 赛道分析',
+                  '${widget.trip.trackName} · Track analysis',
+                ),
         ),
       ),
       body: SingleChildScrollView(
@@ -1358,8 +1520,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             const SizedBox(height: 12),
             if (selected == null) ...[
               Text(
-                s.t('暂无圈速数据：本节无计入圈。',
-                    'No lap times: this session has no counted laps.'),
+                s.t(
+                  '暂无圈速数据：本节无计入圈。',
+                  'No lap times: this session has no counted laps.',
+                ),
                 style: const TextStyle(color: Colors.white54, fontSize: 13),
               ),
             ] else ...[
@@ -1405,9 +1569,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      s.t('理论最佳圈 = 各分段最佳相加；无效圈不进统计',
-                          'Theoretical best = sum of best sectors; invalid laps are excluded'),
-                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      s.t(
+                        '理论最佳圈 = 各分段最佳相加；无效圈不进统计',
+                        'Theoretical best = sum of best sectors; invalid laps are excluded',
+                      ),
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
@@ -1450,8 +1619,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      s.t('参照圈（默认本节最佳圈）',
-                          'Reference lap (defaults to session best)'),
+                      s.t(
+                        '参照圈（默认本节最佳圈）',
+                        'Reference lap (defaults to session best)',
+                      ),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -1467,7 +1638,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                           (x) => lapInvalidReason(x) == null,
                         ))
                           ChoiceChip(
-                            label: Text(s.t('第 ${l.number} 圈', 'Lap ${l.number}')),
+                            label: Text(
+                              s.t('第 ${l.number} 圈', 'Lap ${l.number}'),
+                            ),
                             selected: reference?.number == l.number,
                             onSelected: (_) => setState(() => _reference = l),
                           ),
@@ -1493,11 +1666,15 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     const SizedBox(height: 4),
                     Text(
                       sectorData == null
-                          ? s.t('扇区待核：未查到该赛道扇区数据，分段按计时分段显示',
-                              'Sector data pending: none found for this track; timing sectors are shown')
+                          ? s.t(
+                              '扇区待核：未查到该赛道扇区数据，分段按计时分段显示',
+                              'Sector data pending: none found for this track; timing sectors are shown',
+                            )
                           : sectorData.sourceLabel == '扇区待核'
-                          ? s.t('${sectorData.note}分段按计时分段显示，不标官方 S1/S2/S3',
-                              '${sectorData.note}Timing sectors are shown; official S1/S2/S3 are not labeled.')
+                          ? s.t(
+                              '${sectorData.note}分段按计时分段显示，不标官方 S1/S2/S3',
+                              '${sectorData.note}Timing sectors are shown; official S1/S2/S3 are not labeled.',
+                            )
                           : '${_sectorSourceLabel(s, sectorData.sourceLabel)}：${sectorData.note}',
                       style: const TextStyle(
                         color: Colors.white54,
@@ -1540,9 +1717,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       ],
                     ),
                     Text(
-                      s.t('捏合缩放 · 双击复位整圈 · 横向拖动联动图表与走线 · 点分段缩放到该分段',
-                          'Pinch to zoom · double-tap to reset · drag to scrub · tap a sector to zoom'),
-                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      s.t(
+                        '捏合缩放 · 双击复位整圈 · 横向拖动联动图表与走线 · 点分段缩放到该分段',
+                        'Pinch to zoom · double-tap to reset · drag to scrub · tap a sector to zoom',
+                      ),
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     if (sectorData != null && sectorData.hasBoundaries) ...[
@@ -1641,8 +1823,12 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                               ),
                             ),
                           const SizedBox(height: 8),
-                          _chartTitle(s.t('累计得失（相对参照圈，负 = 更快）',
-                              'Cumulative delta (vs reference; negative = faster)')),
+                          _chartTitle(
+                            s.t(
+                              '累计得失（相对参照圈，负 = 更快）',
+                              'Cumulative delta (vs reference; negative = faster)',
+                            ),
+                          ),
                           _SeriesChart(
                             xs: fractions,
                             series: [
@@ -1658,7 +1844,9 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                             showZeroLine: true,
                           ),
                           const SizedBox(height: 8),
-                          _chartTitle(s.t('横向 / 纵向 G', 'Lateral / longitudinal G')),
+                          _chartTitle(
+                            s.t('横向 / 纵向 G', 'Lateral / longitudinal G'),
+                          ),
                           _SeriesChart(
                             xs: fractions,
                             series: [
@@ -1696,15 +1884,15 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       Text(
                         s.t(
                           '进度：${(_scrub * 100).toStringAsFixed(0)}% · '
-                          '速度 ${(selSlice.points[scrubIndex].speed * 3.6).toStringAsFixed(0)} km/h · '
-                          '得失 ${deltaCurve.isEmpty ? '--' : '${deltaCurve[scrubIndex] >= 0 ? '+' : ''}${(deltaCurve[scrubIndex] / 1000).toStringAsFixed(3)}s'} · '
-                          '横向 G ${selSlice.points[scrubIndex].latG.toStringAsFixed(2)} · '
-                          '纵向 G ${selSlice.points[scrubIndex].longG.toStringAsFixed(2)}',
+                              '速度 ${(selSlice.points[scrubIndex].speed * 3.6).toStringAsFixed(0)} km/h · '
+                              '得失 ${deltaCurve.isEmpty ? '--' : '${deltaCurve[scrubIndex] >= 0 ? '+' : ''}${(deltaCurve[scrubIndex] / 1000).toStringAsFixed(3)}s'} · '
+                              '横向 G ${selSlice.points[scrubIndex].latG.toStringAsFixed(2)} · '
+                              '纵向 G ${selSlice.points[scrubIndex].longG.toStringAsFixed(2)}',
                           'Progress: ${(_scrub * 100).toStringAsFixed(0)}% · '
-                          'speed ${(selSlice.points[scrubIndex].speed * 3.6).toStringAsFixed(0)} km/h · '
-                          'delta ${deltaCurve.isEmpty ? '--' : '${deltaCurve[scrubIndex] >= 0 ? '+' : ''}${(deltaCurve[scrubIndex] / 1000).toStringAsFixed(3)}s'} · '
-                          'lat G ${selSlice.points[scrubIndex].latG.toStringAsFixed(2)} · '
-                          'long G ${selSlice.points[scrubIndex].longG.toStringAsFixed(2)}',
+                              'speed ${(selSlice.points[scrubIndex].speed * 3.6).toStringAsFixed(0)} km/h · '
+                              'delta ${deltaCurve.isEmpty ? '--' : '${deltaCurve[scrubIndex] >= 0 ? '+' : ''}${(deltaCurve[scrubIndex] / 1000).toStringAsFixed(3)}s'} · '
+                              'lat G ${selSlice.points[scrubIndex].latG.toStringAsFixed(2)} · '
+                              'long G ${selSlice.points[scrubIndex].longG.toStringAsFixed(2)}',
                         ),
                         style: const TextStyle(
                           color: Colors.white70,
@@ -1713,9 +1901,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                       )
                     else
                       Text(
-                        s.t('该圈暂无轨迹点，曲线为空',
-                            'No track points for this lap; curves are empty'),
-                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                        s.t(
+                          '该圈暂无轨迹点，曲线为空',
+                          'No track points for this lap; curves are empty',
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
                       ),
                   ],
                 ),
@@ -1757,9 +1950,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     const SizedBox(height: 6),
                     if (selSlice == null || selSlice.points.length < 2)
                       Text(
-                        s.t('该圈暂无轨迹点，走线为空',
-                            'No track points for this lap; line is empty'),
-                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                        s.t(
+                          '该圈暂无轨迹点，走线为空',
+                          'No track points for this lap; line is empty',
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
                       )
                     else
                       _TrackLineDiagram(
@@ -1768,13 +1966,27 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                         mode: _colorMode,
                         scrubIndex: scrubIndex,
                         catalogOutline: catalogOutline,
+                        bands: lapBands,
+                      ),
+                    if (bandLegend != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          bandLegend,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
+                          ),
+                        ),
                       ),
                     if (catalogOutline != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          s.t('灰色细线 = 赛道库轮廓（同一 TrackInfo 数据源）',
-                              'Thin gray line = track library outline (same TrackInfo source)'),
+                          s.t(
+                            '灰色细线 = 赛道库轮廓（同一 TrackInfo 数据源）',
+                            'Thin gray line = track library outline (same TrackInfo source)',
+                          ),
                           style: const TextStyle(
                             color: Colors.white38,
                             fontSize: 11,
@@ -1782,9 +1994,11 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                         ),
                       ),
                     Text(
-                      s.t('仅作复盘示意，不用于计时判定',
-                          'Review only, not for timing'),
-                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      s.t('仅作复盘示意，不用于计时判定', 'Review only, not for timing'),
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
@@ -1840,7 +2054,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                             else if (best?.number == l.number)
                               Text(
                                 s.t('最佳圈', 'Best'),
-                                style: const TextStyle(color: _kGreen, fontSize: 12),
+                                style: const TextStyle(
+                                  color: _kGreen,
+                                  fontSize: 12,
+                                ),
                               ),
                           ],
                         ),
@@ -1890,15 +2107,19 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            s.t('按轨迹曲率与航向变化识别；速度为 GPS 实测，横向 G 仅在传感器标定后显示。',
-                'Detected from track curvature and heading change; speed is GPS-measured, lateral G shows only after calibration.'),
+            s.t(
+              '按轨迹曲率与航向变化识别；速度为 GPS 实测，横向 G 仅在传感器标定后显示。',
+              'Detected from track curvature and heading change; speed is GPS-measured, lateral G shows only after calibration.',
+            ),
             style: const TextStyle(color: Colors.white54, fontSize: 11),
           ),
           const SizedBox(height: 8),
           if (corners.isEmpty)
             Text(
-              s.t('本圈未识别到弯角：轨迹点不足，或全程为直道。',
-                  'No corners on this lap: too few points or a straight route.'),
+              s.t(
+                '本圈未识别到弯角：轨迹点不足，或全程为直道。',
+                'No corners on this lap: too few points or a straight route.',
+              ),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             )
           else ...[
@@ -1907,16 +2128,20 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  s.t('仅显示前 12 个弯，共 ${corners.length} 个。',
-                      'Showing the first 12 of ${corners.length} corners.'),
+                  s.t(
+                    '仅显示前 12 个弯，共 ${corners.length} 个。',
+                    'Showing the first 12 of ${corners.length} corners.',
+                  ),
                   style: const TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ),
           ],
           const SizedBox(height: 8),
           Text(
-            s.t('弯中转向角 / 油门 / 刹车 / 转速 / 水温：当前数据源未提供，OBD 接入后在此显示，本卡不做推算。',
-                'Steering / throttle / brake / RPM / coolant in corners are not provided by the current data source; they will appear after OBD integration. No estimates here.'),
+            s.t(
+              '弯中转向角 / 油门 / 刹车 / 转速 / 水温：当前数据源未提供，OBD 接入后在此显示，本卡不做推算。',
+              'Steering / throttle / brake / RPM / coolant in corners are not provided by the current data source; they will appear after OBD integration. No estimates here.',
+            ),
             style: const TextStyle(
               color: Colors.white38,
               fontSize: 10.5,
@@ -1935,8 +2160,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         : s.t('左弯', 'Left');
     final lat = c.maxLateralG == null
         ? s.t('横向 G —', 'Lat G —')
-        : s.t('横向 G ${c.maxLateralG!.toStringAsFixed(2)}',
-            'Lat G ${c.maxLateralG!.toStringAsFixed(2)}');
+        : s.t(
+            '横向 G ${c.maxLateralG!.toStringAsFixed(2)}',
+            'Lat G ${c.maxLateralG!.toStringAsFixed(2)}',
+          );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Column(
@@ -1974,13 +2201,13 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
           Text(
             s.t(
               '最短 ${c.minKmh.toStringAsFixed(0)} km/h · '
-              '弯长 ${c.lengthM.toStringAsFixed(0)} m · '
-              '走线跨度 ${c.lineSpanM.toStringAsFixed(1)} m · '
-              '$lat · ${(c.durationMs / 1000).toStringAsFixed(1)} s',
+                  '弯长 ${c.lengthM.toStringAsFixed(0)} m · '
+                  '走线跨度 ${c.lineSpanM.toStringAsFixed(1)} m · '
+                  '$lat · ${(c.durationMs / 1000).toStringAsFixed(1)} s',
               'Min ${c.minKmh.toStringAsFixed(0)} km/h · '
-              'length ${c.lengthM.toStringAsFixed(0)} m · '
-              'line span ${c.lineSpanM.toStringAsFixed(1)} m · '
-              '$lat · ${(c.durationMs / 1000).toStringAsFixed(1)} s',
+                  'length ${c.lengthM.toStringAsFixed(0)} m · '
+                  'line span ${c.lineSpanM.toStringAsFixed(1)} m · '
+                  '$lat · ${(c.durationMs / 1000).toStringAsFixed(1)} s',
             ),
             style: const TextStyle(
               color: Colors.white54,
@@ -2006,7 +2233,8 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         : deltaCurve.last; // 分析圈 − 参照圈
     final s = S.of(context);
     final hasBoth = selected != null && reference != null;
-    final sameLap = selected != null &&
+    final sameLap =
+        selected != null &&
         reference != null &&
         selected.number == reference.number;
     return _card(
@@ -2028,27 +2256,35 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     '第 ${selected.number} 圈 − 第 ${reference.number} 圈（按距离对齐，正值 = 分析圈更快）',
                     'Lap ${selected.number} − lap ${reference.number} (distance-aligned; positive = analyzed lap faster)',
                   )
-                : s.t('需要同时选中分析圈与参照圈才能比较。',
-                    'Select both an analyzed and a reference lap to compare.'),
+                : s.t(
+                    '需要同时选中分析圈与参照圈才能比较。',
+                    'Select both an analyzed and a reference lap to compare.',
+                  ),
             style: const TextStyle(color: Colors.white54, fontSize: 11),
           ),
           const SizedBox(height: 10),
           if (!hasBoth)
             Text(
-              s.t('数据不足：没有可用的分析圈或参照圈。',
-                  'Not enough data: no analyzed or reference lap.'),
+              s.t(
+                '数据不足：没有可用的分析圈或参照圈。',
+                'Not enough data: no analyzed or reference lap.',
+              ),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             )
           else if (sameLap)
             Text(
-              s.t('分析圈与参照圈相同：在上方选择另一圈作为参照后显示速度差。',
-                  'Analyzed and reference laps are the same. Pick another reference lap above.'),
+              s.t(
+                '分析圈与参照圈相同：在上方选择另一圈作为参照后显示速度差。',
+                'Analyzed and reference laps are the same. Pick another reference lap above.',
+              ),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             )
           else if (summary == null)
             Text(
-              s.t('数据不足：两圈可对齐的距离区间太短，无法比较。',
-                  'Not enough data: the laps overlap over too short a distance.'),
+              s.t(
+                '数据不足：两圈可对齐的距离区间太短，无法比较。',
+                'Not enough data: the laps overlap over too short a distance.',
+              ),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             )
           else ...[
@@ -2059,43 +2295,45 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 _stat(
                   s.t('平均速度差', 'Avg delta'),
                   '${summary.avgDeltaKmh >= 0 ? '+' : ''}'
-                      '${summary.avgDeltaKmh.toStringAsFixed(1)} km/h',
+                  '${summary.avgDeltaKmh.toStringAsFixed(1)} km/h',
                 ),
                 _stat(
                   s.t('中位速度差', 'Median delta'),
                   '${summary.medianDeltaKmh >= 0 ? '+' : ''}'
-                      '${summary.medianDeltaKmh.toStringAsFixed(1)} km/h',
+                  '${summary.medianDeltaKmh.toStringAsFixed(1)} km/h',
                 ),
                 _stat(
                   s.t('最大领先', 'Max gain'),
                   '+${summary.maxGainKmh.toStringAsFixed(0)} km/h'
-                      ' @ ${formatPercent(summary.maxGainFraction)}',
+                  ' @ ${formatPercent(summary.maxGainFraction)}',
                 ),
                 _stat(
                   s.t('最大落后', 'Max loss'),
                   '-${summary.maxLossKmh.toStringAsFixed(0)} km/h'
-                      ' @ ${formatPercent(summary.maxLossFraction)}',
+                  ' @ ${formatPercent(summary.maxLossFraction)}',
                 ),
                 if (timeDeltaMs != null)
-                  _stat(s.t('时间差', 'Time delta'),
-                      formatDeltaSeconds(timeDeltaMs / 1000)),
+                  _stat(
+                    s.t('时间差', 'Time delta'),
+                    formatDeltaSeconds(timeDeltaMs / 1000),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
               s.t(
                 '评估：${_verdictText(s, summary.avgDeltaKmh)}'
-                '${timeDeltaMs == null
-                    ? ''
-                    : timeDeltaMs <= 0
-                    ? '，本圈用时更短'
-                    : '，本圈用时更长'}。',
+                    '${timeDeltaMs == null
+                        ? ''
+                        : timeDeltaMs <= 0
+                        ? '，本圈用时更短'
+                        : '，本圈用时更长'}。',
                 'Assessment: ${_verdictText(s, summary.avgDeltaKmh)}'
-                '${timeDeltaMs == null
-                    ? ''
-                    : timeDeltaMs <= 0
-                    ? ', this lap is faster'
-                    : ', this lap is slower'}.',
+                    '${timeDeltaMs == null
+                        ? ''
+                        : timeDeltaMs <= 0
+                        ? ', this lap is faster'
+                        : ', this lap is slower'}.',
               ),
               style: const TextStyle(
                 color: Colors.white70,
@@ -2105,13 +2343,209 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              s.t('有效对比点 ${summary.pointCount} 个；超出参照圈距离范围的点不参与比较。',
-                  '${summary.pointCount} comparison points; points outside the reference distance are ignored.'),
+              s.t(
+                '有效对比点 ${summary.pointCount} 个；超出参照圈距离范围的点不参与比较。',
+                '${summary.pointCount} comparison points; points outside the reference distance are ignored.',
+              ),
               style: const TextStyle(color: Colors.white38, fontSize: 10.5),
             ),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _elevationProfileCard(List<TrackPoint> pts) {
+    final valid = pts.where((p) => p.altValid).toList();
+    final profile = ElevationProfile.build([
+      for (final p in valid) (lat: p.lat, lon: p.lon, alt: p.alt),
+    ]);
+    final s = S.of(context);
+    final gradeColor = (double v) =>
+        v >= 0 ? const Color(0xFF22C55E) : const Color(0xFFFF7043);
+    // 弯段坡度与剖面同一口径：只用入弯/出弯的有效海拔。
+    final corners = analyzeCorners(pts);
+    final grades = buildCornerGrades(pts, corners);
+    final gradeByCorner = {for (final g in grades) g.cornerIndex: g};
+    final allDists = List<double>.filled(pts.length, 0);
+    for (var i = 1; i < pts.length; i++) {
+      allDists[i] =
+          allDists[i - 1] +
+          haversineM(pts[i - 1].lat, pts[i - 1].lon, pts[i].lat, pts[i].lon);
+    }
+    final bands = <_CornerBand>[
+      for (final c in corners)
+        if (c.entryIndex >= 0 && c.exitIndex < pts.length)
+          _CornerBand(
+            startM: allDists[c.entryIndex],
+            endM: allDists[c.exitIndex],
+            label: gradeByCorner.containsKey(c.index)
+                ? '${s.t('弯', 'C')}${c.index} '
+                      '${_signedPct(gradeByCorner[c.index]!.gradePct)}'
+                : '${s.t('弯', 'C')}${c.index}',
+          ),
+    ];
+    final speedsKmh = [for (final p in valid) p.speed * 3.6];
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            s.t('赛道高差剖面', 'Elevation profile'),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            s.t(
+              '按累计距离平滑后的气压/GPS 高度，橙色为实测速度；坡度取 5 米以上间隔计算',
+              'Smoothed altitude vs. distance; orange is measured speed; grade uses intervals over 5 m',
+            ),
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          if (profile.samples.length < 2)
+            Text(
+              s.t('暂无有效海拔，无法生成高差剖面', 'No valid altitude data'),
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            )
+          else ...[
+            SizedBox(
+              height: 132,
+              child: CustomPaint(
+                painter: _ElevationPainter(
+                  profile,
+                  speedsKmh: speedsKmh,
+                  cornerBands: bands,
+                  pathTotalM: allDists.isEmpty ? 0 : allDists.last,
+                ),
+                size: Size.infinite,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _LegendDot(const Color(0xFF22C55E), s.t('海拔', 'Altitude')),
+                const SizedBox(width: 12),
+                _LegendDot(
+                  const Color(0xFFFFB020),
+                  s.t('实测速度', 'Measured speed'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                _stat(
+                  s.t('高差', 'Relief'),
+                  '${profile.rangeM.toStringAsFixed(0)} m',
+                ),
+                _stat(
+                  s.t('累计爬升', 'Climb'),
+                  '${profile.totalClimbM.toStringAsFixed(0)} m',
+                ),
+                _stat(
+                  s.t('累计下降', 'Descent'),
+                  '${profile.totalDescentM.toStringAsFixed(0)} m',
+                ),
+                _stat(
+                  s.t('最大上坡', 'Max uphill'),
+                  '${profile.maxGradePct.toStringAsFixed(1)}%',
+                  color: gradeColor(profile.maxGradePct),
+                ),
+                _stat(
+                  s.t('最大下坡', 'Max downhill'),
+                  '${profile.minGradePct.toStringAsFixed(1)}%',
+                  color: gradeColor(profile.minGradePct),
+                ),
+                _stat(
+                  s.t('平均坡度', 'Avg grade'),
+                  '${profile.avgGradePct.toStringAsFixed(1)}%',
+                ),
+              ],
+            ),
+            if (grades.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                s.t('弯段坡度', 'Corner grades'),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                children: [
+                  for (final g in grades.take(8))
+                    Text(
+                      '${s.t('弯', 'C')}${g.cornerIndex} '
+                      '${_signedPct(g.gradePct)}'
+                      ' · ${g.distanceM.toStringAsFixed(0)} m',
+                      style: TextStyle(
+                        color: gradeColor(g.gradePct),
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  if (grades.length > 8)
+                    Text(
+                      s.t(
+                        '其余 ${grades.length - 8} 个弯略',
+                        '${grades.length - 8} more corners omitted',
+                      ),
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _shareTerrain(profile, grades),
+                icon: const Icon(Icons.ios_share, size: 16),
+                label: Text(s.t('分享地形摘要', 'Share terrain summary')),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _signedPct(double value) =>
+      '${value >= 0 ? '+' : ''}${value.toStringAsFixed(1)}%';
+
+  /// 复制地形摘要到剪贴板，走系统粘贴分享；不上传、不带坐标。
+  Future<void> _shareTerrain(
+    ElevationProfile profile,
+    List<CornerGrade> grades,
+  ) async {
+    final s = S.of(context);
+    final title = widget.trip.trackName.isNotEmpty
+        ? widget.trip.trackName
+        : s.t('本次行程', 'This session');
+    final text = terrainShareText(
+      title: title,
+      profile: profile,
+      corners: grades,
+    );
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    showAppNotice(
+      context,
+      s.t('地形摘要已复制，可粘贴分享', 'Terrain summary copied'),
+      AppNoticeKind.success,
     );
   }
 
@@ -2127,7 +2561,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
     );
   }
 
-  Widget _stat(String label, String value) {
+  Widget _stat(String label, String value, {Color? color}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2138,8 +2572,8 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: color ?? Colors.white,
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
@@ -2201,18 +2635,31 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             runSpacing: 8,
             children: [
               _stat(s.t('计入圈数', 'Counted laps'), '${counted.length}'),
-              _stat(s.t('中位圈', 'Median lap'), LapTimer.formatLapTime(median.round())),
-              _stat(s.t('平均圈', 'Mean lap'), LapTimer.formatLapTime(mean.round())),
-              _stat(s.t('标准差 σ', 'Std dev σ'), LapTimer.formatLapTime(sigma.round())),
+              _stat(
+                s.t('中位圈', 'Median lap'),
+                LapTimer.formatLapTime(median.round()),
+              ),
+              _stat(
+                s.t('平均圈', 'Mean lap'),
+                LapTimer.formatLapTime(mean.round()),
+              ),
+              _stat(
+                s.t('标准差 σ', 'Std dev σ'),
+                LapTimer.formatLapTime(sigma.round()),
+              ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             spreadPct <= 1.0
-                ? s.t('一致性 ${spreadPct.toStringAsFixed(1)}% · 圈速很稳',
-                    'Consistency ${spreadPct.toStringAsFixed(1)}% · very steady')
-                : s.t('一致性 ${spreadPct.toStringAsFixed(1)}%（σ 越小越稳）',
-                    'Consistency ${spreadPct.toStringAsFixed(1)}% (lower σ is steadier)'),
+                ? s.t(
+                    '一致性 ${spreadPct.toStringAsFixed(1)}% · 圈速很稳',
+                    'Consistency ${spreadPct.toStringAsFixed(1)}% · very steady',
+                  )
+                : s.t(
+                    '一致性 ${spreadPct.toStringAsFixed(1)}%（σ 越小越稳）',
+                    'Consistency ${spreadPct.toStringAsFixed(1)}% (lower σ is steadier)',
+                  ),
             style: const TextStyle(color: Colors.white54, fontSize: 11),
           ),
           const SizedBox(height: 8),
@@ -2258,8 +2705,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
             ),
           if (counted.length > 20)
             Text(
-              s.t('仅列前 20 圈，共 ${counted.length} 圈。',
-                  'Showing the first 20 of ${counted.length} laps.'),
+              s.t(
+                '仅列前 20 圈，共 ${counted.length} 圈。',
+                'Showing the first 20 of ${counted.length} laps.',
+              ),
               style: const TextStyle(color: Colors.white38, fontSize: 11),
             ),
         ],
@@ -2327,8 +2776,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                 child: Text(
                   ref == null
                       ? '--'
-                      : s.t('参照 ${LapTimer.formatLapTime(ref)}',
-                          'Ref ${LapTimer.formatLapTime(ref)}'),
+                      : s.t(
+                          '参照 ${LapTimer.formatLapTime(ref)}',
+                          'Ref ${LapTimer.formatLapTime(ref)}',
+                        ),
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ),
@@ -2378,13 +2829,17 @@ class _LapTrendChart extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              s.t('慢 ${LapTimer.formatLapTime(maxMs.round())}',
-                  'Slow ${LapTimer.formatLapTime(maxMs.round())}'),
+              s.t(
+                '慢 ${LapTimer.formatLapTime(maxMs.round())}',
+                'Slow ${LapTimer.formatLapTime(maxMs.round())}',
+              ),
               style: const TextStyle(color: Colors.white38, fontSize: 10),
             ),
             Text(
-              s.t('快 ${LapTimer.formatLapTime(minMs.round())}',
-                  'Fast ${LapTimer.formatLapTime(minMs.round())}'),
+              s.t(
+                '快 ${LapTimer.formatLapTime(minMs.round())}',
+                'Fast ${LapTimer.formatLapTime(minMs.round())}',
+              ),
               style: const TextStyle(color: Colors.white38, fontSize: 10),
             ),
           ],
@@ -2720,6 +3175,47 @@ class _SeriesPainter extends CustomPainter {
   bool shouldRepaint(covariant _SeriesPainter old) => true;
 }
 
+/// 走线上的一段高亮范围（累计距离占比 0..1），用于标记本圈最快 /
+/// 最慢分段；只作复盘示意，不参与任何计时口径。
+class _LineBand {
+  const _LineBand({
+    required this.start,
+    required this.end,
+    required this.color,
+  });
+
+  final double start;
+  final double end;
+  final Color color;
+}
+
+/// 起终点徽标：深色描边 + 实色圆 + 白字（S = 起点，F = 终点）。
+void _paintTrackEndpointBadge(
+  Canvas canvas,
+  Offset center,
+  Color color,
+  String text,
+) {
+  canvas.drawCircle(
+    center,
+    8.5,
+    Paint()..color = Colors.black.withValues(alpha: 0.6),
+  );
+  canvas.drawCircle(center, 6.5, Paint()..color = color);
+  final tp = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 8,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+}
+
 /// 走线图：归一化实测轨迹，按速度（白→红）或 delta（绿/红/灰）着色，
 /// scrub 点画白芯红边圆点。
 /// v1.3.4：[referenceSlice] 非 null 时把参照圈轨迹以青色单色线叠在
@@ -2735,6 +3231,9 @@ class _TrackLineDiagram extends StatelessWidget {
   /// 叠在实测走线下方，让结算页与赛道库看到同一形状。
   final List<OutlinePoint>? catalogOutline;
 
+  /// 最快 / 最慢分段高亮（累计距离占比）；空列表时不画。
+  final List<_LineBand> bands;
+
   const _TrackLineDiagram({
     required this.slice,
     required this.deltaCurve,
@@ -2742,6 +3241,7 @@ class _TrackLineDiagram extends StatelessWidget {
     required this.scrubIndex,
     this.referenceSlice,
     this.catalogOutline,
+    this.bands = const [],
   });
 
   @override
@@ -2761,6 +3261,7 @@ class _TrackLineDiagram extends StatelessWidget {
           scrubIndex: scrubIndex,
           referenceSlice: referenceSlice,
           catalogOutline: catalogOutline,
+          bands: bands,
         ),
       ),
     );
@@ -2774,6 +3275,7 @@ class _TrackLinePainter extends CustomPainter {
   final int scrubIndex;
   final _LapSlice? referenceSlice;
   final List<OutlinePoint>? catalogOutline;
+  final List<_LineBand> bands;
 
   _TrackLinePainter({
     required this.slice,
@@ -2782,6 +3284,7 @@ class _TrackLinePainter extends CustomPainter {
     required this.scrubIndex,
     this.referenceSlice,
     this.catalogOutline,
+    this.bands = const [],
   });
 
   @override
@@ -2812,6 +3315,24 @@ class _TrackLinePainter extends CustomPainter {
       offY + (maxLat - p.lat) * scale,
     );
     final offsets = pts.map(toOffset).toList();
+
+    // 最佳 / 最差分段高亮：按累计距离占比铺宽线，压在主走线下面。
+    final totalM = slice.totalDistance;
+    if (bands.isNotEmpty &&
+        totalM > 0 &&
+        offsets.length == slice.distances.length) {
+      for (final band in bands) {
+        final paint = Paint()
+          ..color = band.color.withValues(alpha: 0.42)
+          ..strokeWidth = 9
+          ..strokeCap = StrokeCap.round;
+        for (var i = 1; i < offsets.length; i++) {
+          final f = (slice.distances[i - 1] + slice.distances[i]) / 2 / totalM;
+          if (f < band.start || f > band.end) continue;
+          canvas.drawLine(offsets[i - 1], offsets[i], paint);
+        }
+      }
+    }
 
     // 赛道库轮廓：按实测轨迹的包围盒等比铺开，灰色细线画在最底层。
     // 轮廓与轨迹都是归一化/实测独立数据，此处只做形状对照示意。
@@ -2897,6 +3418,9 @@ class _TrackLinePainter extends CustomPainter {
         Paint()..color = Colors.white,
       );
     }
+    // 起终点标记：S 绿 / F 红，方便一眼确认发车与收车位置。
+    _paintTrackEndpointBadge(canvas, offsets.first, _kGreen, 'S');
+    _paintTrackEndpointBadge(canvas, offsets.last, _kRed, 'F');
   }
 
   @override
@@ -2905,8 +3429,9 @@ class _TrackLinePainter extends CustomPainter {
 
 /// v1.3.1：全程走线卫星底图（地理版）。
 ///
-/// 瓦片走 lib/satellite_tiles.dart（Esri World Imagery，z/y/x 顺序，
-/// WGS-84 直用），落点换算走 lib/track_analysis_geo.dart 的
+/// 瓦片走 lib/satellite_tiles.dart 的高德卫星瓦片（GCJ-02，z ≤ 17），
+/// 因此先把 WGS-84 轨迹转成 GCJ-02 再投影，保证轨迹压在真实道路上。
+/// 落点换算走 lib/track_analysis_geo.dart 的
 /// [AnalysisGeoProjector]（分析页自有 Mercator 投影，不复用编辑页
 /// 的 EditorViewTransform）。轨迹只用 GPS 实测点，按速度彩虹着色
 /// （蓝→绿→黄→红），图例区间取自本节实测最低–最高速度。
@@ -2983,8 +3508,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
           ),
           const SizedBox(height: 6),
           Text(
-            tr.t('卫星图未加载，已显示示意图',
-                'Satellite tiles failed; showing schematic'),
+            tr.t('卫星图未加载，已显示示意图', 'Satellite tiles failed; showing schematic'),
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],
@@ -2994,6 +3518,18 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
     final minKmh = speedsKmh.reduce(math.min);
     final maxKmh = speedsKmh.reduce(math.max);
     final segments = speedLegendSegments(minKmh, maxKmh);
+    // 高德卫星瓦片是 GCJ-02：先把 WGS-84 轨迹转成 GCJ-02 再算范围与
+    // 投影，否则轨迹相对影像会偏数百米（Esri 是 WGS-84，可直接用）。
+    final geo = [for (final p in pts) wgsToGcjLocal(p.lat, p.lon)];
+    final refPoints =
+        (widget.showReferenceOverlay &&
+            widget.referenceSlice != null &&
+            widget.referenceSlice!.points.length >= 2)
+        ? widget.referenceSlice!.points
+        : null;
+    final refGeo = refPoints == null
+        ? null
+        : [for (final p in refPoints) wgsToGcjLocal(p.lat, p.lon)];
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.isFinite
@@ -3001,7 +3537,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
             : 320.0;
         const height = 220.0;
         final bounds = analysisGeoBounds(
-          pts.map((p) => (lat: p.lat, lon: p.lon)).toList(),
+          geo.map((g) => (lat: g.$1, lon: g.$2)).toList(),
         );
         if (bounds == null) {
           return Text(
@@ -3013,6 +3549,8 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
           bounds: bounds,
           widthPx: width,
           heightPx: height,
+          // 高德卫星 z>17 多为旧图/空图，压到 17 以内保证有影像。
+          maxZoom: amapSatelliteMaxZoom,
         );
         final projector = AnalysisGeoProjector(
           bounds: bounds,
@@ -3045,13 +3583,13 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                       Positioned.fromRect(
                         rect: projector.tileScreenRect(x, y),
                         child: Image.network(
-                          satelliteTileUrl(zoom, x, y),
-                          key: ValueKey('analysis-sat-$zoom-$x-$y'),
-                          headers: const {'User-Agent': 'DriveTrack/1.7.4'},
+                          amapSatelliteTileUrl(zoom, x, y),
+                          key: ValueKey('analysis-amap-sat-$zoom-$x-$y'),
+                          headers: const {'User-Agent': 'DriveTrack/1.8.2'},
                           fit: BoxFit.fill,
                           gaplessPlayback: true,
                           errorBuilder: (_, _, _) {
-                            _onTileError(satelliteTileUrl(zoom, x, y));
+                            _onTileError(amapSatelliteTileUrl(zoom, x, y));
                             return Container(color: const Color(0xFF0A0A0A));
                           },
                         ),
@@ -3059,18 +3597,19 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                   CustomPaint(
                     size: Size(width, height),
                     painter: _GeoTrackPainter(
-                      projector: projector,
-                      points: pts,
+                      offsets: [
+                        for (final g in geo) projector.project(g.$1, g.$2),
+                      ],
                       speedsKmh: speedsKmh,
                       minKmh: minKmh,
                       maxKmh: maxKmh,
                       // v1.3.4：参考圈叠加（青色单色线，画在彩虹轨迹之上）。
-                      referencePoints:
-                          (widget.showReferenceOverlay &&
-                              widget.referenceSlice != null &&
-                              widget.referenceSlice!.points.length >= 2)
-                          ? widget.referenceSlice!.points
-                          : null,
+                      referenceOffsets: refGeo == null
+                          ? null
+                          : [
+                              for (final g in refGeo)
+                                projector.project(g.$1, g.$2),
+                            ],
                     ),
                   ),
                 ],
@@ -3108,7 +3647,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
             ),
             const SizedBox(height: 4),
             const Text(
-              satelliteTileAttribution,
+              amapSatelliteAttribution,
               style: TextStyle(color: Colors.white54, fontSize: 11),
             ),
           ],
@@ -3119,28 +3658,25 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
 }
 
 /// 地理版速度着色轨迹：按实测点投影落点，逐段彩虹着色。
-/// v1.3.4：[referencePoints] 非 null 时再叠一条青色单色参考圈轨迹。
+/// v1.3.4：[referenceOffsets] 非 null 时再叠一条青色单色参考圈轨迹。
 class _GeoTrackPainter extends CustomPainter {
-  final AnalysisGeoProjector projector;
-  final List<TrackPoint> points;
+  final List<Offset> offsets;
   final List<double> speedsKmh;
   final double minKmh;
   final double maxKmh;
-  final List<TrackPoint>? referencePoints;
+  final List<Offset>? referenceOffsets;
 
   _GeoTrackPainter({
-    required this.projector,
-    required this.points,
+    required this.offsets,
     required this.speedsKmh,
     required this.minKmh,
     required this.maxKmh,
-    this.referencePoints,
+    this.referenceOffsets,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (points.length < 2) return;
-    final offsets = points.map((p) => projector.project(p.lat, p.lon)).toList();
+    if (offsets.length < 2) return;
     for (var i = 1; i < offsets.length; i++) {
       canvas.drawLine(
         offsets[i - 1],
@@ -3151,15 +3687,12 @@ class _GeoTrackPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
     }
-    final ref = referencePoints;
+    final ref = referenceOffsets;
     if (ref != null && ref.length >= 2) {
-      final refOffsets = ref
-          .map((p) => projector.project(p.lat, p.lon))
-          .toList();
-      for (var i = 1; i < refOffsets.length; i++) {
+      for (var i = 1; i < ref.length; i++) {
         canvas.drawLine(
-          refOffsets[i - 1],
-          refOffsets[i],
+          ref[i - 1],
+          ref[i],
           Paint()
             ..color = _kGhostCyan
             ..strokeWidth = 3
@@ -3167,8 +3700,181 @@ class _GeoTrackPainter extends CustomPainter {
         );
       }
     }
+    // 起终点标记：S 绿 / F 红；卫星底图上同样需要，便于对照真实位置。
+    _paintTrackEndpointBadge(canvas, offsets.first, _kGreen, 'S');
+    _paintTrackEndpointBadge(canvas, offsets.last, _kRed, 'F');
   }
 
   @override
   bool shouldRepaint(covariant _GeoTrackPainter old) => true;
+}
+
+/// 剖面图上的弯段标注：入弯—出弯的累计距离与文字（如“弯1 +3.2%”）。
+class _CornerBand {
+  const _CornerBand({
+    required this.startM,
+    required this.endM,
+    required this.label,
+  });
+
+  final double startM;
+  final double endM;
+  final String label;
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot(this.color, this.label);
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 11),
+        ),
+      ],
+    );
+  }
+}
+
+/// 高差剖面折线：横轴累计距离、纵轴平滑海拔。只画数据，不补零。
+/// 橙色折线为实测速度（独立纵轴，底部为 0）；竖直淡橙带为弯段范围。
+class _ElevationPainter extends CustomPainter {
+  _ElevationPainter(
+    this.profile, {
+    this.speedsKmh = const [],
+    this.cornerBands = const [],
+    this.pathTotalM = 0,
+  });
+
+  final ElevationProfile profile;
+  final List<double> speedsKmh;
+  final List<_CornerBand> cornerBands;
+  final double pathTotalM;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final samples = profile.samples;
+    if (samples.length < 2 || size.width <= 0 || size.height <= 0) return;
+    final total = samples.last.distanceM;
+    if (total <= 0) return;
+    final minV = profile.minM;
+    final span = math.max(1.0, profile.maxM - minV);
+    const top = 8.0;
+    final bottom = size.height - 8;
+
+    Offset at(ElevationSample s) => Offset(
+      s.distanceM / total * size.width,
+      bottom - (s.altitudeM - minV) / span * (bottom - top),
+    );
+
+    // 弯段底色与标注：横向按全程累计距离映射，与剖面同一条距离轴。
+    final bandTotal = pathTotalM > 0 ? pathTotalM : total;
+    for (final band in cornerBands) {
+      final x1 = (band.startM / bandTotal).clamp(0.0, 1.0) * size.width;
+      final x2 = (band.endM / bandTotal).clamp(0.0, 1.0) * size.width;
+      final left = math.min(x1, x2);
+      final right = math.max(x1, x2);
+      if (right - left < 1) continue;
+      canvas.drawRect(
+        Rect.fromLTRB(left, top, right, bottom),
+        Paint()..color = const Color(0x1AFFB020),
+      );
+      if (right - left >= 30) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: band.label,
+            style: const TextStyle(color: Color(0xFFFFB020), fontSize: 9),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(left + (right - left - tp.width) / 2, top - 1));
+      }
+    }
+
+    final line = Path()..moveTo(at(samples.first).dx, at(samples.first).dy);
+    for (var i = 1; i < samples.length; i++) {
+      final p = at(samples[i]);
+      line.lineTo(p.dx, p.dy);
+    }
+    final fill = Path.from(line)
+      ..lineTo(size.width, bottom)
+      ..lineTo(0, bottom)
+      ..close();
+
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x5522C55E), Color(0x0022C55E)],
+        ).createShader(Offset.zero & size),
+    );
+    canvas.drawPath(
+      line,
+      Paint()
+        ..color = const Color(0xFF22C55E)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    // 速度折线：同一横轴、独立纵轴（0 到底部），只画实测点。
+    if (speedsKmh.length == samples.length) {
+      var maxSpeed = 0.0;
+      for (final v in speedsKmh) {
+        if (v > maxSpeed) maxSpeed = v;
+      }
+      if (maxSpeed > 0) {
+        final speedPath = Path();
+        for (var i = 0; i < samples.length; i++) {
+          final p = Offset(
+            at(samples[i]).dx,
+            bottom - (speedsKmh[i] / maxSpeed).clamp(0.0, 1.0) * (bottom - top),
+          );
+          if (i == 0) {
+            speedPath.moveTo(p.dx, p.dy);
+          } else {
+            speedPath.lineTo(p.dx, p.dy);
+          }
+        }
+        canvas.drawPath(
+          speedPath,
+          Paint()
+            ..color = const Color(0xE6FFB020)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.4,
+        );
+      }
+    }
+
+    final tp = TextPainter(
+      text: TextSpan(
+        text:
+            '${profile.minM.toStringAsFixed(0)}–${profile.maxM.toStringAsFixed(0)} m',
+        style: const TextStyle(color: Colors.white38, fontSize: 10),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(0, size.height - tp.height));
+  }
+
+  @override
+  bool shouldRepaint(covariant _ElevationPainter old) =>
+      old.profile != profile ||
+      old.speedsKmh != speedsKmh ||
+      old.cornerBands != cornerBands ||
+      old.pathTotalM != pathTotalM;
 }

@@ -193,51 +193,73 @@ class _CountdownPageState extends State<CountdownPage> {
       child: Scaffold(
         backgroundColor: const Color(0xFF000000),
         body: SafeArea(
-          child: Column(
+          // v1.8.1：数字 / GO 严格居中（旧版用 Column + Spacer，会被
+          // 下方说明文字和取消按钮挤得偏上）。说明文字与取消按钮
+          // 改为相对屏幕对齐，不再参与数字的垂直居中计算。
+          child: Stack(
             children: [
-              const Spacer(),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, anim) => ScaleTransition(
-                  scale: Tween<double>(begin: 0.7, end: 1.0).animate(anim),
-                  child: FadeTransition(opacity: anim, child: child),
-                ),
-                child: Text(
-                  isGo ? 'GO' : '$_remaining',
-                  key: ValueKey<int>(_remaining),
-                  // 继承当前 Orbitron / Racing Sans One 与中文回退，不硬编码字体。
-                  style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                        fontSize: 140,
-                        fontWeight: FontWeight.bold,
-                        color: isGo ? accent : Colors.white,
-                      ) ??
-                      TextStyle(
-                        fontSize: 140,
-                        fontWeight: FontWeight.bold,
-                        color: isGo ? accent : Colors.white,
-                      ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                isGo ? s.t('出发！', 'Go') : s.t('即将开始记录', 'Recording starts'),
-                style: const TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-              if (!widget.vibrationEnabled)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
+              Center(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, anim) => ScaleTransition(
+                    scale: Tween<double>(begin: 0.7, end: 1.0).animate(anim),
+                    child: FadeTransition(opacity: anim, child: child),
+                  ),
                   child: Text(
-                    s.t('震动提醒已关闭', 'Vibration off'),
-                    style: const TextStyle(color: Colors.white38, fontSize: 12),
+                    isGo ? 'GO' : '$_remaining',
+                    key: ValueKey<int>(_remaining),
+                    // 继承当前 Orbitron / Racing Sans One 与中文回退，不硬编码字体。
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                          fontSize: 140,
+                          fontWeight: FontWeight.bold,
+                          color: isGo ? accent : Colors.white,
+                        ) ??
+                        TextStyle(
+                          fontSize: 140,
+                          fontWeight: FontWeight.bold,
+                          color: isGo ? accent : Colors.white,
+                        ),
                   ),
                 ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: TextButton.icon(
-                  icon: const Icon(Icons.close),
-                  label: Text(s.t('取消', 'Cancel')),
-                  onPressed: _cancel,
+              ),
+              Align(
+                alignment: const Alignment(0, 0.34),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isGo
+                          ? s.t('出发！', 'Go')
+                          : s.t('即将开始记录', 'Recording starts'),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (!widget.vibrationEnabled)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          s.t('震动提醒已关闭', 'Vibration off'),
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.close),
+                    label: Text(s.t('取消', 'Cancel')),
+                    onPressed: _cancel,
+                  ),
                 ),
               ),
             ],

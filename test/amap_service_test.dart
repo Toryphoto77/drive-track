@@ -309,10 +309,14 @@ void main() {
       expect(wgsToGcjLocal(0, 0), (0, 0));
     });
 
-    test('amap tile url is keyless style=7 road map', () {
+    test('amap tile url is keyless dark imagery road map with host rotation', () {
       expect(
           amapTileUrl(14, 1234, 5678),
-          'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1234&y=5678&z=14');
+          'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=1234&y=5678&z=14');
+      // 主机按 (x + y) 轮转，不再写死单主机。
+      expect(amapTileUrl(14, 1235, 5678), contains('webrd02.is.autonavi.com'));
+      expect(amapTileUrl(14, 1236, 5678), contains('webrd03.is.autonavi.com'));
+      expect(amapTileUrl(14, 1237, 5678), contains('webrd04.is.autonavi.com'));
       expect(amapTileAttribution, '© 高德地图');
     });
   });

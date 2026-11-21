@@ -20,8 +20,20 @@ import 'video_hud_page.dart';
 /// 追加进 `trip.videoPaths`，使编辑页的自动对齐能直接读到开录时间。
 /// 偏移微调不再在导入时做，全部放进编辑页的「调整画面对齐」。
 
-/// 关联结果：更新后的行程（已写入新的视频路径）。
-Future<Trip?> linkVideoToTrip(
+/// 关联结果：更新后的行程 + 这段视频在磁盘上的最终路径。
+///
+/// 关联时素材会被重命名为 `trip_<开录ms>.mp4`，调用方必须拿 [path]
+/// （而不是重命名前的旧路径）去打开编辑页：旧路径已不存在，
+/// `File(path).existsSync()` 为 false，预览区只会剩下空框。
+class VideoLinkResult {
+  const VideoLinkResult({required this.trip, required this.path});
+
+  final Trip trip;
+  final String path;
+}
+
+/// 关联结果：更新后的行程（已写入新的视频路径）与最终文件路径。
+Future<VideoLinkResult?> linkVideoToTrip(
   Store store, {
   required Trip trip,
   required String videoPath,
@@ -42,7 +54,9 @@ Future<Trip?> linkVideoToTrip(
 
     final existing = trip.videoPaths;
     final paths = <String>[...existing, target.path];
-    return await store.updateTripVideoPaths(trip.id, paths);
+    final updated = await store.updateTripVideoPaths(trip.id, paths);
+    if (updated == null) return null;
+    return VideoLinkResult(trip: updated, path: target.path);
   } catch (e) {
     throw Exception('导入失败：$e');
   }
@@ -91,9 +105,9 @@ Future<Trip?> openVideoSyncFlow(
     }
   }
 
-  Trip? updated;
+  VideoLinkResult? linked;
   try {
-    updated = await linkVideoToTrip(
+    linked = await linkVideoToTrip(
       store,
       trip: trip,
       videoPath: path,
@@ -105,20 +119,28 @@ Future<Trip?> openVideoSyncFlow(
     }
     return null;
   }
-  if (updated == null || !context.mounted) return updated;
+  if (linked == null) {
+    if (context.mounted) {
+      showAppNotice(context, '视频关联失败，请重试。', AppNoticeKind.error);
+    }
+    return null;
+  }
+  final result = linked;
+  if (!context.mounted) return result.trip;
 
   await Navigator.of(context).push(
     DtPageRoute(
       builder: (_) => VideoHudPage(
-        trip: updated!,
+        trip: result.trip,
         store: store,
-        initialVideoPath: path,
+        // 素材已被重命名为 trip_<ms>.mp4，必须传最终路径。
+        initialVideoPath: result.path,
       ),
     ),
   );
   // 编辑页里可能解除关联：返回前重新读一次行程，调用方据此刷新列表。
-  final latest = await store.loadTrip(updated.id);
-  return latest ?? updated;
+  final latest = await store.loadTrip(result.trip.id);
+  return latest ?? result.trip;
 }
 
 /// 选择这段视频对应的行程；返回更新后的行程，取消返回 null。

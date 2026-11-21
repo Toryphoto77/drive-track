@@ -1,7 +1,47 @@
+
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:drive_track/device_hardware_card.dart';
 import 'package:drive_track/firmware_update_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _RealHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) =>
+      super.createHttpClient(context);
+}
+
+class _RateService extends FirmwareUpdateService {
+  int? requestedHz;
+
+  @override
+  Future<FirmwareDeviceInfo?> probeDevice({
+    Duration timeout = const Duration(seconds: 4),
+  }) async => const FirmwareDeviceInfo(
+    model: 'DT-BOX-1',
+    version: '0.4.2',
+    build: 12,
+  );
+
+  @override
+  Future<DeviceRuntimeStatus?> readStatus({
+    Duration timeout = const Duration(seconds: 3),
+  }) async => DeviceRuntimeStatus.fromJson({
+    'gnssHz': 10,
+    'caps': ['gnss-rate'],
+  });
+
+  @override
+  Future<void> setGnssRate(
+    int hz, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    requestedHz = hz;
+  }
+}
 
 class _PartialStorageService extends FirmwareUpdateService {
   @override
@@ -61,6 +101,154 @@ void main() {
       final info = FirmwareDeviceInfo.fromJson({'fw': '0.9.0'});
       expect(info!.batteryPercent, isNull);
       expect(info.charging, isNull);
+    });
+  });
+
+  group('GNSS 输出频率', () {
+    test('状态读取当前频率与控制能力，旧固件保持未知', () {
+      final current = DeviceRuntimeStatus.fromJson({
+        'gnssHz': 25,
+        'caps': ['gnss-rate'],
+      });
+      expect(current.gnssRateHz, 25);
+      expect(current.supportsGnssRate, true);
+
+      final legacy = DeviceRuntimeStatus.fromJson({'battery': 80});
+      expect(legacy.gnssRateHz, isNull);
+      expect(legacy.supportsGnssRate, false);
+    });
+
+    test('只接受硬件支持的 10 / 20 / 25 Hz', () {
+      expect(parseGnssRateHz(10), 10);
+      expect(parseGnssRateHz('20'), 20);
+      expect(parseGnssRateHz(25), 25);
+      expect(parseGnssRateHz(15), isNull);
+      expect(parseGnssRateHz(30), isNull);
+      expect(parseGnssRateHz(null), isNull);
+    });
+
+    test('设置频率通过 HTTP 真正下发到设备', () async {
+      await HttpOverrides.runWithHttpOverrides(() async {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        String? path;
+        Map<String, dynamic>? payload;
+        final sub = server.listen((request) async {
+          path = request.uri.path;
+          payload = jsonDecode(await utf8.decoder.bind(request).join())
+              as Map<String, dynamic>;
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(jsonEncode({'ok': true, 'hz': payload!['hz']}));
+          await request.response.close();
+        });
+        final service = FirmwareUpdateService(
+          host: '127.0.0.1:${server.port}',
+        );
+        try {
+          await service.setGnssRate(25);
+          expect(path, '/api/gnss-rate');
+          expect(payload, {'hz': 25});
+          await expectLater(service.setGnssRate(15), throwsArgumentError);
+        } finally {
+          service.close();
+          await sub.cancel();
+          await server.close(force: true);
+        }
+      }, _RealHttpOverrides());
+    });
+
+    testWidgets('设备详情可切换 10 / 20 / 25 Hz 并调用设备接口', (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final service = _RateService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DeviceManagementPage(
+            deviceName: 'DriveTrack-56F6',
+            address: 'AA:BB:CC:DD:56:F6',
+            deviceType: '外接GPS',
+            service: service,
+            pollInterval: const Duration(hours: 1),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('定位输出频率'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, '10 Hz'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, '20 Hz'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, '25 Hz'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ChoiceChip, '25 Hz'));
+      await tester.pump();
+      expect(service.requestedHz, 25);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('设备热点自动连接', () {
+    testWidgets('没搜到时退避重试，连上后自动重连蓝牙', (tester) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const channel = MethodChannel('drivetrack/native');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var attempts = 0;
+      var hotspotUp = false;
+      var bleConnected = false;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        switch (call.method) {
+          case 'getConnectedWifiSsid':
+            return null;
+          case 'connectDeviceHotspot':
+            attempts++;
+            // 第一次模拟“设备热点还没起来”，退避后再连成功。
+            if (attempts == 1) {
+              return {'ok': false, 'reason': 'unavailable'};
+            }
+            hotspotUp = true;
+            return {'ok': true};
+          case 'getDeviceHotspotStatus':
+            return {'connected': hotspotUp};
+          case 'disconnectDeviceHotspot':
+            return true;
+          default:
+            return null;
+        }
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DeviceManagementPage(
+            deviceName: 'DriveTrack-56F6',
+            address: 'AA:BB:CC:DD:56:F6',
+            deviceType: '外接GPS',
+            service: _RateService(),
+            pollInterval: const Duration(hours: 1),
+            onConnect: () async => bleConnected = true,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(attempts, 1);
+      expect(bleConnected, isFalse);
+
+      // 5 秒退避后第二次请求成功，热点与蓝牙都应自动就绪。
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+      await tester.pump();
+      expect(attempts, 2);
+      expect(bleConnected, isTrue);
+      expect(find.text('已连接（自动）'), findsOneWidget);
     });
   });
 

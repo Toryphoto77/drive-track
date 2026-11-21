@@ -264,18 +264,28 @@ Future<List<(double lat, double lon)>?> convertWgsToGcj(
 }
 
 // ---------------------------------------------------------------------------
-// 记录页高德栅格瓦片（免 Key 标准路网，style=7）。
+// 记录页高德栅格瓦片（免 Key 深色影像路网，style=8，主机轮转）。
 // ---------------------------------------------------------------------------
 
 /// 高德栅格瓦片署名（记录页右下角显示）。
 const String amapTileAttribution = '© 高德地图';
 
-/// 高德标准路网栅格瓦片 URL（免 Key 端点 webrd01，style=7；
-/// 换算与 Esri 瓦片同一套 Web Mercator slippy-map 公式）。
+/// 高德深色影像路网栅格瓦片 URL（免 Key；换算与 Esri 瓦片同一套
+/// Web Mercator slippy-map 公式）。
+///
+/// v1.8.1：修复记录页街道底图约 80% 瓦片加载失败的问题。
+/// - 旧实现写死 webrd01 单主机 + style=7（标准路网，浅色），单主机
+///   限流/丢包时整幅地图几乎没有可用瓦片；
+/// - 现改为 webrd01~04 四台主机按瓦片坐标轮转，并把 style 换成
+///   style=8（影像路网，深色带路网），与行程详情页 RefinedMap /
+///   DarkTileMap 使用的“之前用过的深色路网”同一口径。
+///
 /// 只供记录页（lib/recording_map_page.dart）使用；编辑页与分析页
 /// 仍用 Esri 卫星瓦片，不动。
-String amapTileUrl(int z, int x, int y) =>
-    'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=$x&y=$y&z=$z';
+String amapTileUrl(int z, int x, int y) {
+  final host = 'webrd0${(x + y) % 4 + 1}.is.autonavi.com';
+  return 'https://$host/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=$x&y=$y&z=$z';
+}
 
 // ---------------------------------------------------------------------------
 // 轨迹纠偏（v4/grasproad/driving，POST JSON 数组）。

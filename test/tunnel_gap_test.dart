@@ -350,5 +350,25 @@ void main() {
       expect(rec.gapStatus.value, GapStatus.lost);
       expect(rec.points.where((p) => p.estimated).length, 0);
     });
+
+    test('丢星推算用气压锁高保持高度连续', () {
+      final rec = recorderWithFixes();
+      var baro = 100.0;
+      rec.baroAltitudeReader = () => baro;
+      rec.gapTickForTest(4001); // 缺口开始，基准气压高度 100 m
+      baro = 103.0; // 隧道内缓慢爬升 3 m
+      rec.gapTickForTest(5001);
+      final est = rec.points.last;
+      expect(est.estimated, isTrue);
+      expect(est.altValid, isTrue);
+      expect(est.alt, closeTo(103, 0.5));
+    });
+
+    test('没有气压数据时推算点不冒充海拔', () {
+      final rec = recorderWithFixes();
+      rec.gapTickForTest(4001);
+      expect(rec.points.last.estimated, isTrue);
+      expect(rec.points.last.altValid, isFalse);
+    });
   });
 }

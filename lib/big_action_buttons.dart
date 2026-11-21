@@ -36,6 +36,10 @@ class BigActionButtons extends StatefulWidget {
   /// 总协调传入；为 null 或空时已标定态只显示“已标定 ✓”一行。
   final String? calibrationDetail;
 
+  /// 安装标定是否已确认。默认 true（不显示额外警告）；
+  /// 车头已标定但安装未确认时，首页方块补一行橙色提示。
+  final bool mountCalibrated;
+
   /// 标定钮回调（总协调传已有 _showCalibrationSheet）。
   final VoidCallback? onCalibrate;
 
@@ -64,6 +68,7 @@ class BigActionButtons extends StatefulWidget {
     super.key,
     required this.calibrationState,
     this.calibrationDetail,
+    this.mountCalibrated = true,
     required this.onCalibrate,
     required this.onStartRecording,
     this.height = 128,
@@ -189,6 +194,17 @@ class _BigActionButtonsState extends State<BigActionButtons>
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
+            ],
+            if (!widget.mountCalibrated) ...[
+              const SizedBox(height: 2),
+              Text(
+                s.t('安装未确认 · 姿态角可能偏移', 'Mount not confirmed'),
+                style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
               ),
             ],
           ],

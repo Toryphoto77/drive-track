@@ -2291,40 +2291,34 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
             ),
           ),
           const SizedBox(height: 14),
-          DriveTrackInnerCard(
-            child: Row(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s.t('查看设备详情与管理', 'Device details & management'),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        ownHardware
-                            ? s.t(
-                                '传感器、卫星、固件、电池与硬件存储',
-                                'Sensors, GNSS, firmware, battery & storage',
-                              )
-                            : s.t(
-                                '连接、信号与设备信息',
-                                'Connection, signal & device information',
-                              ),
-                        style: const TextStyle(
-                          color: Colors.white38,
-                          fontSize: 11.5,
-                        ),
-                      ),
-                    ],
+                Text(
+                  s.t('查看设备详情与管理', 'Device details & management'),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                Icon(Icons.chevron_right, color: accent),
+                const SizedBox(height: 4),
+                Text(
+                  ownHardware
+                      ? s.t(
+                          '传感器、卫星、固件、电池与硬件存储',
+                          'Sensors, GNSS, firmware, battery & storage',
+                        )
+                      : s.t(
+                          '连接、信号与设备信息',
+                          'Connection, signal & device information',
+                        ),
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 11.5,
+                  ),
+                ),
               ],
             ),
           ),
@@ -2332,7 +2326,10 @@ class _DeviceCenterPageState extends State<DeviceCenterPage> {
           Row(
             children: [
               Expanded(
-                child: TextButton.icon(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
                   onPressed: addr == null || connecting
                       ? null
                       : () async {

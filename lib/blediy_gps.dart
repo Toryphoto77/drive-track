@@ -2,6 +2,7 @@
 ///
 import 'dart:convert';
 
+import 'sensor_fusion.dart';
 
 /// BleDIY 类设备走 BLE 串口（Nordic UART 风格），订阅后把字节流按行
 /// 交给 [BleDiyGpsFeed] 即可；字节从哪来、特征订阅怎么做，见回执里的
@@ -34,6 +35,7 @@ class ExternalGpsFix {
     this.fixQuality,
     this.fixMode,
     this.usedSatellites,
+    this.deviceTsUs,
   });
 
   final double lat;
@@ -52,6 +54,11 @@ class ExternalGpsFix {
 
   /// GSA 参与解算卫星数（12 个 PRN 槽位里非空个数）；null = 未收到 GSA。
   final int? usedSatellites;
+
+  /// 设备统一时基（固件开机后的微秒数）。自研硬件在每一帧 NDJSON 里
+  /// 都带该字段，供 App 做多传感器时间对齐与 GPS 延时补偿；
+  /// NMEA/手机定位没有该字段时为 null（不得用本地时间伪造）。
+  final int? deviceTsUs;
 
   /// GGA 第 9 字段海拔（平均海平面以上，米）。null = 本次定位
   /// 无海拔（如仅 RMC 定位），调用方必须按“无海拔”处理，绝不
@@ -87,6 +94,7 @@ class ExternalGpsFix {
         'fixQuality': fixQuality,
         'fixMode': fixMode,
         'usedSatellites': usedSatellites,
+        'deviceTsUs': deviceTsUs,
         'source': source,
       };
 }
@@ -337,6 +345,12 @@ class BleDiyGpsFeed {
   int droppedCount = 0;
   int acceptedCount = 0;
 
+  /// 是否已确认对端使用 DriveTrack 私有 NDJSON 协议（见 [feedLine]）。
+  bool _driveTrackJsonMode = false;
+
+  /// 多传感器融合：IMU/气压计帧与 GPS 共用固件 esp_timer 时基。
+  final SensorFusion fusion = SensorFusion();
+
   ExternalGpsFix? get latest => _latest;
   DateTime? get lastFixAt => _lastFixAt;
 
@@ -405,6 +419,10 @@ class BleDiyGpsFeed {
     if (line.startsWith('{')) {
       return _feedDriveTrackJson(line, at);
     }
+    // 自研硬件同时透传 NMEA（兼容通用工具）与 NDJSON（本 App 使用）。
+    // 一旦收到私有协议帧就只认 NDJSON：否则每周期 GGA+JSON 各 emit 一次，
+    // 20 Hz 会显示成 40 Hz，还会让轨迹点与存储量翻倍。
+    if (_driveTrackJsonMode) return _latest;
     if (line.contains('GGA')) {
       final gga = parseGga(line);
       if (gga == null) {
@@ -498,7 +516,36 @@ class BleDiyGpsFeed {
       droppedCount++;
       return null;
     }
-    if ((obj['t'] ?? '').toString() != 'gps') return _latest;
+    final type = (obj['t'] ?? '').toString();
+    if (type == 'gps' || type == 'imu' || type == 'baro') {
+      _driveTrackJsonMode = true;
+    }
+    if (type == 'imu') {
+      fusion.onImu(ImuSample(
+        tsUs: (obj['ts'] as num?)?.toInt() ?? 0,
+        ax: (obj['ax'] as num?)?.toDouble() ?? 0,
+        ay: (obj['ay'] as num?)?.toDouble() ?? 0,
+        az: (obj['az'] as num?)?.toDouble() ?? 0,
+        gx: (obj['gx'] as num?)?.toDouble(),
+        gy: (obj['gy'] as num?)?.toDouble(),
+        gz: (obj['gz'] as num?)?.toDouble(),
+        rollDeg: (obj['roll'] as num?)?.toDouble(),
+        pitchDeg: (obj['pitch'] as num?)?.toDouble(),
+      ));
+      return _latest;
+    }
+    if (type == 'baro') {
+      fusion.onBaro(BaroSample(
+        tsUs: (obj['ts'] as num?)?.toInt() ?? 0,
+        temperatureC: (obj['tc'] as num?)?.toDouble() ?? 0,
+        pressurePa: (obj['pa'] as num?)?.toDouble() ?? 0,
+        altitudeM: (obj['alt'] as num?)?.toDouble() ?? 0,
+        relativeAltitudeM: (obj['rel'] as num?)?.toDouble(),
+        calibrated: (obj['cal'] as num?)?.toInt() == 1,
+      ));
+      return _latest;
+    }
+    if (type != 'gps') return _latest;
     final sats = (obj['sats'] as num?)?.toInt();
     final fix = (obj['fix'] as num?)?.toInt() ?? 0;
     final lat = (obj['lat'] as num?)?.toDouble();
@@ -508,6 +555,16 @@ class BleDiyGpsFeed {
       return _latest;
     }
     _lastFixQuality = 1;
+    // 自研固件不发 GSA（GSA/GSV 已在模块侧关闭），私有协议里的 fix=1
+    // 表示模块已完成三维解算。此前不写 _lastFixMode，导致 App 已连接
+    // 硬件仍判定“未就绪”，现场实测按钮永远点不了。
+    _lastFixMode = 3;
+    final deviceTsUs = (obj['ts'] as num?)?.toInt();
+    final altitudeM = (obj['alt'] as num?)?.toDouble();
+    // GPS 海拔只做低频观测；带设备时标时按延时回推后喂给融合器。
+    if (deviceTsUs != null && altitudeM != null) {
+      fusion.onGpsAltitude(tsUs: deviceTsUs, altitudeM: altitudeM);
+    }
     return _emit(
       lat: lat,
       lon: lon,
@@ -515,7 +572,8 @@ class BleDiyGpsFeed {
       bearingDeg: (obj['cog'] as num?)?.toDouble(),
       satellites: sats,
       hdop: (obj['hdop'] as num?)?.toDouble(),
-      altitudeM: (obj['alt'] as num?)?.toDouble(),
+      altitudeM: altitudeM,
+      deviceTsUs: deviceTsUs,
       at: at,
       countForHz: true,
     );
@@ -530,6 +588,7 @@ class BleDiyGpsFeed {
     double? hdop,
     double? altitudeM,
     DateTime? timestampUtc,
+    int? deviceTsUs,
     required DateTime at,
     bool isGga = false,
     bool countForHz = false,
@@ -557,6 +616,7 @@ class BleDiyGpsFeed {
       fixQuality: _lastFixQuality,
       fixMode: _lastFixMode,
       usedSatellites: _lastUsedSats,
+      deviceTsUs: deviceTsUs,
     );
     return _latest!;
   }

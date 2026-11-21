@@ -56,6 +56,7 @@ int analysisGeoZoom({
   required GeoBounds bounds,
   required double widthPx,
   required double heightPx,
+  int maxZoom = satelliteMaxZoom,
 }) {
   if (widthPx <= 0 || heightPx <= 0) return satelliteMinZoom;
   final midLat = (bounds.minLat + bounds.maxLat) / 2;
@@ -63,7 +64,10 @@ int analysisGeoZoom({
   final spanXM = (bounds.maxLon - bounds.minLon).abs() * 111320 * cosLat;
   final spanYM = (bounds.maxLat - bounds.minLat).abs() * 110540;
   final mpp = math.max(spanXM / widthPx, spanYM / heightPx);
-  var zoom = satelliteZoomForMetersPerPixel(mpp <= 0 ? 10.0 : mpp, midLat);
+  var zoom = satelliteZoomForMetersPerPixel(
+    mpp <= 0 ? 10.0 : mpp,
+    midLat,
+  ).clamp(satelliteMinZoom, maxZoom);
   while (zoom > satelliteMinZoom) {
     final r = satelliteTileRange(
       minLat: bounds.minLat,

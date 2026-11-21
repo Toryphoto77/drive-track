@@ -237,6 +237,14 @@ class DeviceLap {
   }
 }
 
+/// 自研硬件支持的 GNSS 输出档位；其他值返回 null，绝不就近冒充。
+int? parseGnssRateHz(Object? value) {
+  final hz = value is num
+      ? value.toInt()
+      : int.tryParse((value ?? '').toString().trim());
+  return const [10, 20, 25].contains(hz) ? hz : null;
+}
+
 /// `GET /api/status` 的实时状态。字段缺省一律为 null，界面显示“—”，
 /// 绝不把缺省值当成 0 或“未录制”。
 class DeviceRuntimeStatus {
@@ -248,6 +256,7 @@ class DeviceRuntimeStatus {
     this.imuReady,
     this.baroReady,
     this.satellites,
+    this.gnssRateHz,
     this.lapCount,
     this.currentLapMs,
     this.lastLapMs,
@@ -260,6 +269,22 @@ class DeviceRuntimeStatus {
     this.sdFreeKb,
     this.supportsShutdown = false,
     this.supportsLaps = false,
+    this.supportsGnssRate = false,
+    this.supportsFileBackhaul = false,
+    this.imuAx,
+    this.imuAy,
+    this.imuAz,
+    this.imuGx,
+    this.imuGy,
+    this.imuGz,
+    this.imuRollDeg,
+    this.imuPitchDeg,
+    this.imuCalibrated,
+    this.baroTempC,
+    this.baroPressPa,
+    this.baroAltM,
+    this.baroRelAltM,
+    this.baroCalibrated,
   });
 
   final int? batteryPercent;
@@ -271,6 +296,7 @@ class DeviceRuntimeStatus {
   final bool? imuReady;
   final bool? baroReady;
   final int? satellites;
+  final int? gnssRateHz;
   final int? lapCount;
   final int? currentLapMs;
   final int? lastLapMs;
@@ -289,6 +315,33 @@ class DeviceRuntimeStatus {
   /// 固件能力：旧固件不报 caps，对应按钮置灰并提示升级固件。
   final bool supportsShutdown;
   final bool supportsLaps;
+  final bool supportsGnssRate;
+
+  /// 固件是否提供 SD 整场记录列表/下载接口（file-backhaul）。
+  final bool supportsFileBackhaul;
+
+  /// IMU 实时读数（固件 0.4.2+ 的 imuData）；缺字段一律 null → 界面显示“—”，
+  /// 不把“没数据”伪装成 0。
+  final double? imuAx;
+  final double? imuAy;
+  final double? imuAz;
+  final double? imuGx;
+  final double? imuGy;
+  final double? imuGz;
+  final double? imuRollDeg;
+  final double? imuPitchDeg;
+
+  /// 陀螺零偏自动标定是否完成（开机静置自动执行）。
+  final bool? imuCalibrated;
+
+  /// 气压计实时读数与自动零点标定状态。
+  final double? baroTempC;
+  final double? baroPressPa;
+  final double? baroAltM;
+
+  /// 相对自动零点的高度（米），用于看台架/车辆的真实高差。
+  final double? baroRelAltM;
+  final bool? baroCalibrated;
 
   static DeviceRuntimeStatus fromJson(Map<String, dynamic> json) {
     final caps =
@@ -304,6 +357,19 @@ class DeviceRuntimeStatus {
 
     final recording = parseBool(json['recording'] ?? json['rec']);
     final fix = parseBool(json['fix'] ?? json['hasFix'] ?? json['gnss']);
+    final imu = json['imuData'];
+    final imuData = imu is Map ? imu.cast<String, dynamic>() : const <String, dynamic>{};
+    final baro = json['baroData'];
+    final baroData =
+        baro is Map ? baro.cast<String, dynamic>() : const <String, dynamic>{};
+    double? dbl(Map<String, dynamic> src, List<String> keys) {
+      for (final k in keys) {
+        final v = src[k];
+        if (v is num) return v.toDouble();
+      }
+      return null;
+    }
+
     return DeviceRuntimeStatus(
       batteryPercent: parseBatteryPercent(json),
       charging: parseBool(json['charging']),
@@ -312,6 +378,7 @@ class DeviceRuntimeStatus {
       imuReady: parseBool(json['imuReady'] ?? json['imu']),
       baroReady: parseBool(json['baroReady'] ?? json['baro']),
       satellites: _intField(json, const ['sats', 'satellites', 'sat']),
+      gnssRateHz: parseGnssRateHz(json['gnssHz'] ?? json['gnssRateHz']),
       lapCount: _intField(json, const ['laps', 'lapCount', 'lap_count']),
       currentLapMs: _intField(json, const [
         'currentLapMs',
@@ -329,6 +396,22 @@ class DeviceRuntimeStatus {
       sdFreeKb: _intField(json, const ['sdFreeKb', 'sd_free_kb']),
       supportsShutdown: supports('shutdown', 'shutdown'),
       supportsLaps: supports('laps', 'lapsApi'),
+      supportsGnssRate: supports('gnss-rate', 'gnssRateApi'),
+      supportsFileBackhaul: supports('file-backhaul', 'fileBackhaul'),
+      imuAx: dbl(imuData, const ['ax']),
+      imuAy: dbl(imuData, const ['ay']),
+      imuAz: dbl(imuData, const ['az']),
+      imuGx: dbl(imuData, const ['gx']),
+      imuGy: dbl(imuData, const ['gy']),
+      imuGz: dbl(imuData, const ['gz']),
+      imuRollDeg: dbl(imuData, const ['roll', 'rollDeg']),
+      imuPitchDeg: dbl(imuData, const ['pitch', 'pitchDeg']),
+      imuCalibrated: parseBool(imuData['cal'] ?? imuData['calibrated']),
+      baroTempC: dbl(baroData, const ['temp', 'tempC', 'tc']),
+      baroPressPa: dbl(baroData, const ['press', 'pressPa', 'pa']),
+      baroAltM: dbl(baroData, const ['alt', 'altM']),
+      baroRelAltM: dbl(baroData, const ['rel', 'relAltM']),
+      baroCalibrated: parseBool(baroData['cal'] ?? baroData['calibrated']),
     );
   }
 }
@@ -357,6 +440,21 @@ int compareFirmwareVersion(String a, String b) {
     if (va != vb) return va - vb;
   }
   return 0;
+}
+
+/// 设备 SD 卡上的一场完整记录（session_0001.ndjson 这类文件）。
+class DeviceRecordingFile {
+  const DeviceRecordingFile({required this.name, required this.size});
+
+  final String name;
+  final int size;
+
+  /// 界面展示用的大小，如 “12.3 MB”。
+  String get sizeLabel {
+    if (size < 1024) return '$size B';
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
+    return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
 }
 
 /// 自研硬件的固件在线升级：清单拉取、下载校验、WiFi 直连上传。
@@ -460,6 +558,111 @@ class FirmwareUpdateService {
       return const [];
     }
   }
+
+  /// 设置自研硬件 GNSS 输出频率，立即通过热点接口下发到固件。
+  Future<void> setGnssRate(
+    int hz, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (parseGnssRateHz(hz) == null) {
+      throw ArgumentError.value(hz, 'hz', '只支持 10 / 20 / 25 Hz');
+    }
+    final request = await _client
+        .postUrl(Uri.parse('http://$host/api/gnss-rate'))
+        .timeout(timeout);
+    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+    request.write(jsonEncode({'hz': hz}));
+    final response = await request.close().timeout(timeout);
+    final body = await response.transform(utf8.decoder).join();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw FirmwareUpdateException('频率设置失败：HTTP ${response.statusCode} $body');
+    }
+    final decoded = jsonDecode(body);
+    if (decoded is Map && decoded['ok'] == false) {
+      throw FirmwareUpdateException('设备拒绝设置频率：${decoded['error'] ?? '未知原因'}');
+    }
+  }
+
+  /// 列出设备 SD 卡上的全部会话文件（回到 pits 后可整场回传）。
+  ///
+  /// 设备未插卡或固件过旧时返回明确异常，不把空列表当成“没有记录”。
+  Future<List<DeviceRecordingFile>> listRecordings({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final body =
+        await _getString('http://$host/api/files', timeout: timeout);
+    Object? decoded;
+    try {
+      decoded = jsonDecode(body);
+    } on FormatException {
+      throw FirmwareUpdateException('设备返回的记录列表不是 JSON');
+    }
+    if (decoded is! Map || decoded['ok'] == false) {
+      throw FirmwareUpdateException('设备不支持记录回传（需要 SD 卡与新版固件）');
+    }
+    final raw = decoded['files'];
+    if (raw is! List) return const [];
+    final files = <DeviceRecordingFile>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final name = item['name'];
+      if (name is! String || !_isSafeRecordingName(name)) continue;
+      final size = item['size'];
+      files.add(DeviceRecordingFile(
+        name: name,
+        size: size is num ? size.toInt() : 0,
+      ));
+    }
+    files.sort((a, b) => a.name.compareTo(b.name));
+    return files;
+  }
+
+  /// 下载一场 SD 记录到本地目录，先写 .part 再改名，避免半截文件。
+  Future<File> downloadRecording(
+    String name, {
+    required Directory directory,
+    void Function(int received, int total)? onProgress,
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    if (!_isSafeRecordingName(name)) {
+      throw ArgumentError.value(name, 'name', '只允许 session_*.ndjson');
+    }
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    final target = File('${directory.path}/$name');
+    final partial = File('${target.path}.part');
+    final uri = Uri.parse('http://$host/api/files/download')
+        .replace(queryParameters: {'name': name});
+    final request = await _client.getUrl(uri).timeout(timeout);
+    final response = await request.close().timeout(timeout);
+    if (response.statusCode != HttpStatus.ok) {
+      throw FirmwareUpdateException('记录回传失败：HTTP ${response.statusCode}');
+    }
+    final total = response.contentLength > 0 ? response.contentLength : -1;
+    final sink = partial.openWrite();
+    var received = 0;
+    try {
+      await for (final chunk in response.timeout(timeout)) {
+        received += chunk.length;
+        sink.add(chunk);
+        onProgress?.call(received, total);
+      }
+      await sink.flush();
+    } finally {
+      await sink.close();
+    }
+    if (await target.exists()) {
+      await target.delete();
+    }
+    await partial.rename(target.path);
+    return target;
+  }
+
+  /// 只接受本设备生成的文件名，杜绝路径穿越。
+  bool _isSafeRecordingName(String name) =>
+      RegExp(r'^session_[A-Za-z0-9_.-]+$').hasMatch(name) &&
+      !name.contains('..');
 
   /// App 内关机：POST /api/shutdown。
   ///

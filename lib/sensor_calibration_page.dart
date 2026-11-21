@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'app_bar_style.dart';
 import 'glass_button.dart';
+import 'mount_calibration.dart';
 import 'native.dart';
 import 'recorder.dart';
 
@@ -17,13 +18,16 @@ import 'recorder.dart';
 /// 不在设置页发明第二套 G 值计算；G 值计算仍只在 recorder.dart
 /// 的 onSensor 里。
 ///
-/// 三步向导：
+/// 四步向导：
 /// ① 水平静置校零：手机水平静置 2 秒，取传感器流 ax/ay/az 均值
 ///    记为零偏（recordZeroBias），2 秒内无数据则明确报错、不编零；
 /// ② 车头方向标定：复用现有 beginCalibration（直线行驶至 18 km/h
 ///    以上自动锁定），完成状态直接读 rec.calibrated，与记录页
 ///    大方块同一状态源，天然同步；
-/// ③ 罗盘 8 字校准提示：只做提示与完成勾选（状态位
+/// ③ 安装方向与补偿角：设备装歪会让姿态角整体偏移。用户选择
+///    长边朝车头 / 横装，并可用补偿角微调；确认后写入
+///    Recorder.mountCalibration 并持久化到 profile.json；
+/// ④ 罗盘 8 字校准提示：只做提示与完成勾选（状态位
 ///    compassHintDone），不编造罗盘校准结果——系统罗盘校准
 ///    本身由系统完成，App 无法也不应伪造一个结果。
 class SensorCalibrationPage extends StatefulWidget {
@@ -33,10 +37,15 @@ class SensorCalibrationPage extends StatefulWidget {
   /// startLocation + startSensors，与旧标定底部表同一流程）。
   final VoidCallback onStartHeadingCalibration;
 
+  /// 保存安装标定（总协调负责写 Recorder 与 profile.json）。
+  final Future<void> Function(MountCalibration calibration)
+      onSaveMountCalibration;
+
   const SensorCalibrationPage({
     super.key,
     required this.recorder,
     required this.onStartHeadingCalibration,
+    required this.onSaveMountCalibration,
   });
 
   @override
@@ -48,12 +57,16 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
   bool _zeroRunning = false;
   String? _zeroError;
   bool _compassDone = false;
+  late MountOrientation _mountOrientation;
+  late double _mountYaw;
 
   Recorder get _rec => widget.recorder;
 
   @override
   void initState() {
     super.initState();
+    _mountOrientation = _rec.mountCalibration.orientation;
+    _mountYaw = _rec.mountCalibration.yawOffsetDeg;
     _rec.addListener(_tick);
   }
 
@@ -106,10 +119,10 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
   }
 
   Widget _stepper() {
-    const labels = ['水平静置校零', '车头方向标定', '罗盘 8 字提示'];
+    const labels = ['静置校零', '车头方向', '安装补偿', '罗盘提示'];
     return Row(
       children: [
-        for (var i = 0; i < 3; i++) ...[
+        for (var i = 0; i < 4; i++) ...[
           if (i > 0) const Expanded(child: Divider(color: Colors.white24)),
           Column(children: [
             CircleAvatar(
@@ -195,7 +208,87 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
               ],
             ],
             if (_step == 2) ...[
-              const Text('第 3 步 · 罗盘 8 字校准提示',
+              const Text('第 3 步 · 安装方向与补偿角',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text(
+                '设备装歪会让姿态角整体偏移。先选实际安装方向；横装通常需要 ±90°，'
+                '其余小幅歪斜用补偿角微调。不确定就保持 0°，之后可随时回来重调。',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final o in MountOrientation.values)
+                    ChoiceChip(
+                      label: Text(o.label),
+                      selected: _mountOrientation == o,
+                      onSelected: (_) =>
+                          setState(() => _mountOrientation = o),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('安装补偿角',
+                      style: TextStyle(fontSize: 14)),
+                  Text('${_mountYaw.toStringAsFixed(0)}°',
+                      style: const TextStyle(
+                          color: Colors.greenAccent, fontSize: 14)),
+                ],
+              ),
+              Slider(
+                value: _mountYaw,
+                min: -180,
+                max: 180,
+                divisions: 72,
+                label: '${_mountYaw.toStringAsFixed(0)}°',
+                onChanged: (v) => setState(() => _mountYaw = v),
+              ),
+              const Text(
+                '每格 5°：正值为逆时针修正，负值为顺时针修正。',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              if (_rec.calibrated)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('车头方向已锁定，可保存安装标定。',
+                      style: TextStyle(color: Colors.greenAccent, fontSize: 13)),
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('建议先完成第 2 步车头方向标定，再保存安装补偿。',
+                      style: TextStyle(color: Colors.orangeAccent, fontSize: 13)),
+                ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () async {
+                  final calibration = MountCalibration(
+                    orientation: _mountOrientation,
+                    yawOffsetDeg: normalizeMountAngleDeg(_mountYaw),
+                    calibratedAtMs:
+                        DateTime.now().millisecondsSinceEpoch,
+                  );
+                  await widget.onSaveMountCalibration(calibration);
+                  if (!mounted) return;
+                  setState(() {});
+                },
+                child: const Text('保存安装标定'),
+              ),
+              if (_rec.mountCalibration.configured)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('已保存：${_rec.mountCalibration.summary}',
+                      style: const TextStyle(
+                          color: Colors.greenAccent, fontSize: 13)),
+                ),
+            ],
+            if (_step == 3) ...[
+              const Text('第 4 步 · 罗盘 8 字校准提示',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               const Text(
@@ -228,13 +321,13 @@ class _SensorCalibrationPageState extends State<SensorCalibrationPage> {
               Expanded(
                 child: FilledButton(
                   onPressed: () {
-                    if (_step < 2) {
+                    if (_step < 3) {
                       setState(() => _step++);
                     } else {
                       Navigator.pop(context);
                     }
                   },
-                  child: Text(_step < 2 ? '下一步' : '完成并返回'),
+                  child: Text(_step < 3 ? '下一步' : '完成并返回'),
                 ),
               ),
             ]),

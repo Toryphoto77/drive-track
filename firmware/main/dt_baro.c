@@ -1,10 +1,11 @@
 #include "dt_baro.h"
 
-#include "dt_ble.h"
 #include "dt_config.h"
+#include "dt_session.h"
 
 #include "driver/i2c_master.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -39,6 +40,14 @@ static i2c_master_dev_handle_t s_dev;
 static bmp3_calib_t s_cal;
 static dt_baro_sample_t s_last;
 static bool s_ready;
+
+// 自动零点标定：开机后前若干帧视为静止基准，求平均作为相对高度 0 点。
+// 不做手动“校准”按钮——用户只需开机静置几秒，避免现场操作负担。
+#define BARO_CAL_SAMPLES 20
+static float s_cal_sum_pa;
+static int s_cal_count;
+static float s_ref_pa;
+static bool s_calibrated;
 
 static esp_err_t baro_read_regs(uint8_t reg, uint8_t *buf, size_t len)
 {
@@ -180,18 +189,29 @@ static bool baro_sample_once(dt_baro_sample_t *out)
 static void baro_task(void *arg)
 {
     (void)arg;
-    char line[128];
 
     while (true) {
         dt_baro_sample_t s;
         if (baro_sample_once(&s)) {
+            s.ts_us = esp_timer_get_time();
+            // 前 BARO_CAL_SAMPLES 帧累计求基准气压；之后换算相对高度。
+            // 芯片内部已按温度做压力补偿，这里再以基准气压消除天气漂移。
+            if (!s_calibrated) {
+                s_cal_sum_pa += s.press_pa;
+                s_cal_count++;
+                if (s_cal_count >= BARO_CAL_SAMPLES) {
+                    s_ref_pa = s_cal_sum_pa / (float)s_cal_count;
+                    s_calibrated = true;
+                    ESP_LOGI(TAG, "自动零点标定完成：%.1f Pa", s_ref_pa);
+                }
+            }
+            s.rel_alt_m = s_calibrated
+                              ? 44330.0f *
+                                    (1.0f - powf(s.press_pa / s_ref_pa, 0.190295f))
+                              : 0.0f;
             s_last = s;
-            ESP_LOGI(TAG, "T=%.1fC P=%.1fPa alt=%.1fm", s.temp_c, s.press_pa,
-                     s.alt_m);
-            snprintf(line, sizeof(line),
-                     "{\"t\":\"baro\",\"tc\":%.2f,\"pa\":%.1f,\"alt\":%.1f}",
-                     s.temp_c, s.press_pa, s.alt_m);
-            dt_ble_send_line(line);
+            // 统一走 session：所有传感器帧带同一时基，并落 SD/上报。
+            dt_session_on_baro(&s);
         } else {
             baro_dump("读数无效");
         }
@@ -283,6 +303,11 @@ bool dt_baro_start(void)
     }
     s_ready = true;
 
+    // 每次启动重新做自动零点标定，避免沿用上一次开机的旧基准。
+    s_cal_sum_pa = 0;
+    s_cal_count = 0;
+    s_calibrated = false;
+
     BaseType_t ok = xTaskCreate(baro_task, "dt_baro", 4096, NULL, 4, NULL);
     if (ok != pdPASS) {
         s_ready = false;
@@ -309,6 +334,11 @@ bool dt_baro_ready(void)
     return s_ready;
 }
 
+bool dt_baro_calibrated(void)
+{
+    return s_calibrated;
+}
+
 #else
 
 bool dt_baro_start(void)
@@ -323,6 +353,11 @@ bool dt_baro_read(dt_baro_sample_t *out)
 }
 
 bool dt_baro_ready(void)
+{
+    return false;
+}
+
+bool dt_baro_calibrated(void)
 {
     return false;
 }

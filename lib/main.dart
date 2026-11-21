@@ -15,17 +15,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 
 import 'models.dart';
+import 'mount_calibration.dart';
 import 'logic.dart';
 import 'native.dart';
 import 'tappable.dart';
 import 'permission_gate.dart';
 import 'recording_3d_map.dart';
+import 'nearby_map_web.dart';
 import 'recording_map_page.dart';
 import 'recorder.dart';
 import 'tunnel_gap.dart';
 import 'obd_service.dart';
 import 'store.dart';
 import 'gps_source.dart';
+import 'firmware_update_service.dart';
 import 'widgets.dart';
 // v0.1.3 新模块（统合）
 import 'countdown_page.dart';
@@ -37,6 +40,7 @@ import 'track_catalog.dart';
 import 'track_encyclopedia.dart';
 import 'track_guide.dart';
 import 'track_library.dart';
+import 'track_match.dart';
 import 'track_knowledge_page.dart';
 import 'track_library_page.dart';
 import 'track_package_info_page.dart';
@@ -210,6 +214,8 @@ class AppPrefs extends ChangeNotifier {
   String safetyAckDate = '';
   String safetyAckMode = '';
   bool safetyAckTrack = false;
+  // v1.6.0：设备安装标定（方向 + 补偿角），只存本机 profile.json。
+  MountCalibration mountCalibration = const MountCalibration();
   VehicleMarkerSelection get vehicleSelection => VehicleMarkerSelection(
     car: CarMarkerStyle.values.firstWhere(
       (e) => e.key == vehicleCar,
@@ -274,6 +280,7 @@ class AppPrefs extends ChangeNotifier {
         safetyAckDate = (j['safetyAckDate'] as String?) ?? '';
         safetyAckMode = (j['safetyAckMode'] as String?) ?? '';
         safetyAckTrack = (j['safetyAckTrack'] as bool?) ?? false;
+        mountCalibration = MountCalibration.fromJson(j['mountCalibration']);
         // 油耗两项：缺字段 / 非正数一律按空处理，不编默认值。
         final fc = (j['fuelConsumptionLPer100Km'] as num?)?.toDouble();
         fuelConsumptionLPer100Km = (fc != null && fc > 0) ? fc : null;
@@ -292,14 +299,20 @@ class AppPrefs extends ChangeNotifier {
         avatarPath = j['avatarPath'] as String?;
         latinFont = normalizeLatinFont(j['latinFont'] as String?);
       }
-      // 用户 ID 改为纯数字（旧版前缀 DT-）。空或仍是旧 DT- 格式的，
-      // 都重新生成纯数字 ID 并持久化；ID 仅本机展示，无云端绑定。
-      if (userId.isEmpty || userId.startsWith('DT-')) {
-        final secs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        final rand = math.Random().nextInt(900000) + 100000; // 6 位随机尾号
-        userId = '$secs$rand';
-        await save();
+      // 用户 ID 只保留最多 8 位纯数字。旧版把时间戳和随机数直接拼接，
+      // 会显示十几位；超长 ID 保留末尾 8 位，空 ID 新生成 8 位。
+      final oldUserId = userId;
+      final digits = userId.replaceAll(RegExp(r'\D'), '');
+      if (RegExp(r'^\d{1,8}$').hasMatch(userId)) {
+        // 已符合规则，保持不变。
+      } else if (digits.isNotEmpty) {
+        userId = digits.length > 8
+            ? digits.substring(digits.length - 8)
+            : digits;
+      } else {
+        userId = '${math.Random().nextInt(90000000) + 10000000}';
       }
+      if (userId != oldUserId) await save();
     } catch (_) {}
     _loaded = true;
     _loading = false;
@@ -344,11 +357,18 @@ class AppPrefs extends ChangeNotifier {
           'safetyAckDate': safetyAckDate,
           'safetyAckMode': safetyAckMode,
           'safetyAckTrack': safetyAckTrack,
+          'mountCalibration': mountCalibration.toJson(),
           'fuelConsumptionLPer100Km': fuelConsumptionLPer100Km,
           'fuelPricePerLiter': fuelPricePerLiter,
         }),
       );
     } catch (_) {}
+  }
+
+  Future<void> setMountCalibration(MountCalibration calibration) async {
+    mountCalibration = calibration;
+    notifyListeners();
+    await save();
   }
 
   Future<void> setTheme(Color c) async {
@@ -521,9 +541,7 @@ class _DriveTrackAppState extends State<DriveTrackApp> {
             final mq = MediaQuery.of(context);
             final sysFactor = mq.textScaler.scale(14) / 14.0;
             return MediaQuery(
-              data: mq.copyWith(
-                textScaler: TextScaler.linear(sysFactor * 0.9),
-              ),
+              data: mq.copyWith(textScaler: TextScaler.linear(sysFactor * 0.9)),
               child: LocaleScope(
                 controller: LocaleController.instance,
                 child: child ?? const SizedBox.shrink(),
@@ -718,8 +736,23 @@ int drainLapTimerPoints(LapTimer timer, List<TrackPoint> points, int fedCount) {
   var fed = fedCount;
   while (fed < points.length) {
     final p = points[fed++];
+    // 气压高度只用于过线一致性校验：同一气压计在短时间内的相对
+    // 变化可信，绝对值不当作真实海拔。无气压数据时传 null。
+    final pressureAlt = p.pressureHpa > 0
+        ? 44330.0 * (1 - math.pow(p.pressureHpa / 1013.25, 0.1903))
+        : null;
     timer.addPoint(
-      TimedPoint(lat: p.lat, lon: p.lon, speed: p.speed, timeMs: p.timeMs),
+      TimedPoint(
+        lat: p.lat,
+        lon: p.lon,
+        speed: p.speed,
+        timeMs: p.timeMs,
+        // 未标定时车身坐标无效，不把未标定值当成传感器证据。
+        longG: p.calibrated ? p.longG : null,
+        rollDeg: p.calibrated ? p.roll : null,
+        pitchDeg: p.calibrated ? p.pitch : null,
+        altM: pressureAlt,
+      ),
     );
   }
   return fed;
@@ -790,6 +823,8 @@ class _HomePageState extends State<HomePage>
       });
   // v0.1.3 赛道模式 / 地图 / 外接 GPS 状态
   bool trackMode = false;
+  // 自定义跑山/道路：trackMode 必须为 false，确保不创建 LapTimer、不产生单圈。
+  bool customRoadMode = false;
   TrackInfo? selectedTrack;
   // 赛道库：与 selectedTrack 同生命周期，选中包时一并设定，供计时
   // 取包的经纬度起终点 / 分段点（无包数据时回落旧行为）。
@@ -898,6 +933,10 @@ class _HomePageState extends State<HomePage>
     if (appPrefs.directSatellite) SatelliteService.instance.setDirectMode(true);
     await store.init();
     await appPrefs.load();
+    // 安装标定随 profile.json 持久化，启动即套用到姿态解算。
+    rec.setMountCalibration(appPrefs.mountCalibration);
+    // 丢星推算用融合层气压高度锁高；无气压数据时保持 altValid=false。
+    rec.baroAltitudeReader = () => _blediyFeed.fusion.latestBaro?.altitudeM;
     // OBD 服务挂录制器：实时车速写 rec.obdSpeedMs（只供隧道推算用）、
     // 每秒一条实测采样进 rec.obdSamples；不断开不写，GPS 正常时
     // 绝不拿 OBD 速度替换实测点里的 GPS 速度（Recorder 已保证）。
@@ -1425,10 +1464,23 @@ class _HomePageState extends State<HomePage>
     return false;
   }
 
-  /// 汽车 / 摩托在赛道模式下没选赛道时的引导弹层。
+  /// 汽车 / 摩托在赛道模式下赛道不完整时的引导弹层。
   /// 不提供“就这么录”的入口：没有起终点就没有圈速，录成街道行程会误导用户。
+  ///
+  /// v1.8.1：区分“没选”和“选了但缺数据”。此前无论是否已选赛道都写
+  /// “还没有选定赛道”，用户明明选过仍被这句话误导；现在给出真实缺失项，
+  /// 并直接提供补全入口。
   void _showNoTrackSheet(TripMode mode) {
     final modeName = mode == TripMode.moto ? '摩托' : '汽车';
+    final pkg = selectedPackage;
+    final problem = kartTrackProblem(pkg);
+    final pickedButIncomplete = pkg != null && problem != null;
+    final title = pickedButIncomplete ? '已选赛道还缺必要数据' : '$modeName赛道模式：还没有选定赛道';
+    final body = pickedButIncomplete
+        ? '「${pkg.nameCn}」$problem。补全中心线与起终点后即可用于计时，'
+              '无需重新跑一圈。'
+        : '赛道库里没找到你所在的赛道时，可以直接实录自建：沿赛道跑完一圈，'
+              '系统会用这圈的轨迹闭合出中心线与起终点，之后就能计时。';
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF141414),
@@ -1442,7 +1494,7 @@ class _HomePageState extends State<HomePage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$modeName赛道模式：还没有选定赛道',
+              title,
               style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
@@ -1450,10 +1502,9 @@ class _HomePageState extends State<HomePage>
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              '赛道库里没找到你所在的赛道时，可以直接实录自建：沿赛道跑完一圈，'
-              '系统会用这圈的轨迹闭合出中心线与起终点，之后就能计时。',
-              style: TextStyle(
+            Text(
+              body,
+              style: const TextStyle(
                 fontSize: 13,
                 height: 1.5,
                 color: Colors.white70,
@@ -1466,12 +1517,19 @@ class _HomePageState extends State<HomePage>
               child: FilledButton.icon(
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  unawaited(
-                    _openCustomTrackCreator(CustomTrackMethod.measured),
-                  );
+                  if (pickedButIncomplete) {
+                    unawaited(_editTrackPackage(pkg));
+                  } else {
+                    unawaited(
+                      _openCustomTrackCreator(CustomTrackMethod.measured),
+                    );
+                  }
                 },
-                icon: const Icon(Icons.route, size: 18),
-                label: const Text('实录建赛道（跑一圈自动闭合）'),
+                icon: Icon(
+                  pickedButIncomplete ? Icons.edit_road : Icons.route,
+                  size: 18,
+                ),
+                label: Text(pickedButIncomplete ? '补全当前赛道' : '实录建赛道（跑一圈自动闭合）'),
               ),
             ),
             const SizedBox(height: 8),
@@ -1481,11 +1539,15 @@ class _HomePageState extends State<HomePage>
                   child: OutlinedButton(
                     onPressed: () {
                       Navigator.of(ctx).pop();
-                      unawaited(
-                        _openCustomTrackCreator(CustomTrackMethod.satellite),
-                      );
+                      if (pickedButIncomplete) {
+                        _openTrackCatalogSheet();
+                      } else {
+                        unawaited(
+                          _openCustomTrackCreator(CustomTrackMethod.satellite),
+                        );
+                      }
                     },
-                    child: const Text('卫星图绘制'),
+                    child: Text(pickedButIncomplete ? '重新选择赛道' : '卫星图绘制'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1493,9 +1555,15 @@ class _HomePageState extends State<HomePage>
                   child: OutlinedButton(
                     onPressed: () {
                       Navigator.of(ctx).pop();
-                      _openTrackCatalogSheet();
+                      if (pickedButIncomplete) {
+                        unawaited(
+                          _openCustomTrackCreator(CustomTrackMethod.measured),
+                        );
+                      } else {
+                        _openTrackCatalogSheet();
+                      }
                     },
-                    child: const Text('选已有赛道'),
+                    child: Text(pickedButIncomplete ? '实测重建' : '选已有赛道'),
                   ),
                 ),
               ],
@@ -1512,6 +1580,49 @@ class _HomePageState extends State<HomePage>
         ),
       ),
     );
+  }
+
+  /// 编辑已选中的赛道包，保存后写库并保持选中。
+  Future<void> _editTrackPackage(TrackPackage pkg) async {
+    await Navigator.push<void>(
+      context,
+      DtPageRoute(
+        builder: (_) => TrackPackageEditorPage(
+          package: pkg,
+          onSave: (updated) async {
+            try {
+              await TrackLibraryService.instance.savePackage(updated);
+              if (!mounted) return;
+              setState(() {
+                trackMode = true;
+                rec.roadSnapEnabled = false;
+                selectedTrack = trackInfoForPackage(updated);
+                selectedPackage = updated;
+              });
+              showAppNotice(
+                context,
+                '赛道已更新：${updated.nameCn}',
+                AppNoticeKind.success,
+              );
+            } catch (_) {
+              if (mounted) {
+                showAppNotice(context, '赛道保存失败，请重试', AppNoticeKind.error);
+              }
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  /// 当前可用于建赛/匹配的定位点；未就绪时返回 null（不猜测）。
+  GeoPoint? _currentFixGeoPoint() {
+    final fix = _blediyFeed.latest;
+    final at =
+        _blediyFeed.lastFixAt?.millisecondsSinceEpoch ??
+        externalGpsStatus.value.lastFixAtMs;
+    if (!external3DFixReady(fix, at)) return null;
+    return GeoPoint(fix!.lat, fix.lon);
   }
 
   void _showHardwareGateSheet(ExternalGpsStatus st) {
@@ -1683,7 +1794,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.8.0',
+          versionName: '1.8.2',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -2880,17 +2991,17 @@ class _HomePageState extends State<HomePage>
 
   /// 菜单分组标题：白 54、11px、左对齐，与列表项左边距对齐。
   Widget _menuGroupHeader(String label) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+    child: Text(
+      label,
+      style: const TextStyle(
+        color: Colors.white54,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.8,
+      ),
+    ),
+  );
 
   Widget _buildMenuPanel() {
     final s = S.of(context);
@@ -2962,8 +3073,10 @@ class _HomePageState extends State<HomePage>
                         leading: const Icon(Icons.flag),
                         title: Text(s.t('赛道库', 'Track library')),
                         subtitle: Text(
-                          s.t('赛道数据包 · 附近的赛道',
-                              'Track packages · nearby tracks'),
+                          s.t(
+                            '赛道数据包 · 附近的赛道',
+                            'Track packages · nearby tracks',
+                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -2996,10 +3109,7 @@ class _HomePageState extends State<HomePage>
                         leading: const Icon(Icons.menu_book),
                         title: Text(s.t('赛道知识库', 'Track guide')),
                         subtitle: Text(
-                          s.t(
-                            '旗语 · 规则 · 驾驶技术',
-                            'Flags, rules, and driving',
-                          ),
+                          s.t('旗语 · 规则 · 驾驶技术', 'Flags, rules, and driving'),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -3007,11 +3117,12 @@ class _HomePageState extends State<HomePage>
                       ),
                       ListTile(
                         leading: const Icon(Icons.file_download),
-                        title:
-                            Text(s.t('数据导出和备份', 'Export / backup')),
+                        title: Text(s.t('数据导出和备份', 'Export / backup')),
                         subtitle: Text(
-                          s.t('导出 GPX / CSV / VBO · 本地备份',
-                              'Export GPX / CSV / VBO · local backup'),
+                          s.t(
+                            '导出 GPX / CSV / VBO · 本地备份',
+                            'Export GPX / CSV / VBO · local backup',
+                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -3022,8 +3133,7 @@ class _HomePageState extends State<HomePage>
                         leading: const Icon(Icons.warning_amber_rounded),
                         title: Text(s.t('免责声明', 'Disclaimer')),
                         subtitle: Text(
-                          s.t('使用前必读：安全须知与责任说明',
-                              'Read before use'),
+                          s.t('使用前必读：安全须知与责任说明', 'Read before use'),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -3159,13 +3269,18 @@ class _HomePageState extends State<HomePage>
       return const SizedBox.shrink();
     }
     return ModeSwitchSection(
-      surface: trackMode ? DriveSurface.track : DriveSurface.street,
+      surface: trackMode
+          ? DriveSurface.track
+          : customRoadMode
+          ? DriveSurface.custom
+          : DriveSurface.street,
       enabled: !rec.isRecording,
       onSurfaceChanged: (s) {
         // v1.5.7 硬件门槛：切赛道前必须已连接合格的外接定位设备。
         if (s == DriveSurface.track && !_requireTrackHardware()) return;
         setState(() {
-          trackMode = s == DriveSurface.track;
+          trackMode = surfaceUsesLapTiming(s);
+          customRoadMode = s == DriveSurface.custom;
           rec.roadSnapEnabled = !trackMode;
           if (!trackMode) {
             selectedTrack = null;
@@ -3595,10 +3710,13 @@ class _HomePageState extends State<HomePage>
         calibrationDetail: rec.calibrated && rec.calibratedAtMs != null
             ? '${fmtDate(rec.calibratedAtMs!)} · 车头已锁定${rec.zeroBiasAtMs != null ? ' · 零偏已校' : ''}'
             : null,
+        mountCalibrated: appPrefs.mountCalibration.configured,
         onCalibrate: _showCalibrationSheet,
         onStartRecording: _showSafety,
         startSubtitle: trackMode && selectedTrack != null
             ? '赛道：${selectedTrack!.nameCn}'
+            : customRoadMode
+            ? '跑山 / 道路连续记录 · 不计单圈'
             : null,
         // v0.1.5：赛道模式下开始记录大方块右上角方格旗角标。
         showTrackBadge: trackMode && rec.mode != TripMode.bike,
@@ -3607,6 +3725,13 @@ class _HomePageState extends State<HomePage>
   }
 
   void _showCalibrationSheet() {
+    // v1.8.2：标定按数据源切换。硬件（DriveTrack Box）开机自动完成
+    // IMU 零偏与气压计零点校准，App 侧只展示状态并确认安装方向；
+    // 手机数据源才需要“直线行驶到 18 km/h”的动态车头标定。
+    if (externalGpsStatus.value.connected) {
+      _showHardwareCalibrationSheet();
+      return;
+    }
     showModalBottomSheet(
       context: context,
       builder: (ctx) => Padding(
@@ -4391,6 +4516,7 @@ class _HomePageState extends State<HomePage>
         builder: (_) => PerformanceChallengePage(
           onBack: () => Navigator.of(context).pop(),
           recorder: rec,
+          environmentReader: () => _blediyFeed.fusion.latestBaro,
           // v1.6.0：0-400 只认自研硬件供数（BLE 外接 GNSS 正在接管定位）。
           hardwareCheck: () => rec.externalGpsActive,
         ),
@@ -4428,6 +4554,221 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  /// 硬件数据源下的「标定」：只读 `/api/status` 的自动校准结果，
+  /// 并确认一次安装方向；不再要求用户行驶到 18 km/h。
+  ///
+  /// 自动校准由固件开机完成（IMU 零偏 / 气压计零点），App 不重复
+  /// 触发，避免两套校准互相覆盖。
+  void _showHardwareCalibrationSheet() {
+    final service = FirmwareUpdateService();
+    DeviceRuntimeStatus? status;
+    var loading = true;
+    var fetched = false;
+    var mount = appPrefs.mountCalibration;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B0E13),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          Future<void> refresh() async {
+            setSheet(() => loading = true);
+            final s = await service.readStatus();
+            if (!ctx.mounted) return;
+            setSheet(() {
+              loading = false;
+              status = s;
+            });
+          }
+
+          if (!fetched) {
+            fetched = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
+          }
+
+          Future<void> confirmMount() async {
+            final picked = await showDialog<MountOrientation>(
+              context: ctx,
+              builder: (d) => SimpleDialog(
+                title: const Text('选择设备安装方向'),
+                children: [
+                  for (final o in MountOrientation.values)
+                    SimpleDialogOption(
+                      onPressed: () => Navigator.pop(d, o),
+                      child: Text(o.label),
+                    ),
+                ],
+              ),
+            );
+            if (picked == null) return;
+            final next = MountCalibration(
+              orientation: picked,
+              yawOffsetDeg: mount.yawOffsetDeg,
+              calibratedAtMs: DateTime.now().millisecondsSinceEpoch,
+            );
+            rec.setMountCalibration(next);
+            await appPrefs.setMountCalibration(next);
+            if (!ctx.mounted) return;
+            setSheet(() => mount = next);
+          }
+
+          final device = externalGpsStatus.value.deviceName;
+          return SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            '硬件校准状态',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '重新检测',
+                          onPressed: loading ? null : refresh,
+                          icon: loading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      device.isEmpty
+                          ? '设备开机后会自动完成 IMU 与气压计校准，无需行驶标定。'
+                          : '$device 开机后会自动完成 IMU 与气压计校准，无需行驶标定。',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _hwStatusRow(
+                      '陀螺 / 加速度计',
+                      status?.imuReady,
+                      '已校准',
+                      '校准中',
+                      loading,
+                    ),
+                    _hwStatusRow(
+                      '气压计',
+                      status?.baroReady,
+                      '零点已校',
+                      '校准中',
+                      loading,
+                    ),
+                    _hwStatusRow(
+                      '卫星定位',
+                      status?.hasFix,
+                      status?.satellites == null
+                          ? '已定位'
+                          : '已定位 · ${status!.satellites} 颗',
+                      '等待定位',
+                      loading,
+                    ),
+                    const Divider(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '安装方向',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                mount.configured
+                                    ? mount.summary
+                                    : '尚未确认（${mount.orientation.label}）',
+                                style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        OutlinedButton(
+                          onPressed: confirmMount,
+                          child: Text(mount.configured ? '重新确认' : '确认方向'),
+                        ),
+                      ],
+                    ),
+                    if (!mount.configured) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        '确认前请先选好安装姿态：装歪会让姿态角整体偏移，'
+                        '横装可在“传感器校准”里补 ±90° 补偿角。',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _hwStatusRow(
+    String label,
+    bool? ok,
+    String okText,
+    String pendingText,
+    bool loading,
+  ) {
+    final Color color;
+    final String text;
+    if (ok == true) {
+      color = const Color(0xFF22C55E);
+      text = okText;
+    } else if (ok == false) {
+      color = const Color(0xFFF59E0B);
+      text = pendingText;
+    } else {
+      color = Colors.white38;
+      text = loading ? '读取中…' : '未读取到';
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(Icons.circle, size: 8, color: color),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
+          Text(text, style: TextStyle(color: color, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
   // v0.1.9 传感器校准页：车头标定启动复用旧标定底部表同一流程
   // （权限复查 + beginCalibration + startLocation + startSensors）。
   void _openSensorCalibration() {
@@ -4436,6 +4777,10 @@ class _HomePageState extends State<HomePage>
       DtPageRoute(
         builder: (_) => SensorCalibrationPage(
           recorder: rec,
+          onSaveMountCalibration: (calibration) async {
+            rec.setMountCalibration(calibration);
+            await appPrefs.setMountCalibration(calibration);
+          },
           onStartHeadingCalibration: () async {
             await _requestPerm();
             rec.beginCalibration();
@@ -4511,6 +4856,25 @@ class _HomePageState extends State<HomePage>
     if (!_requireTrackHardware()) return;
     final snap = await TrackLibraryService.instance.loadAll();
     if (!mounted) return;
+    // 按当前精确定位自动匹配，免去在长列表里翻找。仅在尚未选赛道时
+    // 自动落选，避免覆盖用户已有选择；没有新鲜 3D 定位则不猜测。
+    final autoMatched = selectedPackage == null
+        ? matchTrackAt(_currentFixGeoPoint(), snap.official)
+        : null;
+    if (autoMatched != null) {
+      final picked = autoMatched.package;
+      setState(() {
+        trackMode = true;
+        rec.roadSnapEnabled = false;
+        selectedTrack = trackInfoForPackage(picked);
+        selectedPackage = picked;
+      });
+      showAppNotice(
+        context,
+        '已按定位匹配赛道：${picked.nameCn}（约 ${autoMatched.distanceM.round()} m）',
+        AppNoticeKind.success,
+      );
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -4526,6 +4890,7 @@ class _HomePageState extends State<HomePage>
               userTracks: snap.userTracks,
               selectedId: selectedTrack?.id,
               onSelected: (pkg) {
+                final problem = kartTrackProblem(pkg);
                 setState(() {
                   trackMode = true;
                   rec.roadSnapEnabled = false;
@@ -4533,6 +4898,13 @@ class _HomePageState extends State<HomePage>
                   selectedPackage = pkg;
                 });
                 Navigator.pop(ctx);
+                if (problem != null) {
+                  showAppNotice(
+                    context,
+                    '已选「${pkg.nameCn}」，但$problem，开始计时前需补全',
+                    AppNoticeKind.warning,
+                  );
+                }
               },
               onInfo: (pkg) async {
                 final entry = encyclopediaTracks
@@ -4910,6 +5282,15 @@ class _HomePageState extends State<HomePage>
       setState(() {});
     }
 
+    // v1.8.1：暂停态按钮改成琥珀色，与顶部暂停横幅同色，一眼可辨。
+    // 记录中仍用主题色，不改变原有主操作视觉。
+    ButtonStyle? pauseButtonStyle() => rec.state == RecState.paused
+        ? FilledButton.styleFrom(
+            backgroundColor: Colors.orange,
+            foregroundColor: Colors.black,
+          )
+        : null;
+
     // v1.3.4：幽灵车（实时 Map 页）——参考圈取本节最佳圈
     // （liveLapTimer.bestLap），按当前圈已用时长插值出位置；
     // 门控缺一不可：赛道模式 + 有最佳圈 + 已过发车圈（currentLapNumber
@@ -5029,6 +5410,37 @@ class _HomePageState extends State<HomePage>
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
           child: gpsBadge,
         ),
+      // v1.8.1：手动暂停要有明显标识——整宽琥珀色横幅，任何方向、
+      // 任何分页都固定在顶部可见，不再只靠底栏按钮文字变化。
+      if (rec.state == RecState.paused)
+        Container(
+          key: const ValueKey('recording-paused-banner'),
+          width: double.infinity,
+          color: const Color(0xFFB45309),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.pause_circle_filled,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                s.t(
+                  '已暂停 · 计时已停止，点“恢复”继续记录',
+                  'Paused · timer stopped, tap Resume to continue',
+                ),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
       // OBD + 缺口推算小药丸（照 GPS 药丸模式，别堆）：
       // - OBD 已连接：绿点 + 实时车速，点按进设备中心；
       // - 缺口推算中：琥珀色“正在推算位置”；丢星未推算：橙色“GPS 信号丢失”。
@@ -5100,171 +5512,196 @@ class _HomePageState extends State<HomePage>
       },
       children: [
         if (isTrackPage)
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(12),
-            child: Builder(
-              builder: (_) {
-                final timer = liveLapTimer;
-                final sectorData = sectorDataFor(selectedTrack!.id);
-                // v1.2.15：分段标签以计时器实际配置的扇区点为准——
-                // 包分段点是经纬度实点，2 点 = S1/S2/S3、1 点 = S1/S2；
-                // 分数制 sectorData 只作无实点时的回落。勒芒等“包有
-                // 实点、分数数据却为 pending”的赛道，旧写法会把整行
-                // 分段格盖成“扇区待核”，delta 在算但格子不显示。
-                // 无实点时仍按 sectorData 标签 + 来源标注显示 '--'。
-                final hasSectorPoints =
-                    timer != null && timer.sectorPoints.isNotEmpty;
-                final labels = hasSectorPoints
-                    ? (timer.sectorPoints.length >= 2
-                          ? const ['S1', 'S2', 'S3']
-                          : const ['S1', 'S2'])
-                    : (sectorData?.sectorLabels ?? const []);
-                final completedDeltas =
-                    timer?.currentSectorDeltasVsBest ?? const <int?>[];
-                final count = labels.length > completedDeltas.length
-                    ? labels.length
-                    : completedDeltas.length;
-                final sectorDeltasMs = List<int?>.generate(
-                  count,
-                  (i) => i < completedDeltas.length ? completedDeltas[i] : null,
-                );
-                final laps = timer?.laps ?? const <Lap>[];
-                final bestMs = timer?.bestLap?.durationMs;
-                // 职业面板接线（诚实口径，见 track_session_display.dart）：
-                // - 预测圈：LapTimer.predictedLapMsVsBest（已完成分段实测 +
-                //   参照圈剩余分段，参照圈 = 本节最佳圈）；无分段点 / 无
-                //   参照圈时 getter 本身返回 null，显示占位，不编数。
-                // - 实时 Delta 只认真实扇区点：liveDeltaMsFor 内部按
-                //   hasSectorPoints 门控，Delta = 预测圈 - 最佳圈（分段级）。
-                // - 最优圈：有真实扇区点时才传 sessionOptimalLapMs（内部
-                //   先按最佳圈段数过滤，避免退化半圈与真实分段混算）；
-                //   无扇区点时传 null，不拿前后半圈拼假最优圈。
-                final completedTimes =
-                    timer?.currentCompletedSectorsMs ?? const <int>[];
-                final predictedMs = timer?.predictedLapMsVsBest;
-                final liveDelta = liveDeltaMsFor(
-                  predictedLapMs: predictedMs,
-                  bestLapMs: bestMs,
-                  hasSectorPoints: hasSectorPoints,
-                );
-                final currentSectorIndex =
-                    hasSectorPoints && completedTimes.length < labels.length
-                    ? completedTimes.length
-                    : null;
-                final optimalLapMs = hasSectorPoints
-                    ? sessionOptimalLapMs(laps)
-                    : null;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TrackSessionDisplay(
-                      currentLapNumber: timer?.currentLapNumber ?? 0,
-                      currentLapMs: timer?.currentLapMs,
-                      // 大计时直播刷新：独立 ticker 插值，只重建大数字；
-                      // 暂停须合并 LapTimer 自动暂停与记录手动暂停，
-                      // 否则手动暂停期间显示仍会插值往前跑。
-                      timerLive: true,
-                      timerPaused:
-                          (timer?.isPaused ?? false) ||
-                          rec.state == RecState.paused,
-                      sectorDeltasMs: sectorDeltasMs,
-                      showDelta: _showTrackDelta,
-                      // v1.5.7：卡丁车用精简档（大数字 + Delta 边缘条）。
-                      compact: rec.mode == TripMode.kart,
-                      sectorTimesMs: completedTimes,
-                      currentSectorIndex: currentSectorIndex,
-                      liveDeltaMs: liveDelta,
-                      sectorLabels: labels,
-                      bestLapMs: bestMs,
-                      predictedLapMs: predictedMs,
-                      optimalLapMs: optimalLapMs,
-                      // 有真实扇区点时不标“扇区待核”：分段点来自赛道包
-                      // 经纬度实点（模拟器推导的待核状态见包 sectorNote
-                      // 与赛道 ⓘ 页，本行只标分段点是否真实存在）。
-                      sectorSourceNote: hasSectorPoints
-                          ? '真实分段点'
-                          : (sectorData?.sourceLabel ?? '扇区待核'),
-                      isPaused: timer?.isPaused ?? false,
-                      liveGSource: LiveGSource(
-                        listenable: rec,
-                        longG: () => rec.smoothLong,
-                        latG: () => rec.smoothLat,
-                        calibrated: () => rec.calibrated,
-                        peakLong: () => rec.tripPeakLong,
-                        peakLat: () => rec.tripPeakLat,
-                        trail: () {
-                          final nowMs = DateTime.now().millisecondsSinceEpoch;
-                          return [
-                            for (final g in rec.gHistory)
-                              if (nowMs - g.timeMs <= 5000)
-                                (longG: g.longG, latG: g.latG),
-                          ];
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // v1.2.17：段速 + 到下一计时线距离行（赛道页内，
-                    // TrackSessionDisplay 下方）。段速取计时器
-                    // sectorSpeeds（与分段标签等长，未开始的段为 null，
-                    // 只取 GPS 实测点）；无真实分段点时显示占位
-                    // “段速 --”，不编数。下一计时线距离取计时器
-                    // nextLineDistanceM，为 null 时该段不显示。
-                    // v1.5.7：卡丁精简档不显示分段段速，减少干扰。
-                    if (rec.mode != TripMode.kart)
-                      TrackSectorSpeedRow(
-                        sectorSpeeds:
-                            timer?.sectorSpeeds ?? const <SectorSpeed?>[],
+          _trackLivePage(
+            context,
+            s,
+            centerLat: cLat,
+            centerLon: cLon,
+            trackCenterline: trackCenterline,
+            // 详情：原大数字面板整体搬进可上滑的详情卡。赛道记录页
+            // 改为地图优先（竞品 RaceChrono / Harry's 记录页同样是
+            // 地图为主、圈速数字悬浮），数字仍随时可下拉查看。
+            detail: SingleChildScrollView(
+              padding: const EdgeInsets.all(12),
+              child: Builder(
+                builder: (_) {
+                  final timer = liveLapTimer;
+                  final sectorData = sectorDataFor(selectedTrack!.id);
+                  // v1.2.15：分段标签以计时器实际配置的扇区点为准——
+                  // 包分段点是经纬度实点，2 点 = S1/S2/S3、1 点 = S1/S2；
+                  // 分数制 sectorData 只作无实点时的回落。勒芒等“包有
+                  // 实点、分数数据却为 pending”的赛道，旧写法会把整行
+                  // 分段格盖成“扇区待核”，delta 在算但格子不显示。
+                  // 无实点时仍按 sectorData 标签 + 来源标注显示 '--'。
+                  final hasSectorPoints =
+                      timer != null && timer.sectorPoints.isNotEmpty;
+                  final labels = hasSectorPoints
+                      ? (timer.sectorPoints.length >= 2
+                            ? const ['S1', 'S2', 'S3']
+                            : const ['S1', 'S2'])
+                      : (sectorData?.sectorLabels ?? const []);
+                  final completedDeltas =
+                      timer?.currentSectorDeltasVsBest ?? const <int?>[];
+                  final count = labels.length > completedDeltas.length
+                      ? labels.length
+                      : completedDeltas.length;
+                  final sectorDeltasMs = List<int?>.generate(
+                    count,
+                    (i) =>
+                        i < completedDeltas.length ? completedDeltas[i] : null,
+                  );
+                  final laps = timer?.laps ?? const <Lap>[];
+                  final bestMs = timer?.bestLap?.durationMs;
+                  // 职业面板接线（诚实口径，见 track_session_display.dart）：
+                  // - 预测圈：LapTimer.predictedLapMsVsBest（已完成分段实测 +
+                  //   参照圈剩余分段，参照圈 = 本节最佳圈）；无分段点 / 无
+                  //   参照圈时 getter 本身返回 null，显示占位，不编数。
+                  // - 实时 Delta 只认真实扇区点：liveDeltaMsFor 内部按
+                  //   hasSectorPoints 门控，Delta = 预测圈 - 最佳圈（分段级）。
+                  // - 最优圈：有真实扇区点时才传 sessionOptimalLapMs（内部
+                  //   先按最佳圈段数过滤，避免退化半圈与真实分段混算）；
+                  //   无扇区点时传 null，不拿前后半圈拼假最优圈。
+                  final completedTimes =
+                      timer?.currentCompletedSectorsMs ?? const <int>[];
+                  final predictedMs = timer?.predictedLapMsVsBest;
+                  final liveDelta = liveDeltaMsFor(
+                    predictedLapMs: predictedMs,
+                    bestLapMs: bestMs,
+                    hasSectorPoints: hasSectorPoints,
+                  );
+                  final currentSectorIndex =
+                      hasSectorPoints && completedTimes.length < labels.length
+                      ? completedTimes.length
+                      : null;
+                  final optimalLapMs = hasSectorPoints
+                      ? sessionOptimalLapMs(laps)
+                      : null;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TrackSessionDisplay(
+                        currentLapNumber: timer?.currentLapNumber ?? 0,
+                        currentLapMs: timer?.currentLapMs,
+                        // 大计时直播刷新：独立 ticker 插值，只重建大数字；
+                        // 暂停须合并 LapTimer 自动暂停与记录手动暂停，
+                        // 否则手动暂停期间显示仍会插值往前跑。
+                        timerLive: true,
+                        timerPaused:
+                            (timer?.isPaused ?? false) ||
+                            rec.state == RecState.paused,
+                        sectorDeltasMs: sectorDeltasMs,
+                        showDelta: _showTrackDelta,
+                        // v1.5.7：卡丁车用精简档（大数字 + Delta 边缘条）。
+                        compact: rec.mode == TripMode.kart,
+                        sectorTimesMs: completedTimes,
+                        currentSectorIndex: currentSectorIndex,
+                        liveDeltaMs: liveDelta,
                         sectorLabels: labels,
-                        hasSectorPoints: hasSectorPoints,
-                        nextLineDistanceM: timer?.nextLineDistanceM,
+                        bestLapMs: bestMs,
+                        predictedLapMs: predictedMs,
+                        optimalLapMs: optimalLapMs,
+                        // 有真实扇区点时不标“扇区待核”：分段点来自赛道包
+                        // 经纬度实点（模拟器推导的待核状态见包 sectorNote
+                        // 与赛道 ⓘ 页，本行只标分段点是否真实存在）。
+                        sectorSourceNote: hasSectorPoints
+                            ? '真实分段点'
+                            : (sectorData?.sourceLabel ?? '扇区待核'),
+                        isPaused: timer?.isPaused ?? false,
+                        liveGSource: LiveGSource(
+                          listenable: rec,
+                          longG: () => rec.smoothLong,
+                          latG: () => rec.smoothLat,
+                          calibrated: () => rec.calibrated,
+                          peakLong: () => rec.tripPeakLong,
+                          peakLat: () => rec.tripPeakLat,
+                          trail: () {
+                            final nowMs = DateTime.now().millisecondsSinceEpoch;
+                            return [
+                              for (final g in rec.gHistory)
+                                if (nowMs - g.timeMs <= 5000)
+                                  (longG: g.longG, latG: g.latG),
+                            ];
+                          },
+                        ),
                       ),
-                    const SizedBox(height: 12),
-                    _trackLapListCard(
-                      laps,
-                      bestMs,
-                      hasSectorPoints: hasSectorPoints,
-                    ),
-                    const SizedBox(height: 12),
-                    _trackSpeedCard(),
-                  ],
-                );
-              },
+                      const SizedBox(height: 12),
+                      // v1.2.17：段速 + 到下一计时线距离行（赛道页内，
+                      // TrackSessionDisplay 下方）。段速取计时器
+                      // sectorSpeeds（与分段标签等长，未开始的段为 null，
+                      // 只取 GPS 实测点）；无真实分段点时显示占位
+                      // “段速 --”，不编数。下一计时线距离取计时器
+                      // nextLineDistanceM，为 null 时该段不显示。
+                      // v1.5.7：卡丁精简档不显示分段段速，减少干扰。
+                      if (rec.mode != TripMode.kart)
+                        TrackSectorSpeedRow(
+                          sectorSpeeds:
+                              timer?.sectorSpeeds ?? const <SectorSpeed?>[],
+                          sectorLabels: labels,
+                          hasSectorPoints: hasSectorPoints,
+                          nextLineDistanceM: timer?.nextLineDistanceM,
+                        ),
+                      const SizedBox(height: 12),
+                      _trackLapListCard(
+                        laps,
+                        bestMs,
+                        hasSectorPoints: hasSectorPoints,
+                      ),
+                      const SizedBox(height: 12),
+                      _trackSpeedCard(),
+                    ],
+                  );
+                },
+              ),
             ),
           )
         else
-          // v0.1.8：记录页地图改 3D 黑色风格自绘（Recording3dMap），
-          // 不再用 RefinedMap 瓦片、瓦片源选择器在记录页不再展示；
-          // 详情页的 RefinedMap 这一处不动。速度/G/时间/圈速/语音/
-          // 事件标记都在本页其余部分原样保留。
-          Recording3dMap(
+        // v1.8.2：街道记录主视图改用“附近赛道”同一套高德 JS 深色地图
+        // （近黑底 + 细路网 + 已跑轨迹 + 车标跟随），不再让街道和赛道
+        // 看到两套完全不同的地图观感。AMAP_JS_KEY 未注入或加载失败时
+        // 回落原有瓦片式深色地图（RefinedMap），无 Key 构建仍可用。
+        if (nearbyMapAvailable)
+          NearbyDarkMap(
+            centerLat: cLat,
+            centerLon: cLon,
+            zoom: mapZoom,
+            follow: true,
+            headingUp: mapHeadingUp,
+            vehicleLat: rec.curLat,
+            vehicleLon: rec.curLon,
+            vehicleHeadingDeg: rec.curHeading,
+            recordingTrail: rec.points,
+          )
+        else
+          RefinedMap(
             centerLat: cLat,
             centerLon: cLon,
             headingDeg: rec.curHeading,
+            accuracyMeters: rec.curHAcc >= 999 ? 0 : rec.curHAcc,
+            zoom: mapZoom,
             points: rec.points
                 .map(
-                  (p) => Recording3dPoint(
+                  (p) => RefinedTrackPoint(
                     lat: p.lat,
                     lon: p.lon,
                     speedKmh: p.speed * 3.6,
+                    estimated: p.estimated,
                   ),
                 )
                 .toList(),
-            photoPoints: livePhotoPoints,
-            is3d: appPrefs.recordingMap3d,
-            onModeChanged: (v) => appPrefs.setRecordingMap3d(v),
-            initialPitchDeg: appPrefs.recordingMapPitch,
-            onPitchChanged: (v) => appPrefs.setRecordingMapPitch(v),
-            zoom: mapZoom,
-            onZoomChanged: (z) => setState(() => mapZoom = z),
+            follow: true,
             headingUp: mapHeadingUp,
-            onCompassTap: () => setState(() => mapHeadingUp = false),
+            source: RefinedTileSource.amap,
+            height: double.infinity,
+            currentSpeedKmh: rec.curSpeed * 3.6,
             accentColor: Theme.of(context).colorScheme.primary,
-            vehicleColor: _vehicleColor(rec.mode),
+            vehicleMarkerColor: _vehicleColor(rec.mode),
             vehicleMarkerPainter: markerPainterFor(
               appPrefs.vehicleSelection,
               rec.mode,
               bodyColor: _vehicleColor(rec.mode),
             ),
+            onZoomChanged: (z) => setState(() => mapZoom = z),
+            onCompassTap: () => setState(() => mapHeadingUp = false),
           ),
         // 第 1 页：实时地图（只看不操作）。状态行：赛道模式为当前圈
         // 用时 + 第 N 圈（无计时器时“等待定位”，未第一次过线时
@@ -5464,6 +5901,7 @@ class _HomePageState extends State<HomePage>
                       width: 96,
                       height: 48,
                       child: FilledButton(
+                        style: pauseButtonStyle(),
                         onPressed: togglePause,
                         child: Text(
                           rec.isRecording
@@ -5475,6 +5913,7 @@ class _HomePageState extends State<HomePage>
                   else
                     Expanded(
                       child: FilledButton(
+                        style: pauseButtonStyle(),
                         onPressed: togglePause,
                         child: Text(
                           rec.isRecording
@@ -5529,6 +5968,7 @@ class _HomePageState extends State<HomePage>
             SizedBox(
               height: 64,
               child: FilledButton(
+                style: pauseButtonStyle(),
                 onPressed: togglePause,
                 child: Text(
                   rec.isRecording ? s.t('暂停', 'Pause') : s.t('恢复', 'Resume'),
@@ -5693,6 +6133,219 @@ class _HomePageState extends State<HomePage>
         // 自然排列，Expanded 的 PageView 拿走全部剩余高度。
         if (_recMapPageIndex == 0) bottomPanelWidget,
       ],
+    );
+  }
+
+  /// 赛道记录第 0 页（竖屏）：全屏 3D 地图 + 悬浮计时条 + 速度/G 窄条。
+  ///
+  /// [detail] 是原大数字面板（当前圈 / 分段 / 圈列表 / 速度卡），
+  /// 点右下角「详情」从底部弹出；地图不再被面板挤到只剩一小块。
+  Widget _trackLivePage(
+    BuildContext context,
+    S s, {
+    required double centerLat,
+    required double centerLon,
+    required List<GeoPoint> trackCenterline,
+    required Widget detail,
+  }) {
+    final timer = liveLapTimer;
+    final bestMs = timer?.bestLap?.durationMs;
+    final hasSectorPoints = timer != null && timer.sectorPoints.isNotEmpty;
+    final liveDelta = liveDeltaMsFor(
+      predictedLapMs: timer?.predictedLapMsVsBest,
+      bestLapMs: bestMs,
+      hasSectorPoints: hasSectorPoints,
+    );
+    final combinedG = math.sqrt(
+      rec.smoothLong * rec.smoothLong + rec.smoothLat * rec.smoothLat,
+    );
+    final lapNo = timer?.currentLapNumber ?? 0;
+    final lapMs = timer?.currentLapMs ?? rec.elapsedMs;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Track3dLiveView(
+          centerLat: centerLat,
+          centerLon: centerLon,
+          headingDeg: rec.curHeading,
+          zoom: mapZoom,
+          points: [
+            for (final p in rec.points)
+              Recording3dPoint(lat: p.lat, lon: p.lon, speedKmh: p.speed * 3.6),
+          ],
+          trackLine: [for (final p in trackCenterline) (p.lat, p.lon)],
+          headingUp: mapHeadingUp,
+          accentColor: Theme.of(context).colorScheme.primary,
+          vehicleColor: _vehicleColor(rec.mode),
+          vehicleMarkerPainter: markerPainterFor(
+            appPrefs.vehicleSelection,
+            rec.mode,
+            bodyColor: _vehicleColor(rec.mode),
+          ),
+          onZoomChanged: (z) => setState(() => mapZoom = z),
+          onCompassTap: () => setState(() => mapHeadingUp = true),
+        ),
+        // 顶部悬浮计时条：当前圈 / 最佳圈 / Delta，半透明不挡地图。
+        Positioned(
+          top: 10,
+          left: 10,
+          right: 10,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      timer == null
+                          ? s.t('等待定位', 'Waiting for GPS')
+                          : lapNo <= 0
+                          ? s.t('发车圈', 'Out lap')
+                          : s.t('第 $lapNo 圈', 'Lap $lapNo'),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      LapTimer.formatLapTime(lapMs),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        fontFeatures: [ui.FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${s.t('最佳', 'Best')} ${LapTimer.formatLapTime(bestMs)}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      liveDelta == null
+                          ? 'Δ --'
+                          : 'Δ ${liveDelta > 0 ? '+' : '-'}'
+                                '${(liveDelta.abs() / 1000).toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: liveDelta == null
+                            ? Colors.white38
+                            : (liveDelta <= 0
+                                  ? const Color(0xFF22C55E)
+                                  : const Color(0xFFF87171)),
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        fontFeatures: const [ui.FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        // 底部窄条：速度 / 合成 G + 详情入口。
+        Positioned(
+          left: 10,
+          right: 10,
+          bottom: 10,
+          child: Row(
+            children: [
+              _liveChip(
+                icon: Icons.speed,
+                value: (rec.curSpeed * 3.6).toStringAsFixed(0),
+                unit: 'km/h',
+              ),
+              const SizedBox(width: 8),
+              _liveChip(
+                icon: Icons.bolt,
+                value: combinedG.toStringAsFixed(2),
+                unit: 'G',
+              ),
+              const Spacer(),
+              FilledButton.tonalIcon(
+                onPressed: () => _openTrackLiveDetail(detail),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.black.withValues(alpha: 0.6),
+                  foregroundColor: Colors.white,
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+                label: Text(s.t('详情', 'Details')),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _liveChip({
+    required IconData icon,
+    required String value,
+    required String unit,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Icon(icon, size: 14, color: Colors.white54),
+          const SizedBox(width: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              fontFeatures: [ui.FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            unit,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 赛道记录页「详情」：原大数字面板从底部弹出，地图保持全屏。
+  void _openTrackLiveDetail(Widget detail) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B0E13),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.88,
+        child: SafeArea(child: detail),
+      ),
     );
   }
 
@@ -7610,8 +8263,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                                   );
                                   // 编辑页可能解除关联：回来重读行程刷新列表。
                                   if (!mounted) return;
-                                  final nt =
-                                      await widget.store.loadTrip(t.id);
+                                  final nt = await widget.store.loadTrip(t.id);
                                   if (nt != null && mounted) {
                                     setState(() => trip = nt);
                                   }

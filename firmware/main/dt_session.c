@@ -39,11 +39,11 @@ static int64_t s_last_hb_us;
 
 static void emit(const char *line)
 {
-    // 连得上就直接发；发不出去才落盘，重连后按游标补传。
-    // 这样缓存里只留断线期间的数据，SPIFFS 不会被常态录制写满。
+    // SD 模式：全量独立记录，BLE 发不发都落盘，手机没电/没连也能跑完整场。
+    // 片内 SPIFFS：只在 BLE 发不出去时缓存，避免把 Flash 写满。
     bool sent = dt_ble_send_line(line);
-    if (s_active && !sent) {
-        dt_store_write_line(line);
+    if (s_active && (dt_store_is_sd() || !sent)) {
+        dt_store_write_line(line, sent);
     }
 }
 
@@ -73,10 +73,12 @@ void dt_session_on_gps(const dt_gps_sample_t *sample)
     char line[LINE_MAX];
     snprintf(line, sizeof(line),
              "{\"t\":\"gps\",\"fix\":%d,\"sats\":%u,\"lat\":%.7f,\"lon\":%.7f,"
-             "\"alt\":%.1f,\"spd\":%.2f,\"cog\":%.1f,\"hdop\":%.1f}",
+             "\"alt\":%.1f,\"spd\":%.2f,\"cog\":%.1f,\"hdop\":%.1f,\"ts\":%lld}",
              sample->fix ? 1 : 0, (unsigned)sample->sats, sample->lat,
              sample->lon, sample->alt_m, sample->speed_kph, sample->course_deg,
-             sample->hdop);
+             sample->hdop,
+             (long long)(sample->ts_us > 0 ? sample->ts_us
+                                           : esp_timer_get_time()));
     emit(line);
 
     if (!sample->fix) {
@@ -134,9 +136,29 @@ void dt_session_on_imu(const dt_imu_sample_t *sample)
     snprintf(line, sizeof(line),
              "{\"t\":\"imu\",\"ax\":%.2f,\"ay\":%.2f,\"az\":%.2f,"
              "\"gx\":%.1f,\"gy\":%.1f,\"gz\":%.1f,\"roll\":%.1f,"
-             "\"pitch\":%.1f,\"latg\":%.2f}",
+             "\"pitch\":%.1f,\"latg\":%.2f,\"ts\":%lld}",
              sample->ax, sample->ay, sample->az, sample->gx, sample->gy,
-             sample->gz, sample->roll_deg, sample->pitch_deg, lat_g);
+             sample->gz, sample->roll_deg, sample->pitch_deg, lat_g,
+             (long long)(sample->ts_us > 0 ? sample->ts_us
+                                           : esp_timer_get_time()));
+    emit(line);
+}
+
+void dt_session_on_baro(const dt_baro_sample_t *sample)
+{
+    if (sample == NULL) {
+        return;
+    }
+    // 所有帧都带同一 esp_timer 时基，App 侧才能做多传感器对齐；
+    // cal 表示自动零点是否完成，未完成时 App 不展示相对高差。
+    char line[LINE_MAX];
+    snprintf(line, sizeof(line),
+             "{\"t\":\"baro\",\"tc\":%.2f,\"pa\":%.1f,\"alt\":%.1f,"
+             "\"rel\":%.2f,\"cal\":%d,\"ts\":%lld}",
+             sample->temp_c, sample->press_pa, sample->alt_m,
+             sample->rel_alt_m, dt_baro_calibrated() ? 1 : 0,
+             (long long)(sample->ts_us > 0 ? sample->ts_us
+                                           : esp_timer_get_time()));
     emit(line);
 }
 
@@ -174,7 +196,8 @@ void dt_session_start(void)
     s_session_id++;
     s_active = true;
 
-    dt_store_set_recording(true);
+    // 每次录制独立文件：SD 上不会覆盖上一场，回到 pits 后可整场回传。
+    dt_store_begin_session();
 
     char line[LINE_MAX];
     snprintf(line, sizeof(line),

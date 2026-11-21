@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <dirent.h>
+#include <sys/stat.h>
+
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "freertos/FreeRTOS.h"
@@ -25,6 +28,8 @@ static const char *TAG = "dt_store";
 static bool s_mounted;
 static bool s_recording;
 static bool s_using_sd;
+static bool s_session_started;
+static uint32_t s_session_seq;
 static char s_path[64];
 static uint64_t s_sd_free;
 static FILE *s_fp;
@@ -117,6 +122,91 @@ bool dt_store_init(void)
     return true;
 }
 
+bool dt_store_is_sd(void)
+{
+    return s_using_sd;
+}
+
+const char *dt_store_current_file(void)
+{
+    if (!s_session_started) {
+        return NULL;
+    }
+    const char *slash = strrchr(s_path, '/');
+    return slash != NULL ? slash + 1 : s_path;
+}
+
+uint64_t dt_store_free_bytes(void)
+{
+    if (!s_mounted) {
+        return 0;
+    }
+    if (s_using_sd) {
+        return s_sd_free;
+    }
+    return s_size < s_partition_bytes ? (uint64_t)(s_partition_bytes - s_size)
+                                      : 0;
+}
+
+// 扫描 SD 上已有的 session_*.ndjson，取最大序号 + 1。
+// 不依赖 RTC/GPS 时间：设备不上电也能确定唯一文件名。
+static uint32_t scan_max_session_seq(void)
+{
+    uint32_t max = 0;
+    DIR *dir = opendir(DT_SD_MOUNT_POINT);
+    if (dir == NULL) {
+        return 0;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        unsigned seq = 0;
+        if (sscanf(entry->d_name, "session_%u.ndjson", &seq) == 1 &&
+            (uint32_t)seq > max) {
+            max = (uint32_t)seq;
+        }
+    }
+    closedir(dir);
+    return max;
+}
+
+bool dt_store_begin_session(void)
+{
+    if (!s_mounted) {
+        return false;
+    }
+    if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(500)) != pdTRUE) {
+        return false;
+    }
+
+    if (s_fp != NULL) {
+        fflush(s_fp);
+        fclose(s_fp);
+        s_fp = NULL;
+    }
+
+    if (s_using_sd) {
+        dt_sd_refresh();
+        s_session_seq = scan_max_session_seq() + 1;
+        snprintf(s_path, sizeof(s_path), "%s/session_%04u.ndjson",
+                 DT_SD_MOUNT_POINT, (unsigned)s_session_seq);
+        s_sd_free = dt_sd_free_bytes();
+    } else {
+        // 片内空间有限，单文件复用：新会话从空文件开始。
+        remove(s_path);
+    }
+
+    s_size = 0;
+    s_cursor = 0;
+    s_cursor_saved = 0;
+    s_writes = 0;
+    save_cursor(true);
+    s_session_started = true;
+    s_recording = true;
+    xSemaphoreGive(s_lock);
+    ESP_LOGI(TAG, "新会话文件：%s", s_path);
+    return true;
+}
+
 void dt_store_set_recording(bool recording)
 {
     if (!s_mounted) {
@@ -134,7 +224,7 @@ void dt_store_set_recording(bool recording)
     xSemaphoreGive(s_lock);
 }
 
-bool dt_store_write_line(const char *line)
+bool dt_store_write_line(const char *line, bool delivered)
 {
     if (!s_mounted || !s_recording || line == NULL) {
         return false;
@@ -172,6 +262,11 @@ bool dt_store_write_line(const char *line)
             ok = true;
             if (++s_writes % FLUSH_EVERY == 0) {
                 fflush(s_fp);
+            }
+            // 已实时发过的行：SD 全量文件继续增长，但游标跟上，重连不回放。
+            if (s_using_sd && delivered) {
+                s_cursor = s_size;
+                save_cursor(false);
             }
         }
     }

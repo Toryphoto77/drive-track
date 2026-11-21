@@ -45,9 +45,15 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
+import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Bundle
+import android.os.PatternMatcher
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -601,6 +607,108 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
         return null
     }
 
+    // ---- 设备热点自动连接 ----
+    // 用 WifiNetworkSpecifier 只锁定 DriveTrack 前缀的热点，并把它绑定为
+    // 本进程默认网络，这样 192.168.4.1 的 /api/status 才能访问。
+    // Android 10+ 首次会弹出系统确认框（系统强制，无法绕过），用户点一次
+    // 即可；低于 Android 10 回落到系统 Wi-Fi 设置页手动连接。
+    private var hotspotCallback: ConnectivityManager.NetworkCallback? = null
+    private var hotspotNetwork: Network? = null
+    private var hotspotResult: MethodChannel.Result? = null
+    // 回调里维护的“设备热点是否可用”，供 Flutter 轮询补判：
+    // 系统确认框晚点被点、或热点中途掉线时，状态都能同步过去。
+    private var hotspotAvailable = false
+
+    private fun connectivity(): ConnectivityManager =
+        getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+    private fun clearHotspotBinding() {
+        hotspotCallback?.let {
+            try { connectivity().unregisterNetworkCallback(it) } catch (_: Exception) {}
+        }
+        hotspotCallback = null
+        hotspotNetwork = null
+        hotspotAvailable = false
+        try { connectivity().bindProcessToNetwork(null) } catch (_: Exception) {}
+    }
+
+    private fun connectDeviceHotspot(prefix: String, password: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            try {
+                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {}
+            result.success(mapOf("ok" to false, "reason" to "unsupported"))
+            return
+        }
+        hotspotResult?.success(mapOf("ok" to false, "reason" to "superseded"))
+        hotspotResult = result
+        clearHotspotBinding()
+        // Wi-Fi 关着时系统不会做任何匹配，直接给出可辨认的原因，
+        // 而不是让用户看到笼统的“没搜到”。
+        try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+            if (!wm.isWifiEnabled) {
+                hotspotResult = null
+                result.success(mapOf("ok" to false, "reason" to "wifi_off"))
+                return
+            }
+        } catch (_: Exception) {}
+        try {
+            val cm = connectivity()
+            val specifier = WifiNetworkSpecifier.Builder()
+                .setSsidPattern(PatternMatcher(prefix, PatternMatcher.PATTERN_PREFIX))
+                .setWpa2Passphrase(password)
+                .build()
+            val request = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .setNetworkSpecifier(specifier)
+                .build()
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                private var replied = false
+                private fun reply(payload: Map<String, Any?>) {
+                    if (replied) return
+                    replied = true
+                    mainHandler.post {
+                        hotspotResult?.success(payload)
+                        hotspotResult = null
+                    }
+                }
+                override fun onAvailable(network: Network) {
+                    hotspotNetwork = network
+                    hotspotAvailable = true
+                    try { cm.bindProcessToNetwork(network) } catch (_: Exception) {}
+                    reply(mapOf("ok" to true))
+                }
+                override fun onUnavailable() {
+                    hotspotAvailable = false
+                    reply(mapOf("ok" to false, "reason" to "unavailable"))
+                }
+                override fun onLost(network: Network) {
+                    if (hotspotNetwork == network) {
+                        hotspotNetwork = null
+                        hotspotAvailable = false
+                        try { cm.bindProcessToNetwork(null) } catch (_: Exception) {}
+                    }
+                }
+            }
+            hotspotCallback = cb
+            cm.requestNetwork(request, cb)
+            // 系统弹框一直不选时兜底，避免 Flutter 侧永远等。
+            // 注意不回滚请求：用户晚点点“连接”时 onAvailable 仍会触发，
+            // 页面轮询 getDeviceHotspotStatus 能补判成已连接。
+            mainHandler.postDelayed({
+                if (hotspotResult === result) {
+                    hotspotResult = null
+                    result.success(mapOf("ok" to false, "reason" to "timeout"))
+                }
+            }, 35000)
+        } catch (e: Exception) {
+            hotspotResult = null
+            result.success(mapOf("ok" to false, "reason" to (e.message ?: "error")))
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // 原生崩溃落盘：后台闪退后至少能在设置页导出堆栈。
@@ -1054,6 +1162,20 @@ class MainActivity : FlutterActivity(), SensorEventListener, LocationListener {
                         } catch (_: Exception) {
                             result.success(null)
                         }
+                    }
+                    // 设备中心：自动连接 DriveTrack-* 热点（Android 10+）。
+                    "connectDeviceHotspot" -> {
+                        val prefix = call.argument<String>("prefix") ?: "DriveTrack-"
+                        val password = call.argument<String>("password") ?: ""
+                        connectDeviceHotspot(prefix, password, result)
+                    }
+                    // 页面轮询补判：热点是否已真正就绪（含系统确认框晚点确认）。
+                    "getDeviceHotspotStatus" -> {
+                        result.success(mapOf("connected" to hotspotAvailable))
+                    }
+                    "disconnectDeviceHotspot" -> {
+                        clearHotspotBinding()
+                        result.success(true)
                     }
                     "stopBleScan" -> {
                         try { bluetoothAdapter?.bluetoothLeScanner?.stopScan(bleScanCallback) } catch (_: Exception) {}

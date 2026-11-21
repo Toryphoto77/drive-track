@@ -81,7 +81,14 @@ class _VideoHudPageState extends State<VideoHudPage> {
     final p = widget.initialVideoPath;
     if (p != null) {
       final i = _trip.videoPaths.indexOf(p);
-      if (i >= 0) _segment = i;
+      if (i >= 0) {
+        _segment = i;
+      } else if (_trip.videoPaths.isNotEmpty) {
+        // 导入流程会把素材重命名（imported_*.mp4 → trip_<ms>.mp4），
+        // 传进来的旧路径已不在列表里。新追加的一段在末尾，直接选中它，
+        // 否则会停在第 0 段，看起来像“选完视频什么都没发生”。
+        _segment = _trip.videoPaths.length - 1;
+      }
     }
     _poll = Timer.periodic(const Duration(milliseconds: 250), (_) => _pollOnce());
     _loadFrames();
@@ -157,16 +164,17 @@ class _VideoHudPageState extends State<VideoHudPage> {
     );
     if (picked == null || !mounted) return;
     try {
-      final updated = await linkVideoToTrip(
+      final linked = await linkVideoToTrip(
         widget.store,
         trip: _trip,
         videoPath: picked.path,
         createdMs: picked.createdMs,
       );
-      if (updated != null && mounted) {
+      if (linked != null && mounted) {
         setState(() {
-          _trip = updated;
-          _segment = updated.videoPaths.length - 1;
+          _trip = linked.trip;
+          final i = linked.trip.videoPaths.indexOf(linked.path);
+          _segment = i >= 0 ? i : linked.trip.videoPaths.length - 1;
           _manualOffsetMs = 0;
           _scrubMs = 0;
           _playerMs = 0;
@@ -201,7 +209,15 @@ class _VideoHudPageState extends State<VideoHudPage> {
     final i = _segment < 0
         ? 0
         : (_segment >= _videos.length ? _videos.length - 1 : _segment);
-    return _videos[i];
+    final path = _videos[i];
+    if (File(path).existsSync()) return path;
+    // 历史关联里的文件被移动 / 重命名后，回落到列表里第一个真实存在的
+    // 文件，避免预览区只剩一个空框；全都缺失时仍返回原路径，
+    // 由预览区给出“文件不存在，请重新导入”的明确提示。
+    for (final p in _videos) {
+      if (File(p).existsSync()) return p;
+    }
+    return path;
   }
 
   int get _offsetMs => _autoOffset(_currentPath) + _manualOffsetMs;
@@ -952,6 +968,10 @@ class _VideoHudPageState extends State<VideoHudPage> {
                 creationParams: <String, dynamic>{'path': _currentPath},
                 onPlatformViewCreated: _onPlatformViewCreated,
               )
+            else if (!hasVideo)
+              // 文件被移动 / 删除，或路径对不上：给明确文案与重新导入入口，
+              // 不再只显示一个黑框让用户以为页面坏了。
+              _MissingVideoPlaceholder(onRetry: () => _importVideo())
             else
               const _PreviewPlaceholder(),
             IgnorePointer(
@@ -2486,6 +2506,68 @@ class _PreviewPlaceholder extends StatelessWidget {
           Icons.play_circle_outline,
           size: 40,
           color: Colors.white24,
+        ),
+      ),
+    );
+  }
+}
+
+/// 关联路径在磁盘上不存在时的占位：说明原因并给出重新导入入口。
+class _MissingVideoPlaceholder extends StatelessWidget {
+  const _MissingVideoPlaceholder({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return ColoredBox(
+      color: const Color(0xFF151515),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.videocam_off_outlined,
+                  size: 34, color: Colors.white38),
+              const SizedBox(height: 8),
+              Text(
+                s.t(
+                  '视频文件不存在或已被移动',
+                  'Video file missing or moved',
+                ),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                s.t(
+                  '请重新导入这段素材后再继续对齐与导出。',
+                  'Import the clip again to sync and export.',
+                ),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.white38,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                onPressed: onRetry,
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.video_library_outlined, size: 16),
+                label: Text(s.t('重新导入视频', 'Import again')),
+              ),
+            ],
+          ),
         ),
       ),
     );

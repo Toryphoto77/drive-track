@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 /// 精细化地图（v0.1.3 分工：地图 UI 精细化）。
 ///
 /// 底图逻辑照搬现有 DarkTileMap（lib/widgets.dart），不重写坐标系：
-/// - 默认高德栅格 webrd0X.is.autonavi.com，style=8（影像路网）→
-///   备用 OSM → 备用 CARTO dark_all，整幅以源为单位切换，不逐张混源；
+/// - 默认高德栅格 webrd0X.is.autonavi.com，style=8（影像路网，深色）→
+///   备用 CARTO dark_all（深色路网）→ 备用 OSM，整幅以源为单位切换，
+///   不逐张混源。v1.8.1 起备用顺序改为先深色 CARTO 再浅色 OSM，
+///   避免高德不可用时行程回放显示成浅色底图；
 /// - 高德源用 GCJ-02：WGS-84 的 GPS 点 / 中心统一转 GCJ-02 再算瓦片
 ///   与画轨迹，切到 OSM / CARTO 时用回原始 WGS-84；
 /// - 失败瓦片一律画深色占位，绝不贴错误码图；单源连续失败 ≥4 张
@@ -14,16 +16,19 @@ import 'package:flutter/material.dart';
 ///
 /// 高德深色风格结论（已查代码与公开瓦片文档）：
 /// appmaptile 的 style 参数只有 6=卫星影像、7=矢量路网、8=影像路网，
-/// 没有“深色风格”选项；官方深色要走 JS API / SDK 的自定义样式，
-/// 栅格瓦片参数给不出来。本文件因此保留 style=8 的浅色路网，
-/// 不硬说已深色；深色感由黑色毛玻璃控件、信息条、角标与深色
-/// 占位提供，CARTO 备用源本身是 dark_all 深色。
+/// 没有“深色风格”选项；官方深色要走 JS API / SDK 的自定义样式，栅格
+/// 瓦片参数给不出来。本页因此用 style=8 的影像路网（深色带路网），
+/// 深色感再由黑色毛玻璃控件、信息条、角标与深色占位补足；
+/// CARTO 备用源本身是 dark_all 深色。
 /// 朝向优先（headingUp）时整层渲染图层做视觉旋转，不是瓦片重投影，
 /// 旋转后四角用多算一圈瓦片补齐，比例尺仍按北向上近似值算。
 ///
 /// API 全部走构造函数参数，不引用 main.dart 的任何类。
 
-enum RefinedTileSource { amap, osm, carto }
+/// 注意顺序：切源按枚举顺序向后走（amap → carto → osm），
+/// 保证高德不可用时先落深色 CARTO，而不是浅色 OSM。
+enum RefinedTileSource { amap, carto, osm }
+
 
 extension RefinedTileSourceLabel on RefinedTileSource {
   String get label => switch (this) {

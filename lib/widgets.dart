@@ -38,13 +38,15 @@ Offset latLonToScreen(double lat, double lon, double cLat, double cLon, double z
 //     也不会切源，用户看到的就是一堆深色/空白贴图。
 //
 // 本版：默认高德栅格瓦片（webrd0X.is.autonavi.com，无需个人 key，国内
-// 可达；沙箱实测上海 z16 瓦片 200 / 21835 字节）→ 备用 OSM
-// （tile.openstreetmap.org，WGS-84）→ 备用 CARTO dark_all。整幅地图
-// 以源为单位切换（不逐张混源，避免坐标系混用）；高德源使用 GCJ-02，
-// 本文件把 WGS-84 的 GPS 点/中心统一转 GCJ-02 再算瓦片与画轨迹，
-// 切到 OSM/CARTO 时用回原始 WGS-84。失败瓦片一律画深色占位，
-// 绝不把带错误码/错误文案的图片贴到地图上；底部有源名 + 手动切源。
-enum TileSource { amap, osm, carto }
+// 可达；沙箱实测上海 z16 瓦片 200 / 21835 字节）→ 备用 CARTO dark_all
+// （深色路网）→ 备用 OSM。整幅地图以源为单位切换（不逐张混源，避免
+// 坐标系混用）；高德源使用 GCJ-02，本文件把 WGS-84 的 GPS 点/中心统一
+// 转 GCJ-02 再算瓦片与画轨迹，切到 OSM/CARTO 时用回原始 WGS-84。失败
+// 瓦片一律画深色占位，绝不把带错误码/错误文案的图片贴到地图上；底部
+// 有源名 + 手动切源。v1.8.1：备用顺序改为 CARTO 在前、OSM 在后，高德
+// 不可用时优先保住深色观感。
+// 注意顺序：切源按枚举顺序向后走，故 amap → carto → osm。
+enum TileSource { amap, carto, osm }
 
 String _tileUrl(TileSource src, int z, int x, int y) {
   switch (src) {

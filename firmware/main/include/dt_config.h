@@ -11,8 +11,10 @@
 
 // ---------------- 固件身份 ----------------
 // 改功能就同时抬高版本号；App 按 build 判断是否需要升级。
-#define DT_FW_VERSION "0.4.1"
-#define DT_FW_BUILD 11
+// 0.5.1 / build 13：在 0.5.0 基础上增加天线诊断（周期打开 GSV 解析 C/N0），
+// 随 1.8.1 App 发布。
+#define DT_FW_VERSION "0.5.1"
+#define DT_FW_BUILD 13
 #define DT_DEVICE_MODEL "DT-BOX-1"
 #define DT_BOARD_NAME "DriveTrack V4.6"
 
@@ -46,10 +48,23 @@
 // PPS 秒脉冲，U1 pad4(IO4)，当前固件不做授时，只记录引脚。
 #define DT_GNSS_PPS_GPIO 4
 #define DT_GNSS_BUF_SIZE 4096
-// 上报给 App 的最小间隔（毫秒）。10 Hz 对应 100。
-#define DT_GNSS_EMIT_MS 100
-// 启动时尝试把模块导航频率改到这个值（1~25）。设 0 表示完全不动模块配置。
-#define DT_GNSS_TARGET_HZ 10
+// 默认输出间隔（毫秒）。运行时支持 10 / 20 / 25 Hz，最高 25 Hz 对应 40 ms。
+#define DT_GNSS_EMIT_MS 40
+// NEO-M9N 硬件最高 25 Hz，启动与掉电恢复均默认使用最高档。
+#define DT_GNSS_TARGET_HZ 25
+
+// ---------------- 天线诊断（GSV / C/N0） ----------------
+// 周期性打开 NMEA GSV，解析每颗星的载噪比并打到串口，用来判断天线、
+// 馈线、接头和供电是否正常。GSV 只在导航解算周期输出，25 Hz 下打开会
+// 瞬间灌满 38400 bps 的串口（GGA/RMC 也会跟着丢），所以诊断窗口内临时
+// 把导航频率降到 1 Hz，采完立刻恢复 App 设置的档位。
+// 录制期间不做诊断，避免打断 25 Hz 记录的连续性。
+#define DT_GNSS_DIAG_ENABLE 1
+#define DT_GNSS_DIAG_PERIOD_S 30   // 两次诊断的间隔
+#define DT_GNSS_DIAG_FIRST_S 10    // 开机后第一次诊断前的等待
+#define DT_GNSS_DIAG_WINDOW_MS 2500  // 单次采集窗口（1 Hz 下覆盖两轮 GSV）
+#define DT_GNSS_DIAG_MAX_SATS 64     // 去重后的卫星上限
+#define DT_GNSS_DIAG_STRONG 8        // 串口打印最强的几颗
 
 // ---------------- IMU（Bosch BMI088，SPI2） ----------------
 // 加速度计与陀螺仪共用一组 SPI，各自一个片选：
@@ -77,8 +92,9 @@
 #define DT_BARO_SCL_GPIO 9
 #define DT_BARO_SCL_HZ 400000
 #define DT_BARO_ADDR 0x77
-// 采样与上报频率。1 Hz 足够算气压高度，也不会刷爆串口和蓝牙。
-#define DT_BARO_HZ 1
+// 采样与上报频率。10 Hz 才能给 ESKF 的垂直通道提供足够的高差/坡度分辨率；
+// BMP390 本身可到 50 Hz，10 Hz 不会刷爆串口和蓝牙。
+#define DT_BARO_HZ 10
 
 // ---------------- microSD（SPI3 + FATFS） ----------------
 // 0.4.0 起：开机先挂 SD，挂上就用 SD 存会话缓存，挂不上自动回落片内 SPIFFS。

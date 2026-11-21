@@ -31,6 +31,26 @@ const int satelliteFallbackFailureThreshold = 3;
 String satelliteTileUrl(int z, int x, int y) =>
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$z/$y/$x';
 
+/// 高德卫星瓦片 URL（style=6，GCJ-02 坐标，z/y/x 顺序）。
+///
+/// 为什么保留两套源：Esri 在国内高缩放级别会返回“MAP DATA NOT YET
+/// AVAILABLE”的灰色占位图（HTTP 200，不会触发 errorBuilder），赛后分析页
+/// 因此整幅灰块；高德卫星在国内覆盖稳定，用于分析页。
+///
+/// 注意：高德瓦片是 GCJ-02，调用方必须先把 WGS-84 的轨迹与范围转成
+/// GCJ-02 再投影（见 amap_service.wgsToGcjLocal），否则会有数百米偏移。
+String amapSatelliteTileUrl(int z, int x, int y) {
+  final host = 1 + (x + y) % 4;
+  return 'https://webst0$host.is.autonavi.com/appmaptile'
+      '?style=6&x=$x&y=$y&z=$z';
+}
+
+/// 高德卫星影像署名。
+const String amapSatelliteAttribution = '影像 © 高德地图';
+
+/// 高德卫星瓦片最大可用缩放（再高会回落到低级别旧图或空图）。
+const int amapSatelliteMaxZoom = 17;
+
 /// Web Mercator slippy-map 换算（与 widgets.dart 的 DarkTileMap 同口径）。
 double satelliteTileX(double lon, int z) => (lon + 180) / 360 * math.pow(2, z);
 

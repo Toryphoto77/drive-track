@@ -4,12 +4,14 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "dt_baro.h"
 #include "dt_types.h"
 
 void dt_session_init(void);
 
 void dt_session_on_gps(const dt_gps_sample_t *sample);
 void dt_session_on_imu(const dt_imu_sample_t *sample);
+void dt_session_on_baro(const dt_baro_sample_t *sample);
 void dt_session_on_obd(const dt_obd_sample_t *sample);
 
 bool dt_session_active(void);

@@ -221,6 +221,38 @@ class Native {
     final r = await _m.invokeMethod('getConnectedWifiSsid');
     return r as String?;
   }
+
+  /// 自动连接设备热点（Android 10+ 会弹一次系统确认框）。
+  /// 返回 {ok: bool, reason?: string}；不支持的旧系统会打开 Wi-Fi 设置页。
+  static Future<Map<String, dynamic>> connectDeviceHotspot({
+    String prefix = 'DriveTrack-',
+    required String password,
+  }) async {
+    final r = await _m.invokeMethod('connectDeviceHotspot', {
+      'prefix': prefix,
+      'password': password,
+    });
+    return Map<String, dynamic>.from(r as Map);
+  }
+
+  /// 查询原生侧设备热点网络是否已真正就绪。
+  /// 用于轮询补判：系统确认框晚点被点、或热点中途掉线时，
+  /// 页面都能及时更新状态，不必只依赖首次连接的返回值。
+  static Future<bool> isDeviceHotspotConnected() async {
+    try {
+      final r = await _m.invokeMethod('getDeviceHotspotStatus');
+      if (r is Map) return r['connected'] == true;
+      return r == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 解除热点网络绑定，恢复手机默认上网网络。
+  static Future<void> disconnectDeviceHotspot() async {
+    await _m.invokeMethod('disconnectDeviceHotspot');
+  }
+
   static Future<void> shareFiles(List<String> paths, String mime, String text) =>
       _m.invokeMethod('shareFiles', {'paths': paths, 'mime': mime, 'text': text});
 

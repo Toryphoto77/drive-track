@@ -67,6 +67,11 @@ static spi_device_handle_t s_accel;
 static spi_device_handle_t s_gyro;
 static bool s_ready;
 
+// 最近一次采样与自动标定状态，供 /api/status 实时读数使用。
+static dt_imu_sample_t s_last_sample;
+static bool s_have_sample;
+static bool s_calibrated;
+
 // 读：地址最高位置 1，随后丢弃 1 个 dummy 字节。
 static esp_err_t bus_read(spi_device_handle_t dev, uint8_t reg, uint8_t *out,
                           size_t len)
@@ -252,6 +257,7 @@ static void calibrate_gyro(void)
     s_bias_gx = sx / (float)got;
     s_bias_gy = sy / (float)got;
     s_bias_gz = sz / (float)got;
+    s_calibrated = true;
     ESP_LOGI(TAG, "陀螺零偏 gx=%.2f gy=%.2f gz=%.2f dps", s_bias_gx, s_bias_gy,
              s_bias_gz);
 }
@@ -333,7 +339,10 @@ static void imu_task(void *arg)
             .gz = gz,
             .roll_deg = roll,
             .pitch_deg = pitch,
+            .ts_us = now_us,
         };
+        s_last_sample = sample;
+        s_have_sample = true;
         dt_session_on_imu(&sample);
 
 #if DT_SERIAL_TELEMETRY
@@ -424,4 +433,18 @@ bool dt_imu_start(void)
 bool dt_imu_ready(void)
 {
     return s_ready;
+}
+
+bool dt_imu_read(dt_imu_sample_t *out)
+{
+    if (!s_have_sample || out == NULL) {
+        return false;
+    }
+    *out = s_last_sample;
+    return true;
+}
+
+bool dt_imu_calibrated(void)
+{
+    return s_calibrated;
 }

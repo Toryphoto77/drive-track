@@ -6,15 +6,17 @@
 ///
 /// 数据口径（与分析页一致，不编数）：
 /// - 底图按模式选择：赛道使用 Esri World Imagery 卫星瓦片，叠加点
-///   保持 WGS-84；街道保留高德标准路网栅格瓦片，叠加点先从 WGS-84
-///   转 GCJ-02。两种模式都复用 [AnalysisGeoProjector]，但绝不混用
-///   坐标系，否则叠加层会与底图错位。
+///   保持 WGS-84；街道使用高德深色影像路网（style=8，host 轮转），
+///   叠加点先从 WGS-84 转 GCJ-02；高德失败时整幅切 CARTO dark_all /
+///   OSM，此时叠加层用回原始 WGS-84。两种模式都复用
+///   [AnalysisGeoProjector]，但绝不混用坐标系，否则叠加层会与底图错位。
 /// - 赛道中心线只用包经纬度实点（[TrackPackage.centerline]），
 ///   起终点 / 分段点只用包与计时器已采用的经纬度实点；
 ///   目录归一化轮廓（[TrackInfo]）不是经纬度，绝不画到地图上。
 /// - 已录轨迹只用 GPS 实测点连线；无有效位置时不画当前位置箭头。
-/// - 回落：瓦片累计失败达到 [satelliteFallbackFailureThreshold]
-///   （3 张）即自动回落示意图（深色底 + 中心线 / 轨迹 / 箭头），
+/// - 回落：赛道卫星瓦片累计失败达到
+///   [satelliteFallbackFailureThreshold]（3 张），或街道三个源都失败，
+///   才自动回落示意图（深色底 + 中心线 / 轨迹 / 箭头），
 ///   不弹错、不白屏，状态行写明“地图未加载，已显示示意图”。
 /// - 无点（中心线与轨迹都空）时显示占位文案“暂无位置，等待定位”，
 ///   不画假线。单点 / 全部重合时以该点为中心扩一小框（约 ±220 m），
@@ -42,6 +44,37 @@ import 'models.dart';
 import 'satellite_tiles.dart';
 import 'track_analysis_geo.dart';
 import 'track_timing.dart';
+
+/// 街道模式底图源（整幅切换，不逐张混源）。
+///
+/// v1.8.1：旧实现只走高德 webrd01 + style=7 单源，国内单主机限流时
+/// 约 80% 瓦片失败、几乎什么都显示不出来。现改为：
+/// 1. [amap] 高德深色影像路网（style=8，host 轮转，GCJ-02）；
+/// 2. [carto] CARTO dark_all 深色路网（WGS-84，海外可用）；
+/// 3. [osm] OSM 标准路网（WGS-84，最后兜底）。
+/// 同一源连续失败 3 张才整幅切下一源；三源都失败才回落示意图。
+enum StreetTileSource { amap, carto, osm }
+
+String _streetTileUrl(StreetTileSource src, int z, int x, int y) {
+  switch (src) {
+    case StreetTileSource.amap:
+      return amapTileUrl(z, x, y);
+    case StreetTileSource.carto:
+      return 'https://basemaps.cartocdn.com/dark_all/$z/$x/$y.png';
+    case StreetTileSource.osm:
+      return 'https://tile.openstreetmap.org/$z/$x/$y.png';
+  }
+}
+
+String _streetTileAttribution(StreetTileSource src) => switch (src) {
+  StreetTileSource.amap => amapTileAttribution,
+  StreetTileSource.carto => '© OpenStreetMap contributors © CARTO',
+  StreetTileSource.osm => '© OpenStreetMap contributors',
+};
+
+/// 高德源用 GCJ-02；CARTO / OSM 用 WGS-84。叠加层坐标必须随源切换，
+/// 否则会与底图错位（高德偏差可达约 500 米）。
+bool _streetUsesGcj(StreetTileSource src) => src == StreetTileSource.amap;
 
 /// v1.3.4：幽灵车插值纯函数（参考圈 = 本节最佳圈）。
 ///
@@ -388,17 +421,48 @@ class RecordingMapPage extends StatefulWidget {
 
 class _RecordingMapPageState extends State<RecordingMapPage> {
   /// 已失败过的瓦片 URL（去重计数；单张失败只计一次）。
+  /// 赛道卫星源用总失败数判断回落；街道源按当前源单独计数。
   final Set<String> _failedTileUrls = {};
 
-  bool get _fallback => shouldFallbackToSchematic(_failedTileUrls.length);
+  /// 街道当前底图源（整幅切换）与该源已失败瓦片数。
+  StreetTileSource _streetSource = StreetTileSource.amap;
+  final Set<String> _streetFailedUrls = {};
 
-  void _onTileError(String url) {
+  /// 街道源连续失败达阈值（3 张）且还有下一源时整幅切源；
+  /// 已是最后一源（OSM）仍失败才回落示意图。
+  static const int _streetSwitchFailures = 3;
+
+  bool get _streetExhausted =>
+      _streetSource == StreetTileSource.osm &&
+      _streetFailedUrls.length >= _streetSwitchFailures;
+
+  bool get _fallback => widget.isTrack
+      ? shouldFallbackToSchematic(_failedTileUrls.length)
+      : _streetExhausted;
+
+  void _onTrackTileError(String url) {
     if (_failedTileUrls.contains(url)) return;
     _failedTileUrls.add(url);
     // 图片加载失败发生在帧外，此处经 post-frame 再刷新，避免
     // 在 build 期间 setState。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() {});
+    });
+  }
+
+  void _onStreetTileError(String url) {
+    if (_streetFailedUrls.contains(url)) return;
+    _streetFailedUrls.add(url);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // 同一源失败 3 张即整幅切下一源（amap → carto → osm），
+      // 不逐张混源，避免坐标系混用。已是 OSM 时由 _fallback 回落。
+      if (_streetFailedUrls.length >= _streetSwitchFailures &&
+          _streetSource != StreetTileSource.osm) {
+        _streetSource = StreetTileSource.values[_streetSource.index + 1];
+        _streetFailedUrls.clear();
+      }
+      setState(() {});
     });
   }
 
@@ -414,10 +478,12 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
     final overlaySectors = widget.showTrackOverlay
         ? widget.sectorPoints
         : const <GeoPoint>[];
-    // 赛道 Esri 瓦片使用 WGS-84；街道高德瓦片使用 GCJ-02。
-    // 框外点（包括无效的 0,0）由原转换函数原样返回。
+    // 赛道 Esri 瓦片使用 WGS-84；街道仅高德源使用 GCJ-02，
+    // 切到 CARTO / OSM 时回到原始 WGS-84。框外点（包括无效的
+    // 0,0）由原转换函数原样返回。
+    final streetGcj = !widget.isTrack && _streetUsesGcj(_streetSource);
     GeoPoint toMapPoint(GeoPoint p) {
-      if (widget.isTrack) return p;
+      if (!streetGcj) return p;
       final (la, lo) = wgsToGcjLocal(p.lat, p.lon);
       return GeoPoint(la, lo);
     }
@@ -427,15 +493,15 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
     final mapStart = overlayStart == null ? null : toMapPoint(overlayStart);
     final mapFinish = overlayFinish == null ? null : toMapPoint(overlayFinish);
     final mapSectors = overlaySectors.map(toMapPoint).toList();
-    final (mapCurLat, mapCurLon) = widget.isTrack
-        ? (widget.curLat, widget.curLon)
-        : wgsToGcjLocal(widget.curLat, widget.curLon);
+    final (mapCurLat, mapCurLon) = streetGcj
+        ? wgsToGcjLocal(widget.curLat, widget.curLon)
+        : (widget.curLat, widget.curLon);
     double? mapGhostLat;
     double? mapGhostLon;
     if (widget.ghostLat != null && widget.ghostLon != null) {
-      final (la, lo) = widget.isTrack
-          ? (widget.ghostLat!, widget.ghostLon!)
-          : wgsToGcjLocal(widget.ghostLat!, widget.ghostLon!);
+      final (la, lo) = streetGcj
+          ? wgsToGcjLocal(widget.ghostLat!, widget.ghostLon!)
+          : (widget.ghostLat!, widget.ghostLon!);
       mapGhostLat = la;
       mapGhostLon = lo;
     }
@@ -520,19 +586,29 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                             child: Image.network(
                               widget.isTrack
                                   ? satelliteTileUrl(zoom, x, y)
-                                  : amapTileUrl(zoom, x, y),
+                                  : _streetTileUrl(_streetSource, zoom, x, y),
                               key: ValueKey(
-                                'recmap-${widget.isTrack ? 'satellite' : 'amap'}-$zoom-$x-$y',
+                                'recmap-'
+                                '${widget.isTrack ? 'satellite' : _streetSource.name}'
+                                '-$zoom-$x-$y',
                               ),
-                              headers: const {'User-Agent': 'DriveTrack/1.7.4'},
+                              headers: const {'User-Agent': 'DriveTrack/1.8.1'},
                               fit: BoxFit.fill,
                               gaplessPlayback: true,
                               errorBuilder: (_, _, _) {
-                                _onTileError(
-                                  widget.isTrack
-                                      ? satelliteTileUrl(zoom, x, y)
-                                      : amapTileUrl(zoom, x, y),
-                                );
+                                final url = widget.isTrack
+                                    ? satelliteTileUrl(zoom, x, y)
+                                    : _streetTileUrl(
+                                        _streetSource,
+                                        zoom,
+                                        x,
+                                        y,
+                                      );
+                                if (widget.isTrack) {
+                                  _onTrackTileError(url);
+                                } else {
+                                  _onStreetTileError(url);
+                                }
                                 return Container(
                                   color: const Color(0xFF0A0A0A),
                                 );
@@ -658,7 +734,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                           child: Text(
                             widget.isTrack
                                 ? satelliteTileAttribution
-                                : amapTileAttribution,
+                                : _streetTileAttribution(_streetSource),
                             style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 11,

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'crash_log.dart';
 import 'lean_estimator.dart';
 import 'models.dart';
+import 'mount_calibration.dart';
 import 'native.dart';
 import 'road_snap.dart';
 import 'tunnel_gap.dart';
@@ -170,6 +171,10 @@ class Recorder extends ChangeNotifier {
   TrackPoint? _gapStart;
   List<(double, double)>? _gapRoad;
   double _gapDistanceM = 0;
+  /// 气压高度读取（main 注入融合层最新气压高度）；缺口期间用
+  /// 它锁定推算点高度，避免隧道内高度掉成常数或乱跳。
+  double? Function()? baroAltitudeReader; // 返回 null 表示当前没有可信气压高度。
+  double? _gapStartBaroAlt;
   Timer? _gapTimer;
   int _lastObdSampleMs = 0;
   String calibrationNote = '未标定：点“标定车头方向”，直线行驶至 18 km/h 以上';
@@ -179,6 +184,16 @@ class Recorder extends ChangeNotifier {
   double? zeroBiasAx, zeroBiasAy, zeroBiasAz;
   int? zeroBiasAtMs;
   bool compassHintDone = false;
+
+  /// 设备安装标定（方向 + 补偿角）。未确认时为零补偿，车头方向
+  /// 仍按标定姿态计算，不凭空猜测。
+  MountCalibration mountCalibration = const MountCalibration();
+
+  /// 设置安装标定并立即作用于后续姿态解算。
+  void setMountCalibration(MountCalibration calibration) {
+    mountCalibration = calibration;
+    notifyListeners();
+  }
 
   /// 记录水平静置校零均值（仅存储与展示，不改 G 值计算）。
   void recordZeroBias(double ax, double ay, double az) {
@@ -324,9 +339,16 @@ class Recorder extends ChangeNotifier {
     final q = _latestQ!;
     final aw = q.rotate([ax, ay, az]);
     final delta = q * _q0!.inv;
-    final f = delta.rotate(_forward0);
-    final r = delta.rotate(_right0);
+    var f = delta.rotate(_forward0);
+    var r = delta.rotate(_right0);
     final u = delta.rotate([0, 0, 1]);
+    // 安装补偿：设备装歪时车头/横向基向量整体绕竖直轴旋转。
+    // 补偿角由用户在标定页输入，未确认时恒为 0，不做任何猜测。
+    final mountYaw = mountCalibration.yawOffsetDeg;
+    if (mountYaw != 0) {
+      f = rotateHorizontalDeg(f, mountYaw);
+      r = rotateHorizontalDeg(r, mountYaw);
+    }
     const g = 9.81;
     final lg = (aw[0] * f[0] + aw[1] * f[1] + aw[2] * f[2]) / g;
     final tg = (aw[0] * r[0] + aw[1] * r[1] + aw[2] * r[2]) / g;
@@ -697,6 +719,7 @@ class Recorder extends ChangeNotifier {
     _gapStart = null;
     _gapRoad = null;
     _gapDistanceM = 0;
+    _gapStartBaroAlt = null;
     _resetLiveFixState();
     gapStatus.value = GapStatus.ok;
     _gapTimer?.cancel();
@@ -803,6 +826,7 @@ class Recorder extends ChangeNotifier {
     _gapStart = null;
     _gapRoad = null;
     _gapDistanceM = 0;
+    _gapStartBaroAlt = null;
     gapStatus.value = GapStatus.ok;
   }
 
@@ -825,6 +849,7 @@ class Recorder extends ChangeNotifier {
         return;
       }
       _gapStart = last;
+      _gapStartBaroAlt = baroAltitudeReader?.call();
       _gapDistanceM = 0;
       gapStatus.value = GapStatus.estimating;
       // 有路网时拉隧道折线（失败/无路网 = null，走弦；不阻塞推算）。
@@ -863,12 +888,22 @@ class Recorder extends ChangeNotifier {
       pos = projectOntoPolyline(pos.lat, pos.lon, _gapRoad!);
     }
     _gapDistanceM += haversineM(last.lat, last.lon, pos.lat, pos.lon);
+    // 气压锁高：以缺口起点的 GPS 海拔为基准，叠加气压高度相对变化。
+    // 缺气压或缺可信起点海拔时保持 altValid=false，不冒充真实海拔。
+    var alt = gapStart.alt;
+    var altValid = false;
+    final baroNow = baroAltitudeReader?.call();
+    final baroBase = _gapStartBaroAlt;
+    if (gapStart.altValid && baroNow != null && baroBase != null) {
+      alt = gapStart.alt + (baroNow - baroBase);
+      altValid = true;
+    }
     points.add(TrackPoint(
       timeMs: nowMs,
       lat: pos.lat,
       lon: pos.lon,
-      alt: gapStart.alt,
-      altValid: false,
+      alt: alt,
+      altValid: altValid,
       speed: speed,
       bearing: heading,
       hAcc: 999,
@@ -909,6 +944,7 @@ class Recorder extends ChangeNotifier {
     _gapTimer?.cancel();
     _gapTimer = null;
     _gapStart = null;
+    _gapStartBaroAlt = null;
     gapStatus.value = GapStatus.ok;
     state = RecState.idle;
     _autoPaused = false;
