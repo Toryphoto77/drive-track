@@ -76,7 +76,7 @@ CLOUDBASE_DEFINE=()
 if [ -f $HOME/.local/share/drive-track/secrets/.cloudbase-env ]; then
   CLOUDBASE_DEFINE=(--dart-define="CLOUDBASE_ENV_ID=$(cat $HOME/.local/share/drive-track/secrets/.cloudbase-env)")
 fi
-flutter build apk --release --target-platform android-arm64 --split-per-abi --no-android-gradle-daemon "${AMAP_DEFINE[@]}" "${AMAPJS_DEFINE[@]}" "${CLOUDBASE_DEFINE[@]}"
+flutter build apk --release --target-platform android-arm64 --split-per-abi -Pforce-version-code-ignoring-abi=true --no-android-gradle-daemon "${AMAP_DEFINE[@]}" "${AMAPJS_DEFINE[@]}" "${CLOUDBASE_DEFINE[@]}"
 cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "./DriveTrack-v${VERSION}-release-arm64-v8a.apk"
 ls -la "./DriveTrack-v${VERSION}-release-arm64-v8a.apk"
 echo BUILD_DONE
