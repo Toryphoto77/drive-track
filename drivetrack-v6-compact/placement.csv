@@ -18,7 +18,7 @@ U9,LIS2DW12,Package_LGA-12_2x2mm_P0.5mm,39.00,52.00,0,top,POWER_HOT,1.6uA motion
 Q1,AO3401,Package_TO_SOT_SMD:SOT-23,42.50,52.00,0,top,POWER_HOT,P-MOS soft-latch high-side switch SYS to VSYS
 Q2,2N7002,Package_TO_SOT_SMD:SOT-23,45.00,52.00,0,top,POWER_HOT,latch SET pull-down (VBUS edge / motion INT)
 Q3,2N7002,Package_TO_SOT_SMD:SOT-23,47.50,52.00,0,top,POWER_HOT,latch HOLD pull-down (ESP32 PWR_HOLD)
-J3,JST-SH 1.0mm 2P,Connector_JST:JST_SH_SM02B-SRSS-TB_1x02_P1.00mm_Horizontal,57.50,50.00,-90,top,BATTERY_CONNECTOR,low-profile ~2.9mm mated; opening -X; near cell tabs
+J3,JST-SH 1.0mm 2P,Connector_JST:JST_SH_SM02B-SRSS-TB_1x02_P1.00mm_Horizontal,57.50,55.00,180,top,BATTERY_CONNECTOR,opening south; fed by 2.0x4.3mm cable notch at board edge X60-62 Y55-59.3
 SW1,BOOT,SW_SPST_EVQP7A,44.00,28.00,0,top,DEBUG,internal; reachable before lid
 SW2,RST,SW_SPST_EVQP7A,49.00,28.00,0,top,DEBUG,internal pogo/pinhole reset only; not a user button
 MH1,MH 2.2mm NPTH,MountingHole_2.2mm,30.00,3.00,0,top,MECHANICAL,top strip; outside cell (cell Y>=6) and antenna (X>=27)
