@@ -7,7 +7,8 @@
 - 主控：ESP32-S3-MINI-1U（替代 ESP32-S3-WROOM-1U）
 - 移除：microSD、全部测试点 / DNI 器件（U.FL、原 SK6812、J5、J9、TP1–TP10）
 - 灯：5 颗 0805 → 1 颗 SK6812MINI RGB
-- 保留：25×25 陶瓷天线、NEO-M9N、BMI088、BMP390、USB-C、IP5306、TPS563201
+- 保留：25×25 陶瓷天线、NEO-M9N、BMI088、BMP390、USB-C
+- 电源：改为 BQ24074 + TPS63802 + 软锁存（无按键），详见 `power-and-wireless.md`
 - 安装：4 × M2 对称，全部落在上下边条，不穿电芯、不进天线投影
 
 ## 最终尺寸
@@ -72,6 +73,7 @@
 | microSD Hirose DM3AT | 删除 | 固件未挂载；可选 128MB SPI NOR |
 | JST-PH 2.0 卧式 | JST-SH 1.0 卧式 | 高度 -5 mm |
 | L1 7.3×7.3×4.5 | 4×4×2 屏蔽电感 | 高度 -2.5 mm |
+| IP5306 + TPS563201 | BQ24074 + TPS63802 + 软锁存 | 无按键电源；3.3V buck-boost 覆盖 3.0–4.4V |
 | 5 × LED 0805 + 电阻 | 1 × SK6812MINI | 简化灯窗 |
 | U.FL / SK6812 / J5 / J9 / TP1–10 | 删除 | 量产不贴，只保留工厂 pogo 焊盘 |
 | R8 0Ω（GNSS 馈线） | 删除 | 直连 50Ω |
