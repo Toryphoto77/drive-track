@@ -11,12 +11,14 @@
 
 // ---------------- 固件身份 ----------------
 // 改功能就同时抬高版本号；App 按 build 判断是否需要升级。
-#define DT_FW_VERSION "0.2.0"
-#define DT_FW_BUILD 2
+#define DT_FW_VERSION "0.2.1"
+#define DT_FW_BUILD 3
 #define DT_DEVICE_MODEL "DT-BOX-1"
 #define DT_BOARD_NAME "DriveTrack V4.6"
 
-// ---------------- WiFi 热点（OTA 通道） ----------------
+// ---------------- WiFi 热点（OTA 通道，按需开启） ----------------
+// 开机不再常驻热点；App 通过 BLE 下发 {"cmd":"ota-start"} 才开启，
+// 120s 无 HTTP 请求自动关闭，避免抢占手机蜂窝网络。
 // SSID 形如 DriveTrack-A1B2，后缀取 MAC 末两字节。
 #define DT_AP_SSID_PREFIX "DriveTrack"
 // WPA2 密码，至少 8 位；App 固件升级页显示的就是这一串。

@@ -29,7 +29,15 @@ static const char *TAG = "dt_ota";
 #define OTA_CHUNK 4096
 
 static bool s_updating;
+static bool s_active;
+static bool s_netif_ready;
+static bool s_wifi_ready;
+static httpd_handle_t s_server;
+static int64_t s_last_activity_us;
 static char s_ssid[33];
+
+// 没有 HTTP 请求超过这个时间就自动关热点，把射频还给 BLE。
+#define OTA_IDLE_STOP_US (120LL * 1000000LL)
 
 static void to_hex(const unsigned char *in, size_t len, char *out)
 {
@@ -58,6 +66,7 @@ static bool hex_equal(const char *a, const char *b)
 
 static esp_err_t info_get(httpd_req_t *req)
 {
+    s_last_activity_us = esp_timer_get_time();
     char body[288];
     int n = snprintf(body, sizeof(body),
                      "{\"model\":\"%s\",\"board\":\"%s\",\"fw\":\"%s\","
@@ -84,6 +93,7 @@ static void ota_reboot_task(void *arg)
 
 static esp_err_t ota_post(httpd_req_t *req)
 {
+    s_last_activity_us = esp_timer_get_time();
     if (s_updating) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_set_type(req, "application/json");
@@ -211,25 +221,44 @@ static esp_err_t ota_post(httpd_req_t *req)
     return send_err;
 }
 
-static void dt_wifi_start(void)
+const char *dt_ota_ssid(void)
 {
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_ap();
+    if (s_ssid[0] == '\0') {
+        uint8_t mac[6] = {0};
+        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+        snprintf(s_ssid, sizeof(s_ssid), "%s-%02X%02X", DT_AP_SSID_PREFIX,
+                 mac[4], mac[5]);
+    }
+    return s_ssid;
+}
 
-    wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&init));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+static bool dt_wifi_start(void)
+{
+    // netif 和 WiFi 驱动整个生命周期只初始化一次；
+    // 之后只做 start/stop，避免重复建 netif 导致 DHCP 异常。
+    if (!s_netif_ready) {
+        ESP_ERROR_CHECK(esp_netif_init());
+        esp_err_t err = esp_event_loop_create_default();
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+            ESP_LOGE(TAG, "事件循环创建失败 %s", esp_err_to_name(err));
+            return false;
+        }
+        esp_netif_create_default_wifi_ap();
+        s_netif_ready = true;
+    }
+    if (!s_wifi_ready) {
+        wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
+        ESP_ERROR_CHECK(esp_wifi_init(&init));
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+        s_wifi_ready = true;
+    }
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
 
-    uint8_t mac[6] = {0};
-    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
-    snprintf(s_ssid, sizeof(s_ssid), "%s-%02X%02X", DT_AP_SSID_PREFIX, mac[4],
-             mac[5]);
-
     wifi_config_t cfg = {0};
-    memcpy(cfg.ap.ssid, s_ssid, strlen(s_ssid));
-    cfg.ap.ssid_len = (uint8_t)strlen(s_ssid);
+    const char *ssid = dt_ota_ssid();
+    memcpy(cfg.ap.ssid, ssid, strlen(ssid));
+    cfg.ap.ssid_len = (uint8_t)strlen(ssid);
     memcpy(cfg.ap.password, DT_AP_PASSWORD, strlen(DT_AP_PASSWORD));
     cfg.ap.channel = DT_AP_CHANNEL;
     cfg.ap.max_connection = DT_AP_MAX_CONN;
@@ -237,13 +266,43 @@ static void dt_wifi_start(void)
     cfg.ap.pmf_cfg.required = false;
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &cfg));
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "热点已开：%s（密码 %s）", s_ssid, DT_AP_PASSWORD);
+    esp_err_t err = esp_wifi_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "热点启动失败 %s", esp_err_to_name(err));
+        return false;
+    }
+    return true;
+}
+
+static void ota_idle_task(void *arg)
+{
+    (void)arg;
+    while (s_active) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        if (!s_active) {
+            break;
+        }
+        if (s_updating) {
+            continue;
+        }
+        if (esp_timer_get_time() - s_last_activity_us > OTA_IDLE_STOP_US) {
+            ESP_LOGI(TAG, "OTA 空闲超时，关闭热点");
+            dt_ota_stop();
+            break;
+        }
+    }
+    vTaskDelete(NULL);
 }
 
 void dt_ota_start(void)
 {
-    dt_wifi_start();
+    if (s_active) {
+        s_last_activity_us = esp_timer_get_time();
+        return;
+    }
+    if (!dt_wifi_start()) {
+        return;
+    }
 
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.stack_size = 8192;
@@ -252,10 +311,10 @@ void dt_ota_start(void)
     cfg.recv_wait_timeout = 30;
     cfg.send_wait_timeout = 30;
 
-    httpd_handle_t server = NULL;
-    esp_err_t err = httpd_start(&server, &cfg);
+    esp_err_t err = httpd_start(&s_server, &cfg);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "HTTP 服务启动失败 %s", esp_err_to_name(err));
+        esp_wifi_stop();
         return;
     }
 
@@ -269,8 +328,36 @@ void dt_ota_start(void)
         .method = HTTP_POST,
         .handler = ota_post,
     };
-    httpd_register_uri_handler(server, &info_uri);
-    httpd_register_uri_handler(server, &ota_uri);
+    httpd_register_uri_handler(s_server, &info_uri);
+    httpd_register_uri_handler(s_server, &ota_uri);
 
-    ESP_LOGI(TAG, "OTA 服务已就绪 http://192.168.4.1/api/info");
+    s_active = true;
+    s_last_activity_us = esp_timer_get_time();
+    xTaskCreate(ota_idle_task, "ota_idle", 2048, NULL, 3, NULL);
+    ESP_LOGI(TAG, "OTA 已按需开启：%s http://192.168.4.1/api/info", dt_ota_ssid());
+}
+
+void dt_ota_stop(void)
+{
+    if (!s_active) {
+        return;
+    }
+    if (s_updating) {
+        ESP_LOGW(TAG, "升级进行中，拒绝关闭热点");
+        return;
+    }
+    s_active = false;
+    if (s_server != NULL) {
+        httpd_stop(s_server);
+        s_server = NULL;
+    }
+    if (s_wifi_ready) {
+        esp_wifi_stop();
+    }
+    ESP_LOGI(TAG, "OTA 热点已关闭，射频归还 BLE");
+}
+
+bool dt_ota_active(void)
+{
+    return s_active;
 }

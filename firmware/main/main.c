@@ -1,6 +1,7 @@
 // DriveTrack 自研硬件主程序。
 //
-// 启动顺序：NVS -> 本地缓存 -> 会话层 -> WiFi/HTTP/OTA -> BLE -> 传感器。
+// 启动顺序：NVS -> 本地缓存 -> 会话层 -> 电源 -> BLE -> 传感器。
+// WiFi/HTTP/OTA 不再开机常驻，由 App 通过 BLE 指令按需开启，避免抢占手机流量。
 // 任一外设没接好只打印告警，不影响其余功能，方便分模块联调。
 #include <stdio.h>
 #include <string.h>
@@ -18,18 +19,18 @@
 #include "dt_config.h"
 #include "dt_gnss.h"
 #include "dt_imu.h"
-#include "dt_ota.h"
 #include "dt_power.h"
 #include "dt_session.h"
 #include "dt_store.h"
 
 static const char *TAG = "dt_main";
 
-// BLE 名称与热点名同源，都取 MAC 末两字节，多台设备不会重名。
+// BLE 名称与热点名必须完全一致：App 用 BLE 名称推导热点名再触发 OTA。
+// 两者统一取 SoftAP MAC 末两字节，不要用 ESP_MAC_BT（差一个偏移，名称会对不上）。
 static void build_device_name(char *out, size_t len)
 {
     uint8_t mac[6] = {0};
-    esp_read_mac(mac, ESP_MAC_BT);
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
     snprintf(out, len, "%s-%02X%02X", DT_AP_SSID_PREFIX, mac[4], mac[5]);
 }
 
@@ -53,7 +54,6 @@ void app_main(void)
     if (!dt_power_start()) {
         ESP_LOGW(TAG, "电源监控不可用，电量与指示灯失效");
     }
-    dt_ota_start();
 
 #if DT_ENABLE_BLE
     char name[24];

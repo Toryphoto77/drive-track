@@ -1,7 +1,8 @@
 # DriveTrack 自研硬件固件（V4.6 / ESP32-S3）
 
-配合 App 的「设备中心 → 自研设备固件升级」使用：设备开热点，手机连上后 App
-检测版本、下载固件并通过 WiFi 写入设备备用分区，全程不拆机、不插线。
+配合 App 的「设备中心 → 自研设备固件升级」使用：App 先经 BLE 下发
+`{"cmd":"ota-start"}` 让设备按需开热点，手机连上后检测版本、下载固件并通过
+WiFi 写入备用分区，全程不拆机、不插线。热点 120 秒无请求自动关闭，不常驻。
 
 - 主控：ESP32-S3-WROOM-1U-N16R8（16 MB Flash + 8 MB 八线 PSRAM）
 - 框架：ESP-IDF v5.1 ~ v5.4
@@ -68,18 +69,23 @@ esptool.py -p COM3 -b 460800 --before default_reset --after hard_reset \
   0x20000 build/drivetrack-box.bin
 ```
 
-烧完设备会开热点 `DriveTrack-XXXX`（密码 `drivetrack123`），
-浏览器访问 `http://192.168.4.1/api/info` 应能看到型号、板卡、电量与版本。
-之后所有升级都走 App，不用再连线。
+烧完后热点默认不开。App 通过 BLE 下发 `{"cmd":"ota-start"}` 后才会出现
+`DriveTrack-XXXX`（密码 `drivetrack123`），浏览器访问
+`http://192.168.4.1/api/info` 应能看到型号、板卡、电量与版本；再发
+`{"cmd":"ota-stop"}` 可立即关闭。120 秒无 HTTP 请求也会自动关闭。
 
 > ESP32-S3 的 bootloader 偏移是 `0x0`（经典 ESP32 才是 `0x1000`），别照抄旧文档。
 
-## 4. WiFi 升级链路
+## 4. OTA 升级链路（BLE 触发）
 
 | 接口 | 说明 |
 | --- | --- |
-| `GET /api/info` | `{"model":"DT-BOX-1","board":"DriveTrack V4.6","fw":"0.2.0","build":2,"battMv":4020,"freeHeap":..,"uptimeMs":..}` |
+| BLE `{"cmd":"ota-start"}` | 开启热点，回 `{"t":"ota","on":1,"ssid":..,"pass":..}` |
+| BLE `{"cmd":"ota-stop"}` | 立即关闭热点 |
+| `GET /api/info` | `{"model":"DT-BOX-1","board":"DriveTrack V4.6","fw":"0.2.1","build":3,"battMv":4020,"freeHeap":..,"uptimeMs":..}` |
 | `POST /api/ota` | 请求体为固件 `.bin`，头 `X-Firmware-Sha256` 为 64 位十六进制摘要 |
+
+BLE 名称与热点名一致（都取 SoftAP MAC 末两字节），App 可直接用 BLE 名推导热点名。
 
 设备收到固件后：写入当前未运行的 OTA 分区 → 校验 SHA-256 → 切换启动分区 →
 重启 → 新固件跑满 10 秒未崩溃才取消回滚标记。任何一步失败都停在旧固件上，不会变砖。

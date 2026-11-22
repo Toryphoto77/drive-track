@@ -12,9 +12,12 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "dt_ble.h"
 #include "dt_config.h"
+#include "dt_ota.h"
 #include "dt_power.h"
 #include "dt_store.h"
 #include "dt_types.h"
@@ -41,7 +44,11 @@ static void emit(const char *line)
 {
     // 连得上就直接发；发不出去才落盘，重连后按游标补传。
     // 这样缓存里只留断线期间的数据，SPIFFS 不会被常态录制写满。
-    bool sent = dt_ble_send_line(line);
+    // OTA 期间暂停 BLE 遥测，把射频时间片让给 WiFi，避免上传被拖慢。
+    bool sent = false;
+    if (!dt_ota_active()) {
+        sent = dt_ble_send_line(line);
+    }
     if (s_active && !sent) {
         dt_store_write_line(line);
     }
@@ -222,16 +229,36 @@ static void ack(const char *cmd)
 
 static void send_status(void)
 {
-    char line[224];
+    char line[256];
     snprintf(line, sizeof(line),
              "{\"t\":\"dev\",\"model\":\"%s\",\"board\":\"%s\",\"fw\":\"%s\","
              "\"build\":%d,\"rec\":%d,\"up\":%lld,\"heap\":%u,\"batt\":%d,"
-             "\"cache\":%u}",
+             "\"ota\":%d,\"cache\":%u}",
              DT_DEVICE_MODEL, DT_BOARD_NAME, DT_FW_VERSION, DT_FW_BUILD,
              s_active ? 1 : 0, (long long)(esp_timer_get_time() / 1000000),
              (unsigned)esp_get_free_heap_size(), dt_power_batt_mv(),
-             (unsigned)dt_store_backlog());
+             dt_ota_active() ? 1 : 0, (unsigned)dt_store_backlog());
     dt_ble_send_line(line);
+}
+
+// 热点状态：App 收到 on=1 后再切到 WiFi 上传固件。
+static void send_ota_status(void)
+{
+    char line[256];
+    snprintf(line, sizeof(line),
+             "{\"t\":\"ota\",\"on\":%d,\"ssid\":\"%s\",\"pass\":\"%s\","
+             "\"url\":\"http://192.168.4.1/api/info\"}",
+             dt_ota_active() ? 1 : 0, dt_ota_ssid(), DT_AP_PASSWORD);
+    dt_ble_send_line(line);
+}
+
+// 开热点会阻塞上百毫秒，别占着 BLE 主机任务；先回 ack，再在独立任务里开。
+static void ota_start_task(void *arg)
+{
+    (void)arg;
+    dt_ota_start();
+    send_ota_status();
+    vTaskDelete(NULL);
 }
 
 void dt_session_handle_command(const char *json, size_t len)
@@ -264,6 +291,12 @@ void dt_session_handle_command(const char *json, size_t len)
         ack("stop");
     } else if (strcmp(cmd->valuestring, "status") == 0) {
         send_status();
+    } else if (strcmp(cmd->valuestring, "ota-start") == 0) {
+        ack("ota-starting");
+        xTaskCreate(ota_start_task, "ota_start", 4096, NULL, 4, NULL);
+    } else if (strcmp(cmd->valuestring, "ota-stop") == 0) {
+        dt_ota_stop();
+        send_ota_status();
     } else if (strcmp(cmd->valuestring, "sync") == 0) {
         size_t moved = dt_store_sync_step(1500);
         if (moved == 0 && dt_store_backlog() == 0) {
