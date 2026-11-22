@@ -85,7 +85,7 @@ USB_RECESS_W, USB_RECESS_H, USB_RECESS_D = 14.00, 8.00, 0.90
 MH = [
     b(30.00, 3.00),     # 33.30, 6.30
     b(54.00, 3.00),     # 57.30, 6.30
-    b(30.00, 59.00),    # 33.30, 62.30
+    b(21.50, 59.00),    # 24.80, 62.30  (moved west of the USB-C receptacle)
     b(54.00, 59.00),    # 57.30, 62.30
 ]
 BOSS_D, PILOT_D, PILOT_DEPTH = 4.40, 1.60, 5.50

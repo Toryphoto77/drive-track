@@ -1,0 +1,38 @@
+value,footprint,qty,refs,note
+0.47uH,DriveTrack:L_4x4_H2,1,L1,buck-boost inductor 4x4x2
+1.78k,Resistor_SMD:R_0402_1005Metric,1,R2,
+100k,Resistor_SMD:R_0402_1005Metric,6,R10 R12 R14 R5 R7 R9,
+100n,Capacitor_SMD:C_0402_1005Metric,13,C12 C13 C15 C16 C17 C18 C19 C20 C22 C23 C24 C7 C8,
+10k,Resistor_SMD:R_0402_1005Metric,6,R17 R18 R24 R25 R3 R6,
+10u,Capacitor_SMD:C_0805_2012Metric,3,C1 C14 C4,
+150k,Resistor_SMD:R_0402_1005Metric,1,R13,
+1M,Resistor_SMD:R_0402_1005Metric,2,R19 R20,
+1N4148W,Diode_SMD:D_SOD-323,2,D4 D5,diode-OR from USB detect
+1u,Capacitor_SMD:C_0603_1608Metric,5,C10 C11 C2 C21 C9,
+22u,Capacitor_SMD:C_0805_2012Metric,2,C5 C6,
+25x25 patch,DriveTrack:GPS_Patch_25x25,1,ANT1,single feed pin; patch ground bonded to the ground plane
+3.09k,Resistor_SMD:R_0402_1005Metric,1,R1,
+330R,Resistor_SMD:R_0402_1005Metric,1,R21,
+4.7k,Resistor_SMD:R_0402_1005Metric,2,R15 R16,
+4.7u,Capacitor_SMD:C_0805_2012Metric,1,C3,
+47k,Resistor_SMD:R_0402_1005Metric,1,R4,
+5.1k,Resistor_SMD:R_0402_1005Metric,2,R22 R23,
+560k,Resistor_SMD:R_0402_1005Metric,1,R11,
+AO3401,Package_TO_SOT_SMD:SOT-23,1,Q1,"P-MOS high-side latch, source to VSYS"
+BMI088,DriveTrack:BMI088_LGA-16_3.0x4.5mm,1,U3,
+BMP390,DriveTrack:BMP390_LGA-10_2.0x2.0mm,1,U4,
+BQ24074,Package_DFN_QFN:VQFN-16-1EP_3x3mm_P0.5mm_EP1.6x1.6mm,1,U5,"power-path charger, 500 mA input (EN1=1/EN2=0)"
+BSS138,Package_TO_SOT_SMD:SOT-23,2,Q2 Q3,wake OR gate: USB present or motion
+ESD9B3.3ST5G,Diode_SMD:D_SOD-923,2,D2 D3,
+ESD9B5.0ST5G,Diode_SMD:D_SOD-923,1,D1,
+ESP32-S3-MINI-1U-N8R2,Espressif:ESP32-S3-MINI-1,1,U1,"module, 65 pads; GPIO26-37 reserved for in-package flash/PSRAM"
+Factory pogo 6P,DriveTrack:Pogo_6_1.5mm,1,J4,"1.5 mm pads, no connector; factory flashing only"
+JST-SH 2P,Connector_JST:JST_SH_SM02B-SRSS-TB_1x02-1MP_P1.00mm_Horizontal,1,J3,"opening south, cable notch at board edge"
+LIS2DW12,Package_LGA:LGA-12_2x2mm_P0.5mm,1,U9,1.6 uA motion wake; I2C address 0x18 (SA0 low)
+M2 NPTH mounting hole,MountingHole:MountingHole_2.2mm,4,MH1 MH2 MH3 MH4,no pads
+NEO-M9N,RF_GPS:ublox_NEO,1,U2,V_BCKP moved to always-on 3.0 V rail
+SK6812MINI,LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm,1,LED1,"powered from switched VLOAD, 3.4-4.2 V"
+TPS63802,DriveTrack:VSON-10-3x2mm_P0.5mm_TPS63802,1,U6,"3.3 V / 2 A buck-boost, 0.47 uH"
+TPS7A0230,Package_SON:Texas_X2SON-4_1x1mm_P0.65mm,1,U8,always-on 3.0 V / 25 nA for motion wake + GNSS backup
+TPS7A2033,Package_TO_SOT_SMD:SOT-23-5,1,U7,low-noise 3.3 V LDO for GNSS
+USB-C 16P,Connector_USB:USB_C_Receptacle_Amphenol_12401610E4-2A,1,J2,mid-mount; CC resistors 5.1k

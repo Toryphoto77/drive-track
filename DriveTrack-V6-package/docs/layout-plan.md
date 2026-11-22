@@ -60,8 +60,8 @@
 5. BMP390 距 BQ24074 / TPS63802 / L1 ≥ 8 mm，靠近左壁透气孔，局部挖铜隔热。
 6. VBUS / BAT / 3V3 主干 0.5–1.0 mm；充电热回路面积最小化。
 7. USB-C ESD 器件距连接器 ≤3 mm；D+/D- 等长差 <5 mm。
-8. 电池座 JST-SH 放在板东南角 (57.5,55)，开口朝南；板边开 2.0×4.3 mm 出线缺口（X 60–62，Y 55–59.3），极耳线从缺口上翻，不横穿板面。
-9. 安装孔 Ø2.2 NPTH，位置 (30,3)、(54,3)、(30,59)、(54,59)，柱外径 ≤4.6 mm。
+8. 电池座 JST-SH 放在板东侧 (58.5,49)，开口朝南；板边开 2.0×4.3 mm 出线缺口（X 60–62，Y 55–59.3），极耳线从缺口上翻，不横穿板面。JST 从原 (57.5,55) 北移，避开 MH4 安装柱。
+9. 安装孔 Ø2.2 NPTH，位置 **(30,3)、(54,3)、(21.5,59)、(54,59)**，柱外径 ≤4.6 mm。**左下孔从 (30,59) 西移到 (21.5,59)**：原位置正好压在 USB-C 插座本体上；外壳 v10 的对应螺钉柱需同步从 X=33.3 改到 X=24.8（见 `enclosure-v10/notes-v10.md`）。
 10. 2.4GHz IPEX 到盖内 FPC 的走线避开 GNSS patch 投影。
 11. 出线缺口 5 mm 范围内不得有走线或裸露铜箔，缺口边缘做 0.3 mm 倒圆，防止割伤线皮。
 
@@ -74,7 +74,8 @@
 | microSD Hirose DM3AT | 删除 | 固件未挂载；可选 128MB SPI NOR |
 | JST-PH 2.0 卧式 | JST-SH 1.0 卧式 | 高度 -5 mm |
 | L1 7.3×7.3×4.5 | 4×4×2 屏蔽电感 | 高度 -2.5 mm |
-| IP5306 + TPS563201 | BQ24074 + TPS63802 + 软锁存 | 无按键电源；3.3V buck-boost 覆盖 3.0–4.4V |
+| IP5306 + TPS563201 | BQ24074 + TPS63802 + TPS7A2033 + TPS7A0230 + 软锁存 | 无按键电源；3.3V buck-boost 覆盖 3.0–4.4V |
+| — | Q2/Q3 BSS138、D4/D5 1N4148W、R7/R9/R14 100k | 软锁存与 USB/动作唤醒或门 |
 | 5 × LED 0805 + 电阻 | 1 × SK6812MINI | 简化灯窗 |
 | U.FL / SK6812 / J5 / J9 / TP1–10 | 删除 | 量产不贴，只保留工厂 pogo 焊盘 |
 | R8 0Ω（GNSS 馈线） | 删除 | 直连 50Ω |
@@ -83,17 +84,24 @@
 
 1. **Flash 容量**：ESP32-S3-MINI-1U 常见最大为 8MB Flash + 2MB PSRAM（N8R2）。现固件分区按 16MB 规划（2×4MB OTA + 8MB 缓存），需改为 2×2.5MB OTA + 2.5MB 缓存（固件约 1.5MB，够用）；若 16MB 是硬指标，只能回 WROOM-1U。
 2. 若断线缓存需要 >30 min，加一颗 64/128MB SPI NOR（约 6×5 mm，可放板上）。
-3. JST-SH 座已定在 (57.5,55)、开口朝南；电芯极耳朝南偏东，线长按约 25 mm 实配。
+3. JST-SH 座已定在 (58.5,49)、开口朝南；电芯极耳朝南偏东，线长按约 25 mm 实配。
 4. 外壳已按 62×62 出 v10：68.6×68.6×21.0 mm，无按键、无外翻边，STL 见 `enclosure-v10/`。
 5. 电源键已取消：USB 插入沿 + LIS2DW12 动作唤醒，APP 或 5 分钟无动作关机；外壳只保留 USB 与通气孔。
 6. BQ24074 / TPS63802 与电芯之间在结构上留 ≥2 mm 间隙，避免充电发热烤电芯。
 7. 四颗 M2 螺钉位于密封圈内侧，需用带 O 圈的螺钉或点胶，否则是进水通道。
 
+## 当前状态（rev 6.1）
+
+- 原理图：`DriveTrack-PCB-V6/drivetrack-v6.kicad_sch`，71 个符号（4 个安装孔无引脚）、274 个引脚全部带全局标签、37 个 NC 脚全部有 no-connect。
+- 网表 / BOM / 布局：`netlist-v6.csv`、`nets-v6.csv`、`bom-v6.csv`、`placement.csv`，由 `tools/v6_design.py` 单一数据源生成。
+- PCB：`DriveTrack-PCB-V6/drivetrack-pcb-v6-electrical.kicad_pcb`，75 个真实封装、50 个网络、311 个设计引脚全部落焊盘并赋网络；**未布线、未铺铜、未跑 DRC/ERC**。
+- 预览：`DriveTrack-PCB-V6/previews/placement-v6.png/.svg`。
+
 ## 下一步
 
-1. 按 `placement.csv` 重新摆件。
+1. 按 `placement.csv` 在 KiCad 里核对丝印与 courtyard；去耦电容在布线时按引脚重新就近摆放（当前为自动聚类参考）。
 2. 按 `keepouts.csv` 画禁布/禁铺铜。
-3. 删除 R8 及全部 DNI 器件，GNSS 直连。
+3. 补 `fp-lib-table`（如需要“Update from library”），当前封装已内嵌在 PCB 文件中，可直接打开。
 4. 完成 3V3 / BAT / SPI / I2C / UART / USB 布线并加粗电源。
-5. 跑 ERC / DRC。
+5. 跑 ERC / DRC，并修正外壳 v10 的左下螺钉柱（X 33.3 → 24.8）。
 6. 外壳 v10 已生成（68.6×68.6×21.0），按 `enclosure-v10/notes-v10.md` 打印。

@@ -10,4 +10,5 @@ POWER_HOT,25,42,56,57,power devices and thermal relief,USB charging/buck area; k
 USB_KEEPOUT,24,52,38,62,USB connector + ESD + test pads,avoid battery connector and cell tabs
 WIFI_FPC_KEEPOUT,36,0,62,12,lid 2.4GHz FPC net area,away from GNSS patch; no metal screws inside
 MOUNTING_TOP,26,0,58,6,top screw strip for MH1/MH2,outside cell (cell starts Y=6) and antenna (X>=27)
-MOUNTING_BOTTOM,26,56,58,62,bottom screw strip for MH3/MH4,outside cell (cell ends Y=56)
+MOUNTING_BOTTOM_LEFT,18,56,25,62,bottom-left screw MH3,outside cell (cell ends Y=56); moved west of USB-C to (21.5,59)
+MOUNTING_BOTTOM_RIGHT,50,56,58,62,bottom-right screw MH4,outside cell (cell ends Y=56)

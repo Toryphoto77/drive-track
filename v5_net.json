@@ -1,0 +1,2246 @@
+{
+ "comps": [
+  {
+   "ref": "ANT1",
+   "value": "GPS_Patch_25x25",
+   "footprint": "DriveTrack:GPS_Patch_25x25",
+   "lib": "GPS_Patch_25x25"
+  },
+  {
+   "ref": "C1",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C2",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C3",
+   "value": "1u",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C4",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C5",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C6",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C7",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C8",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C9",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C10",
+   "value": "1u",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C11",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C12",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C13",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C14",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C15",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C16",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C18",
+   "value": "22u",
+   "footprint": "Capacitor_SMD:C_1206_3216Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C19",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C20",
+   "value": "22u",
+   "footprint": "Capacitor_SMD:C_1206_3216Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C21",
+   "value": "22u",
+   "footprint": "Capacitor_SMD:C_1206_3216Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C22",
+   "value": "22u",
+   "footprint": "Capacitor_SMD:C_1206_3216Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C23",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C24",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C25",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "C26",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0603_1608Metric",
+   "lib": "C"
+  },
+  {
+   "ref": "D1",
+   "value": "ESD9B5.0ST5G",
+   "footprint": "Diode_SMD:D_SOD-923",
+   "lib": "ESD9B5.0ST5G"
+  },
+  {
+   "ref": "D2",
+   "value": "ESD9B3.3ST5G",
+   "footprint": "Diode_SMD:D_SOD-923",
+   "lib": "ESD9B3.3ST5G"
+  },
+  {
+   "ref": "D3",
+   "value": "ESD9B3.3ST5G",
+   "footprint": "Diode_SMD:D_SOD-923",
+   "lib": "ESD9B3.3ST5G"
+  },
+  {
+   "ref": "DS1",
+   "value": "LED 0805",
+   "footprint": "LED_SMD:LED_0805_2012Metric",
+   "lib": "LED"
+  },
+  {
+   "ref": "DS2",
+   "value": "LED 0805",
+   "footprint": "LED_SMD:LED_0805_2012Metric",
+   "lib": "LED"
+  },
+  {
+   "ref": "DS3",
+   "value": "LED 0805",
+   "footprint": "LED_SMD:LED_0805_2012Metric",
+   "lib": "LED"
+  },
+  {
+   "ref": "DS4",
+   "value": "LED 0805",
+   "footprint": "LED_SMD:LED_0805_2012Metric",
+   "lib": "LED"
+  },
+  {
+   "ref": "DS5",
+   "value": "LED 0805",
+   "footprint": "LED_SMD:LED_0805_2012Metric",
+   "lib": "LED"
+  },
+  {
+   "ref": "FB1",
+   "value": "FB 120R@100MHz",
+   "footprint": "Inductor_SMD:L_0805_2012Metric",
+   "lib": "L"
+  },
+  {
+   "ref": "J1",
+   "value": "microSD push-push",
+   "footprint": "Connector_Card:microSD_HC_Hirose_DM3AT-SF-PEJM5",
+   "lib": "Micro_SD_Card_Det2"
+  },
+  {
+   "ref": "J2",
+   "value": "USB-C 16P",
+   "footprint": "Connector_USB:USB_C_Receptacle_Amphenol_12401610E4-2A",
+   "lib": "USB_C_Receptacle_USB2.0_16P"
+  },
+  {
+   "ref": "J3",
+   "value": "JST-PH 2.0mm",
+   "footprint": "Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal",
+   "lib": "Conn_01x02"
+  },
+  {
+   "ref": "J4",
+   "value": "U.FL (DNI)",
+   "footprint": "Connector_Coaxial:U.FL_Hirose_U.FL-R-SMT-1_Vertical",
+   "lib": "Conn_01x02"
+  },
+  {
+   "ref": "J5",
+   "value": "rescue UART DNI",
+   "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical",
+   "lib": "Conn_01x04"
+  },
+  {
+   "ref": "J9",
+   "value": "solder pads DNI",
+   "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+   "lib": "Conn_01x02"
+  },
+  {
+   "ref": "L1",
+   "value": "1u",
+   "footprint": "Inductor_SMD:L_7.3x7.3_H4.5",
+   "lib": "L"
+  },
+  {
+   "ref": "L2",
+   "value": "2.2u",
+   "footprint": "Inductor_SMD:L_1210_3225Metric",
+   "lib": "L"
+  },
+  {
+   "ref": "Q1",
+   "value": "2N7002",
+   "footprint": "Package_TO_SOT_SMD:SOT-23",
+   "lib": "2N7002"
+  },
+  {
+   "ref": "Q3",
+   "value": "2N7002",
+   "footprint": "Package_TO_SOT_SMD:SOT-23",
+   "lib": "2N7002"
+  },
+  {
+   "ref": "R1",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R2",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R3",
+   "value": "330",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R4",
+   "value": "0.5R",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R5",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R6",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R7",
+   "value": "0R",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R8",
+   "value": "0R",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R9",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R10",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R11",
+   "value": "4.7k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R12",
+   "value": "4.7k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R13",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R14",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R15",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R16",
+   "value": "5.1k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R17",
+   "value": "5.1k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R18",
+   "value": "0R",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R19",
+   "value": "100R",
+   "footprint": "Resistor_SMD:R_1206_3216Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R20",
+   "value": "1k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R21",
+   "value": "100k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R22",
+   "value": "33k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R23",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R24",
+   "value": "100k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R26",
+   "value": "330R",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R27",
+   "value": "2R",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R30",
+   "value": "100k",
+   "footprint": "Resistor_SMD:R_0805_2012Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R31",
+   "value": "100k",
+   "footprint": "Resistor_SMD:R_0805_2012Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R32",
+   "value": "330R",
+   "footprint": "Resistor_SMD:R_0805_2012Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R33",
+   "value": "1k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R35",
+   "value": "100k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "R36",
+   "value": "100k",
+   "footprint": "Resistor_SMD:R_0603_1608Metric",
+   "lib": "R"
+  },
+  {
+   "ref": "SW1",
+   "value": "BOOT",
+   "footprint": "Button_Switch_SMD:SW_SPST_EVQP7A",
+   "lib": "SW_Push"
+  },
+  {
+   "ref": "SW2",
+   "value": "RST",
+   "footprint": "Button_Switch_SMD:SW_SPST_EVQP7A",
+   "lib": "SW_Push"
+  },
+  {
+   "ref": "TP1",
+   "value": "TP +3V3",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP2",
+   "value": "TP GND",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP3",
+   "value": "TP PPS",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP4",
+   "value": "TP BAT",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP5",
+   "value": "TP VBAT_DIV",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP6",
+   "value": "TP UART0_TX",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP7",
+   "value": "TP UART0_RX",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP8",
+   "value": "TP IO2",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP9",
+   "value": "TP KEY",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "TP10",
+   "value": "TP KEY_GND",
+   "footprint": "TestPoint:TestPoint_Pad_D1.5mm",
+   "lib": "Conn_01x01"
+  },
+  {
+   "ref": "U1",
+   "value": "ESP32-S3-WROOM-1U-N16R8",
+   "footprint": "RF_Module:ESP32-S3-WROOM-1U",
+   "lib": "ESP32-S3-WROOM-1U-N16R8"
+  },
+  {
+   "ref": "U2",
+   "value": "NEO-M9N",
+   "footprint": "RF_GPS:ublox_NEO",
+   "lib": "NEO-M9N"
+  },
+  {
+   "ref": "U3",
+   "value": "BMI088",
+   "footprint": "DriveTrack:BMI088_LGA-16_3.0x4.5mm",
+   "lib": "BMI088"
+  },
+  {
+   "ref": "U4",
+   "value": "BMP390",
+   "footprint": "DriveTrack:BMP390_LGA-10_2.0x2.0mm",
+   "lib": "BMP390"
+  },
+  {
+   "ref": "U5",
+   "value": "IP5306",
+   "footprint": "DriveTrack:IP5306_eSOP-8_3.9x4.9mm_EP2.21x3.10",
+   "lib": "IP5306"
+  },
+  {
+   "ref": "U6",
+   "value": "TPS563201",
+   "footprint": "Package_TO_SOT_SMD:SOT-23-6",
+   "lib": "TPS563201"
+  },
+  {
+   "ref": "U7",
+   "value": "SK6812MINI",
+   "footprint": "LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm",
+   "lib": "SK6812MINI"
+  }
+ ],
+ "nets": [
+  {
+   "name": "+3V3",
+   "nodes": [
+    [
+     "C1",
+     "2"
+    ],
+    [
+     "C10",
+     "2"
+    ],
+    [
+     "C11",
+     "2"
+    ],
+    [
+     "C12",
+     "2"
+    ],
+    [
+     "C13",
+     "2"
+    ],
+    [
+     "C14",
+     "2"
+    ],
+    [
+     "C15",
+     "2"
+    ],
+    [
+     "C2",
+     "2"
+    ],
+    [
+     "C21",
+     "2"
+    ],
+    [
+     "C22",
+     "2"
+    ],
+    [
+     "C4",
+     "2"
+    ],
+    [
+     "C9",
+     "2"
+    ],
+    [
+     "FB1",
+     "2"
+    ],
+    [
+     "J1",
+     "4"
+    ],
+    [
+     "J5",
+     "3"
+    ],
+    [
+     "L2",
+     "2"
+    ],
+    [
+     "R1",
+     "2"
+    ],
+    [
+     "R10",
+     "2"
+    ],
+    [
+     "R11",
+     "2"
+    ],
+    [
+     "R12",
+     "2"
+    ],
+    [
+     "R13",
+     "2"
+    ],
+    [
+     "R14",
+     "2"
+    ],
+    [
+     "R15",
+     "2"
+    ],
+    [
+     "R2",
+     "2"
+    ],
+    [
+     "R22",
+     "1"
+    ],
+    [
+     "R9",
+     "2"
+    ],
+    [
+     "TP1",
+     "1"
+    ],
+    [
+     "U1",
+     "2"
+    ],
+    [
+     "U3",
+     "11"
+    ],
+    [
+     "U3",
+     "3"
+    ],
+    [
+     "U4",
+     "1"
+    ],
+    [
+     "U4",
+     "10"
+    ],
+    [
+     "U4",
+     "5"
+    ],
+    [
+     "U4",
+     "6"
+    ],
+    [
+     "U7",
+     "4"
+    ]
+   ]
+  },
+  {
+   "name": "+5V",
+   "nodes": [
+    [
+     "C19",
+     "2"
+    ],
+    [
+     "C20",
+     "1"
+    ],
+    [
+     "C25",
+     "1"
+    ],
+    [
+     "R19",
+     "1"
+    ],
+    [
+     "R24",
+     "1"
+    ],
+    [
+     "U5",
+     "8"
+    ],
+    [
+     "U6",
+     "3"
+    ]
+   ]
+  },
+  {
+   "name": "BARO_SCL",
+   "nodes": [
+    [
+     "R12",
+     "1"
+    ],
+    [
+     "U1",
+     "17"
+    ],
+    [
+     "U4",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "BARO_SDA",
+   "nodes": [
+    [
+     "R11",
+     "1"
+    ],
+    [
+     "U1",
+     "12"
+    ],
+    [
+     "U4",
+     "4"
+    ]
+   ]
+  },
+  {
+   "name": "BAT",
+   "nodes": [
+    [
+     "C18",
+     "2"
+    ],
+    [
+     "J3",
+     "1"
+    ],
+    [
+     "J9",
+     "1"
+    ],
+    [
+     "L1",
+     "1"
+    ],
+    [
+     "R30",
+     "1"
+    ],
+    [
+     "R4",
+     "1"
+    ],
+    [
+     "TP4",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "BOOT",
+   "nodes": [
+    [
+     "R1",
+     "1"
+    ],
+    [
+     "SW1",
+     "1"
+    ],
+    [
+     "U1",
+     "27"
+    ]
+   ]
+  },
+  {
+   "name": "DUMMY_EN",
+   "nodes": [
+    [
+     "R20",
+     "2"
+    ],
+    [
+     "U1",
+     "23"
+    ]
+   ]
+  },
+  {
+   "name": "EN",
+   "nodes": [
+    [
+     "C3",
+     "2"
+    ],
+    [
+     "R2",
+     "1"
+    ],
+    [
+     "SW2",
+     "1"
+    ],
+    [
+     "U1",
+     "3"
+    ]
+   ]
+  },
+  {
+   "name": "GND",
+   "nodes": [
+    [
+     "ANT1",
+     "2"
+    ],
+    [
+     "C1",
+     "1"
+    ],
+    [
+     "C10",
+     "1"
+    ],
+    [
+     "C11",
+     "1"
+    ],
+    [
+     "C12",
+     "1"
+    ],
+    [
+     "C13",
+     "1"
+    ],
+    [
+     "C14",
+     "1"
+    ],
+    [
+     "C15",
+     "1"
+    ],
+    [
+     "C16",
+     "1"
+    ],
+    [
+     "C18",
+     "1"
+    ],
+    [
+     "C19",
+     "1"
+    ],
+    [
+     "C2",
+     "1"
+    ],
+    [
+     "C20",
+     "2"
+    ],
+    [
+     "C21",
+     "1"
+    ],
+    [
+     "C22",
+     "1"
+    ],
+    [
+     "C24",
+     "1"
+    ],
+    [
+     "C25",
+     "2"
+    ],
+    [
+     "C26",
+     "2"
+    ],
+    [
+     "C3",
+     "1"
+    ],
+    [
+     "C4",
+     "1"
+    ],
+    [
+     "C5",
+     "1"
+    ],
+    [
+     "C6",
+     "1"
+    ],
+    [
+     "C7",
+     "1"
+    ],
+    [
+     "C8",
+     "1"
+    ],
+    [
+     "C9",
+     "1"
+    ],
+    [
+     "D1",
+     "2"
+    ],
+    [
+     "D2",
+     "2"
+    ],
+    [
+     "D3",
+     "2"
+    ],
+    [
+     "DS1",
+     "1"
+    ],
+    [
+     "DS2",
+     "1"
+    ],
+    [
+     "DS3",
+     "1"
+    ],
+    [
+     "DS4",
+     "1"
+    ],
+    [
+     "DS5",
+     "1"
+    ],
+    [
+     "J1",
+     "11"
+    ],
+    [
+     "J1",
+     "6"
+    ],
+    [
+     "J1",
+     "9"
+    ],
+    [
+     "J2",
+     "A1"
+    ],
+    [
+     "J2",
+     "A12"
+    ],
+    [
+     "J2",
+     "B1"
+    ],
+    [
+     "J2",
+     "B12"
+    ],
+    [
+     "J3",
+     "2"
+    ],
+    [
+     "J4",
+     "2"
+    ],
+    [
+     "J5",
+     "4"
+    ],
+    [
+     "J9",
+     "2"
+    ],
+    [
+     "Q1",
+     "2"
+    ],
+    [
+     "Q3",
+     "2"
+    ],
+    [
+     "R16",
+     "1"
+    ],
+    [
+     "R17",
+     "1"
+    ],
+    [
+     "R18",
+     "2"
+    ],
+    [
+     "R21",
+     "1"
+    ],
+    [
+     "R23",
+     "1"
+    ],
+    [
+     "R31",
+     "2"
+    ],
+    [
+     "R36",
+     "1"
+    ],
+    [
+     "SW1",
+     "2"
+    ],
+    [
+     "SW2",
+     "2"
+    ],
+    [
+     "TP10",
+     "1"
+    ],
+    [
+     "TP2",
+     "1"
+    ],
+    [
+     "U1",
+     "1"
+    ],
+    [
+     "U1",
+     "40"
+    ],
+    [
+     "U1",
+     "41"
+    ],
+    [
+     "U2",
+     "10"
+    ],
+    [
+     "U2",
+     "12"
+    ],
+    [
+     "U2",
+     "13"
+    ],
+    [
+     "U2",
+     "24"
+    ],
+    [
+     "U2",
+     "7"
+    ],
+    [
+     "U3",
+     "4"
+    ],
+    [
+     "U3",
+     "6"
+    ],
+    [
+     "U3",
+     "7"
+    ],
+    [
+     "U4",
+     "3"
+    ],
+    [
+     "U4",
+     "8"
+    ],
+    [
+     "U4",
+     "9"
+    ],
+    [
+     "U5",
+     "9"
+    ],
+    [
+     "U6",
+     "1"
+    ],
+    [
+     "U7",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "GPS_PPS",
+   "nodes": [
+    [
+     "TP3",
+     "1"
+    ],
+    [
+     "U1",
+     "4"
+    ],
+    [
+     "U2",
+     "3"
+    ]
+   ]
+  },
+  {
+   "name": "GPS_RF",
+   "nodes": [
+    [
+     "R8",
+     "2"
+    ],
+    [
+     "U2",
+     "11"
+    ]
+   ]
+  },
+  {
+   "name": "GPS_RX",
+   "nodes": [
+    [
+     "U1",
+     "11"
+    ],
+    [
+     "U2",
+     "20"
+    ]
+   ]
+  },
+  {
+   "name": "GPS_TX",
+   "nodes": [
+    [
+     "U1",
+     "10"
+    ],
+    [
+     "U2",
+     "21"
+    ]
+   ]
+  },
+  {
+   "name": "GPS_UFL_DNI",
+   "nodes": [
+    [
+     "J4",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "GPS_VCC",
+   "nodes": [
+    [
+     "C5",
+     "2"
+    ],
+    [
+     "C6",
+     "2"
+    ],
+    [
+     "C7",
+     "2"
+    ],
+    [
+     "FB1",
+     "1"
+    ],
+    [
+     "R5",
+     "2"
+    ],
+    [
+     "R6",
+     "2"
+    ],
+    [
+     "R7",
+     "1"
+    ],
+    [
+     "R7",
+     "2"
+    ],
+    [
+     "U2",
+     "22"
+    ],
+    [
+     "U2",
+     "23"
+    ]
+   ]
+  },
+  {
+   "name": "IMU_CS1",
+   "nodes": [
+    [
+     "R9",
+     "1"
+    ],
+    [
+     "U1",
+     "18"
+    ],
+    [
+     "U3",
+     "14"
+    ]
+   ]
+  },
+  {
+   "name": "IMU_CS2",
+   "nodes": [
+    [
+     "R10",
+     "1"
+    ],
+    [
+     "U1",
+     "19"
+    ],
+    [
+     "U3",
+     "5"
+    ]
+   ]
+  },
+  {
+   "name": "IMU_INT1",
+   "nodes": [
+    [
+     "U1",
+     "5"
+    ],
+    [
+     "U3",
+     "16"
+    ]
+   ]
+  },
+  {
+   "name": "IMU_INT3",
+   "nodes": [
+    [
+     "U1",
+     "6"
+    ],
+    [
+     "U3",
+     "12"
+    ]
+   ]
+  },
+  {
+   "name": "IMU_MISO",
+   "nodes": [
+    [
+     "U1",
+     "9"
+    ],
+    [
+     "U3",
+     "10"
+    ],
+    [
+     "U3",
+     "15"
+    ]
+   ]
+  },
+  {
+   "name": "IMU_MOSI",
+   "nodes": [
+    [
+     "U1",
+     "8"
+    ],
+    [
+     "U3",
+     "9"
+    ]
+   ]
+  },
+  {
+   "name": "IMU_SCK",
+   "nodes": [
+    [
+     "U1",
+     "22"
+    ],
+    [
+     "U3",
+     "8"
+    ]
+   ]
+  },
+  {
+   "name": "IO2",
+   "nodes": [
+    [
+     "R32",
+     "2"
+    ],
+    [
+     "TP8",
+     "1"
+    ],
+    [
+     "U1",
+     "38"
+    ]
+   ]
+  },
+  {
+   "name": "KEY",
+   "nodes": [
+    [
+     "Q3",
+     "3"
+    ],
+    [
+     "TP9",
+     "1"
+    ],
+    [
+     "U5",
+     "5"
+    ]
+   ]
+  },
+  {
+   "name": "KEY_CTRL",
+   "nodes": [
+    [
+     "R33",
+     "1"
+    ],
+    [
+     "U1",
+     "34"
+    ]
+   ]
+  },
+  {
+   "name": "LED1",
+   "nodes": [
+    [
+     "DS1",
+     "2"
+    ],
+    [
+     "U5",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "LED2",
+   "nodes": [
+    [
+     "DS2",
+     "2"
+    ],
+    [
+     "U5",
+     "3"
+    ]
+   ]
+  },
+  {
+   "name": "LED3",
+   "nodes": [
+    [
+     "DS3",
+     "2"
+    ],
+    [
+     "U5",
+     "4"
+    ]
+   ]
+  },
+  {
+   "name": "LED4",
+   "nodes": [
+    [
+     "DS4",
+     "2"
+    ],
+    [
+     "R32",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "M9N_RESET",
+   "nodes": [
+    [
+     "R6",
+     "1"
+    ],
+    [
+     "U2",
+     "8"
+    ]
+   ]
+  },
+  {
+   "name": "M9N_SAFEBOOT",
+   "nodes": [
+    [
+     "R5",
+     "1"
+    ],
+    [
+     "U2",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(ANT1-FEED)",
+   "nodes": [
+    [
+     "ANT1",
+     "1"
+    ],
+    [
+     "R8",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(C24-Pad2)",
+   "nodes": [
+    [
+     "C24",
+     "2"
+    ],
+    [
+     "R27",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(J2-SHIELD)",
+   "nodes": [
+    [
+     "J2",
+     "S1"
+    ],
+    [
+     "R18",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(Q1-D)",
+   "nodes": [
+    [
+     "Q1",
+     "3"
+    ],
+    [
+     "R19",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(Q1-G)",
+   "nodes": [
+    [
+     "Q1",
+     "1"
+    ],
+    [
+     "R20",
+     "1"
+    ],
+    [
+     "R21",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(Q3-G)",
+   "nodes": [
+    [
+     "Q3",
+     "1"
+    ],
+    [
+     "R33",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(U2-VCC_RF)",
+   "nodes": [
+    [
+     "C8",
+     "2"
+    ],
+    [
+     "U2",
+     "9"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(U5-BAT)",
+   "nodes": [
+    [
+     "R4",
+     "2"
+    ],
+    [
+     "U5",
+     "6"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(U5-SW)",
+   "nodes": [
+    [
+     "L1",
+     "2"
+    ],
+    [
+     "U5",
+     "7"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(U6-EN)",
+   "nodes": [
+    [
+     "R24",
+     "2"
+    ],
+    [
+     "U6",
+     "5"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(U6-SW)",
+   "nodes": [
+    [
+     "C23",
+     "2"
+    ],
+    [
+     "L2",
+     "1"
+    ],
+    [
+     "U6",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(U6-VBST)",
+   "nodes": [
+    [
+     "C23",
+     "1"
+    ],
+    [
+     "U6",
+     "6"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(U6-VFB)",
+   "nodes": [
+    [
+     "R22",
+     "2"
+    ],
+    [
+     "R23",
+     "2"
+    ],
+    [
+     "U6",
+     "4"
+    ]
+   ]
+  },
+  {
+   "name": "Net-(U7-DIN)",
+   "nodes": [
+    [
+     "R3",
+     "1"
+    ],
+    [
+     "U7",
+     "3"
+    ]
+   ]
+  },
+  {
+   "name": "RGB_DIN",
+   "nodes": [
+    [
+     "R3",
+     "2"
+    ],
+    [
+     "U1",
+     "25"
+    ]
+   ]
+  },
+  {
+   "name": "SD_CD",
+   "nodes": [
+    [
+     "J1",
+     "10"
+    ],
+    [
+     "R15",
+     "1"
+    ],
+    [
+     "U1",
+     "21"
+    ]
+   ]
+  },
+  {
+   "name": "SD_CS",
+   "nodes": [
+    [
+     "J1",
+     "2"
+    ],
+    [
+     "U1",
+     "20"
+    ]
+   ]
+  },
+  {
+   "name": "SD_DAT1",
+   "nodes": [
+    [
+     "J1",
+     "8"
+    ],
+    [
+     "R13",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "SD_DAT2",
+   "nodes": [
+    [
+     "J1",
+     "1"
+    ],
+    [
+     "R14",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "SD_MISO",
+   "nodes": [
+    [
+     "J1",
+     "7"
+    ],
+    [
+     "U1",
+     "33"
+    ]
+   ]
+  },
+  {
+   "name": "SD_MOSI",
+   "nodes": [
+    [
+     "J1",
+     "3"
+    ],
+    [
+     "U1",
+     "32"
+    ]
+   ]
+  },
+  {
+   "name": "SD_SCK",
+   "nodes": [
+    [
+     "J1",
+     "5"
+    ],
+    [
+     "U1",
+     "31"
+    ]
+   ]
+  },
+  {
+   "name": "STAT_ANODE",
+   "nodes": [
+    [
+     "DS5",
+     "2"
+    ],
+    [
+     "R26",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "STAT_LED",
+   "nodes": [
+    [
+     "R26",
+     "1"
+    ],
+    [
+     "U1",
+     "7"
+    ]
+   ]
+  },
+  {
+   "name": "UART0_RX",
+   "nodes": [
+    [
+     "J5",
+     "2"
+    ],
+    [
+     "TP7",
+     "1"
+    ],
+    [
+     "U1",
+     "36"
+    ]
+   ]
+  },
+  {
+   "name": "UART0_TX",
+   "nodes": [
+    [
+     "J5",
+     "1"
+    ],
+    [
+     "TP6",
+     "1"
+    ],
+    [
+     "U1",
+     "37"
+    ]
+   ]
+  },
+  {
+   "name": "USB_CC1",
+   "nodes": [
+    [
+     "J2",
+     "A5"
+    ],
+    [
+     "R16",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "USB_CC2",
+   "nodes": [
+    [
+     "J2",
+     "B5"
+    ],
+    [
+     "R17",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "USB_DM",
+   "nodes": [
+    [
+     "D3",
+     "1"
+    ],
+    [
+     "J2",
+     "A7"
+    ],
+    [
+     "J2",
+     "B7"
+    ],
+    [
+     "U1",
+     "13"
+    ]
+   ]
+  },
+  {
+   "name": "USB_DP",
+   "nodes": [
+    [
+     "D2",
+     "1"
+    ],
+    [
+     "J2",
+     "A6"
+    ],
+    [
+     "J2",
+     "B6"
+    ],
+    [
+     "U1",
+     "14"
+    ]
+   ]
+  },
+  {
+   "name": "VBAT_DIV",
+   "nodes": [
+    [
+     "R30",
+     "2"
+    ],
+    [
+     "R31",
+     "1"
+    ],
+    [
+     "TP5",
+     "1"
+    ],
+    [
+     "U1",
+     "39"
+    ]
+   ]
+  },
+  {
+   "name": "VBUS",
+   "nodes": [
+    [
+     "C16",
+     "2"
+    ],
+    [
+     "D1",
+     "1"
+    ],
+    [
+     "J2",
+     "A4"
+    ],
+    [
+     "J2",
+     "A9"
+    ],
+    [
+     "J2",
+     "B4"
+    ],
+    [
+     "J2",
+     "B9"
+    ],
+    [
+     "R27",
+     "2"
+    ],
+    [
+     "R35",
+     "1"
+    ],
+    [
+     "U5",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "VBUS_DET",
+   "nodes": [
+    [
+     "C26",
+     "1"
+    ],
+    [
+     "R35",
+     "2"
+    ],
+    [
+     "R36",
+     "2"
+    ],
+    [
+     "U1",
+     "35"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(J2-SBU1-PadA8)",
+   "nodes": [
+    [
+     "J2",
+     "A8"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(J2-SBU2-PadB8)",
+   "nodes": [
+    [
+     "J2",
+     "B8"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U1-IO3-Pad15)",
+   "nodes": [
+    [
+     "U1",
+     "15"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U1-IO35-Pad28)",
+   "nodes": [
+    [
+     "U1",
+     "28"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U1-IO36-Pad29)",
+   "nodes": [
+    [
+     "U1",
+     "29"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U1-IO37-Pad30)",
+   "nodes": [
+    [
+     "U1",
+     "30"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U1-IO45-Pad26)",
+   "nodes": [
+    [
+     "U1",
+     "26"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U1-IO46-Pad16)",
+   "nodes": [
+    [
+     "U1",
+     "16"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U1-IO47-Pad24)",
+   "nodes": [
+    [
+     "U1",
+     "24"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-D_SEL-Pad2)",
+   "nodes": [
+    [
+     "U2",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-EXTINT-Pad4)",
+   "nodes": [
+    [
+     "U2",
+     "4"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-LNA_EN-Pad14)",
+   "nodes": [
+    [
+     "U2",
+     "14"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-RESERVED-Pad15)",
+   "nodes": [
+    [
+     "U2",
+     "15"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-RESERVED-Pad16)",
+   "nodes": [
+    [
+     "U2",
+     "16"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-RESERVED-Pad17)",
+   "nodes": [
+    [
+     "U2",
+     "17"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-SCL{slash}SPI_CLK-Pad19)",
+   "nodes": [
+    [
+     "U2",
+     "19"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-SDA{slash}~{SPI_CS}-Pad18)",
+   "nodes": [
+    [
+     "U2",
+     "18"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-USB_DM-Pad5)",
+   "nodes": [
+    [
+     "U2",
+     "5"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U2-USB_DP-Pad6)",
+   "nodes": [
+    [
+     "U2",
+     "6"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U3-INT2-Pad1)",
+   "nodes": [
+    [
+     "U3",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U3-INT4-Pad13)",
+   "nodes": [
+    [
+     "U3",
+     "13"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U3-NC-Pad2)",
+   "nodes": [
+    [
+     "U3",
+     "2"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U4-INT-Pad7)",
+   "nodes": [
+    [
+     "U4",
+     "7"
+    ]
+   ]
+  },
+  {
+   "name": "unconnected-(U7-DOUT-Pad1)",
+   "nodes": [
+    [
+     "U7",
+     "1"
+    ]
+   ]
+  }
+ ]
+}
