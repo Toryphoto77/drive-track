@@ -1,6 +1,6 @@
 # DriveTrack V6 交付包
 
-PCB V6 rev 6.1（KiCad 9：原理图 + 真实封装 PCB）+ 外壳 v10（CadQuery / STL / STEP）+ 网表 / BOM / 布局文档。
+PCB V6 rev 6.1（KiCad 9：原理图 + 真实封装 PCB）+ 外壳 v10（MJF PA12，CadQuery / STL / STEP）+ 网表 / BOM / 布局文档。
 打包日期：2026-11-23
 
 ---
@@ -46,13 +46,13 @@ DriveTrack-V6-package/
 │   ├── bom-v6.csv                按封装归并的 BOM
 │   ├── DriveTrack.pretty/        自定义 + 新增真实封装（ESP32 / BQ24074 / TPS7A0230 / LIS2DW12 / JST-SH / SOT-23 …）
 │   └── previews/placement-v6.png 布局图（PNG + SVG）
-├── enclosure-v10/                外壳 v10（已按新孔位重新生成）
-│   ├── base-v10.stl / .step      底座（打印件）
-│   ├── lid-v10.stl / .step       盖板（打印件）
-│   ├── lens-v10.stl / .step      灯窗导光柱（打印件）
+├── enclosure-v10/                外壳 v10（MJF PA12，已按新孔位重新生成）
+│   ├── base-v10.stl / .step      底座（MJF PA12）
+│   ├── lid-v10.stl / .step       盖板（MJF PA12）
+│   ├── lens-v10.stl / .step      灯窗导光柱（透明 PETG/PC/PMMA）
 │   ├── assembled-v10-DO-NOT-PRINT.stl/.step   仅装配检查，勿打印
 │   ├── enclosure_v10.py          参数化脚本（自带尺寸与探针校验）
-│   └── notes-v10.md              打印参数、五金、装配顺序、密封注意
+│   └── notes-v10.md              制造与验收、五金、装配顺序、密封注意
 ├── docs/
 │   ├── layout-plan.md            布局方案（分区、规则、BOM 变更、风险、当前状态）
 │   ├── placement.csv             75 个器件坐标（含无源件）
@@ -74,6 +74,7 @@ DriveTrack-V6-package/
 | --- | --- |
 | PCB | 62 × 62 × 1.6 mm，四层（Sig / GND / PWR / Sig），R2 圆角 |
 | 外壳 | 68.6 × 68.6 × 21.0 mm，壁厚 2.8，平面圆角 R6 |
+| 外壳材料 | MJF PA12 黑色染色（导光柱为透明 PETG/PC/PMMA） |
 | 体积 | 约 99 cm³ |
 | 对比 V5 优化版（147 cm³） | −33% |
 | 对比 v9（117 cm³） | −15% |
@@ -147,19 +148,22 @@ App 侧还需改：先发 `ota-start`，收到 `on=1` 后再连设备热点上�
 
 ---
 
-## 七、外壳 v10 打印
+## 七、外壳 v10 制造（MJF PA12）
 
-| 件 | 材料 | 朝向 |
+| 件 | 工艺 / 材料 | 说明 |
 | --- | --- | --- |
-| `base-v10.stl` | ASA / ABS | 开口朝上，原样 |
-| `lid-v10.stl` | ASA / ABS | **翻面**，顶面贴床 |
-| `lens-v10.stl` | 透明 PETG | 法兰贴床，100% 填充 |
+| `base-v10.stl` | MJF PA12，黑色染色 | 开放壳体，无夹粉腔，无需支撑 |
+| `lid-v10.stl` | MJF PA12，黑色染色 | 密封舌、FPC 槽、GPS 减薄区均为开放特征 |
+| `lens-v10.stl` | 透明 PETG / PC / PMMA | MJF 做不了透明件，导光柱单独做 |
 
-0.2 mm 层高 / 4 圈 / 40% gyroid；盖板翻面后密封舌朝上，FPC 槽与 GPS 减薄区不悬空。
-五金、装配顺序、密封注意见 `enclosure-v10/notes-v10.md`。
+- 精度按 **±0.3 mm 或 ±0.3%** 验收；最小壁厚 0.8 mm、最小孔 0.8 mm，当前设计均满足。
+- **密封槽深度 1.20 ±0.10 mm 是关键公差**，来料必须抽检；槽深超差会直接漏水。PA12 本身微透气，IP54 没问题，IP67 需机加工密封面或浸渗。
+- 长期户外请指定 UV 稳定级 PA12；仪表台暴晒工况需实测（HDT ≈ 95 °C）。
+- M2 可直接攻入 1.6 mm 底孔；需反复拆装则改用 M2 黄铜热熔螺母（柱外径 4.4 mm 够）。
+- 五金、装配顺序、密封注意见 `enclosure-v10/notes-v10.md`。
 
 **未定项**：USB 开口按 mid-mount 建模。若实际用 top-mount 座，开口需下移约 1.6 mm，
-首件打印请先量实物座子。
+首件请先量实物座子。
 
 ---
 
@@ -194,5 +198,5 @@ cd enclosure-v10 && python enclosure_v10.py
 3. **分区落铜**：按 `docs/keepouts.csv` 画禁铺铜，天线区与传感器区下方完整地。
 4. **ERC / DRC**：导入 `netlist-v6.csv` 与原理图对照，跑 KiCad ERC 和 DRC；确认 BQ24074 散热焊盘过孔阵列。
 5. **首件打样**：先只贴电源链 + ESP32，实测充电、待机 45µA、唤醒与关机（含“关中断再释放 HOLD”时序）。
-6. **结构首件**：打印 v10 底座 + 盖板，实测 USB 座高度、电池出线、密封圈压缩量、MH3 新孔位。
+6. **结构首件**：MJF 打样 v10 底座 + 盖板（黑色 PA12），实测 USB 座高度、电池出线、密封圈压缩量、MH3 新孔位。
 7. **App 侧 OTA 流程改造**（见第六节）。

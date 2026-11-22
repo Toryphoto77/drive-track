@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """DriveTrack enclosure v10 — compact sealed box for PCB V6 (62 x 62 mm).
 
+Process: MJF PA12, black dyed (base + lid).  The light pipe must stay a
+transparent part (PETG / PC / PMMA) because MJF cannot be clear.
+
 Changes vs v9:
   * board 62 x 62 (was 52 x 70), cell 103450 34 x 50 (was 104060 40 x 60)
   * NO user button: no side holes. USB insert + motion wake, APP/5 min idle off

@@ -103,5 +103,5 @@
 2. 按 `keepouts.csv` 画禁布/禁铺铜。
 3. 补 `fp-lib-table`（如需要“Update from library”），当前封装已内嵌在 PCB 文件中，可直接打开。
 4. 完成 3V3 / BAT / SPI / I2C / UART / USB 布线并加粗电源。
-5. 跑 ERC / DRC，并修正外壳 v10 的左下螺钉柱（X 33.3 → 24.8）。
-6. 外壳 v10 已生成（68.6×68.6×21.0），按 `enclosure-v10/notes-v10.md` 打印。
+5. 跑 ERC / DRC。外壳左柱已修正（板坐标 MH3 21.5,59 / 壳坐标 24.8,62.3），无需再动。
+6. 外壳 v10 已生成（68.6×68.6×21.0），材料定为 MJF PA12（黑色染色），制造与验收按 `enclosure-v10/notes-v10.md`。
