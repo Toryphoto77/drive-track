@@ -649,7 +649,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                                 '${widget.isTrack ? mapTileSourceStore.source.name : _streetSource.name}'
                                 '-$zoom-$x-$y',
                               ),
-                              headers: const {'User-Agent': 'DriveTrack/1.8.3'},
+                              headers: const {'User-Agent': 'DriveTrack/1.8.4'},
                               fit: BoxFit.fill,
                               gaplessPlayback: true,
                               errorBuilder: (_, _, _) {

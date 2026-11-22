@@ -3896,7 +3896,7 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                           key: ValueKey(
                             'analysis-sat-${mapTileSourceStore.source.name}-$zoom-$x-$y',
                           ),
-                          headers: const {'User-Agent': 'DriveTrack/1.8.3'},
+                          headers: const {'User-Agent': 'DriveTrack/1.8.4'},
                           fit: BoxFit.fill,
                           gaplessPlayback: true,
                           errorBuilder: (_, _, _) {
