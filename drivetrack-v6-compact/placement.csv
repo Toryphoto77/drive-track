@@ -1,0 +1,23 @@
+Ref,Value,Package,X_mm,Y_mm,Rotation_deg,Side,Keepout_Zone,Notes
+ANT1,GPS_Patch_25x25,DriveTrack:GPS_Patch_25x25,13.50,13.00,0,top,GNSS_ANTENNA,25x25 ceramic patch; solid GND below; 2mm edge clearance
+U2,NEO-M9N,RF_GPS:ublox_NEO,13.50,34.00,0,top,GNSS_ANTENNA,directly below patch; 50R feed <10mm; delete R8
+U3,BMI088,DriveTrack:BMI088_LGA-16_3.0x4.5mm,7.50,50.00,0,top,IMU_STRESS_FREE,left sensor strip; no battery below; isolation slots
+U4,BMP390,DriveTrack:BMP390_LGA-10_2.0x2.0mm,3.50,45.00,0,top,PRESSURE_VENT,left wall vent; >=8mm from IP5306/L1/L2
+U1,ESP32-S3-MINI-1U-N8R2,RF_Module:ESP32-S3-MINI-1U,46.00,13.00,0,top,DIGITAL_RF,IPEX at top edge; keep >=10mm from patch
+LED1,SK6812MINI RGB,LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm,56.00,8.00,0,top,LED_STRIP,single RGB status/battery LED; light pipe in lid
+J2,USB-C 16P,Connector_USB:USB_C_Receptacle_Amphenol_12401610E4-2A,31.00,58.00,0,top,POWER_EDGE,bottom edge; ESD within 3mm
+D1,ESD9B5.0ST5G,Diode_SMD:D_SOD-923,27.00,51.00,0,top,POWER_EDGE,VBUS ESD
+D2,ESD9B3.3ST5G,Diode_SMD:D_SOD-923,30.00,51.00,0,top,POWER_EDGE,D- ESD
+D3,ESD9B3.3ST5G,Diode_SMD:D_SOD-923,33.00,51.00,0,top,POWER_EDGE,D+ ESD
+U5,IP5306,DriveTrack:IP5306_eSOP-8_3.9x4.9mm_EP2.21x3.10,42.00,53.00,0,top,POWER_HOT,charger; thermal pad to inner GND; away from BMP
+U6,TPS563201,Package_TO_SOT_SMD:SOT-23-6,50.00,53.00,0,top,POWER_HOT,3V3 buck; short SW node
+L1,1u,Inductor_SMD:L_4x4_H2,42.00,45.00,0,top,POWER_HOT,low-profile boost inductor replaces 7.3x7.3x4.5
+L2,2.2u,Inductor_SMD:L_1210_3225Metric,50.00,45.50,0,top,POWER_HOT,buck inductor
+J3,JST-SH 1.0mm 2P,Connector_JST:JST_SH_SM02B-SRSS-TB_1x02_P1.00mm_Horizontal,57.50,50.00,-90,top,BATTERY_CONNECTOR,low-profile ~2.9mm mated; opening -X; near cell tabs
+SW1,BOOT,SW_SPST_EVQP7A,44.00,28.00,0,top,DEBUG,internal; reachable before lid
+SW2,RST,SW_SPST_EVQP7A,49.00,28.00,0,top,DEBUG,physical reset; internal
+MH1,MH 2.2mm NPTH,MountingHole_2.2mm,30.00,3.00,0,top,MECHANICAL,top strip; outside cell (cell Y>=6) and antenna (X>=27)
+MH2,MH 2.2mm NPTH,MountingHole_2.2mm,54.00,3.00,0,top,MECHANICAL,top strip; outside cell
+MH3,MH 2.2mm NPTH,MountingHole_2.2mm,30.00,59.00,0,top,MECHANICAL,bottom strip; outside cell (cell Y<=56)
+MH4,MH 2.2mm NPTH,MountingHole_2.2mm,54.00,59.00,0,top,MECHANICAL,bottom strip; outside cell
+OPT1,128MB SPI NOR (optional),Package_SO:SOIC-8_5.3x5.3mm_P1.27mm,56.00,30.00,0,top,DIGITAL_RF,only if >30min offline cache needed; DNP by default
