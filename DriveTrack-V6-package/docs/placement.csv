@@ -1,0 +1,26 @@
+Ref,Value,Package,X_mm,Y_mm,Rotation_deg,Side,Keepout_Zone,Notes
+ANT1,GPS_Patch_25x25,DriveTrack:GPS_Patch_25x25,13.50,13.00,0,top,GNSS_ANTENNA,25x25 ceramic patch; solid GND below; 2mm edge clearance
+U2,NEO-M9N,RF_GPS:ublox_NEO,13.50,34.00,0,top,GNSS_ANTENNA,directly below patch; 50R feed <10mm; V_BCKP from V_AON
+U3,BMI088,DriveTrack:BMI088_LGA-16_3.0x4.5mm,7.50,50.00,0,top,IMU_STRESS_FREE,left sensor strip; no battery below; isolation slots
+U4,BMP390,DriveTrack:BMP390_LGA-10_2.0x2.0mm,3.50,45.00,0,top,PRESSURE_VENT,left wall vent; >=8mm from power stage
+U1,ESP32-S3-MINI-1U-N8R2,RF_Module:ESP32-S3-MINI-1U,45.00,14.50,0,top,DIGITAL_RF,IPEX at top edge under lid FPC pocket; keep >=10mm from patch
+LED1,SK6812MINI RGB,LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm,56.00,8.00,0,top,LED_STRIP,single RGB status/battery LED; light pipe in lid
+J2,USB-C 16P,Connector_USB:USB_C_Receptacle_Amphenol_12401610E4-2A,31.00,58.00,0,top,POWER_EDGE,bottom edge; ESD within 3mm
+D1,ESD9B5.0ST5G,Diode_SMD:D_SOD-923,26.50,52.00,0,top,POWER_EDGE,VBUS ESD
+D2,ESD9B3.3ST5G,Diode_SMD:D_SOD-923,29.00,52.00,0,top,POWER_EDGE,D- ESD
+D3,ESD9B3.3ST5G,Diode_SMD:D_SOD-923,31.50,52.00,0,top,POWER_EDGE,D+ ESD
+U5,BQ24074,Package_DFN_QFN:VQFN-16-1EP_3x3mm_P0.5mm_EP1.6x1.6mm,42.00,46.00,0,top,POWER_HOT,power-path charger 500mA; PGOOD used as VBUS wake edge
+U6,TPS63802,Package_DFN_QFN:VQFN-15-1EP_2.5x2.0mm_P0.5mm,48.00,46.00,0,top,POWER_HOT,3.3V/2A buck-boost; short SW node
+L1,1uH,Inductor_SMD:L_4x4_H2,53.00,45.50,0,top,POWER_HOT,single buck-boost inductor; keep away from GNSS/IMU
+U7,TPS7A2033,Package_TO_SOT_SMD:SOT-23-5,36.00,46.00,0,top,POWER_HOT,low-noise 3.3V LDO for NEO-M9N; ferrite input
+U8,TPS7A0230,Package_SON:Texas_X2SON-5_1.5x1.5mm_P0.5mm,36.00,52.00,0,top,POWER_HOT,always-on 3.0V/25nA for wake and V_BCKP; fed from SYS before latch
+U9,LIS2DW12,Package_LGA-12_2x2mm_P0.5mm,39.00,52.00,0,top,POWER_HOT,1.6uA motion wake on V_AON; INT1 to latch SET
+Q1,AO3401,Package_TO_SOT_SMD:SOT-23,42.50,52.00,0,top,POWER_HOT,P-MOS soft-latch high-side switch SYS to VSYS
+Q2,2N7002,Package_TO_SOT_SMD:SOT-23,46.00,52.00,0,top,POWER_HOT,latch SET pull-down (VBUS edge / motion INT)
+Q3,2N7002,Package_TO_SOT_SMD:SOT-23,49.50,52.00,0,top,POWER_HOT,latch HOLD pull-down (ESP32 PWR_HOLD)
+J3,JST-SH 1.0mm 2P,Connector_JST:JST_SH_SM02B-SRSS-TB_1x02_P1.00mm_Horizontal,57.50,55.00,180,top,BATTERY_CONNECTOR,opening south; fed by 2.0x4.3mm cable notch at board edge X60-62 Y55-59.3
+MH1,MH 2.2mm NPTH,MountingHole_2.2mm,30.00,3.00,0,top,MECHANICAL,top strip; outside cell (cell Y>=6) and antenna (X>=27)
+MH2,MH 2.2mm NPTH,MountingHole_2.2mm,54.00,3.00,0,top,MECHANICAL,top strip; outside cell
+MH3,MH 2.2mm NPTH,MountingHole_2.2mm,30.00,59.00,0,top,MECHANICAL,bottom strip; outside cell (cell Y<=56)
+MH4,MH 2.2mm NPTH,MountingHole_2.2mm,54.00,59.00,0,top,MECHANICAL,bottom strip; outside cell
+OPT1,128MB SPI NOR (optional),Package_SO:SOIC-8_5.3x5.3mm_P1.27mm,56.00,30.00,0,top,DIGITAL_RF,only if >30min offline cache needed; DNP by default

@@ -1,0 +1,13 @@
+Zone,X0_mm,Y0_mm,X1_mm,Y1_mm,Rule,Reason
+BOARD_OUTLINE,0,0,62,62,board size 62x62 mm,4-layer FR4 1.6mm; rounded corners R2.0
+BATTERY_103450,26,6,60,56,battery projection only,34x50 pouch; no posts through cell; no BMI/BMP/GNSS above
+NO_BATTERY_LEFT,0,0,26,62,no battery foil or pack,sensor safe zone for GNSS/IMU/BMP and vent
+GNSS_ANTENNA_KEEPOUT,0,0,27,26,no battery,metal,screws,high-speed traces,switching nodes,25x25 patch with solid ground plane below
+GNSS_FEED_KEEPOUT,11,25,16,42,50R trace with ground guard,patch to NEO RF_IN; minimize vias; avoid parallel digital traces; delete R8
+IMU_STRESS_FREE,2,42,13,56,no battery,connectors,screws,large copper cuts,BMI088 mechanical and thermal isolation
+PRESSURE_VENT,0,40,6,50,vent/membrane access; >=8mm from IP5306/L1/L2,BMP390 pressure accuracy and thermal isolation
+POWER_HOT,25,42,56,57,power devices and thermal relief,USB charging/buck area; keep away from BMP390 and BMI088
+USB_KEEPOUT,24,52,38,62,USB connector + ESD + test pads,avoid battery connector and cell tabs
+WIFI_FPC_KEEPOUT,36,0,62,12,lid 2.4GHz FPC net area,away from GNSS patch; no metal screws inside
+MOUNTING_TOP,26,0,58,6,top screw strip for MH1/MH2,outside cell (cell starts Y=6) and antenna (X>=27)
+MOUNTING_BOTTOM,26,56,58,62,bottom screw strip for MH3/MH4,outside cell (cell ends Y=56)

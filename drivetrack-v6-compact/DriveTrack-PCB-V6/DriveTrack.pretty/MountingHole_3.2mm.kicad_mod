@@ -1,0 +1,15 @@
+(footprint MountingHole_3.2mm (version 20221018) (generator "drivetrack-make-footprints")
+  (layer F.Cu)
+  (descr "Mounting hole 3.4mm drill (M3 clearance), non-plated")
+  (tags "mounting hole")
+  (attr board_only)
+  (fp_text reference "REF**" (at 0 -2.6) (layer F.SilkS)
+    (effects (font (size 1.0 1.0) (thickness 0.15)))
+  )
+  # V4: courtyard removed (was a 3.2mm-radius circle). The V3 holes sit
+  # 0.4-0.85mm from the board edge / adjacent courtyards, so any courtyard
+  # enclosing the hole overlaps a neighbour and DRC flags it (V3 worked
+  # around this with a per-footprint local override). These are bottom-
+  # mounted M3 screw holes (NPTH, no copper); no top-side keepout needed.
+  (pad "" np_thru_hole circle (at 0.0000 0.0000) (size 3.4000 3.4000) (drill 3.4000) (layers *.Cu *.Mask) (tstamp 6c62e715-41e2-49bf-b586-932d5255bfb4))
+)
