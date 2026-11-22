@@ -974,6 +974,21 @@ class _VideoHudPageState extends State<VideoHudPage> {
               _MissingVideoPlaceholder(onRetry: () => _importVideo())
             else
               const _PreviewPlaceholder(),
+            // 首帧缩略图兜底：原生首帧解码出来前（或非 Android 没有平台
+            // 视图时）先盖一张抽帧缩略图，保证预览区立刻有内容，而不是
+            // 一块纯灰 / 纯黑空框；无分圈行程也能直接看到画面。
+            if (hasVideo && !_prepared && _frames.isNotEmpty)
+              Builder(
+                builder: (ctx) {
+                  final f = _frames.first;
+                  if (!File(f).existsSync()) return const SizedBox.shrink();
+                  return Image.file(
+                    File(f),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  );
+                },
+              ),
             IgnorePointer(
               child: Stack(
                 children: [

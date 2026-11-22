@@ -5,11 +5,12 @@
 /// 赛道模式有已知中心线时框住赛道本身，不把整段行程并进范围。
 ///
 /// 数据口径（与分析页一致，不编数）：
-/// - 底图按模式选择：赛道使用 Esri World Imagery 卫星瓦片，叠加点
-///   保持 WGS-84；街道使用高德深色影像路网（style=8，host 轮转），
-///   叠加点先从 WGS-84 转 GCJ-02；高德失败时整幅切 CARTO dark_all /
-///   OSM，此时叠加层用回原始 WGS-84。两种模式都复用
-///   [AnalysisGeoProjector]，但绝不混用坐标系，否则叠加层会与底图错位。
+/// - 底图按模式选择：赛道使用卫星瓦片（默认高德 webst GCJ-02，可在
+///   设置页切谷歌 WGS-84），叠加点随源转换；街道使用路网瓦片（默认
+///   高德深色影像路网 style=8，可在设置页切谷歌 lyrs=m）；高德失败时
+///   整幅切 CARTO dark_all / OSM，此时叠加层用回原始 WGS-84。两种
+///   模式都复用 [AnalysisGeoProjector]，但绝不混用坐标系，否则叠加层
+///   会与底图错位。
 /// - 赛道中心线只用包经纬度实点（[TrackPackage.centerline]），
 ///   起终点 / 分段点只用包与计时器已采用的经纬度实点；
 ///   目录归一化轮廓（[TrackInfo]）不是经纬度，绝不画到地图上。
@@ -40,6 +41,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'amap_service.dart';
+import 'map_tile_source.dart';
 import 'models.dart';
 import 'satellite_tiles.dart';
 import 'track_analysis_geo.dart';
@@ -52,11 +54,17 @@ import 'track_timing.dart';
 /// 1. [amap] 高德深色影像路网（style=8，host 轮转，GCJ-02）；
 /// 2. [carto] CARTO dark_all 深色路网（WGS-84，海外可用）；
 /// 3. [osm] OSM 标准路网（WGS-84，最后兜底）。
-/// 同一源连续失败 3 张才整幅切下一源；三源都失败才回落示意图。
-enum StreetTileSource { amap, carto, osm }
+/// 同一源连续失败 3 张才整幅切下一源；全部失败才回落示意图。
+///
+/// v1.8.3：新增 [google] 路网（WGS-84）。用户在设置页选「谷歌」时
+/// 主链为 google → amap → carto → osm（谷歌国内不可达时回落高德）；
+/// 选「高德」（默认）时主链为 amap → carto → osm。
+enum StreetTileSource { google, amap, carto, osm }
 
 String _streetTileUrl(StreetTileSource src, int z, int x, int y) {
   switch (src) {
+    case StreetTileSource.google:
+      return roadTileUrl(MapTileSource.google, z, x, y);
     case StreetTileSource.amap:
       return amapTileUrl(z, x, y);
     case StreetTileSource.carto:
@@ -67,13 +75,14 @@ String _streetTileUrl(StreetTileSource src, int z, int x, int y) {
 }
 
 String _streetTileAttribution(StreetTileSource src) => switch (src) {
+  StreetTileSource.google => googleTileAttribution,
   StreetTileSource.amap => amapTileAttribution,
   StreetTileSource.carto => '© OpenStreetMap contributors © CARTO',
   StreetTileSource.osm => '© OpenStreetMap contributors',
 };
 
-/// 高德源用 GCJ-02；CARTO / OSM 用 WGS-84。叠加层坐标必须随源切换，
-/// 否则会与底图错位（高德偏差可达约 500 米）。
+/// 高德源用 GCJ-02；谷歌 / CARTO / OSM 用 WGS-84。叠加层坐标必须随
+/// 源切换，否则会与底图错位（高德偏差可达约 500 米）。
 bool _streetUsesGcj(StreetTileSource src) => src == StreetTileSource.amap;
 
 /// v1.3.4：幽灵车插值纯函数（参考圈 = 本节最佳圈）。
@@ -455,7 +464,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
     _streetFailedUrls.add(url);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // 同一源失败 3 张即整幅切下一源（amap → carto → osm），
+      // 同一源失败 3 张即整幅切下一源（google → amap → carto → osm），
       // 不逐张混源，避免坐标系混用。已是 OSM 时由 _fallback 回落。
       if (_streetFailedUrls.length >= _streetSwitchFailures &&
           _streetSource != StreetTileSource.osm) {
@@ -463,6 +472,51 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
         _streetFailedUrls.clear();
       }
       setState(() {});
+    });
+  }
+
+  /// 用户在设置页选择的主源（高德默认 / 谷歌）。
+  StreetTileSource _streetSourceForGlobal() =>
+      mapTileSourceStore.source == MapTileSource.google
+          ? StreetTileSource.google
+          : StreetTileSource.amap;
+
+  /// 赛道卫星瓦片 URL：按地图源设置选高德（GCJ-02，z 限 17）或谷歌
+  /// （WGS-84，z 限 19）。切源时调用方须同步切换叠加层坐标口径
+  /// （见 build 内 trackGcj），否则错位。
+  String _trackSatelliteUrl(int z, int x, int y) {
+    if (mapTileSourceStore.source == MapTileSource.google) {
+      final zz = z.clamp(googleTileMinZoom, googleTileMaxZoom);
+      return satelliteTileUrlFor(MapTileSource.google, zz, x, y);
+    }
+    final zz = z.clamp(satelliteMinZoom, amapSatelliteMaxZoom);
+    return amapSatelliteTileUrl(zz, x, y);
+  }
+
+  /// 赛道卫星是否用 GCJ-02（仅高德国内瓦片需要）。
+  bool get _trackUsesGcj =>
+      widget.isTrack && mapTileSourceStore.source.usesGcj;
+
+  @override
+  void initState() {
+    super.initState();
+    _streetSource = _streetSourceForGlobal();
+    mapTileSourceStore.addListener(_onStoreChanged);
+    mapTileSourceStore.load();
+  }
+
+  @override
+  void dispose() {
+    mapTileSourceStore.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (!mounted) return;
+    setState(() {
+      _streetSource = _streetSourceForGlobal();
+      _streetFailedUrls.clear();
+      _failedTileUrls.clear();
     });
   }
 
@@ -478,12 +532,15 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
     final overlaySectors = widget.showTrackOverlay
         ? widget.sectorPoints
         : const <GeoPoint>[];
-    // 赛道 Esri 瓦片使用 WGS-84；街道仅高德源使用 GCJ-02，
-    // 切到 CARTO / OSM 时回到原始 WGS-84。框外点（包括无效的
-    // 0,0）由原转换函数原样返回。
+    // 坐标口径随底图源切换：
+    // - 街道：仅高德源（GCJ-02）需转换，切 CARTO/OSM/谷歌回 WGS-84；
+    // - 赛道：地图源选「高德」时用高德卫星（GCJ-02）需转换，
+    //   选「谷歌」时谷歌卫星为 WGS-84，不转换。
+    // 框外点（包括无效的 0,0）由原转换函数原样返回。
     final streetGcj = !widget.isTrack && _streetUsesGcj(_streetSource);
+    final useGcj = streetGcj || _trackUsesGcj;
     GeoPoint toMapPoint(GeoPoint p) {
-      if (!streetGcj) return p;
+      if (!useGcj) return p;
       final (la, lo) = wgsToGcjLocal(p.lat, p.lon);
       return GeoPoint(la, lo);
     }
@@ -493,13 +550,13 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
     final mapStart = overlayStart == null ? null : toMapPoint(overlayStart);
     final mapFinish = overlayFinish == null ? null : toMapPoint(overlayFinish);
     final mapSectors = overlaySectors.map(toMapPoint).toList();
-    final (mapCurLat, mapCurLon) = streetGcj
+    final (mapCurLat, mapCurLon) = useGcj
         ? wgsToGcjLocal(widget.curLat, widget.curLon)
         : (widget.curLat, widget.curLon);
     double? mapGhostLat;
     double? mapGhostLon;
     if (widget.ghostLat != null && widget.ghostLon != null) {
-      final (la, lo) = streetGcj
+      final (la, lo) = useGcj
           ? wgsToGcjLocal(widget.ghostLat!, widget.ghostLon!)
           : (widget.ghostLat!, widget.ghostLon!);
       mapGhostLat = la;
@@ -585,19 +642,19 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                             rect: projector.tileScreenRect(x, y),
                             child: Image.network(
                               widget.isTrack
-                                  ? satelliteTileUrl(zoom, x, y)
+                                  ? _trackSatelliteUrl(zoom, x, y)
                                   : _streetTileUrl(_streetSource, zoom, x, y),
                               key: ValueKey(
                                 'recmap-'
-                                '${widget.isTrack ? 'satellite' : _streetSource.name}'
+                                '${widget.isTrack ? mapTileSourceStore.source.name : _streetSource.name}'
                                 '-$zoom-$x-$y',
                               ),
-                              headers: const {'User-Agent': 'DriveTrack/1.8.1'},
+                              headers: const {'User-Agent': 'DriveTrack/1.8.3'},
                               fit: BoxFit.fill,
                               gaplessPlayback: true,
                               errorBuilder: (_, _, _) {
                                 final url = widget.isTrack
-                                    ? satelliteTileUrl(zoom, x, y)
+                                    ? _trackSatelliteUrl(zoom, x, y)
                                     : _streetTileUrl(
                                         _streetSource,
                                         zoom,
@@ -733,7 +790,7 @@ class _RecordingMapPageState extends State<RecordingMapPage> {
                           ),
                           child: Text(
                             widget.isTrack
-                                ? satelliteTileAttribution
+                                ? '影像 ${mapTileSourceStore.source.attribution}'
                                 : _streetTileAttribution(_streetSource),
                             style: const TextStyle(
                               color: Colors.white70,

@@ -1,7 +1,7 @@
 name: drive_track
 description: "驰迹 DriveTrack：极简风轨迹记录 App（汽车 / 摩托 / 卡丁车）"
 publish_to: 'none'
-version: 1.8.2+5002
+version: 1.8.3+5003
 
 environment:
   sdk: ^3.13.7

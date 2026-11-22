@@ -11,6 +11,7 @@
 ///
 /// 不测计时判定、圈速统计口径、预测圈 / Delta / 最优圈（本版不动）。
 
+import 'package:drive_track/amap_service.dart';
 import 'package:drive_track/models.dart';
 import 'package:drive_track/recording_map_page.dart';
 import 'package:drive_track/track_analysis_page.dart';
@@ -281,9 +282,10 @@ void main() {
       expect(find.text('◇ 幽灵车 · 参考圈'), findsOneWidget);
       final painter = _overlayPainter(tester);
       expect(painter.hasGhost, isTrue);
-      // 赛道 Esri 底图与幽灵车都使用 WGS-84，不做 GCJ-02 偏移。
-      expect(painter.ghostLat, closeTo(31.3390, 1e-9));
-      expect(painter.ghostLon, closeTo(121.2210, 1e-9));
+      // v1.8.3 默认高德瓦片（GCJ-02），幽灵车与中心线同样做坐标转换。
+      final ghost = wgsToGcjLocal(31.3390, 121.2210);
+      expect(painter.ghostLat, closeTo(ghost.$1, 1e-9));
+      expect(painter.ghostLon, closeTo(ghost.$2, 1e-9));
       expect(painter.ghostHeading, 45);
     });
 

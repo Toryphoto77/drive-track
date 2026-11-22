@@ -13,7 +13,6 @@ import 'dart:io';
 
 import 'package:drive_track/amap_service.dart';
 import 'package:drive_track/recording_map_page.dart';
-import 'package:drive_track/satellite_tiles.dart';
 import 'package:drive_track/track_analysis_geo.dart';
 import 'package:drive_track/track_timing.dart';
 import 'package:flutter/material.dart';
@@ -255,27 +254,29 @@ void main() {
       final tileUrls = _tileUrls(tester);
       expect(tileUrls, isNotEmpty);
       for (final url in tileUrls) {
+        // v1.8.3：默认地图源为高德，赛道卫星走 webst 影像瓦片（GCJ-02）。
         expect(
           url,
-          startsWith(
-            'https://server.arcgisonline.com/ArcGIS/rest/services/'
-            'World_Imagery/MapServer/tile/',
-          ),
+          startsWith('https://webst0'),
         );
+        expect(url, contains('is.autonavi.com'));
+        expect(url, contains('style=6'));
       }
-      expect(find.text(satelliteTileAttribution), findsOneWidget);
-      expect(find.text(amapTileAttribution), findsNothing);
+      expect(find.text('影像 © 高德地图'), findsOneWidget);
       await tester.pumpAndSettle();
       expect(find.textContaining('第 2 圈 · 当前圈 01:23'), findsOneWidget);
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      // Esri 使用 WGS-84，赛道叠加层不得再做 GCJ-02 偏移。
-      expect(painter.start!.lat, closeTo(_p1.lat, 1e-9));
-      expect(painter.start!.lon, closeTo(_p1.lon, 1e-9));
-      expect(painter.finish!.lat, closeTo(_p2.lat, 1e-9));
-      expect(painter.finish!.lon, closeTo(_p2.lon, 1e-9));
-      expect(painter.curLat, closeTo(31.3400, 1e-9));
-      expect(painter.curLon, closeTo(121.2230, 1e-9));
+      // 高德瓦片为 GCJ-02，叠加层须做同一转换，否则错位数百米。
+      final g1 = wgsToGcjLocal(_p1.lat, _p1.lon);
+      final g2 = wgsToGcjLocal(_p2.lat, _p2.lon);
+      final gCur = wgsToGcjLocal(31.3400, 121.2230);
+      expect(painter.start!.lat, closeTo(g1.$1, 1e-9));
+      expect(painter.start!.lon, closeTo(g1.$2, 1e-9));
+      expect(painter.finish!.lat, closeTo(g2.$1, 1e-9));
+      expect(painter.finish!.lon, closeTo(g2.$2, 1e-9));
+      expect(painter.curLat, closeTo(gCur.$1, 1e-9));
+      expect(painter.curLon, closeTo(gCur.$2, 1e-9));
       expect(painter.startFinishCoincident, isFalse);
       expect(painter.sectorPoints.length, 2);
       expect(painter.trail.length, 2);

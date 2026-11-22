@@ -1794,7 +1794,7 @@ class _HomePageState extends State<HomePage>
           // v1.0.3 正式版显示：版本号显示值由本任务定为 1.0.3，
           // pubspec.yaml 同步改 1.0.3+15；
           // versionCode 不再在关于页展示，此处不再传旧值 10。
-          versionName: '1.8.2',
+          versionName: '1.8.3',
           packageName: 'com.chixi.drive_track',
           channelLabel: '正式版',
           displayFont: appPrefs.displayFont,
@@ -4854,15 +4854,20 @@ class _HomePageState extends State<HomePage>
   void _openTrackCatalogSheet() async {
     // v1.5.7：选赛道即进入赛道计时链路，先过硬件门槛。
     if (!_requireTrackHardware()) return;
-    final snap = await TrackLibraryService.instance.loadAll();
-    if (!mounted) return;
-    // 按当前精确定位自动匹配，免去在长列表里翻找。仅在尚未选赛道时
-    // 自动落选，避免覆盖用户已有选择；没有新鲜 3D 定位则不猜测。
-    final autoMatched = selectedPackage == null
-        ? matchTrackAt(_currentFixGeoPoint(), snap.official)
-        : null;
-    if (autoMatched != null) {
-      final picked = autoMatched.package;
+    // v1.8.3：点击后立刻弹出赛道库，不再先 await 资源加载。
+    //
+    // 旧实现是 `await loadAll()` 之后才 showModalBottomSheet：加载期间
+    // 没有任何反馈，资源多 / 磁盘慢时用户会觉得按钮“完全失效”；一旦
+    // 加载抛错，回调直接中断，更加毫无反应。现在把加载、失败与重试
+    // 都放进表内（_TrackCatalogSheet），保证任何情况下点击都有可见响应。
+    //
+    // 定位自动匹配改成数据就绪后异步补一次，不阻塞弹表、失败也不影响
+    // 表内正常选赛道。
+    TrackLibraryService.instance.loadAll().then<void>((snap) {
+      if (!mounted || selectedPackage != null) return;
+      final autoMatched = matchTrackAt(_currentFixGeoPoint(), snap.official);
+      final picked = autoMatched?.package;
+      if (picked == null) return;
       setState(() {
         trackMode = true;
         rec.roadSnapEnabled = false;
@@ -4871,26 +4876,49 @@ class _HomePageState extends State<HomePage>
       });
       showAppNotice(
         context,
-        '已按定位匹配赛道：${picked.nameCn}（约 ${autoMatched.distanceM.round()} m）',
+        '已按定位匹配赛道：${picked.nameCn}（约 ${autoMatched!.distanceM.round()} m）',
         AppNoticeKind.success,
       );
-    }
+    }, onError: (_) {});
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.7,
-        builder: (_, ctrl) => SingleChildScrollView(
-          controller: ctrl,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: TrackPackageSelector(
-              packages: snap.official,
-              userTracks: snap.userTracks,
-              selectedId: selectedTrack?.id,
-              onSelected: (pkg) {
-                final problem = kartTrackProblem(pkg);
+        builder: (_, ctrl) => _TrackCatalogSheet(
+          scrollController: ctrl,
+          selectedId: selectedTrack?.id,
+          onSelected: (pkg) {
+            final problem = kartTrackProblem(pkg);
+            setState(() {
+              trackMode = true;
+              rec.roadSnapEnabled = false;
+              selectedTrack = trackInfoForPackage(pkg);
+              selectedPackage = pkg;
+            });
+            Navigator.pop(ctx);
+            if (problem != null) {
+              showAppNotice(
+                context,
+                '已选「${pkg.nameCn}」，但$problem，开始计时前需补全',
+                AppNoticeKind.warning,
+              );
+            }
+          },
+          onInfo: (pkg) async {
+            final entry = encyclopediaTracks
+                .where((e) => e.id == pkg.id)
+                .firstOrNull;
+            if (entry != null) {
+              final picked = await Navigator.push<EncyclopediaTrack>(
+                ctx,
+                DtPageRoute(
+                  builder: (_) => TrackDetailPage(track: entry, package: pkg),
+                ),
+              );
+              if (picked != null && ctx.mounted) {
                 setState(() {
                   trackMode = true;
                   rec.roadSnapEnabled = false;
@@ -4898,55 +4926,25 @@ class _HomePageState extends State<HomePage>
                   selectedPackage = pkg;
                 });
                 Navigator.pop(ctx);
-                if (problem != null) {
-                  showAppNotice(
-                    context,
-                    '已选「${pkg.nameCn}」，但$problem，开始计时前需补全',
-                    AppNoticeKind.warning,
-                  );
-                }
-              },
-              onInfo: (pkg) async {
-                final entry = encyclopediaTracks
-                    .where((e) => e.id == pkg.id)
-                    .firstOrNull;
-                if (entry != null) {
-                  final picked = await Navigator.push<EncyclopediaTrack>(
-                    ctx,
-                    DtPageRoute(
-                      builder: (_) =>
-                          TrackDetailPage(track: entry, package: pkg),
-                    ),
-                  );
-                  if (picked != null && ctx.mounted) {
-                    setState(() {
-                      trackMode = true;
-                      rec.roadSnapEnabled = false;
-                      selectedTrack = trackInfoForPackage(pkg);
-                      selectedPackage = pkg;
-                    });
-                    Navigator.pop(ctx);
-                  }
-                } else {
-                  final picked = await Navigator.push<TrackPackage>(
-                    ctx,
-                    DtPageRoute(
-                      builder: (_) => TrackPackageInfoPage(package: pkg),
-                    ),
-                  );
-                  if (picked != null && ctx.mounted) {
-                    setState(() {
-                      trackMode = true;
-                      rec.roadSnapEnabled = false;
-                      selectedTrack = trackInfoForPackage(picked);
-                      selectedPackage = picked;
-                    });
-                    Navigator.pop(ctx);
-                  }
-                }
-              },
-            ),
-          ),
+              }
+            } else {
+              final picked = await Navigator.push<TrackPackage>(
+                ctx,
+                DtPageRoute(
+                  builder: (_) => TrackPackageInfoPage(package: pkg),
+                ),
+              );
+              if (picked != null && ctx.mounted) {
+                setState(() {
+                  trackMode = true;
+                  rec.roadSnapEnabled = false;
+                  selectedTrack = trackInfoForPackage(picked);
+                  selectedPackage = picked;
+                });
+                Navigator.pop(ctx);
+              }
+            }
+          },
         ),
       ),
     );
@@ -5703,10 +5701,10 @@ class _HomePageState extends State<HomePage>
             onZoomChanged: (z) => setState(() => mapZoom = z),
             onCompassTap: () => setState(() => mapHeadingUp = false),
           ),
-        // 第 1 页：实时地图（只看不操作）。状态行：赛道模式为当前圈
-        // 用时 + 第 N 圈（无计时器时“等待定位”，未第一次过线时
-        // “等待通过起终点线”），街道模式为用时 + 里程。
-        // 已知中心线时叠加层与视口在打开时就锁在赛道上。
+        // 第 1 页：实时地图（只看不操作）。状态行：街道模式为用时 + 里程。
+        // v1.8.3：赛道模式按竞品做法去掉普通地图页（赛道记录只保留
+        // 计时 HUD + 可选 3D 跟随），因此仅街道模式挂载本页。
+        if (!isTrackPage)
         RecordingMapPage(
           isTrack: isTrackPage,
           centerline: trackCenterline,
@@ -5739,17 +5737,20 @@ class _HomePageState extends State<HomePage>
       ],
     );
     // v1.3.2：页指示点（计时 / 地图），可点切换。
-    final pageTabs = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _recMapPageTab(0, s.t('计时', 'Timing')),
-          const SizedBox(width: 16),
-          _recMapPageTab(1, s.t('地图', 'Map')),
-        ],
-      ),
-    );
+    // v1.8.3：赛道模式只有一个计时页，不再显示分页点。
+    final pageTabs = isTrackPage
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _recMapPageTab(0, s.t('计时', 'Timing')),
+                const SizedBox(width: 16),
+                _recMapPageTab(1, s.t('地图', 'Map')),
+              ],
+            ),
+          );
     // v1.0.2 记录页底部面板底色统一为卡片色 #1E1E1E（仅改色，不改结构/逻辑）。
     // v1.3.2：底部按钮只在计时页（第 0 页）显示，地图页不显示操作区。
     // v1.5.1：本面板只用于竖屏（横屏用 landscapeControls）；竖屏
@@ -7146,6 +7147,12 @@ class _TripDetailPageState extends State<TripDetailPage> {
   bool showCorrected = true;
   bool loadingShareMap = false;
   Uint8List? shareMapBytes;
+  // v1.8.3：详情页派生数据缓存。build 在拖动回放滑块时会高频触发，
+  // 之前每次都重算分段 / 裁剪 / 地图点（O(点数)），长行程明显卡顿。
+  String _derivedKey = '';
+  List<double> _cachedSplits = const [];
+  List<TrackPoint> _cachedShown = const [];
+  List<RefinedTrackPoint> _cachedMapPoints = const [];
   final GlobalKey _previewCardKey = GlobalKey();
   String selectedScoreKey = '';
   bool leanMountedConfirmed = false;
@@ -7269,16 +7276,31 @@ class _TripDetailPageState extends State<TripDetailPage> {
   }
 
   Future<void> _load() async {
-    trip = await widget.store.loadTrip(widget.tripId);
-    metas = await widget.store.loadIndex();
-    vehicleLibrary = await widget.store.loadVehicleLibrary();
-    if (mounted) setState(() {});
+    // v1.8.3：三份数据并行读取。之前串行 await 三次磁盘 IO，
+    // 行程 JSON（含全部轨迹点）又是最重的一份，详情页因此长时间转圈。
+    final results = await Future.wait<Object?>([
+      widget.store.loadTrip(widget.tripId),
+      widget.store.loadIndex(),
+      widget.store.loadVehicleLibrary(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      trip = results[0] as Trip?;
+      metas = (results[1] as List<TripMeta>?) ?? const [];
+      vehicleLibrary = results[2] as VehicleLibrary?;
+    });
   }
 
   /// 高德第一批：详情页刷新（后台 enrichment 完成后点“刷新”可见结果）。
   Future<void> _refreshTrip() async {
     final t = await widget.store.loadTrip(widget.tripId);
-    if (mounted && t != null) setState(() => trip = t);
+    if (mounted && t != null) {
+      setState(() {
+        trip = t;
+        // 轨迹点可能已变化，让 build 里的派生缓存失效重算。
+        _derivedKey = '';
+      });
+    }
   }
 
   /// 云端一期：手动上传本行程（点按钮才传，不自动传）。
@@ -7609,28 +7631,40 @@ class _TripDetailPageState extends State<TripDetailPage> {
               e.kind != 'corner' && (_kinds == null || _kinds.contains(e.kind)),
         )
         .toList();
-    final splits = paceSplitsKm(t.points);
-    final shown = widget.store.trimmedPoints(t);
+    final splits0 = paceSplitsKm(t.points);
+    final shown0 = widget.store.trimmedPoints(t);
     // 高德第一批：纠偏完成且开关开时，地图画纠偏轨迹（回放滑块、
     // 各遥测图与车辆标记仍用原始点，遥测口径不动）。
     final useCorrected =
         t.correctionStatus == 'done' &&
         t.correctedPoints.isNotEmpty &&
         showCorrected;
-    final mapPoints = useCorrected
-        ? t.correctedPoints
-              .map((p) => RefinedTrackPoint(lat: p.$1, lon: p.$2, speedKmh: 0))
-              .toList()
-        : t.points
-              .map(
-                (p) => RefinedTrackPoint(
-                  lat: p.lat,
-                  lon: p.lon,
-                  speedKmh: p.speed * 3.6,
-                  estimated: p.estimated,
-                ),
-              )
-              .toList();
+    // v1.8.3：只有行程或纠偏开关变化时才重算这三份派生数据；
+    // 拖动回放滑块等高频 rebuild 直接复用缓存。
+    final derivedKey =
+        '${t.id}|$useCorrected|${t.points.length}|${t.correctedPoints.length}';
+    if (_derivedKey != derivedKey) {
+      _cachedSplits = splits0;
+      _cachedShown = shown0;
+      _cachedMapPoints = useCorrected
+          ? t.correctedPoints
+                .map((p) => RefinedTrackPoint(lat: p.$1, lon: p.$2, speedKmh: 0))
+                .toList()
+          : t.points
+                .map(
+                  (p) => RefinedTrackPoint(
+                    lat: p.lat,
+                    lon: p.lon,
+                    speedKmh: p.speed * 3.6,
+                    estimated: p.estimated,
+                  ),
+                )
+                .toList();
+      _derivedKey = derivedKey;
+    }
+    final splits = _cachedSplits;
+    final shown = _cachedShown;
+    final mapPoints = _cachedMapPoints;
     final centerPt = scrub >= 0 && scrub < t.points.length
         ? t.points[scrub]
         : t.points[t.points.length ~/ 2];
@@ -8499,6 +8533,106 @@ class _TripDetailPageState extends State<TripDetailPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 赛道库底部表内容（v1.8.3）。
+///
+/// 职责单一：拉取赛道库并在表内呈现「加载中 / 失败可重试 / 选择器」三种
+/// 状态。放在表内而不是弹表前 await，是为了让点击「选择赛道」永远立即
+/// 有可见响应——这是 v1.8.2 里“切换模式后点按钮完全没反应”的直接原因：
+/// 加载期间没有任何反馈，一旦加载抛错回调直接中断。
+class _TrackCatalogSheet extends StatefulWidget {
+  const _TrackCatalogSheet({
+    required this.scrollController,
+    required this.selectedId,
+    required this.onSelected,
+    required this.onInfo,
+  });
+
+  final ScrollController scrollController;
+  final String? selectedId;
+  final ValueChanged<TrackPackage> onSelected;
+  final ValueChanged<TrackPackage> onInfo;
+
+  @override
+  State<_TrackCatalogSheet> createState() => _TrackCatalogSheetState();
+}
+
+class _TrackCatalogSheetState extends State<_TrackCatalogSheet> {
+  late Future<LibrarySnapshot> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = TrackLibraryService.instance.loadAll();
+  }
+
+  void _retry() {
+    setState(() => _future = TrackLibraryService.instance.loadAll());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<LibrarySnapshot>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const SizedBox(
+            height: 220,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    '正在读取赛道库…',
+                    style: TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        final lib = snap.data;
+        if (snap.hasError || lib == null) {
+          return SizedBox(
+            height: 220,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '赛道库读取失败',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton(onPressed: _retry, child: const Text('重试')),
+                ],
+              ),
+            ),
+          );
+        }
+        return SingleChildScrollView(
+          controller: widget.scrollController,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: TrackPackageSelector(
+              packages: lib.official,
+              userTracks: lib.userTracks,
+              selectedId: widget.selectedId,
+              onSelected: widget.onSelected,
+              onInfo: widget.onInfo,
+            ),
+          ),
+        );
+      },
     );
   }
 }

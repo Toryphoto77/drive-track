@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import 'map_tile_source.dart';
 
 /// 精细化地图（v0.1.3 分工：地图 UI 精细化）。
 ///
@@ -25,18 +28,21 @@ import 'package:flutter/material.dart';
 ///
 /// API 全部走构造函数参数，不引用 main.dart 的任何类。
 
-/// 注意顺序：切源按枚举顺序向后走（amap → carto → osm），
-/// 保证高德不可用时先落深色 CARTO，而不是浅色 OSM。
-enum RefinedTileSource { amap, carto, osm }
+/// 注意顺序：切源按枚举顺序向后走（google → amap → carto → osm），
+/// 保证用户显式选谷歌时优先谷歌，谷歌不可用时回落高德，再落深色
+/// CARTO，而不是浅色 OSM。用户选高德（默认）时主链为 amap → carto → osm。
+enum RefinedTileSource { google, amap, carto, osm }
 
 
 extension RefinedTileSourceLabel on RefinedTileSource {
   String get label => switch (this) {
+        RefinedTileSource.google => '谷歌',
         RefinedTileSource.amap => '高德',
         RefinedTileSource.osm => 'OSM',
         RefinedTileSource.carto => 'CARTO',
       };
   String get attribution => switch (this) {
+        RefinedTileSource.google => '© Google · 轨迹 WGS-84',
         RefinedTileSource.amap => '© 高德地图 · 轨迹已按 GCJ-02 对齐',
         RefinedTileSource.osm => '© OpenStreetMap contributors',
         RefinedTileSource.carto => '© OpenStreetMap contributors © CARTO',
@@ -45,6 +51,8 @@ extension RefinedTileSourceLabel on RefinedTileSource {
 
 String _refinedTileUrl(RefinedTileSource src, int z, int x, int y) {
   switch (src) {
+    case RefinedTileSource.google:
+      return roadTileUrl(MapTileSource.google, z, x, y);
     case RefinedTileSource.amap:
       final host = 'webrd0${(x + y) % 4 + 1}.is.autonavi.com';
       return 'https://$host/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=$x&y=$y&z=$z';
@@ -136,6 +144,10 @@ class RefinedMap extends StatefulWidget {
   final RefinedTileSource source;
   final double height;
 
+  /// 瓦片挂起看门狗阈值；为 null 时取默认 8s，Duration.zero 禁用。
+  /// 仅供测试缩短等待。
+  final Duration? watchdogTimeout;
+
   /// 当前时速 km/h；为 null 时取轨迹最后一点的速度。
   final double? currentSpeedKmh;
   final Color accentColor;
@@ -167,6 +179,7 @@ class RefinedMap extends StatefulWidget {
     this.headingUp = true,
     this.source = RefinedTileSource.amap,
     required this.height,
+    this.watchdogTimeout,
     this.currentSpeedKmh,
     this.accentColor = const Color(0xFFE10600),
     this.vehicleMarkerKind = 0,
@@ -195,16 +208,66 @@ class _RefinedMapState extends State<RefinedMap> with TickerProviderStateMixin {
   int _generation = 0;
   int _retryKey = 0;
   final Set<String> _failedKeys = {};
+  final Set<String> _loadedKeys = {};
   int _tileTotal = 0;
+  bool _timedOut = false;
+  Timer? _watchdog;
+
+  /// 超时阈值：瓦片长时间既不加载成功也不报错（弱网 / 被墙）时，
+  /// 判定挂起并显示「加载失败 + 重试」占位，绝不纯黑。测试可缩短。
+  Duration get _watchdogTimeout => widget.watchdogTimeout ?? const Duration(seconds: 8);
+
+  @override
+  void initState() {
+    super.initState();
+    mapTileSourceStore.addListener(_onStoreChanged);
+    // 异步读盘；读到后若与当前默认不同会广播触发重建。
+    mapTileSourceStore.load();
+    _armWatchdog();
+  }
 
   @override
   void dispose() {
+    mapTileSourceStore.removeListener(_onStoreChanged);
+    _watchdog?.cancel();
     _camera.dispose();
     _pulse.dispose();
     super.dispose();
   }
 
-  RefinedTileSource get _effectiveSource => _sourceOverride ?? widget.source;
+  void _onStoreChanged() {
+    if (!mounted) return;
+    setState(() {
+      _sourceOverride = null;
+      _resetFailures();
+      _armWatchdog();
+    });
+  }
+
+  void _armWatchdog() {
+    _watchdog?.cancel();
+    _timedOut = false;
+    if (_watchdogTimeout.inMilliseconds <= 0) return;
+    _watchdog = Timer(_watchdogTimeout, () {
+      if (!mounted) return;
+      // 已有瓦片成功渲染则不视为整体挂起（局部缺失可接受）。
+      if (_tileTotal > 0 && _loadedKeys.isEmpty && !_allFailed) {
+        setState(() => _timedOut = true);
+      }
+    });
+  }
+
+  /// 用户显式选择的主源（高德默认 / 谷歌）；回落链仍按枚举顺序向后走。
+  RefinedTileSource _primaryFromGlobal() =>
+      mapTileSourceStore.source == MapTileSource.google
+          ? RefinedTileSource.google
+          : RefinedTileSource.amap;
+
+  RefinedTileSource get _effectiveSource => _sourceOverride ?? _primaryFromGlobal();
+
+  /// 全部瓦片报错或看门狗挂起 → 视为加载失败。
+  bool get _allFailed =>
+      _tileTotal > 0 && (_failedKeys.length >= _tileTotal || _timedOut);
 
   @override
   void didUpdateWidget(covariant RefinedMap oldWidget) {
@@ -226,7 +289,10 @@ class _RefinedMapState extends State<RefinedMap> with TickerProviderStateMixin {
   void _resetFailures() {
     _generation++;
     _failedKeys.clear();
+    _loadedKeys.clear();
     _tileTotal = 0;
+    _timedOut = false;
+    _armWatchdog();
   }
 
   void _reportFailure(String key) {
@@ -238,7 +304,8 @@ class _RefinedMapState extends State<RefinedMap> with TickerProviderStateMixin {
         // 单源连续失败 ≥4 张才整幅切源，避免单张缺失就乱跳。
         if (_failedKeys.length >= 4) {
           final cur = _effectiveSource;
-          if (cur != RefinedTileSource.carto) {
+          // 已到回落链末尾（OSM）则不再自动切，等待用户手动重试。
+          if (cur.index < RefinedTileSource.values.length - 1) {
             final next = RefinedTileSource.values[cur.index + 1];
             if (widget.onSourceChanged != null) {
               widget.onSourceChanged!(next);
@@ -250,6 +317,16 @@ class _RefinedMapState extends State<RefinedMap> with TickerProviderStateMixin {
         }
       }
     });
+  }
+
+  void _markLoaded(String key) {
+    if (_loadedKeys.add(key)) {
+      // 首张瓦片成功即停止挂起判定。
+      if (_timedOut || _watchdog?.isActive == true) {
+        _watchdog?.cancel();
+        if (_timedOut) setState(() => _timedOut = false);
+      }
+    }
   }
 
   void _cycleSource() {
@@ -338,7 +415,9 @@ class _RefinedMapState extends State<RefinedMap> with TickerProviderStateMixin {
     final rotate = widget.headingUp ? -headingRad : 0.0;
     final speed = widget.currentSpeedKmh ?? (widget.points.isEmpty ? 0 : widget.points.last.speedKmh);
     final scale = _scaleBar(widget.centerLat);
-    final allFailed = _tileTotal > 0 && _failedKeys.length >= _tileTotal;
+    final allFailed = _allFailed;
+    final stillLoading =
+        _tileTotal > 0 && _loadedKeys.isEmpty && !allFailed;
 
     return LayoutBuilder(builder: (context, constraints) {
       final effHeight = widget.height.isFinite
@@ -398,6 +477,10 @@ class _RefinedMapState extends State<RefinedMap> with TickerProviderStateMixin {
                       headers: const {'User-Agent': 'DriveTrack/0.1.3'},
                       fit: BoxFit.cover,
                       gaplessPlayback: true,
+                      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                        if (frame != null) _markLoaded(key);
+                        return child;
+                      },
                       errorBuilder: (_, __, ___) {
                         _reportFailure(key);
                         return Container(color: const Color(0xFF0A0F1E));
@@ -540,6 +623,26 @@ class _RefinedMapState extends State<RefinedMap> with TickerProviderStateMixin {
                     ]),
                   ),
                 ),
+                // 加载中：首张瓦片尚未到达时给个轻量提示，避免整屏近黑
+                // 让用户误以为卡死（地图加载失败占位见下）。
+                if (stillLoading)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Center(
+                        child: _glass(
+                          child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                            ),
+                            SizedBox(width: 8),
+                            Text('地图加载中…', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
                 // 全部瓦片失败：深色占位 + 重试（绝不贴错误码图）。
                 if (allFailed)
                   Positioned.fill(

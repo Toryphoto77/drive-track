@@ -737,6 +737,13 @@ class TrackLibraryService {
   static final TrackLibraryService instance = TrackLibraryService._();
   TrackLibraryService._();
 
+  /// v1.8.3：内置种子包的读取结果缓存。
+  ///
+  /// bundledPackages 每次都要 rootBundle 读几十个 JSON，原来每次打开
+  /// 赛道库都重读一遍，慢机型上首屏能卡几百毫秒。种子包随 assets 打包、
+  /// 运行期不会变，缓存一次即可；只缓存成功结果，读取失败仍会重试。
+  List<TrackPackage>? _bundledCache;
+
   static const String _localFileName = 'track_library.json';
 
   Future<File> _localFile() async {
@@ -791,6 +798,8 @@ class TrackLibraryService {
 
   /// 打包的种子包（assets data/；缺失时回落为空，不抛错）。
   Future<List<TrackPackage>> bundledPackages() async {
+    final cached = _bundledCache;
+    if (cached != null) return cached;
     try {
       final manifestJson = await rootBundle.loadString(kBundledManifestAsset);
       final manifest = TrackLibraryManifest.fromJson(
@@ -810,6 +819,7 @@ class TrackLibraryService {
           continue;
         }
       }
+      if (out.isNotEmpty) _bundledCache = List.unmodifiable(out);
       return out;
     } catch (_) {
       return const [];

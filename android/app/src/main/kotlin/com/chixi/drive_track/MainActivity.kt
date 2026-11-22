@@ -2467,10 +2467,20 @@ class DriveTrackVideoView(
 
     init {
         videoView.setMediaController(null)
+        // 首帧解码出来前，VideoView 的 Surface 是系统默认灰底，看起来像
+        // “灰屏”。先铺一层深色背景把灰底盖住，首帧渲染出来后会自然覆盖。
+        videoView.setBackgroundColor(0xFF0B0B0C.toInt())
         if (path.isNotEmpty()) {
             videoView.setVideoPath(path)
         }
         videoView.setOnPreparedListener { mp ->
+            // 准备好后 seek 到 1ms 强制解码并渲染首帧：停在 0ms 时部分机型
+            // 不触发渲染，会一直停在上面那层深色背景（像没加载出来）。
+            // 这样进入视频同步页立刻能看到画面，不必等用户点播放。
+            try {
+                videoView.seekTo(1)
+            } catch (_: Exception) {
+            }
             channel.invokeMethod(
                 "onPrepared", mapOf("duration" to mp.duration)
             )

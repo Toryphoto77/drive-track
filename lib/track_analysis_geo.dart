@@ -223,3 +223,63 @@ List<SpeedLegendSegment> speedLegendSegments(double minKmh, double maxKmh) {
 /// 回落门控：瓦片累计失败数达到阈值即切示意图。
 bool shouldFallbackToSchematic(int failureCount) =>
     failureCount >= satelliteFallbackFailureThreshold;
+
+/// 走线图手势缩放 / 平移状态机（纯逻辑，供单测）。
+///
+/// 关键点：Flutter 的 [ScaleUpdateDetails.scale] 是**从手势开始起的
+/// 累计倍率**，不能每帧与当前值连乘（会指数放大）。因此 onScaleStart
+/// 记下基准，onScaleUpdate 用「基准 × 累计倍率」；单指拖动与双指缩放
+/// 统一在 scale 手势内处理，不同时开 onPan，避免手势竞争。
+///
+/// 平移取焦点位移（focalPoint − 起始焦点），捏合时焦点漂移同样生效；
+/// 给出 [viewport] 时把平移钳制在画布范围内，避免把走线拖丢。
+class AnalysisViewTransform {
+  static const double minScale = 0.5;
+  static const double maxScale = 4.0;
+
+  double scale = 1.0;
+  Offset translate = Offset.zero;
+
+  double _startScale = 1.0;
+  Offset _startTranslate = Offset.zero;
+  Offset _startFocal = Offset.zero;
+
+  /// 是否为初始视图（用于判断是否显示“复位”提示）。
+  bool get isIdentity => scale == 1.0 && translate == Offset.zero;
+
+  /// onScaleStart：记录手势基准。
+  void start(Offset focal) {
+    _startScale = scale;
+    _startTranslate = translate;
+    _startFocal = focal;
+  }
+
+  /// onScaleUpdate：[gestureScale] 为累计倍率，[focal] 为当前焦点。
+  void update(double gestureScale, Offset focal, {Size? viewport}) {
+    scale = (_startScale * gestureScale).clamp(minScale, maxScale);
+    var next = _startTranslate + (focal - _startFocal);
+    if (viewport != null) {
+      final maxX = viewport.width * scale;
+      final maxY = viewport.height * scale;
+      next = Offset(
+        next.dx.clamp(-maxX, maxX),
+        next.dy.clamp(-maxY, maxY),
+      );
+    }
+    translate = next;
+  }
+
+  /// onScaleEnd：把当前值落定为下一次手势的基准。
+  void end() {
+    _startScale = scale;
+    _startTranslate = translate;
+  }
+
+  /// 双击 / 点按复位。
+  void reset() {
+    scale = 1.0;
+    translate = Offset.zero;
+    _startScale = 1.0;
+    _startTranslate = Offset.zero;
+  }
+}

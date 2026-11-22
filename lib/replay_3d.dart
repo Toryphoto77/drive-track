@@ -1,4 +1,7 @@
-/// v1.3.7：赛后分析页「3D 回放」。
+/// v1.8.3：赛后分析页「3D 回放」。
+///
+/// 对齐竞品（Dragy 式）：真实卫星底图 + 速度彩色轨迹 + 相机跟随/
+/// 全程俯瞰切换 + 速度/G 标注 + 参考圈 VS 双轨迹对比。
 ///
 /// 只画本行程实测轨迹点（`Trip.points`），不插值、不编数：
 /// - 轨迹点过少（<2 个）时显示占位文案，不启动回放；
@@ -6,24 +9,24 @@
 ///   位置取 [replayPointAt] 二分到的实测点，不插值造点；
 /// - 速度/时间取当前实测点的 `speed` / `timeMs`，速度无效
 ///   （NaN / 负值）时不显示速度、不编数；
-/// - 3D 透视投影复用 lib/perspective_projection.dart（与记录页
-///   同一套数学：相机高 140 米、地平线 16%、车标 72%），
-///   朝向与速度取值复用 lib/video_map_gauge.dart 的纯函数，
-///   速度着色复用 lib/track_analysis_geo.dart 的彩虹色阶；
-///   本文件不另写一套 3D 渲染，不叠卫星底图、不拉路网、不读缓存。
+/// - 底图走 [mapTileSourceStore]（高德卫星 GCJ-02 / 谷歌卫星
+///   WGS-84，与分析页同源同口径），叠加层坐标随源切换，保证
+///   轨迹压在真实道路上；瓦片全失败时回落到深色网格，绝不纯黑；
+/// - 速度着色复用 lib/track_analysis_geo.dart 的彩虹色阶。
 ///
-/// 视口：北向上固定视口（headingUp=false），投影中心取轨迹
-/// 南缘外 55 米（全部点前向距离 > 0，透视因子 < 1，纵向恒在
-/// 地平线与车标线之间）；横向按全部实测点投影跨度等比适配，
-/// 整条轨迹始终在画内，不跟随、不旋转。
+/// 相机：跟随模式以当前点为中心拉近；全程模式把整条轨迹等比入画。
+/// 不引入重型 3D 引擎，瓦片与投影复用分析页既有能力，保持流畅。
 
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'amap_service.dart';
+import 'map_tile_source.dart';
 import 'models.dart';
 import 'perspective_projection.dart';
+import 'satellite_tiles.dart';
 import 'track_analysis_geo.dart';
 import 'video_map_gauge.dart';
 
@@ -109,6 +112,16 @@ String replayTimeLabel(int ms) {
   return '$m:$ss';
 }
 
+/// 圈速差文本（当前圈 − 对比圈）：负 = 更快，正 = 更慢。
+/// 任一圈速缺失时返回 null（不编数）；|差| < 0.05s 记为持平。
+String? replayLapDeltaLabel(int? currentLapMs, int? referenceLapMs) {
+  if (currentLapMs == null || referenceLapMs == null) return null;
+  final diffSec = (currentLapMs - referenceLapMs) / 1000.0;
+  final abs = diffSec.abs().toStringAsFixed(1);
+  if (diffSec.abs() < 0.05) return '±0.0 s';
+  return diffSec > 0 ? '+$abs s' : '−$abs s';
+}
+
 /// 3D 回放投影中心：北向上固定视口，中心纬度取轨迹南缘外
 /// 约 55 米（0.0005 度），使全部点前向距离 > 0、透视因子 < 1；
 /// 中心经度取轨迹东西中点。点不足 2 个或全部重合时返回 null。
@@ -171,12 +184,26 @@ double replayPxPerM({
 /// 统计口径；切出页面 / dispose 时停掉定时器，不泄漏。
 class Replay3dView extends StatefulWidget {
   final List<TrackPoint> points;
+
+  /// 参考圈实测点（VS 对比用）；为空时只画本圈。
+  final List<TrackPoint>? referencePoints;
   final double height;
+
+  /// 当前圈圈号 / 用时（圈速差用）；无圈（公路行程）时为 null。
+  final int? currentLapNumber;
+  final int? referenceLapNumber;
+  final int? currentLapMs;
+  final int? referenceLapMs;
 
   const Replay3dView({
     super.key,
     required this.points,
+    this.referencePoints,
     this.height = 260,
+    this.currentLapNumber,
+    this.referenceLapNumber,
+    this.currentLapMs,
+    this.referenceLapMs,
   });
 
   @override
@@ -201,15 +228,47 @@ class _Replay3dViewState extends State<Replay3dView> {
       _index < 0 ? null : widget.points[_index];
 
   @override
+  void initState() {
+    super.initState();
+    // 地图源切换（高德 ↔ 谷歌）时重建底图与坐标口径。
+    mapTileSourceStore.addListener(_onMapSourceChanged);
+    mapTileSourceStore.load();
+  }
+
+  void _onMapSourceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void didUpdateWidget(covariant Replay3dView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.points != widget.points && _elapsedMs > _totalMs) {
+    // 切换分析圈 / 轨迹集合时从头回放，避免沿旧进度显示新轨迹。
+    // 用端点内容比较而非 List 身份：父级每次 build 都会重建切片列表，
+    // 若按身份比较会导致回放进度被反复清零。
+    if (!_sameTrack(oldWidget.points, widget.points)) {
+      _stopTimer();
+      _playing = false;
+      _elapsedMs = 0;
+    } else if (_elapsedMs > _totalMs) {
       _elapsedMs = _totalMs;
     }
   }
 
+  static bool _sameTrack(List<TrackPoint> a, List<TrackPoint> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length || a.isEmpty) return a.length == b.length;
+    final f1 = a.first, f2 = b.first, l1 = a.last, l2 = b.last;
+    return f1.timeMs == f2.timeMs &&
+        f1.lat == f2.lat &&
+        f1.lon == f2.lon &&
+        l1.timeMs == l2.timeMs &&
+        l1.lat == l2.lat &&
+        l1.lon == l2.lon;
+  }
+
   @override
   void dispose() {
+    mapTileSourceStore.removeListener(_onMapSourceChanged);
     _stopTimer();
     super.dispose();
   }
@@ -280,21 +339,167 @@ class _Replay3dViewState extends State<Replay3dView> {
     final current = _current;
     final speedKmh =
         current == null ? null : videoGaugeSpeedKmh(current);
-    final g = current == null ? null : current.combinedG;
+    final rawG = current == null ? null : current.combinedG;
+    final g = (rawG != null && rawG.isFinite) ? rawG : null;
+    final hasRef =
+        widget.referencePoints != null && widget.referencePoints!.length >= 2;
+    final deltaLabel =
+        replayLapDeltaLabel(widget.currentLapMs, widget.referenceLapMs);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
           height: widget.height,
           width: double.infinity,
-          child: CustomPaint(
-            painter: _Replay3dPainter(
-              points: widget.points,
-              currentIndex: _index,
-              follow: _follow,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final size = constraints.biggest;
+                      if (size.isEmpty) return const SizedBox.shrink();
+                      final useGcj = mapTileSourceStore.source.usesGcj;
+                      final cur = _current;
+                      // 坐标口径随底图源：高德 GCJ-02 需先转换，谷歌 WGS-84 直用。
+                      List<(double lat, double lon)> convert(
+                              List<TrackPoint> ps) =>
+                          useGcj
+                              ? [
+                                  for (final p in ps)
+                                    wgsToGcjLocal(p.lat, p.lon)
+                                ]
+                              : [for (final p in ps) (p.lat, p.lon)];
+                      final geo = convert(widget.points);
+                      final refGeo = widget.referencePoints == null
+                          ? null
+                          : convert(widget.referencePoints!);
+                      final maxZoom =
+                          useGcj ? amapSatelliteMaxZoom : googleTileMaxZoom;
+                      List<({double lat, double lon})> named(
+                              List<(double, double)> ps) =>
+                          [for (final g in ps) (lat: g.$1, lon: g.$2)];
+                      // 相机：跟随 = 当前点小框拉近；全程 = 整条轨迹等比入画。
+                      final curGeo = cur == null ? null : convert([cur]).first;
+                      final followNamed = curGeo == null
+                          ? null
+                          : [
+                              (lat: curGeo.$1 - 0.002, lon: curGeo.$2 - 0.002),
+                              (lat: curGeo.$1 + 0.002, lon: curGeo.$2 + 0.002),
+                            ];
+                      final bounds = (_follow && followNamed != null)
+                          ? analysisGeoBounds(followNamed)
+                          : analysisGeoBounds(named(geo));
+                      if (bounds == null) {
+                        return const Center(
+                          child: Text(
+                            '轨迹范围无效',
+                            style:
+                                TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                        );
+                      }
+                      final zoom = analysisGeoZoom(
+                        bounds: bounds,
+                        widthPx: size.width,
+                        heightPx: size.height,
+                        maxZoom: maxZoom,
+                      );
+                      final projector = AnalysisGeoProjector(
+                        bounds: bounds,
+                        zoom: zoom,
+                        size: size,
+                      );
+                      return ColoredBox(
+                        color: const Color(0xFF0A0A0A),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: _ReplaySatelliteLayer(
+                                projector: projector,
+                                useGcj: useGcj,
+                              ),
+                            ),
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _ReplayOverlayPainter(
+                                  projector: projector,
+                                  geo: geo,
+                                  refGeo: refGeo,
+                                  points: widget.points,
+                                  currentIndex: _index,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // 左上：当前速度 / G 值徽标（实测读数，无效不显示）。
+                if (speedKmh != null || g != null)
+                  Positioned(
+                    left: 8,
+                    top: 8,
+                    child: _ReplayBadge(
+                      key: const ValueKey('replay-3d-readout'),
+                      text: [
+                        if (speedKmh != null)
+                          '${speedKmh.toStringAsFixed(0)} km/h',
+                        if (g != null) '${g.toStringAsFixed(2)} G',
+                      ].join(' · '),
+                    ),
+                  ),
+                // 右上：当前底图源（高德 / 谷歌），随设置切换。
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: _ReplayBadge(
+                    text: '${mapTileSourceStore.source.label}卫星',
+                    color: const Color(0xFF22D3EE),
+                  ),
+                ),
+                // 左下：VS 双轨迹图例。
+                if (hasRef)
+                  Positioned(
+                    left: 8,
+                    bottom: 8,
+                    child: Row(
+                      children: [
+                        _ReplayBadge(
+                          text:
+                              '本圈${widget.currentLapNumber != null ? ' ${widget.currentLapNumber}' : ''}',
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 6),
+                        _ReplayBadge(
+                          text:
+                              '对比圈${widget.referenceLapNumber != null ? ' ${widget.referenceLapNumber}' : ''}',
+                          color: const Color(0xFF22D3EE),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
+        const SizedBox(height: 4),
+        // VS 圈速差：有当前圈与对比圈用时才显示（不编数）。
+        if (deltaLabel != null && hasRef)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '第 ${widget.currentLapNumber ?? '-'} 圈 '
+              '${replayTimeLabel(widget.currentLapMs ?? 0)} vs 第 '
+              '${widget.referenceLapNumber ?? '-'} 圈 '
+              '${replayTimeLabel(widget.referenceLapMs ?? 0)} · VS $deltaLabel',
+              key: const ValueKey('replay-3d-lap-delta'),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
         const SizedBox(height: 4),
         Row(
           children: [
@@ -378,169 +583,214 @@ class _Replay3dViewState extends State<Replay3dView> {
   }
 }
 
-class _Replay3dPainter extends CustomPainter {
-  final List<TrackPoint> points;
-  final int currentIndex;
+/// 回放地图上的小徽标（深色半透明底 + 彩点 / 文本）。
+class _ReplayBadge extends StatelessWidget {
+  final String text;
+  final Color? color;
 
-  /// true = 跟随车头（相机随当前点旋转，与记录页 3D 同观感）；
-  /// false = 全程俯瞰（整条轨迹固定入画，北朝上）。
-  final bool follow;
+  const _ReplayBadge({super.key, this.text = '', this.color});
 
-  _Replay3dPainter({
-    required this.points,
-    required this.currentIndex,
-    this.follow = true,
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (color != null) ...[
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            text,
+            style: const TextStyle(color: Colors.white, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 回放卫星底图层：按地图源设置拉真实卫星瓦片（高德 GCJ-02 / 谷歌
+/// WGS-84），与叠加层共用同一 [AnalysisGeoProjector]，保证轨迹压在
+/// 真实道路上。瓦片累计失败达阈值时回落到深色网格 + 重试，绝不纯黑。
+class _ReplaySatelliteLayer extends StatefulWidget {
+  final AnalysisGeoProjector projector;
+  final bool useGcj;
+
+  const _ReplaySatelliteLayer({
+    required this.projector,
+    required this.useGcj,
   });
 
-  bool _sameSideOutside(Offset a, Offset b, Size size) {
-    const m = 60.0;
-    if (a.dx < -m && b.dx < -m) return true;
-    if (a.dx > size.width + m && b.dx > size.width + m) return true;
-    if (a.dy < -m && b.dy < -m) return true;
-    if (a.dy > size.height + m && b.dy > size.height + m) return true;
-    return false;
+  @override
+  State<_ReplaySatelliteLayer> createState() => _ReplaySatelliteLayerState();
+}
+
+class _ReplaySatelliteLayerState extends State<_ReplaySatelliteLayer> {
+  final Set<String> _failed = {};
+  int _retryKey = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    mapTileSourceStore.addListener(_onStoreChanged);
+    mapTileSourceStore.load();
   }
 
   @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-        Offset.zero & size, Paint()..color = const Color(0xFF121212));
+  void dispose() {
+    mapTileSourceStore.removeListener(_onStoreChanged);
+    super.dispose();
+  }
 
-    final TrackPoint? cur =
-        (currentIndex >= 0 && currentIndex < points.length)
-            ? points[currentIndex]
-            : null;
-
-    late final double centerLat;
-    late final double centerLon;
-    late final double headingDeg;
-    late final bool headingUp;
-    late final double pxPerM;
-
-    if (follow && cur != null) {
-      // 跟随车头：相机中心放在车后 60 m（沿车头方向），车标落在画面
-      // 约 55% 高度，前方留出可视区。旧版固定整段入画，长直道会被
-      // 透视压缩成地平线上一条细线，看着像“没渲染出来”。
-      final h = videoGaugeHeadingDeg(points, currentIndex) ?? 0;
-      final c = forwardRightToLatLon(
-        centerLat: cur.lat,
-        centerLon: cur.lon,
-        headingDeg: h,
-        headingUp: true,
-        forward: -60,
-        right: 0,
-      );
-      centerLat = c.lat;
-      centerLon = c.lon;
-      headingDeg = h;
-      headingUp = true;
-      pxPerM = size.width / 170;
-    } else {
-      final center = replayProjectionCenter(points);
-      if (center == null) return;
-      centerLat = center.centerLat;
-      centerLon = center.centerLon;
-      headingDeg = 0;
-      headingUp = false;
-      pxPerM = replayPxPerM(
-        size: size,
-        points: points,
-        centerLat: centerLat,
-        centerLon: centerLon,
-      );
+  void _onStoreChanged() {
+    if (mounted) {
+      setState(() {
+        _failed.clear();
+        _retryKey++;
+      });
     }
+  }
 
-    Offset project(TrackPoint p) => perspectiveProjectLatLon(
-          size: size,
-          centerLat: centerLat,
-          centerLon: centerLon,
-          headingDeg: headingDeg,
-          headingUp: headingUp,
-          lat: p.lat,
-          lon: p.lon,
-          pxPerM: pxPerM,
-          is3d: true,
-        );
+  void _retry() {
+    setState(() {
+      _failed.clear();
+      _retryKey++;
+    });
+  }
 
-    /// 场景坐标（前进 / 右偏，米）→ 屏幕点，网格与轨迹共用同一相机。
-    Offset scene(double forward, double right) {
-      final ll = forwardRightToLatLon(
-        centerLat: centerLat,
-        centerLon: centerLon,
-        headingDeg: headingDeg,
-        headingUp: headingUp,
-        forward: forward,
-        right: right,
-      );
-      return perspectiveProjectLatLon(
-        size: size,
-        centerLat: centerLat,
-        centerLon: centerLon,
-        headingDeg: headingDeg,
-        headingUp: headingUp,
-        lat: ll.lat,
-        lon: ll.lon,
-        pxPerM: pxPerM,
-        is3d: true,
-      );
-    }
+  String _tileUrl(int z, int x, int y) => widget.useGcj
+      ? amapSatelliteTileUrl(z, x, y)
+      : satelliteTileUrlFor(MapTileSource.google, z, x, y);
 
-    // 远处地平线微光（与记录页 3D 地图同式，固定屏幕位置的装饰）。
-    final horizonY = size.height * perspectiveHorizonFraction;
-    final glow = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Colors.transparent,
-          const Color(0xFFE10600).withValues(alpha: 0.18),
-          Colors.transparent
+  Widget _tile(AnalysisGeoProjector p, int x, int y) {
+    final r = p.tileScreenRect(x, y);
+    final url = _tileUrl(p.zoom, x, y);
+    return Positioned(
+      left: r.left,
+      top: r.top,
+      width: r.width,
+      height: r.height,
+      child: Image.network(
+        url,
+        // 重试 / 切源时换 key，强制重新发起请求。
+        key: ValueKey(
+          'replay-sat-${widget.useGcj ? 'gcj' : 'wgs'}'
+          '-$_retryKey-${p.zoom}-$x-$y',
+        ),
+        fit: BoxFit.fill,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) {
+          if (_failed.add(url)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() {});
+            });
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final projector = widget.projector;
+    if (shouldFallbackToSchematic(_failed.length)) {
+      // 深色网格占位 + 重试：绝不整屏纯黑，也不贴错误码图。
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _ReplayGridPainter(),
+              size: Size.infinite,
+            ),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.satellite_alt_outlined,
+                    color: Colors.white38, size: 30),
+                const SizedBox(height: 6),
+                const Text(
+                  '卫星底图加载失败',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _retry,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.25)),
+                    ),
+                    child: const Text(
+                      '重试',
+                      style: TextStyle(
+                        color: Color(0xFF22D3EE),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-      ).createShader(Rect.fromLTWH(0, horizonY - 30, size.width, 60));
-    canvas.drawRect(Rect.fromLTWH(0, horizonY - 30, size.width, 60), glow);
-
-    // 透视网格地面（跟随模式下随车头一起转，不再固定北向）。
-    final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.10)
-      ..strokeWidth = 1;
-    for (final d in [
-      -100.0,
-      -50.0,
-      0.0,
-      25.0,
-      50.0,
-      100.0,
-      200.0,
-      400.0,
-      800.0
-    ]) {
-      final a = scene(d, -200);
-      final b = scene(d, 200);
-      if (_sameSideOutside(a, b, size)) continue;
-      canvas.drawLine(a, b, gridPaint);
+      );
     }
-    for (final r in [-200.0, -100.0, -50.0, 0.0, 50.0, 100.0, 200.0]) {
-      final path = Path();
-      var first = true;
-      for (var d = -100.0; d <= 1000; d += 100) {
-        final p = scene(d, r);
-        if (first) {
-          path.moveTo(p.dx, p.dy);
-          first = false;
-        } else {
-          path.lineTo(p.dx, p.dy);
-        }
-      }
-      canvas.drawPath(path, gridPaint);
-    }
+    final tr = projector.tileRange;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Container(color: const Color(0xFF0A0A0A)),
+        ),
+        for (var x = tr.x0; x <= tr.x1; x++)
+          for (var y = tr.y0; y <= tr.y1; y++) _tile(projector, x, y),
+      ],
+    );
+  }
+}
 
-    // 全程轨迹（实测点连线，未播部分暗色）。
-    final projected = points.map(project).toList();
-    final dimPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.25)
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
+/// 回放叠加层：速度彩色轨迹（已播彩虹 / 未播暗）、参考圈 VS 对比、
+/// 起终点 / 当前点标记、速度标注与图例。与底图共用同一投影。
+class _ReplayOverlayPainter extends CustomPainter {
+  final AnalysisGeoProjector projector;
+  final List<(double lat, double lon)> geo;
+  final List<(double lat, double lon)>? refGeo;
+  final int currentIndex;
+  final List<TrackPoint> points;
+
+  _ReplayOverlayPainter({
+    required this.projector,
+    required this.geo,
+    this.refGeo,
+    required this.currentIndex,
+    required this.points,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (geo.length < 2) return;
+    Offset proj((double lat, double lon) g) => projector.project(g.$1, g.$2);
+    final projected = geo.map(proj).toList();
+
+    // 未播部分：暗色主线。
     final dimPath = Path();
     for (var i = 0; i < projected.length; i++) {
       if (i == 0) {
@@ -549,72 +799,168 @@ class _Replay3dPainter extends CustomPainter {
         dimPath.lineTo(projected[i].dx, projected[i].dy);
       }
     }
-    canvas.drawPath(dimPath, dimPaint);
+    canvas.drawPath(
+      dimPath,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.25)
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke,
+    );
 
-    // 已播部分按速度彩虹着色（与分析页同色阶，区间取自本节实测速度）。
+    // 已播部分：速度彩虹着色（区间取自本节实测速度）。
     final speedsKmh =
         points.map((p) => p.speed * 3.6).where((v) => v.isFinite).toList();
-    final minKmh =
-        speedsKmh.isEmpty ? 0.0 : speedsKmh.reduce(math.min);
-    final maxKmh =
-        speedsKmh.isEmpty ? 0.0 : speedsKmh.reduce(math.max);
+    final minKmh = speedsKmh.isEmpty ? 0.0 : speedsKmh.reduce(math.min);
+    final maxKmh = speedsKmh.isEmpty ? 0.0 : speedsKmh.reduce(math.max);
     final playedEnd = currentIndex.clamp(0, points.length - 1);
     for (var i = 1; i <= playedEnd; i++) {
-      final a = projected[i - 1], b = projected[i];
-      if (_sameSideOutside(a, b, size)) continue;
       final midKmh = (points[i - 1].speed + points[i].speed) / 2 * 3.6;
       canvas.drawLine(
-          a,
-          b,
-          Paint()
-            ..color = speedToRainbowColor(midKmh, minKmh, maxKmh)
-            ..strokeWidth = 3.5
-            ..strokeCap = StrokeCap.round
-            ..style = PaintingStyle.stroke);
+        projected[i - 1],
+        projected[i],
+        Paint()
+          ..color = speedToRainbowColor(midKmh, minKmh, maxKmh)
+          ..strokeWidth = 3.5
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+
+    // 参考圈 VS 对比：青色单色线画在本圈之上，两条轨迹同屏可辨。
+    final ref = refGeo;
+    if (ref != null && ref.length >= 2) {
+      final rp = ref.map(proj).toList();
+      final paint = Paint()
+        ..color = const Color(0xFF22D3EE)
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round;
+      for (var i = 1; i < rp.length; i++) {
+        canvas.drawLine(rp[i - 1], rp[i], paint);
+      }
     }
 
     // 起点绿点 / 终点白点（实测首末点，不编位置）。
-    canvas.drawCircle(projected.first, 5,
-        Paint()..color = Colors.greenAccent);
+    canvas.drawCircle(projected.first, 5, Paint()..color = Colors.greenAccent);
     canvas.drawCircle(projected.last, 5, Paint()..color = Colors.white);
 
-    // 当前位置：朝向箭头（相邻实测点算出，算不出时只画圆点、不编方向）
-    // + 白点红环（与视频地图仪表同式）。跟随模式下场景已按车头旋转，
-    // 箭头固定朝上（-90°），避免二次旋转。
-    if (currentIndex >= 0 && currentIndex < points.length) {
+    // 当前位置：白心红环。
+    if (currentIndex >= 0 && currentIndex < projected.length) {
       final pos = projected[currentIndex];
-      final heading = videoGaugeHeadingDeg(points, currentIndex);
-      if (follow || heading != null) {
-        final angle = follow
-            ? -math.pi / 2
-            : math.atan2(-math.cos(heading! * math.pi / 180),
-                math.sin(heading * math.pi / 180));
-        canvas.save();
-        canvas.translate(pos.dx, pos.dy);
-        canvas.rotate(angle);
-        final arrow = Path()
-          ..moveTo(10, 0)
-          ..lineTo(-7, -6)
-          ..lineTo(-4, 0)
-          ..lineTo(-7, 6)
-          ..close();
-        canvas.drawPath(arrow, Paint()..color = Colors.red);
-        canvas.restore();
-      }
       canvas.drawCircle(pos, 4, Paint()..color = Colors.white);
       canvas.drawCircle(
-          pos,
-          4,
-          Paint()
-            ..color = Colors.red
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5);
+        pos,
+        5,
+        Paint()
+          ..color = Colors.red
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
+
+    // 速度标注 + 图例（画在最上层，不随相机变形）。
+    _paintSpeedLabels(canvas, size, projected, minKmh, maxKmh);
+    _paintLegend(canvas, size, minKmh, maxKmh);
+  }
+
+  void _paintSpeedLabels(
+    Canvas canvas,
+    Size size,
+    List<Offset> projected,
+    double minKmh,
+    double maxKmh,
+  ) {
+    if (projected.length < 3) return;
+    const ts = TextStyle(
+      color: Colors.white,
+      fontSize: 10,
+      fontWeight: FontWeight.bold,
+    );
+    const samples = 5;
+    final step =
+        (projected.length / samples).floor().clamp(1, projected.length);
+    for (var i = 0; i < projected.length; i += step) {
+      final kmh = points[i].speed * 3.6;
+      if (!kmh.isFinite || kmh < 0) continue;
+      final tp = TextPainter(
+        text: TextSpan(text: '${kmh.toStringAsFixed(0)}', style: ts),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final pos = projected[i];
+      final bg = Rect.fromLTWH(
+        pos.dx - tp.width / 2 - 2,
+        pos.dy - tp.height - 6,
+        tp.width + 4,
+        tp.height + 2,
+      );
+      canvas.drawRect(
+        bg,
+        Paint()..color = Colors.black.withValues(alpha: 0.55),
+      );
+      tp.paint(canvas, Offset(pos.dx - tp.width / 2, pos.dy - tp.height - 5));
+    }
+  }
+
+  void _paintLegend(
+    Canvas canvas,
+    Size size,
+    double minKmh,
+    double maxKmh,
+  ) {
+    const w = 110.0;
+    const h = 6.0;
+    final left = size.width - w - 10;
+    final top = size.height - 18;
+    final rect = Rect.fromLTWH(left, top, w, h);
+    final shader = const LinearGradient(
+      colors: [
+        Color(0xFF2563EB),
+        Color(0xFF22C55E),
+        Color(0xFFFACC15),
+        Color(0xFFE10600),
+      ],
+    ).createShader(rect);
+    canvas.drawRect(rect, Paint()..shader = shader);
+    const ts = TextStyle(color: Colors.white70, fontSize: 9);
+    final a = TextPainter(
+      text: TextSpan(text: '${minKmh.toStringAsFixed(0)}', style: ts),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final b = TextPainter(
+      text: TextSpan(text: '${maxKmh.toStringAsFixed(0)} km/h', style: ts),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    a.paint(canvas, Offset(left, top - 12));
+    b.paint(canvas, Offset(left + w - b.width, top - 12));
+  }
+
+  @override
+  bool shouldRepaint(covariant _ReplayOverlayPainter old) =>
+      old.currentIndex != currentIndex ||
+      old.projector != projector ||
+      old.geo != geo ||
+      old.refGeo != refGeo;
+}
+
+/// 瓦片失败回落：深色网格，避免纯黑。
+class _ReplayGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFF0A0A0A),
+    );
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.08)
+      ..strokeWidth = 1;
+    const step = 40.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _Replay3dPainter old) =>
-      old.points != points ||
-      old.currentIndex != currentIndex ||
-      old.follow != follow;
+  bool shouldRepaint(covariant _ReplayGridPainter old) => false;
 }

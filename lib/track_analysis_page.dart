@@ -64,6 +64,7 @@ import 'dt_page_route.dart';
 import 'elevation_profile.dart';
 import 'lap_speed_delta.dart';
 import 'logic.dart';
+import 'map_tile_source.dart';
 import 'models.dart';
 import 'replay_3d.dart';
 import 'satellite_tiles.dart';
@@ -256,6 +257,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
         widget.referenceLap ??
         byNumber(widget.initialReferenceLapNumber) ??
         best;
+    // 监听地图源切换：卫星 / 示意 / 走线图都要随之重建（坐标系与瓦片
+    // 源都变）。
+    mapTileSourceStore.addListener(_onMapSourceChanged);
+    mapTileSourceStore.load();
+  }
+
+  void _onMapSourceChanged() {
+    if (mounted) setState(() {});
   }
 
   void _resetView() {
@@ -387,17 +396,62 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
       }
     }
     final showRefOverlay = _showReferenceOverlay && refSlice != null;
+    // 3D 回放：有计入圈时以「分析圈」为当前圈，并与对比圈（优先参照圈；
+    // 参照圈 = 分析圈时自动取最快的另一圈）同屏 VS，显示圈速差。
+    // 无计入圈（公路行程）时用整节轨迹，不做圈速差，不编数。
+    _LapSlice? replaySlice;
+    _LapSlice? replayRefSlice;
+    int? replayLapNumber;
+    int? replayRefLapNumber;
+    int? replayLapMs;
+    int? replayRefLapMs;
+    final selectedLap = _selected;
+    if (selectedLap != null && selectedLap.durationMs > 0) {
+      final cur = _sliceLap(trip, selectedLap);
+      if (cur.points.length >= 2) {
+        replaySlice = cur;
+        replayLapNumber = selectedLap.number;
+        replayLapMs = selectedLap.durationMs;
+        Lap? cmp;
+        if (_reference != null && _reference!.number != selectedLap.number) {
+          cmp = _reference;
+        } else {
+          final others = widget.laps
+              .where(
+                (l) => l.number != selectedLap.number && !l.dwellNotCounted,
+              )
+              .toList();
+          if (others.isNotEmpty) {
+            cmp = others.reduce(
+              (a, b) => a.durationMs <= b.durationMs ? a : b,
+            );
+          }
+        }
+        if (cmp != null) {
+          final rs = _sliceLap(trip, cmp);
+          if (rs.points.length >= 2) {
+            replayRefSlice = rs;
+            replayRefLapNumber = cmp.number;
+            replayRefLapMs = cmp.durationMs;
+          }
+        }
+      }
+    }
+    // 3D 回放的对比圈：参考圈叠加开关关闭时不画。
+    final replayRefPoints = _showReferenceOverlay ? replayRefSlice : null;
+    // 有赛道库轮廓时，走线用单圈切片对照（整节多圈叠加会与单圈轮廓错位）。
+    final catalog = _catalogTrack;
+    final catalogOutline = (catalog != null && catalog.outline.length >= 3)
+        ? catalog.outline
+        : null;
+    final catalogSlice =
+        (catalogOutline != null && replaySlice != null) ? replaySlice : wholeSlice;
     final splits = trip.mode == TripMode.bike
         ? paceSplitsKm(pts)
         : const <double>[];
     final leanOver30 = trip.mode == TripMode.moto
         ? pts.where((p) => p.roll.abs() > 30).length
         : 0;
-    // 赛道库轮廓：与赛道库/赛道详情页同一 TrackInfo.outline 数据源。
-    final catalog = _catalogTrack;
-    final catalogOutline = (catalog != null && catalog.outline.length >= 3)
-        ? catalog.outline
-        : null;
     // 走线卡补充：弯段坡度复用“赛道高差剖面”同一算法（入弯/出弯海拔），
     // 只展示前 6 个弯，完整列表仍在那张卡里，不另造数据。
     final cornerGrades = pts.length >= 2
@@ -564,8 +618,8 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                   ),
                   // v1.3.4：参考圈叠加开关（默认开，只影响本页会话；
                   // 无参照圈时不出现，参照圈切片点数 < 2 时不画线；
-                  // 3D 回放 / 赛道库轮廓模式下不出现）。
-                  if (_reference != null && !_replay3d && !_catalogView)
+                  // 赛道库轮廓模式下不出现；3D 回放下作为 VS 双轨迹对比）。
+                  if (_reference != null && !_catalogView)
                     ChoiceChip(
                       key: const ValueKey('reference-overlay-toggle'),
                       label: Text(s.t('参考圈叠加', 'Reference lap')),
@@ -578,7 +632,14 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
               ),
               const SizedBox(height: 8),
               if (_replay3d)
-                Replay3dView(points: pts)
+                Replay3dView(
+                  points: replaySlice?.points ?? pts,
+                  referencePoints: replayRefPoints?.points,
+                  currentLapNumber: replayLapNumber,
+                  referenceLapNumber: replayRefLapNumber,
+                  currentLapMs: replayLapMs,
+                  referenceLapMs: replayRefLapMs,
+                )
               else if (_catalogView && catalog != null)
                 TrackSchematicDiagram(
                   track: catalog,
@@ -597,15 +658,18 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                   referenceSlice: refSlice,
                   referenceLapNumber: refLapNumber,
                   showReferenceOverlay: _showReferenceOverlay,
+                  catalog: catalog,
+                  fallbackSlice: catalogSlice,
                 )
               else
                 _TrackLineDiagram(
-                  slice: wholeSlice,
+                  slice: catalogSlice ?? wholeSlice,
                   deltaCurve: List<double>.filled(pts.length, 0),
                   mode: TrackLineColorMode.speed,
                   scrubIndex: 0,
                   referenceSlice: showRefOverlay ? refSlice : null,
                   catalogOutline: catalogOutline,
+                  interactive: true,
                 ),
               const SizedBox(height: 6),
               Text(
@@ -620,8 +684,10 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                         'Same outline source as the track library (redrawn schematic, not the official map)',
                       )
                     : s.t(
-                        '走线按速度着色，仅作复盘示意，不用于计时判定',
-                        'Line colored by speed; review only, not for timing',
+                        '走线按速度着色，仅作复盘示意，不用于计时判定；'
+                            '卫星瓦片加载失败时作为走线对照底图',
+                        'Line colored by speed; review only, not for timing. '
+                            'Used as the fallback base map when satellite tiles fail',
                       ),
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
@@ -634,6 +700,13 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
                     _LegendDot(_kGreen, s.t('S 起点', 'S start')),
                     const SizedBox(width: 12),
                     _LegendDot(_kRed, s.t('F 终点', 'F finish')),
+                    if (catalogOutline != null && !_satelliteMap) ...[
+                      const SizedBox(width: 12),
+                      _LegendDot(
+                        Colors.white38,
+                        s.t('赛道库轮廓', 'Track-library outline'),
+                      ),
+                    ],
                   ],
                 ),
                 if (cornerGrades.isNotEmpty) ...[
@@ -1022,6 +1095,7 @@ class _TrackAnalysisPageState extends State<TrackAnalysisPage> {
 
   @override
   void dispose() {
+    mapTileSourceStore.removeListener(_onMapSourceChanged);
     _aiService.close();
     super.dispose();
   }
@@ -3220,7 +3294,7 @@ void _paintTrackEndpointBadge(
 /// scrub 点画白芯红边圆点。
 /// v1.3.4：[referenceSlice] 非 null 时把参照圈轨迹以青色单色线叠在
 /// 其上（3px，与主线区分；全程走线卡的卫星回落 / 示意模式共用）。
-class _TrackLineDiagram extends StatelessWidget {
+class _TrackLineDiagram extends StatefulWidget {
   final _LapSlice slice;
   final List<double> deltaCurve;
   final TrackLineColorMode mode;
@@ -3234,7 +3308,10 @@ class _TrackLineDiagram extends StatelessWidget {
   /// 最快 / 最慢分段高亮（累计距离占比）；空列表时不画。
   final List<_LineBand> bands;
 
-  const _TrackLineDiagram({
+  /// 是否开启缩放 / 拖动交互（分析页主示意开启；每圈小卡片关闭）。
+  final bool interactive;
+
+  _TrackLineDiagram({
     required this.slice,
     required this.deltaCurve,
     required this.mode,
@@ -3242,28 +3319,135 @@ class _TrackLineDiagram extends StatelessWidget {
     this.referenceSlice,
     this.catalogOutline,
     this.bands = const [],
+    this.interactive = false,
   });
 
   @override
+  State<_TrackLineDiagram> createState() => _TrackLineDiagramState();
+}
+
+class _TrackLineDiagramState extends State<_TrackLineDiagram> {
+  /// 手势状态机（缩放 / 平移基准与钳制），逻辑抽到 track_analysis_geo
+  /// 以便单测；这里只负责把手势事件喂进去并触发重绘。
+  final AnalysisViewTransform _view = AnalysisViewTransform();
+  Size _viewport = const Size(320, 220);
+
+  bool get _useGcj => mapTileSourceStore.source.usesGcj;
+
+  @override
+  void initState() {
+    super.initState();
+    // 地图源切换（高德 ↔ 谷歌）时坐标口径随之变化，重绘走线。
+    mapTileSourceStore.addListener(_onStoreChanged);
+    mapTileSourceStore.load();
+  }
+
+  @override
+  void dispose() {
+    mapTileSourceStore.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _resetView() {
+    setState(_view.reset);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _kBorder),
-      ),
-      child: CustomPaint(
-        painter: _TrackLinePainter(
-          slice: slice,
-          deltaCurve: deltaCurve,
-          mode: mode,
-          scrubIndex: scrubIndex,
-          referenceSlice: referenceSlice,
-          catalogOutline: catalogOutline,
-          bands: bands,
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _viewport = Size(
+          constraints.maxWidth.isFinite ? constraints.maxWidth : 320,
+          220,
+        );
+        final painter = _TrackLinePainter(
+          slice: widget.slice,
+          deltaCurve: widget.deltaCurve,
+          mode: widget.mode,
+          scrubIndex: widget.scrubIndex,
+          referenceSlice: widget.referenceSlice,
+          catalogOutline: widget.catalogOutline,
+          bands: widget.bands,
+          useGcj: _useGcj,
+          scale: _view.scale,
+          translate: _view.translate,
+          showLegend: widget.interactive,
+        );
+        final box = Container(
+          height: 220,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0A0A0A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kBorder),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: CustomPaint(painter: painter, size: Size.infinite),
+        );
+        if (!widget.interactive) return box;
+        return Stack(
+          children: [
+            // 缩放 / 拖动统一走 scale 手势：单指拖动 = 焦点位移，
+            // 双指捏合 = 累计倍率；不同时开 onPan，避免手势竞争。
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onScaleStart: (details) => _view.start(details.localFocalPoint),
+              onScaleUpdate: (details) => setState(
+                () => _view.update(
+                  details.scale,
+                  details.localFocalPoint,
+                  viewport: _viewport,
+                ),
+              ),
+              onScaleEnd: (_) => _view.end(),
+              onDoubleTap: _resetView,
+              child: box,
+            ),
+            // 左上：缩放倍率 + 点按复位。
+            Positioned(
+              left: 8,
+              top: 6,
+              child: GestureDetector(
+                onTap: _resetView,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${_view.scale.toStringAsFixed(1)}× · 双击复位',
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  ),
+                ),
+              ),
+            ),
+            // 左下：手势 / 颜色图例说明（不遮挡右下速度色标）。
+            Positioned(
+              left: 8,
+              bottom: 8,
+              child: IgnorePointer(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Text(
+                    '双指缩放 · 单指拖动 · 双击复位 · 白→红 = 慢→快',
+                    style: TextStyle(color: Colors.white60, fontSize: 9),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -3276,6 +3460,10 @@ class _TrackLinePainter extends CustomPainter {
   final _LapSlice? referenceSlice;
   final List<OutlinePoint>? catalogOutline;
   final List<_LineBand> bands;
+  final bool useGcj;
+  final double scale;
+  final Offset translate;
+  final bool showLegend;
 
   _TrackLinePainter({
     required this.slice,
@@ -3285,36 +3473,54 @@ class _TrackLinePainter extends CustomPainter {
     this.referenceSlice,
     this.catalogOutline,
     this.bands = const [],
+    this.useGcj = false,
+    this.scale = 1.0,
+    this.translate = Offset.zero,
+    this.showLegend = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final pts = slice.points;
     if (pts.length < 2) return;
-    var minLat = pts.first.lat;
-    var maxLat = pts.first.lat;
-    var minLon = pts.first.lon;
-    var maxLon = pts.first.lon;
-    for (final p in pts) {
-      if (p.lat < minLat) minLat = p.lat;
-      if (p.lat > maxLat) maxLat = p.lat;
-      if (p.lon < minLon) minLon = p.lon;
-      if (p.lon > maxLon) maxLon = p.lon;
+    // 坐标口径与卫星视图对齐：地图源为高德（GCJ-02）时，示意走线也先
+    // 转 GCJ-02 再归一化，避免「卫星 ↔ 示意」切换时因两套坐标系形状
+    // 不同而显得错位（国内偏差可达数百米）。
+    final conv = useGcj;
+    final List<(double lat, double lon)> geo = conv
+        ? [for (final p in pts) wgsToGcjLocal(p.lat, p.lon)]
+        : [for (final p in pts) (p.lat, p.lon)];
+    var minLat = geo.first.$1;
+    var maxLat = geo.first.$1;
+    var minLon = geo.first.$2;
+    var maxLon = geo.first.$2;
+    for (final g in geo) {
+      if (g.$1 < minLat) minLat = g.$1;
+      if (g.$1 > maxLat) maxLat = g.$1;
+      if (g.$2 < minLon) minLon = g.$2;
+      if (g.$2 > maxLon) maxLon = g.$2;
     }
     final spanLat = (maxLat - minLat).abs() < 1e-9 ? 1 : maxLat - minLat;
     final spanLon = (maxLon - minLon).abs() < 1e-9 ? 1 : maxLon - minLon;
     const pad = 14.0;
     final w = size.width - pad * 2;
     final h = size.height - pad * 2;
-    // 等比缩放，居中。
-    final scale = math.min(w / spanLon, h / spanLat);
-    final offX = pad + (w - spanLon * scale) / 2;
-    final offY = pad + (h - spanLat * scale) / 2;
-    Offset toOffset(TrackPoint p) => Offset(
-      offX + (p.lon - minLon) * scale,
-      offY + (maxLat - p.lat) * scale,
-    );
-    final offsets = pts.map(toOffset).toList();
+    // 等比缩放，居中（fit 为归一化到画布的比例，与交互缩放 scale 区分）。
+    final fit = math.min(w / spanLon, h / spanLat);
+    final offX = pad + (w - spanLon * fit) / 2;
+    final offY = pad + (h - spanLat * fit) / 2;
+    Offset toOffset((double lat, double lon) g) => Offset(
+          offX + (g.$2 - minLon) * fit,
+          offY + (maxLat - g.$1) * fit,
+        );
+    final offsets = geo.map(toOffset).toList();
+
+    // 缩放 / 拖动交互：以画布中心为缩放原点，再叠加平移；1×/零平移时
+    // 与原渲染完全一致，向后兼容。
+    canvas.save();
+    canvas.translate(size.width / 2 + translate.dx, size.height / 2 + translate.dy);
+    canvas.scale(scale, scale);
+    canvas.translate(-size.width / 2, -size.height / 2);
 
     // 最佳 / 最差分段高亮：按累计距离占比铺宽线，压在主走线下面。
     final totalM = slice.totalDistance;
@@ -3341,8 +3547,8 @@ class _TrackLinePainter extends CustomPainter {
       final path = Path();
       for (var i = 0; i < outline.length; i++) {
         final p = Offset(
-          offX + outline[i].x * spanLon * scale,
-          offY + outline[i].y * spanLat * scale,
+          offX + outline[i].x * spanLon * fit,
+          offY + outline[i].y * spanLat * fit,
         );
         if (i == 0) {
           path.moveTo(p.dx, p.dy);
@@ -3396,9 +3602,15 @@ class _TrackLinePainter extends CustomPainter {
       );
     }
     // v1.3.4：参照圈叠加（青色单色 3px，画在主线之上；点数 < 2 不画）。
+    // 参照圈与主线同一坐标系（useGcj 同步转换），保证对齐。
     final refPts = referenceSlice?.points;
-    if (refPts != null && refPts.length >= 2) {
-      final refOffsets = refPts.map(toOffset).toList();
+    final refGeo = refPts == null
+        ? null
+        : conv
+            ? [for (final p in refPts) wgsToGcjLocal(p.lat, p.lon)]
+            : [for (final p in refPts) (p.lat, p.lon)];
+    if (refGeo != null && refGeo.length >= 2) {
+      final refOffsets = refGeo.map(toOffset).toList();
       for (var i = 1; i < refOffsets.length; i++) {
         canvas.drawLine(
           refOffsets[i - 1],
@@ -3421,6 +3633,44 @@ class _TrackLinePainter extends CustomPainter {
     // 起终点标记：S 绿 / F 红，方便一眼确认发车与收车位置。
     _paintTrackEndpointBadge(canvas, offsets.first, _kGreen, 'S');
     _paintTrackEndpointBadge(canvas, offsets.last, _kRed, 'F');
+
+    canvas.restore();
+
+    // 速度图例（不随缩放变形，画在右下）。
+    if (showLegend && mode == TrackLineColorMode.speed) {
+      _paintSpeedLegend(canvas, size, minSpeed, maxSpeed);
+    }
+  }
+
+  /// 右下速度图例：白→红渐变条 + 最低/最高时速（km/h）。
+  void _paintSpeedLegend(Canvas canvas, Size size, double minSpeed, double maxSpeed) {
+    const barW = 120.0;
+    const barH = 6.0;
+    final left = size.width - barW - 12;
+    final top = size.height - 20;
+    final rect = Rect.fromLTWH(left, top, barW, barH);
+    final shader = const LinearGradient(
+      colors: [Colors.white54, Color(0xFFE10600)],
+    ).createShader(rect);
+    canvas.drawRect(rect, Paint()..shader = shader);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..color = Colors.white24
+        ..strokeWidth = 0.5,
+    );
+    final ts = const TextStyle(color: Colors.white70, fontSize: 9);
+    final minTp = TextPainter(
+      text: TextSpan(text: '${(minSpeed * 3.6).toStringAsFixed(0)}', style: ts),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final maxTp = TextPainter(
+      text: TextSpan(text: '${(maxSpeed * 3.6).toStringAsFixed(0)} km/h', style: ts),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    minTp.paint(canvas, Offset(left, top - 12));
+    maxTp.paint(canvas, Offset(left + barW - maxTp.width, top - 12));
   }
 
   @override
@@ -3451,11 +3701,21 @@ class _SatelliteTrackMap extends StatefulWidget {
   final int? referenceLapNumber;
   final bool showReferenceOverlay;
 
+  /// 赛道库赛道（TrackInfo）：卫星瓦片失败时优先回落到赛道库真实轮廓，
+  /// 而不是纯示意图形；为空时仍回落归一化示意图。
+  final TrackInfo? catalog;
+
+  /// 回落时改用单圈切片（有分析圈时），让走线与单圈轮廓对得上；
+  /// 为空则用 [slice]（整节轨迹）。
+  final _LapSlice? fallbackSlice;
+
   const _SatelliteTrackMap({
     required this.slice,
     this.referenceSlice,
     this.referenceLapNumber,
     this.showReferenceOverlay = true,
+    this.catalog,
+    this.fallbackSlice,
   });
 
   @override
@@ -3467,6 +3727,33 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
   final Set<String> _failedTileUrls = {};
 
   bool get _fallback => shouldFallbackToSchematic(_failedTileUrls.length);
+
+  /// 当前底图是否为 GCJ-02（仅高德国内卫星）。
+  bool get _useGcj => mapTileSourceStore.source.usesGcj;
+
+  /// 按地图源设置选瓦片：高德卫星（GCJ-02）/ 谷歌卫星（WGS-84）。
+  String _tileUrl(int z, int x, int y) => _useGcj
+      ? amapSatelliteTileUrl(z, x, y)
+      : satelliteTileUrlFor(MapTileSource.google, z, x, y);
+
+  @override
+  void initState() {
+    super.initState();
+    mapTileSourceStore.addListener(_onStoreChanged);
+    mapTileSourceStore.load();
+  }
+
+  @override
+  void dispose() {
+    mapTileSourceStore.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (!mounted) return;
+    // 切源后清空旧源的失败计数，避免误判回落。
+    setState(() => _failedTileUrls.clear());
+  }
 
   void _onTileError(String url) {
     if (_failedTileUrls.contains(url)) return;
@@ -3489,26 +3776,42 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
       );
     }
     if (_fallback) {
-      // 回落示意图：复用现有归一化走线图，不画假线。
-      // v1.3.4：回落时参考圈叠加同样保留（经 _TrackLineDiagram）。
+      // 回落顺序：有赛道库轮廓时优先用「赛道库真实轮廓 + 实测走线」
+      // （灰线为赛道库同一 TrackInfo.outline 数据源），否则退回归一化
+      // 示意图。两种情况都不画假线、不丢参考圈。
       final refSlice = widget.referenceSlice;
       final showRef =
           widget.showReferenceOverlay &&
           refSlice != null &&
           refSlice.points.length >= 2;
+      final outline = widget.catalog?.outline;
+      final hasOutline = outline != null && outline.length >= 3;
+      final fallbackSlice = hasOutline
+          ? (widget.fallbackSlice ?? widget.slice)
+          : widget.slice;
+      final fbPts = fallbackSlice.points;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _TrackLineDiagram(
-            slice: widget.slice,
-            deltaCurve: List<double>.filled(pts.length, 0),
+            slice: fallbackSlice,
+            deltaCurve: List<double>.filled(fbPts.length, 0),
             mode: TrackLineColorMode.speed,
             scrubIndex: 0,
             referenceSlice: showRef ? refSlice : null,
+            catalogOutline: hasOutline ? outline : null,
           ),
           const SizedBox(height: 6),
           Text(
-            tr.t('卫星图未加载，已显示示意图', 'Satellite tiles failed; showing schematic'),
+            hasOutline
+                ? tr.t(
+                    '卫星图未加载，已回落赛道库真实轮廓（灰线）+ 实测走线',
+                    'Satellite tiles failed; showing track-library outline (gray) + measured line',
+                  )
+                : tr.t(
+                    '卫星图未加载，已显示示意图',
+                    'Satellite tiles failed; showing schematic',
+                  ),
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ],
@@ -3518,9 +3821,13 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
     final minKmh = speedsKmh.reduce(math.min);
     final maxKmh = speedsKmh.reduce(math.max);
     final segments = speedLegendSegments(minKmh, maxKmh);
-    // 高德卫星瓦片是 GCJ-02：先把 WGS-84 轨迹转成 GCJ-02 再算范围与
-    // 投影，否则轨迹相对影像会偏数百米（Esri 是 WGS-84，可直接用）。
-    final geo = [for (final p in pts) wgsToGcjLocal(p.lat, p.lon)];
+    // 坐标口径随地图源：高德国内卫星是 GCJ-02，需先把 WGS-84 轨迹转成
+    // GCJ-02 再算范围与投影，否则轨迹相对影像偏数百米；谷歌卫星是
+    // WGS-84，直接用原始坐标。
+    final useGcj = _useGcj;
+    final geo = useGcj
+        ? [for (final p in pts) wgsToGcjLocal(p.lat, p.lon)]
+        : [for (final p in pts) (p.lat, p.lon)];
     final refPoints =
         (widget.showReferenceOverlay &&
             widget.referenceSlice != null &&
@@ -3529,7 +3836,9 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
         : null;
     final refGeo = refPoints == null
         ? null
-        : [for (final p in refPoints) wgsToGcjLocal(p.lat, p.lon)];
+        : useGcj
+            ? [for (final p in refPoints) wgsToGcjLocal(p.lat, p.lon)]
+            : [for (final p in refPoints) (p.lat, p.lon)];
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.isFinite
@@ -3549,8 +3858,8 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
           bounds: bounds,
           widthPx: width,
           heightPx: height,
-          // 高德卫星 z>17 多为旧图/空图，压到 17 以内保证有影像。
-          maxZoom: amapSatelliteMaxZoom,
+          // 高德卫星 z>17 多为旧图/空图，压到 17 以内；谷歌卫星可到 19。
+          maxZoom: useGcj ? amapSatelliteMaxZoom : googleTileMaxZoom,
         );
         final projector = AnalysisGeoProjector(
           bounds: bounds,
@@ -3583,13 +3892,15 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
                       Positioned.fromRect(
                         rect: projector.tileScreenRect(x, y),
                         child: Image.network(
-                          amapSatelliteTileUrl(zoom, x, y),
-                          key: ValueKey('analysis-amap-sat-$zoom-$x-$y'),
-                          headers: const {'User-Agent': 'DriveTrack/1.8.2'},
+                          _tileUrl(zoom, x, y),
+                          key: ValueKey(
+                            'analysis-sat-${mapTileSourceStore.source.name}-$zoom-$x-$y',
+                          ),
+                          headers: const {'User-Agent': 'DriveTrack/1.8.3'},
                           fit: BoxFit.fill,
                           gaplessPlayback: true,
                           errorBuilder: (_, _, _) {
-                            _onTileError(amapSatelliteTileUrl(zoom, x, y));
+                            _onTileError(_tileUrl(zoom, x, y));
                             return Container(color: const Color(0xFF0A0A0A));
                           },
                         ),
@@ -3646,9 +3957,10 @@ class _SatelliteTrackMapState extends State<_SatelliteTrackMap> {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
-              amapSatelliteAttribution,
-              style: TextStyle(color: Colors.white54, fontSize: 11),
+            // 署名随地图源：高德卫星 / 谷歌卫星，不冒充另一家。
+            Text(
+              useGcj ? amapSatelliteAttribution : '影像 © Google',
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
             ),
           ],
         );

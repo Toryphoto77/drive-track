@@ -17,10 +17,17 @@
 /// 不测计时判定本身（越线检测 / 半径法已由 track_timing_crossing_test
 /// 覆盖）、不测幽灵车门控（v134 已覆盖，本版不动）。
 
+import 'package:drive_track/amap_service.dart';
 import 'package:drive_track/recording_map_page.dart';
 import 'package:drive_track/track_timing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// 高德瓦片为 GCJ-02，赛道叠加层同样做转换；期望值一并转换后比对。
+GeoPoint _gcj(GeoPoint p) {
+  final (la, lo) = wgsToGcjLocal(p.lat, p.lon);
+  return GeoPoint(la, lo);
+}
 
 const _p1 = GeoPoint(31.3380, 121.2180);
 const _p2 = GeoPoint(31.3420, 121.2280);
@@ -280,10 +287,12 @@ void main() {
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      expect(painter.start!.lat, closeTo(_p1.lat, 1e-9));
-      expect(painter.start!.lon, closeTo(_p1.lon, 1e-9));
-      expect(painter.finish!.lat, closeTo(_p2.lat, 1e-9));
-      expect(painter.finish!.lon, closeTo(_p2.lon, 1e-9));
+      final g1 = _gcj(_p1);
+      final g2 = _gcj(_p2);
+      expect(painter.start!.lat, closeTo(g1.lat, 1e-9));
+      expect(painter.start!.lon, closeTo(g1.lon, 1e-9));
+      expect(painter.finish!.lat, closeTo(g2.lat, 1e-9));
+      expect(painter.finish!.lon, closeTo(g2.lon, 1e-9));
       expect(painter.sectorPoints.length, 1);
       expect(painter.trail.length, 2);
       expect(find.textContaining('第 1 圈 · 当前圈 00:05'), findsOneWidget);
@@ -305,10 +314,12 @@ void main() {
       await tester.pumpAndSettle();
       final painter = _overlayPainter(tester);
       expect(painter.centerline.length, 3);
-      expect(painter.start!.lat, closeTo(_p1.lat, 1e-9));
-      expect(painter.start!.lon, closeTo(_p1.lon, 1e-9));
-      expect(painter.finish!.lat, closeTo(_p2.lat, 1e-9));
-      expect(painter.finish!.lon, closeTo(_p2.lon, 1e-9));
+      final g1 = _gcj(_p1);
+      final g2 = _gcj(_p2);
+      expect(painter.start!.lat, closeTo(g1.lat, 1e-9));
+      expect(painter.start!.lon, closeTo(g1.lon, 1e-9));
+      expect(painter.finish!.lat, closeTo(g2.lat, 1e-9));
+      expect(painter.finish!.lon, closeTo(g2.lon, 1e-9));
       expect(painter.sectorPoints.length, 1);
       expect(find.textContaining('第 3 圈 · 当前圈 01:10'), findsOneWidget);
       expect(find.textContaining('等待通过起终点线'), findsNothing);

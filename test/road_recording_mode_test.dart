@@ -9,7 +9,7 @@ void main() {
     expect(surfaceUsesLapTiming(DriveSurface.custom), isFalse);
   });
 
-  testWidgets('自定义档显示跑山连续记录说明且不显示赛道选择器', (tester) async {
+  testWidgets('v1.8.3 首页不再提供自定义档，只剩街道/赛道且赛道档显示选择器', (tester) async {
     var surface = DriveSurface.street;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -23,11 +23,14 @@ void main() {
       ),
     ));
 
-    await tester.tap(find.text('自定义'));
+    // 首页第二个「自定义」入口已下线。
+    expect(find.text('自定义'), findsNothing);
+    expect(find.text('测试赛道选择器'), findsNothing);
+
+    await tester.tap(find.text('赛道'));
     await tester.pumpAndSettle();
 
-    expect(surface, DriveSurface.custom);
-    expect(find.text('跑山 / 道路连续记录 · 不生成单圈'), findsOneWidget);
-    expect(find.text('测试赛道选择器'), findsNothing);
+    expect(surface, DriveSurface.track);
+    expect(find.text('测试赛道选择器'), findsOneWidget);
   });
 }

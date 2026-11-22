@@ -8,6 +8,7 @@ import 'card_style.dart';
 import 'cloud_service.dart';
 import 'dt_page_route.dart';
 import 'glass_button.dart';
+import 'map_tile_source.dart';
 
 /// 设置页标准分组行：图标底色块 + 标题/副标题 + 右侧 chevron / 自定义控件。
 /// 抽成顶层函数，供本页分组与自包含的账号行复用，避免两套行样式。
@@ -113,6 +114,68 @@ class _AccountSettingsRowState extends State<AccountSettingsRow> {
             .push(DtPageRoute(builder: (_) => const AccountPage()));
         if (mounted) setState(() {});
       },
+    );
+  }
+}
+
+/// v1.8.3：地图源选择行（高德 / 谷歌）。
+///
+/// 国内默认高德（GCJ-02，瓦片可达）；谷歌仅在用户确认网络可达时使用。
+/// 写入 [mapTileSourceStore] 后各地图组件监听自动换源，无需重启。
+class MapSourceSettingsRow extends StatefulWidget {
+  const MapSourceSettingsRow({super.key});
+
+  @override
+  State<MapSourceSettingsRow> createState() => _MapSourceSettingsRowState();
+}
+
+class _MapSourceSettingsRowState extends State<MapSourceSettingsRow> {
+  @override
+  void initState() {
+    super.initState();
+    mapTileSourceStore.addListener(_onChanged);
+    mapTileSourceStore.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _onChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    mapTileSourceStore.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final current = mapTileSourceStore.source;
+    return settingsGroupRow(
+      context,
+      icon: Icons.map_outlined,
+      title: s.t('地图源', 'Map source'),
+      subtitle: current == MapTileSource.google
+          ? s.t('谷歌（需网络可达）', 'Google (network permitting)')
+          : s.t('高德（国内推荐）', 'AMap (China)'),
+      trailing: SegmentedButton<MapTileSource>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 11.5)),
+        ),
+        segments: [
+          ButtonSegment(value: MapTileSource.amap, label: Text(s.t('高德', 'AMap'))),
+          ButtonSegment(
+            value: MapTileSource.google,
+            label: Text(s.t('谷歌', 'Google')),
+          ),
+        ],
+        selected: {current},
+        onSelectionChanged: (v) => mapTileSourceStore.setSource(v.first),
+      ),
     );
   }
 }
@@ -329,6 +392,8 @@ class SettingsHomePage extends StatelessWidget {
         ),
         onTap: onOpenMapImport,
       ),
+      // v1.8.3：国内网络下地图源优先高德，谷歌为可选。
+      const MapSourceSettingsRow(),
     ];
 
     final lookRows = <Widget>[

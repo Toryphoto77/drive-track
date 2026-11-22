@@ -234,16 +234,20 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('默认卫星地图；测试环境瓦片失败达阈值后回落示意图',
+    testWidgets('默认卫星地图；测试环境瓦片失败达阈值后回落赛道库轮廓',
         (tester) async {
       await pumpPage(tester);
       // 默认卫星模式：卫星 chip 存在；瓦片加载失败达阈值后回落，
-      // 状态行写明回落原因，不白屏。
+      // 有赛道库轮廓时优先用真实轮廓（不再是“假图/示意”），状态行写明
+      // 回落原因，不白屏。
       expect(
         find.byKey(const ValueKey('analysis-map-satellite')),
         findsOneWidget,
       );
-      expect(find.text('卫星图未加载，已显示示意图'), findsOneWidget);
+      expect(
+        find.text('卫星图未加载，已回落赛道库真实轮廓（灰线）+ 实测走线'),
+        findsOneWidget,
+      );
       expect(find.text('暂无轨迹点，走线为空'), findsNothing);
     });
 
@@ -257,7 +261,10 @@ void main() {
         find.textContaining('走线按速度着色，仅作复盘示意，不用于计时判定'),
         findsOneWidget,
       );
-      expect(find.text('卫星图未加载，已显示示意图'), findsNothing);
+      expect(
+        find.text('卫星图未加载，已回落赛道库真实轮廓（灰线）+ 实测走线'),
+        findsNothing,
+      );
     });
 
     testWidgets('速度曲线区块隐藏开关隐藏卡片', (tester) async {

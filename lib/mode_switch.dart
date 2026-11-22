@@ -13,6 +13,10 @@ import 'checkered_flag.dart';
 /// 之前），与大方块的左右边距一致；街道为默认。
 /// 骑行模式下调用方不渲染本组件（赛道选择对骑行无意义）。
 ///
+/// v1.8.3：按用户要求，首页「自定义」入口下线，只保留街道 / 赛道
+/// 两段。[DriveSurface.custom] 仍保留枚举值供旧状态兼容，但不再
+/// 出现在切换控件里；自定义赛道的创建入口仍在赛道目录底部表里。
+///
 /// - 药丸开关：圆角胶囊分段控件，高 48，左“街道”右“赛道”，
 ///   滑块用 AnimatedAlign 做 200ms easeOutCubic 滑动，选中态主题色；
 ///   行程中禁用切换（[enabled]=false 时置灰且不触发回调）。
@@ -181,17 +185,15 @@ class _ModeSwitchState extends State<ModeSwitch>
         ),
         child: Stack(
           children: [
-            // 三段滑块：街道 / 自定义 / 赛道。
+            // 两段滑块：街道 / 赛道（v1.8.3 起首页不再提供「自定义」）。
             AnimatedAlign(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
-              alignment: switch (widget.surface) {
-                DriveSurface.street => Alignment.centerLeft,
-                DriveSurface.custom => Alignment.center,
-                DriveSurface.track => Alignment.centerRight,
-              },
+              alignment: widget.surface == DriveSurface.track
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
               child: FractionallySizedBox(
-                widthFactor: 1 / DriveSurface.values.length,
+                widthFactor: 1 / 2,
                 child: Container(
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.22),
@@ -203,7 +205,6 @@ class _ModeSwitchState extends State<ModeSwitch>
             ),
             Row(children: [
               segment(DriveSurface.street),
-              segment(DriveSurface.custom),
               segment(DriveSurface.track),
             ]),
           ],
@@ -267,14 +268,6 @@ class ModeSwitchSection extends StatelessWidget {
               child: Text(
                 '示意轮廓，非官方测绘',
                 style: TextStyle(color: Colors.white38, fontSize: 10),
-              ),
-            ),
-          if (surface == DriveSurface.custom)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text(
-                '跑山 / 道路连续记录 · 不生成单圈',
-                style: TextStyle(color: Colors.white60, fontSize: 12),
               ),
             ),
         ],
