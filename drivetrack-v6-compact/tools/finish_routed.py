@@ -79,6 +79,28 @@ def main():
         b.Add(v)
 
     # ---------------------------------------------------------------- deletions
+    # drop vias the autorouter left dangling (copper ends on one layer only);
+    # GND is skipped because its vias also tie into the plane
+    segs = [t for t in all_tracks if not isinstance(t, pcbnew.PCB_VIA)]
+
+    def touches(p, q, tol=MM(0.01)):
+        return abs(p.x - q.x) <= tol and abs(p.y - q.y) <= tol
+
+    dangling = []
+    for v in all_tracks:
+        if not isinstance(v, pcbnew.PCB_VIA) or v.GetNetname() == "GND":
+            continue
+        p = v.GetPosition()
+        layers = {t.GetLayer() for t in segs
+                  if t.GetNetname() == v.GetNetname()
+                  and (touches(t.GetStart(), p) or touches(t.GetEnd(), p))}
+        if len(layers) < 2:
+            dangling.append(v)
+    for v in dangling:
+        print("remove dangling via", v.GetNetname(),
+              pcbnew.ToMM(v.GetPosition().x), pcbnew.ToMM(v.GetPosition().y))
+        b.Remove(v)
+
     old_uart = [(28.424, -61.760, 28.424, -54.633),
                 (28.424, -61.760, 27.381, -61.760),
                 (27.381, -61.760, 27.366, -61.775),
