@@ -163,6 +163,31 @@ def main():
     add_via("USB_DM", 45.000, -5.000)
     add_track("USB_DM", pcbnew.F_Cu, [(45.000, -5.000), (45.000, -7.500)], 0.25)
 
+    # ---------------------------------------------------------------- GNSS
+    # ANT1's pin is a through-hole pad (layers "*.Cu"), and build_v6_pcb_real
+    # only injected nets into pads that literally list "F.Cu", so the patch
+    # feed pin came out unconnected.  Restore the net, then run the feed on
+    # B.Cu (under the ground plane) with a single via at the module end.
+    gps_rf = b.FindNet("GPS_RF")
+    assert gps_rf is not None, "GPS_RF"
+    for fp in b.GetFootprints():
+        if fp.GetReference() != "ANT1":
+            continue
+        for pad in fp.Pads():
+            if pad.GetNumber() == "1":
+                pad.SetNet(gps_rf)
+    add_track("GPS_RF", pcbnew.B_Cu,
+              [(13.500, -10.500), (13.500, -38.000), (7.600, -42.000)], 0.25)
+    add_via("GPS_RF", 7.600, -42.000)
+    add_track("GPS_RF", pcbnew.F_Cu, [(7.600, -42.000), (7.600, -40.000)], 0.25)
+    # -42.0 instead of -41.2: the In2 IMU_INT3 run passes through (7.6,-41.16)
+
+    # Note: the autorouter left six sensor/UART branches on In1 across the
+    # patch.  They cannot be moved to B.Cu without cutting the only corridor
+    # into U2 pin 11, and In2 is already crowded, so they stay put for this
+    # test board.  F.Cu under the patch (the patch's reference plane) is kept
+    # solid by the keepout below; next rev should rotate/relocate ANT1.
+
     # ---------------------------------------------------------------- GND pour
     # the autoroute step placed its zones at y = +0.6..+61.4 while the board
     # lives at y = -62.05..0.05, so rebuild them across the real board outline
@@ -190,6 +215,24 @@ def main():
         for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
             poly.Append(int(x), int(y))
         b.Add(z)
+
+    # lock the top ground under the patch: no tracks or vias on F.Cu, but
+    # keep the GND pour (the patch needs a solid reference plane)
+    ko = pcbnew.ZONE(b)
+    ko.SetIsRuleArea(True)
+    ko.SetDoNotAllowCopperPour(False)
+    ko.SetDoNotAllowVias(True)
+    ko.SetDoNotAllowTracks(True)
+    ko.SetDoNotAllowPads(False)
+    ko.SetDoNotAllowFootprints(False)
+    ls = pcbnew.LSET()
+    ls.AddLayer(pcbnew.F_Cu)
+    ko.SetLayerSet(ls)
+    kpoly = ko.Outline()
+    kpoly.NewOutline()
+    for x, y in ((1.0, -25.5), (26.0, -25.5), (26.0, -0.5), (1.0, -0.5)):
+        kpoly.Append(MM(x), MM(y))
+    b.Add(ko)
 
     # U5's GND pad only gets one thermal spoke at this density -> solid it
     for fp in b.GetFootprints():

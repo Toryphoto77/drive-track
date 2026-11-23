@@ -54,8 +54,8 @@
 ## 关键布局规则
 
 1. 四层板：Sig / GND / PWR / Sig，GND 完整，缝合孔 3–5 mm。
-2. GNSS 馈线 patch → NEO RF_IN 直连，不换层、不上过孔，两侧地过孔护栏。
-3. 天线正下方 25×25 内禁止任何走线、过孔、铜箔割缝和螺钉。
+2. GNSS 馈线 patch → NEO RF_IN 直连，不换层、不上过孔，两侧地过孔护栏。（测试版实际：受布局限制改为 B.Cu 走线 + 1 个过孔，长约 33 mm，未做 50Ω 控阻抗）
+3. 天线正下方 25×25 内禁止任何走线、过孔、铜箔割缝和螺钉。（测试版实际：F.Cu 已用 rule area 锁死；In1 仍有 6 条自动布线信号线斜穿投影区，留待下一版）
 4. BMI088 四周开隔离槽，下方无电芯、无连接器；SPI 走线短且不跨分割。
 5. BMP390 距 BQ24074 / TPS63802 / L1 ≥ 8 mm，靠近左壁透气孔，局部挖铜隔热。
 6. VBUS / BAT / 3V3 主干 0.5–1.0 mm；充电热回路面积最小化。
@@ -96,20 +96,21 @@
 - 网表 / BOM / 布局：`netlist-v6.csv`、`nets-v6.csv`、`bom-v6.csv`、`placement.csv`，由 `tools/v6_design.py` 单一数据源生成。
 - 电气板：`DriveTrack-PCB-V6/drivetrack-pcb-v6-electrical.kicad_pcb`，75 个真实封装、50 个网络、311 个设计引脚全部落焊盘并赋网络。
 - **已布线板**：`DriveTrack-PCB-V6/drivetrack-pcb-v6-routed.kicad_pcb`
-  - 1053 段走线 / 130 个过孔 / 75 个封装 / 50 个网络。
-  - 四层 GND 铺铜：F.Cu 3048 mm²、In1.Cu 2078 mm²、In2.Cu 2894 mm²、B.Cu 3439 mm²。板边内缩 0.6 mm，热焊盘连接，U5 的 GND 焊盘为实心。
-  - DRC（`kicad-cli pcb drc`）：**0 error / 0 unconnected**；316 条 warning（丝印压焊盘 131、lib_footprint 72、丝印重叠 53、text_height 53、丝印贴边 4、悬空过孔 3）。
+  - 1056 段走线 / 128 个过孔 / 75 个封装 / 50 个网络。
+  - 四层 GND 铺铜：F.Cu 3049 mm²、In1.Cu 2080 mm²、In2.Cu 2896 mm²、B.Cu 3417 mm²。板边内缩 0.6 mm，热焊盘连接，U5 的 GND 焊盘为实心。
+  - DRC（`kicad-cli pcb drc`）：**0 error / 0 unconnected**；313 条 warning（丝印压焊盘 131、lib_footprint 72、丝印重叠 53、text_height 53、丝印贴边 4）。
   - 规则：Default netclass clearance 0.15 mm、走线 0.25 mm、过孔 0.6/0.3 mm；板边/孔壁 0.2 mm。
   - J2 mid-mount 焊盘贴边：由 `drivetrack-pcb-v6-routed.kicad_dru` 中 `A.Parent == 'J2'` 的 edge_clearance 豁免解决。
-  - 已知取舍：B.Cu 被 USB_DM 的 D3→U1 长斜线切成两块（x≈33→45）；USB 差分未等长、GNSS 馈线未做 50Ω 控阻抗；板上无 keepout/rule area（ESP32 模块为外置天线型号）。
+  - GNSS：修复 ANT1 馈电脚无网络的生成 bug；馈线 ANT1 → B.Cu → 单过孔 → F.Cu → U2 pin 11，宽 0.25 mm，长约 33 mm；天线投影区加 F.Cu rule area（禁走线/过孔、允许铺铜/焊盘）。In1 仍有 6 条信号线斜穿投影区，测试版保留，见文末。
+  - 已知取舍：B.Cu 被 USB_DM 的 D3→U1 长斜线切成两块（x≈33→45）；USB 差分未等长、GNSS 馈线未做 50Ω 控阻抗。
 - 制造文件：`DriveTrack-PCB-V6/fabrication/`（11 层 Gerber + Excellon PTH/NPTH + 钻孔报告），基于已铺铜的 routed 板。
 - 预览：`DriveTrack-PCB-V6/previews/`，`placement-v6.png/.svg`（布局）+ `routed-F_Cu/B_Cu/In1_Cu/In2_Cu.png/.svg`（含铺铜各层）+ `routed-3d-top/bottom/iso.png`。
 
 ## 下一步
 
 1. **ERC**：本地打开工程跑 KiCad ERC，确认无未驱动/多驱动；沙箱只跑了 DRC。
-2. **打样前自查 Gerber**：重点看 USB-C 贴边、板框圆角、NPTH 4×Ø2.2、PTH 130×Ø0.3。
+2. **打样前自查 Gerber**：重点看 USB-C 贴边、板框圆角、NPTH 4×Ø2.2、PTH 128×Ø0.3。
 3. **测试版首件**：先贴电源链 + ESP32 + GNSS，实测充电、待机 45µA、唤醒/关机时序、GNSS TTFF。
-4. **量产前整改**：去耦就近重摆；USB 差分等长；GNSS 馈线 50Ω CPWG；B.Cu 分割问题。
+4. **量产前整改**：去耦就近重摆；USB 差分等长；旋转/移动 ANT1 缩短馈线并按实际叠层做 50Ω CPWG；把 In1 清为完整地；B.Cu 分割问题。
 5. 补 `fp-lib-table`（如需要“Update from library”），当前封装已内嵌在 PCB 文件中，可直接打开。
 6. 外壳 v10 已生成（68.6×68.6×21.0），材料定为 MJF PA12（黑色染色），制造与验收按 `enclosure-v10/notes-v10.md`（板坐标 MH3 21.5,59 / 壳坐标 24.8,62.3）。

@@ -13,9 +13,9 @@ PCB V6 rev 6.1（KiCad 9：原理图 + 真实封装 PCB）+ 外壳 v10（MJF PA1
 | --- | --- |
 | 原理图 rev 6.1：BQ24074 + TPS63802 + TPS7A2033/0230 + 软锁存 + LIS2DW12 | ERC（沙箱已能跑 DRC，但 ERC 未跑） |
 | 75 个器件的引脚级网表（50 个网络，311 个设计引脚） | 去耦电容按引脚就近重摆（当前仍是自动聚类 + 自动布线） |
-| PCB 上 75 个真实封装、311 个引脚全部有焊盘并赋网络 | 阻抗 / 等长 / 电源载流复核（USB 差分未做等长，GNSS 馈线未做 50Ω） |
-| **布线：1053 段走线 / 130 个过孔；DRC 0 error / 0 unconnected** | 首件打样与实测 |
-| **铺铜：F / In1 / In2 / B 四层 GND 铺铜（3048 / 2078 / 2894 / 3439 mm²）** | 丝印与 DRC warning 清理（316 条 warning，见下） |
+| PCB 上 75 个真实封装、311 个引脚全部有焊盘并赋网络 | 阻抗 / 等长 / 电源载流复核（USB 差分未等长，GNSS 馈线未做控阻抗） |
+| **布线：1056 段走线 / 128 个过孔；DRC 0 error / 0 unconnected** | 首件打样与实测 |
+| **铺铜：F / In1 / In2 / B 四层 GND 铺铜（3049 / 2080 / 2896 / 3417 mm²）** | 丝印与 DRC warning 清理（313 条 warning，见下） |
 | 62 × 62 板框、4 × M2 孔位、分区禁布 | |
 | 制造文件：Gerber（11 层）+ Excellon 钻孔 + 钻孔报告，见 `pcb-v6/fabrication/` | |
 | 与外壳 v10 的装配关系（含螺钉柱、USB 开口、灯窗、通气孔） | |
@@ -33,13 +33,18 @@ PCB 自检结果：
 
 布线与 DRC 结果（KiCad 9.0.9 `kicad-cli pcb drc`）：
 
-- `unconnected_items` = **0**，`error` = **0**；warning 316 条，均为可忽略类：`silk_over_copper` 131、`lib_footprint_issues` 72、`silk_overlap` 53、`text_height` 53、`silk_edge_clearance` 4、`via_dangling` 3。
+- `unconnected_items` = **0**，`error` = **0**；warning 313 条，均为可忽略类：`silk_over_copper` 131、`lib_footprint_issues` 72、`silk_overlap` 53、`text_height` 53、`silk_edge_clearance` 4。
 - 布线规则：Default netclass clearance **0.15 mm**、走线 0.25 mm、过孔 0.6/0.3 mm；板边与孔壁间距 0.2 mm。
 - J2（USB-C mid-mount）A 排焊盘按结构设计贴板边，用同目录 `.kicad_dru` 对 `A.Parent == 'J2'` 豁免 edge_clearance，其余对象仍按 0.2 mm 检查。
 - U5 的 GND 焊盘改为实心连接（热焊盘辐条不足，会报 starved_thermal）。
 - **B.Cu 被 USB_DM 的 D3→U1 长斜线切成两块**（x≈33→45）；测试板可接受，量产建议改到 In1/In2 重排。
-- 自动布线遗留 3 个 dangling via（GND / SW_L1 / SW_L2 / USB_CC2 相关），电气无影响，可在 KiCad 里一键删除。
-- 板上没有画 rule area / keepout；ESP32-S3-MINI-1U 为外置天线型号，天线净空由模块本体保证。
+- 自动布线遗留的 3 个悬空过孔（SW_L1 / SW_L2 / USB_CC2）已删除。
+- **GNSS**：
+  - 修复了 ANT1 馈电脚没有网络的 bug（该脚是通孔 `*.Cu` 焊盘，生成脚本原来只给显式写 `F.Cu` 的焊盘赋网络）。
+  - 馈线已布通：ANT1 引脚 → B.Cu（从地平面下方走）→ 单过孔 → F.Cu 进 U2 的 RF_IN（pin 11），线宽 0.25 mm，无残桩。全长约 33 mm，**未做 50Ω 控阻抗**（缺叠层参数）。
+  - 天线投影区加了 F.Cu rule area：禁止走线/过孔、允许铺铜和焊盘，保证顶层参考地完整。
+  - 已知取舍：In1 上仍有 6 条传感器/UART 走线斜穿天线投影区（自动布线结果）。若把它们移到 B.Cu，唯一的入 pad11 通道会被切断；测试版保留，下一版应旋转/移动 ANT1 或重排模块。
+  - ESP32-S3-MINI-1U 为外置天线型号，板上未再单独画 2.4G keepout。
 
 ---
 
@@ -64,7 +69,7 @@ DriveTrack-V6-package/
 │   │   ├── *-F_Cu/B_Cu/In1_Cu/In2_Cu.gbr       四层铜
 │   │   ├── *-F/B_Paste, F/B_Silkscreen, F/B_Mask, Edge_Cuts.gbr
 │   │   ├── *-PTH.drl / *-NPTH.drl / *-drl_map.gbr / *-job.gbrjob
-│   │   └── drill-report.txt      钻孔统计（PTH 135 / NPTH 6）
+│   │   └── drill-report.txt      钻孔统计（PTH 133 / NPTH 6）
 │   └── previews/                 布局图 + 每层铜箔 + 3D
 │       ├── placement-v6.png/.svg        布局图
 │       ├── routed-F_Cu/B_Cu/In1_Cu/In2_Cu.png/.svg   含铺铜的各层图
@@ -137,8 +142,8 @@ VSYS → TPS7A0230（3.0V / 25nA 常开）→ V_AON → LIS2DW12 + NEO-M9N V_BCK
 
 | 区域 | 器件 | 要点 |
 | --- | --- | --- |
-| GNSS 天线 | ANT1 25×25（13.5,13） | 正下方完整地，禁走线/过孔/螺钉，板边 ≥2 mm |
-| GNSS 模块 | U2 NEO-M9N（13.5,34，−90°） | 馈线 <10 mm，50Ω CPWG，直连不去 R8 |
+| GNSS 天线 | ANT1 25×25（13.5,13） | 正下方 F.Cu 完整地并加 rule area；禁走线/过孔/螺钉，板边 ≥2 mm |
+| GNSS 模块 | U2 NEO-M9N（13.5,34，−90°） | 馈线实际 33 mm（受布局限制），B.Cu 走线 + 单过孔，未做 50Ω 控阻抗 |
 | 传感器 | U3 BMI088（7.5,50）、U4 BMP390（3.5,45） | 左侧无电池区；BMP 贴西壁通气孔，距电源 ≥8 mm |
 | 主控 / RF | U1 ESP32-S3-MINI-1U（45,14.5）、LED1（56,8） | courtyard 含天线端净空 Y 6.4–27.6 |
 | 接口 | J2 USB-C（31,58）、D1–D3 ESD（26.5/29/31.5,51） | ESD 距连接器 ≤3 mm；USB 本体伸出南边 1.9 mm |
@@ -231,9 +236,9 @@ cd enclosure-v10 && python enclosure_v10.py
 ## 九、投产前还必须做的（按顺序）
 
 1. **ERC**：本地打开工程跑 KiCad ERC，确认无未驱动/多驱动；沙箱只跑了 DRC。
-2. **打样前自查 Gerber**：用板厂或 KiCad Gerber Viewer 过一遍 `pcb-v6/fabrication/`，重点看 USB-C 贴边、板框圆角、NPTH 4×Ø2.2、PTH 130×Ø0.3。
+2. **打样前自查 Gerber**：用板厂或 KiCad Gerber Viewer 过一遍 `pcb-v6/fabrication/`，重点看 USB-C 贴边、板框圆角、NPTH 4×Ø2.2、PTH 128×Ø0.3。
 3. **去耦与电源优化**：当前为自动布线结果，C7/C13/C16/C17/C21/C23 等去耦仍在自动聚类位置；3V3/VLOAD 主干 0.25–0.5 mm。测试版可接受，量产建议手工重排电源与去耦。
-4. **高速/射频**：USB 差分未等长（<5 mm 量级）、GNSS 馈线未做 50Ω CPWG 控制阻抗；若 GNSS 定位性能不达标，下一版需手工整改这两处。
+4. **高速/射频**：USB 差分未等长（<5 mm 量级）；GNSS 馈线已连通但长 33 mm、未做 50Ω 控阻抗，且 In1 有 6 条信号线斜穿天线投影区。首件先实测 GNSS 冷启动 TTFF 与 C/N0；若明显偏低，下一版优先做：旋转/移动 ANT1 让馈电脚朝向模块、缩短馈线、按实际叠层把馈线做成 50Ω CPWG、把 In1 清空为完整地。USB 差分等长同样留到量产版。
 5. **首件打样**：先只贴电源链 + ESP32 + GNSS，实测充电、待机 45µA、唤醒与关机（含“关中断再释放 HOLD”时序）、GNSS 冷启动 TTFF。
 6. **结构首件**：MJF 打样 v10 底座 + 盖板（黑色 PA12），实测 USB 座高度、电池出线、密封圈压缩量、MH3 新孔位。
 7. **App 侧 OTA 流程改造**（见第六节）。
