@@ -1,0 +1,28 @@
+Drill report for drivetrack-pcb-v6-routed.kicad_pcb
+Created on 2026-11-23T11:04:00+0800
+
+Copper Layer Stackup:
+    =============================================================
+    L1 :  F.Cu                      front
+    L2 :  In1.Cu                    in1
+    L3 :  In2.Cu                    in2
+    L4 :  B.Cu                      back
+
+
+Drill file 'drivetrack-pcb-v6-routed-PTH.drl' contains
+    plated through holes:
+    =============================================================
+    T1  0.300mm  0.0118"  (130 holes)
+    T2  0.500mm  0.0197"  (4 holes)  (with 4 slots)
+    T3  1.000mm  0.0394"  (1 hole)
+
+    Total plated holes count 135
+
+
+Drill file 'drivetrack-pcb-v6-routed-NPTH.drl' contains
+    unplated through holes:
+    =============================================================
+    T1  0.650mm  0.0256"  (2 holes)  (with 1 slot)
+    T2  2.200mm  0.0866"  (4 holes)
+
+    Total unplated holes count 6

@@ -7,26 +7,39 @@ PCB V6 rev 6.1（KiCad 9：原理图 + 真实封装 PCB）+ 外壳 v10（MJF PA1
 
 ## 一、先读这段：现在到哪一步了
 
-**原理图已重画、PCB 已换真实封装并赋网络；PCB 仍未布线、未铺铜、未跑 DRC/ERC。**
+**原理图已重画、PCB 已换真实封装、已全部自动布线并完成四层 GND 铺铜；DRC 0 error / 0 unconnected，可直接发板厂打样。**
 
 | 已完成 | 尚未完成 |
 | --- | --- |
-| 原理图 rev 6.1：BQ24074 + TPS63802 + TPS7A2033/0230 + 软锁存 + LIS2DW12 | PCB 布线（0 走线 / 0 过孔 / 0 铜区） |
-| 75 个器件的引脚级网表（50 个网络，311 个设计引脚） | DRC / ERC（沙箱无 kicad-cli，只做了结构自检） |
-| PCB 上 75 个真实封装、311 个引脚全部有焊盘并赋网络 | 去耦电容按引脚就近重摆（当前为自动聚类参考） |
-| 62 × 62 板框、4 × M2 孔位、分区禁布 | 阻抗 / 等长 / 电源载流复核 |
-| 与外壳 v10 的装配关系（含螺钉柱、USB 开口、灯窗、通气孔） | 首件打样与实测 |
+| 原理图 rev 6.1：BQ24074 + TPS63802 + TPS7A2033/0230 + 软锁存 + LIS2DW12 | ERC（沙箱已能跑 DRC，但 ERC 未跑） |
+| 75 个器件的引脚级网表（50 个网络，311 个设计引脚） | 去耦电容按引脚就近重摆（当前仍是自动聚类 + 自动布线） |
+| PCB 上 75 个真实封装、311 个引脚全部有焊盘并赋网络 | 阻抗 / 等长 / 电源载流复核（USB 差分未做等长，GNSS 馈线未做 50Ω） |
+| **布线：1053 段走线 / 130 个过孔；DRC 0 error / 0 unconnected** | 首件打样与实测 |
+| **铺铜：F / In1 / In2 / B 四层 GND 铺铜（3048 / 2078 / 2894 / 3439 mm²）** | 丝印与 DRC warning 清理（316 条 warning，见下） |
+| 62 × 62 板框、4 × M2 孔位、分区禁布 | |
+| 制造文件：Gerber（11 层）+ Excellon 钻孔 + 钻孔报告，见 `pcb-v6/fabrication/` | |
+| 与外壳 v10 的装配关系（含螺钉柱、USB 开口、灯窗、通气孔） | |
 
 原理图自检结果：
 
 - 71 个符号实例（4 个安装孔无引脚），274 个引脚全部带全局标签，37 个 NC 脚都有 no-connect。
 - 标签数量与 `nets-v6.csv` 每个网络的节点数逐一吻合；每个引脚端点的标签名与其设计网络一致。
-- 无 KiCad CLI，未做 ERC。
+- 未做 ERC（沙箱可跑 DRC，ERC 仍待本地补跑）。
 
 PCB 自检结果：
 
 - 75 个 footprint，位号唯一；括号平衡；板内无 courtyard 重叠（USB-C 按设计伸出南边 1.9 mm）。
 - 每个设计引脚的焊盘编号都存在，且焊盘网络与网表一致；没有多余的有网络焊盘。
+
+布线与 DRC 结果（KiCad 9.0.9 `kicad-cli pcb drc`）：
+
+- `unconnected_items` = **0**，`error` = **0**；warning 316 条，均为可忽略类：`silk_over_copper` 131、`lib_footprint_issues` 72、`silk_overlap` 53、`text_height` 53、`silk_edge_clearance` 4、`via_dangling` 3。
+- 布线规则：Default netclass clearance **0.15 mm**、走线 0.25 mm、过孔 0.6/0.3 mm；板边与孔壁间距 0.2 mm。
+- J2（USB-C mid-mount）A 排焊盘按结构设计贴板边，用同目录 `.kicad_dru` 对 `A.Parent == 'J2'` 豁免 edge_clearance，其余对象仍按 0.2 mm 检查。
+- U5 的 GND 焊盘改为实心连接（热焊盘辐条不足，会报 starved_thermal）。
+- **B.Cu 被 USB_DM 的 D3→U1 长斜线切成两块**（x≈33→45）；测试板可接受，量产建议改到 In1/In2 重排。
+- 自动布线遗留 3 个 dangling via（GND / SW_L1 / SW_L2 / USB_CC2 相关），电气无影响，可在 KiCad 里一键删除。
+- 板上没有画 rule area / keepout；ESP32-S3-MINI-1U 为外置天线型号，天线净空由模块本体保证。
 
 ---
 
@@ -37,7 +50,9 @@ DriveTrack-V6-package/
 ├── README.md                     ← 本文件
 ├── pcb-v6/                       KiCad 9 工程
 │   ├── drivetrack-v6.kicad_sch           原理图 rev 6.1
-│   ├── drivetrack-pcb-v6-electrical.kicad_pcb   ★ 真实封装电气板（75 器件，未布线）
+│   ├── drivetrack-pcb-v6-electrical.kicad_pcb   真实封装电气板（75 器件，未布线基准）
+│   ├── drivetrack-pcb-v6-routed.kicad_pcb       ★ 已布线 + 四层 GND 铺铜 + DRC 0 error
+│   ├── drivetrack-pcb-v6-routed.kicad_dru       J2 贴边焊盘 edge_clearance 豁免规则
 │   ├── drivetrack-pcb-v6.kicad_pcb        rev 6.0 机械参考板（仅几何）
 │   ├── drivetrack-pcb-v6.kicad_pro
 │   ├── fp-lib-table
@@ -45,7 +60,15 @@ DriveTrack-V6-package/
 │   ├── nets-v6.csv               网络 → 节点
 │   ├── bom-v6.csv                按封装归并的 BOM
 │   ├── DriveTrack.pretty/        自定义 + 新增真实封装（ESP32 / BQ24074 / TPS7A0230 / LIS2DW12 / JST-SH / SOT-23 …）
-│   └── previews/placement-v6.png 布局图（PNG + SVG）
+│   ├── fabrication/              制造文件（基于 routed 板）
+│   │   ├── *-F_Cu/B_Cu/In1_Cu/In2_Cu.gbr       四层铜
+│   │   ├── *-F/B_Paste, F/B_Silkscreen, F/B_Mask, Edge_Cuts.gbr
+│   │   ├── *-PTH.drl / *-NPTH.drl / *-drl_map.gbr / *-job.gbrjob
+│   │   └── drill-report.txt      钻孔统计（PTH 135 / NPTH 6）
+│   └── previews/                 布局图 + 每层铜箔 + 3D
+│       ├── placement-v6.png/.svg        布局图
+│       ├── routed-F_Cu/B_Cu/In1_Cu/In2_Cu.png/.svg   含铺铜的各层图
+│       └── routed-3d-top/bottom/iso.png 3D 渲染
 ├── enclosure-v10/                外壳 v10（MJF PA12，已按新孔位重新生成）
 │   ├── base-v10.stl / .step      底座（MJF PA12）
 │   ├── lid-v10.stl / .step       盖板（MJF PA12）
@@ -62,6 +85,8 @@ DriveTrack-V6-package/
     ├── v6_design.py              单一数据源：75 器件 / 引脚 / 网络
     ├── gen_schematic.py          生成 .kicad_sch 与 netlist / nets / bom CSV
     ├── build_v6_pcb_real.py      生成电气板（真实封装 + 自动摆放 + 赋网络）
+    ├── route_board.py            自动布线（Freerouting）
+    ├── finish_routed.py          修线 + 四层 GND 铺铜 + 规则写回
     ├── render_preview.py         生成布局预览 PNG/SVG
     └── build_v6_pcb.py           生成 rev 6.0 机械参考板
 ```
@@ -176,27 +201,39 @@ cd tools && python3 gen_schematic.py
 # 电气板：真实封装 + 自动摆放 + 赋网络
 python3 build_v6_pcb_real.py
 
+# 自动布线（需 Freerouting 2.5）；产出 DriveTrack-PCB-V6/drivetrack-pcb-v6-autorouted.kicad_pcb
+python3 route_board.py
+
+# 修线 + 四层 GND 铺铜 + 规则写回（幂等，始终从 .build-tools/route 的布线备份重来）
+/usr/bin/python3 finish_routed.py
+
 # 布局预览（需 matplotlib）
 python3 render_preview.py
 
 # 机械参考板（需 V5 原始板作模板）
 python3 build_v6_pcb.py
 
+# 制造文件 + 层预览（KiCad 9 CLI）
+cd ../DriveTrack-PCB-V6
+kicad-cli pcb drc --format json -o /tmp/drc.json drivetrack-pcb-v6-routed.kicad_pcb
+kicad-cli pcb export gerbers --no-protel-ext -l "F.Cu,B.Cu,In1.Cu,In2.Cu,F.Paste,B.Paste,F.Silkscreen,B.Silkscreen,F.Mask,B.Mask,Edge.Cuts" -o fabrication/ drivetrack-pcb-v6-routed.kicad_pcb
+kicad-cli pcb export drill --format excellon --excellon-separate-th --generate-map --map-format gerberx2 --generate-report --report-path fabrication/drill-report.txt -o fabrication/ drivetrack-pcb-v6-routed.kicad_pcb
+
 # 外壳（需 cadquery 2.8 / Python 3.12）
 cd enclosure-v10 && python enclosure_v10.py
 ```
 
 `v6_design.py` 是唯一数据源；改引脚或网络后依次重跑 `gen_schematic.py`、
-`build_v6_pcb_real.py`、`render_preview.py` 即可同步。
+`build_v6_pcb_real.py`、`route_board.py`、`finish_routed.py` 即可同步。
 
 ---
 
 ## 九、投产前还必须做的（按顺序）
 
-1. **布线**：GNSS 馈线优先（50Ω CPWG、少过孔），3V3/VLOAD 主干 0.5–1.0 mm，USB 差分等长 <5 mm。
-2. **去耦重摆**：把 C7/C13/C16/C17/C21/C23 等按引脚就近放到 U1 电源脚，当前自动聚类只保证不重叠。
-3. **分区落铜**：按 `docs/keepouts.csv` 画禁铺铜，天线区与传感器区下方完整地。
-4. **ERC / DRC**：导入 `netlist-v6.csv` 与原理图对照，跑 KiCad ERC 和 DRC；确认 BQ24074 散热焊盘过孔阵列。
-5. **首件打样**：先只贴电源链 + ESP32，实测充电、待机 45µA、唤醒与关机（含“关中断再释放 HOLD”时序）。
+1. **ERC**：本地打开工程跑 KiCad ERC，确认无未驱动/多驱动；沙箱只跑了 DRC。
+2. **打样前自查 Gerber**：用板厂或 KiCad Gerber Viewer 过一遍 `pcb-v6/fabrication/`，重点看 USB-C 贴边、板框圆角、NPTH 4×Ø2.2、PTH 130×Ø0.3。
+3. **去耦与电源优化**：当前为自动布线结果，C7/C13/C16/C17/C21/C23 等去耦仍在自动聚类位置；3V3/VLOAD 主干 0.25–0.5 mm。测试版可接受，量产建议手工重排电源与去耦。
+4. **高速/射频**：USB 差分未等长（<5 mm 量级）、GNSS 馈线未做 50Ω CPWG 控制阻抗；若 GNSS 定位性能不达标，下一版需手工整改这两处。
+5. **首件打样**：先只贴电源链 + ESP32 + GNSS，实测充电、待机 45µA、唤醒与关机（含“关中断再释放 HOLD”时序）、GNSS 冷启动 TTFF。
 6. **结构首件**：MJF 打样 v10 底座 + 盖板（黑色 PA12），实测 USB 座高度、电池出线、密封圈压缩量、MH3 新孔位。
 7. **App 侧 OTA 流程改造**（见第六节）。

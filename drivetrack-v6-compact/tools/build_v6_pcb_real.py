@@ -247,7 +247,8 @@ def to_board(mod: str, ref: str, value: str, fp_lib: str, x: float, y: float, ro
     keep = []
     for k in kids:
         h = head(k)
-        if h in ("version", "generator", "model", "layer"):
+        if h in ("version", "generator", "model", "layer",
+                 "duplicate_pad_numbers_are_jumpers"):
             continue
         if h == "fp_text":
             m = re.search(r'\(fp_text (\w+) "([^"]*)"', k)
@@ -262,6 +263,11 @@ def to_board(mod: str, ref: str, value: str, fp_lib: str, x: float, y: float, ro
             elif m and m.group(1) == "Value":
                 k = k.replace(f'"{m.group(2)}"', f'"{value}"', 1)
         elif h == "pad":
+            num = re.match(r'\(pad "([^"]*)"', k).group(1)
+            if ref == "U8" and num == "5":
+                # the official X2SON-4 mod carries a centre pad the real
+                # TPS7A0230 (DQN, no exposed pad) does not have
+                continue
             k = inject(k, ref)
         keep.append(k)
     # ensure reference/value exist (simple passives do)
@@ -445,7 +451,8 @@ def main():
             out_kids = []
             for k in kids:
                 h = head(k)
-                if h in ("model", "layer", "uuid", "at", "tstamp"):
+                if h in ("model", "layer", "uuid", "at", "tstamp",
+                         "duplicate_pad_numbers_are_jumpers"):
                     continue
                 if h == "property":
                     m = re.search(r'\(property "(\w+)" "([^"]*)"', k)

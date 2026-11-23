@@ -90,18 +90,26 @@
 6. BQ24074 / TPS63802 与电芯之间在结构上留 ≥2 mm 间隙，避免充电发热烤电芯。
 7. 四颗 M2 螺钉位于密封圈内侧，需用带 O 圈的螺钉或点胶，否则是进水通道。
 
-## 当前状态（rev 6.1）
+## 当前状态（rev 6.1，已布线铺铜）
 
 - 原理图：`DriveTrack-PCB-V6/drivetrack-v6.kicad_sch`，71 个符号（4 个安装孔无引脚）、274 个引脚全部带全局标签、37 个 NC 脚全部有 no-connect。
 - 网表 / BOM / 布局：`netlist-v6.csv`、`nets-v6.csv`、`bom-v6.csv`、`placement.csv`，由 `tools/v6_design.py` 单一数据源生成。
-- PCB：`DriveTrack-PCB-V6/drivetrack-pcb-v6-electrical.kicad_pcb`，75 个真实封装、50 个网络、311 个设计引脚全部落焊盘并赋网络；**未布线、未铺铜、未跑 DRC/ERC**。
-- 预览：`DriveTrack-PCB-V6/previews/placement-v6.png/.svg`。
+- 电气板：`DriveTrack-PCB-V6/drivetrack-pcb-v6-electrical.kicad_pcb`，75 个真实封装、50 个网络、311 个设计引脚全部落焊盘并赋网络。
+- **已布线板**：`DriveTrack-PCB-V6/drivetrack-pcb-v6-routed.kicad_pcb`
+  - 1053 段走线 / 130 个过孔 / 75 个封装 / 50 个网络。
+  - 四层 GND 铺铜：F.Cu 3048 mm²、In1.Cu 2078 mm²、In2.Cu 2894 mm²、B.Cu 3439 mm²。板边内缩 0.6 mm，热焊盘连接，U5 的 GND 焊盘为实心。
+  - DRC（`kicad-cli pcb drc`）：**0 error / 0 unconnected**；316 条 warning（丝印压焊盘 131、lib_footprint 72、丝印重叠 53、text_height 53、丝印贴边 4、悬空过孔 3）。
+  - 规则：Default netclass clearance 0.15 mm、走线 0.25 mm、过孔 0.6/0.3 mm；板边/孔壁 0.2 mm。
+  - J2 mid-mount 焊盘贴边：由 `drivetrack-pcb-v6-routed.kicad_dru` 中 `A.Parent == 'J2'` 的 edge_clearance 豁免解决。
+  - 已知取舍：B.Cu 被 USB_DM 的 D3→U1 长斜线切成两块（x≈33→45）；USB 差分未等长、GNSS 馈线未做 50Ω 控阻抗；板上无 keepout/rule area（ESP32 模块为外置天线型号）。
+- 制造文件：`DriveTrack-PCB-V6/fabrication/`（11 层 Gerber + Excellon PTH/NPTH + 钻孔报告），基于已铺铜的 routed 板。
+- 预览：`DriveTrack-PCB-V6/previews/`，`placement-v6.png/.svg`（布局）+ `routed-F_Cu/B_Cu/In1_Cu/In2_Cu.png/.svg`（含铺铜各层）+ `routed-3d-top/bottom/iso.png`。
 
 ## 下一步
 
-1. 按 `placement.csv` 在 KiCad 里核对丝印与 courtyard；去耦电容在布线时按引脚重新就近摆放（当前为自动聚类参考）。
-2. 按 `keepouts.csv` 画禁布/禁铺铜。
-3. 补 `fp-lib-table`（如需要“Update from library”），当前封装已内嵌在 PCB 文件中，可直接打开。
-4. 完成 3V3 / BAT / SPI / I2C / UART / USB 布线并加粗电源。
-5. 跑 ERC / DRC。外壳左柱已修正（板坐标 MH3 21.5,59 / 壳坐标 24.8,62.3），无需再动。
-6. 外壳 v10 已生成（68.6×68.6×21.0），材料定为 MJF PA12（黑色染色），制造与验收按 `enclosure-v10/notes-v10.md`。
+1. **ERC**：本地打开工程跑 KiCad ERC，确认无未驱动/多驱动；沙箱只跑了 DRC。
+2. **打样前自查 Gerber**：重点看 USB-C 贴边、板框圆角、NPTH 4×Ø2.2、PTH 130×Ø0.3。
+3. **测试版首件**：先贴电源链 + ESP32 + GNSS，实测充电、待机 45µA、唤醒/关机时序、GNSS TTFF。
+4. **量产前整改**：去耦就近重摆；USB 差分等长；GNSS 馈线 50Ω CPWG；B.Cu 分割问题。
+5. 补 `fp-lib-table`（如需要“Update from library”），当前封装已内嵌在 PCB 文件中，可直接打开。
+6. 外壳 v10 已生成（68.6×68.6×21.0），材料定为 MJF PA12（黑色染色），制造与验收按 `enclosure-v10/notes-v10.md`（板坐标 MH3 21.5,59 / 壳坐标 24.8,62.3）。
