@@ -61,15 +61,26 @@ class ExternalGpsFix {
   /// App 侧用 [hAcc] 做米级精度显示与跳变过滤。
   final double? hdop;
 
-  /// 由 HDOP 换算的米级水平精度（估算值）。
+  /// 由 HDOP × UERE 换算的米级水平精度（估算值）。
   ///
   /// NMEA 标准里没有米级精度字段；HDOP × UERE 是唯一可用口径。
-  /// 消费级 GNSS（u-blox NEO-M9N 等）UERE 典型值 2.5 m，
-  /// 换算后大约 HDOP 0.4 → 1 m、HDOP 1.0 → 2.5 m。
-  /// 若设备为 RTK 固定解，真实精度会好于此估算值，但 App 暂时
-  /// 无法区分（NMEA 不输出 UERE），按保守值走；后续可扩展
-  /// 通过 GGA fixQuality=4（RTK 固定）调低系数。
-  double? get hAcc => hdop != null ? hdop! * 2.5 : null;
+  /// 消费级 GNSS（u-blox NEO-M9N 等）典型值按 GGA fixQuality 分档：
+  /// | fixQuality | 含义         | UERE 系数 | 备注                        |
+  /// | ---        | ---          | ---       | ---                         |
+  /// | 1          | GPS fix      | 2.5 m     | 消费级默认                  |
+  /// | 2          | DGPS fix     | 1.5 m     |                             |
+  /// | 4          | RTK Fixed    | 0.3 m     | 厘米级真实精度，HDOP×0.3    |
+  /// | 5          | RTK Float    | 0.8 m     |                             |
+  /// | null / 其他| 保守值       | 2.5 m     | 无定位质量信息时回退        |
+  ///
+  /// 示例：RTK 固定解（fixQuality=4）HDOP=0.4 → 0.4×0.3 ≈ 0.12 m；
+  /// 消费级 GPS（fixQuality=1）HDOP=0.4 → 0.4×2.5 = 1.0 m。
+  double? get hAcc {
+    if (hdop == null) return null;
+    const table = <int, double>{1: 2.5, 2: 1.5, 4: 0.3, 5: 0.8};
+    final uere = table[fixQuality] ?? 2.5;
+    return hdop! * uere;
+  }
 
   /// RMC 提供的 UTC 时间（无日期/时间字段的语句则为 null）。
   final DateTime? timestampUtc;
