@@ -282,3 +282,101 @@
 - 9 条可映射包版本 1→2（manifest 同步 bump）；数据总版本
   保持 V1.0.1，updatedAt 2026-11-05；其余 10 条包版本不动。
 - 本批数据尚未发布（未推仓库、未建 Release），随下个版本走。
+
+## V1.4.0 补充（2026-11-24）
+
+数据总版本 V1.3.0 → V1.4.0；软件版本不动。逐条来源见 `data/track-sources-v1.4.0.json`，脚本见 `tools/track-batch-v1.4/`。
+
+### 规则
+
+- 几何只取 OpenStreetMap（ODbL），沿用 `tools/seed_fetch.py` 的核对规则：闭合、点数 ≥ 30、名称/位置对得上、最大点间距检查。
+- 公布长度取英文维基百科信息框（每条记录页面与 revision），只作校验，不作几何来源。偏差 ≤ 10% 且无大缺口为已核对；有大缺口为待核；偏差 > 10% 本轮不收。
+- 起终点只采用 OSM 关系 role=start 节点，否则留空；分段点、龙门架一律留空待核。
+- 卡丁车场多数没有可引用的公布长度，一律标待核。
+- 新增可选字段 `kinds`（`kart` / `moto` / `car`，可多选）：卡丁车来自 OSM sport=karting 或场地名；摩托依据维基信息框当前赛事含摩托赛事（MotoGP、WorldSBK、BSB、MotoAmerica、FIM EWC 等）。没有依据的不写，App 回落按名称归类。
+
+### 新增 45 条
+
+| id | 赛道 | 地区 | 类型 | 计算长度 | 公布长度 | 偏差 | 状态 | 起终点 |
+|---|---|---|---|---|---|---|---|---|
+| assen | 阿森赛道 / TT Circuit Assen | 荷兰 | car/moto | 4547 m | 4.555 km | -0.17% | 已核对 | 无 |
+| autopolis | Autopolis 赛道 / Autopolis | 日本 | car/moto | 4633 m | 4.673 km | -0.86% | 已核对 | 无 |
+| bilster_berg | 比尔斯特贝格赛道 / Bilster Berg | 德国 | 按名称 | 4186 m | 4.274 km | -2.07% | 已核对 | 无 |
+| brno | 布尔诺赛道 / Brno Circuit | 捷克 | 按名称 | 5401 m | 5.403 km | -0.03% | 已核对 | 无 |
+| buriram | 武里南国际赛道 / Chang International Circuit | 泰国 | car/moto | 4567 m | 4.554 km | +0.29% | 待核 | 无 |
+| cadwell_park | 卡德威尔公园 / Cadwell Park | 英国 | car/moto | 3490 m | 3.502 km | -0.33% | 已核对 | 无 |
+| dubai_autodrome | 迪拜赛车场 / Dubai Autodrome | 阿联酋 | car | 5406 m | 5.39 km | +0.29% | 已核对 | 无 |
+| inje | 麟蹄赛道 / Inje Speedium | 韩国 | car | 3947 m | 3.908 km | +1.01% | 已核对 | 无 |
+| knockhill | 诺克希尔赛道 / Knockhill Racing Circuit | 英国 | car/moto | 2071 m | 2.0389 km | +1.58% | 已核对 | 无 |
+| knutstorp | 克努茨托普赛道 / Ring Knutstorp | 瑞典 | car | 2064 m | 2.079 km | -0.72% | 已核对 | 无 |
+| kymiring | 屈米环 / KymiRing | 芬兰 | car | 4497 m | 4.65 km | -3.30% | 待核 | 无 |
+| ledenon | 莱德农赛道 / Circuit de Lédenon | 法国 | car | 3149 m | 3.151 km | -0.07% | 已核对 | 无 |
+| lihpao | 丽宝国际赛车场 / Lihpao International Circuit | 中国 | car | 3561 m | 3.5 km | +1.74% | 已核对 | 无 |
+| lime_rock | 莱姆罗克公园 / Lime Rock Park | 美国 | car | 2390 m | 2.462 km | -2.92% | 已核对 | 无 |
+| madras | 马德拉斯国际赛道 / Madras International Circuit | 印度 | car | 3724 m | 3.717 km | +0.19% | 已核对 | 无 |
+| mid_ohio | 中俄亥俄赛道 / Mid-Ohio Sports Car Course | 美国 | car/moto | 3539 m | 3.634 km | -2.62% | 已核对 | 无 |
+| misano | 米萨诺赛道 / Misano World Circuit Marco Simoncelli | 意大利 | car/moto | 4218 m | 4.226 km | -0.18% | 已核对 | 有 |
+| most | 莫斯特赛道 / Autodrom Most | 捷克 | car/moto | 4208 m | 4.212 km | -0.09% | 已核对 | 无 |
+| motegi | 茂木赛道 / Mobility Resort Motegi | 日本 | car/moto | 4812 m | 4.801 km | +0.22% | 已核对 | 无 |
+| navarra | 纳瓦拉赛道 / Circuito de Navarra | 西班牙 | car | 4296 m | 4.313 km | -0.39% | 已核对 | 无 |
+| nogaro | 诺加罗赛道 / Circuit Paul Armagnac | 法国 | car | 3514 m | 3.636 km | -3.36% | 已核对 | 无 |
+| nola | 新奥尔良赛车场 / NOLA Motorsports Park | 美国 | car | 4442 m | 4.423 km | +0.44% | 已核对 | 无 |
+| oschersleben | 奥舍斯莱本赛道 / Motorsport Arena Oschersleben | 德国 | car/moto | 3664 m | 3.668 km | -0.11% | 已核对 | 无 |
+| oulton_park | 奥尔顿公园 / Oulton Park | 英国 | car/moto | 4317 m | 4.307 km | +0.23% | 已核对 | 无 |
+| phillip_island | 菲利普岛赛道 / Phillip Island Grand Prix Circuit | 澳大利亚 | car/moto | 4454 m | 4.448 km | +0.13% | 已核对 | 无 |
+| poznan | 波兹南赛道 / Tor Poznań | 波兰 | car | 4073 m | 4.083 km | -0.24% | 已核对 | 有 |
+| sachsenring | 萨克森林赛道 / Sachsenring | 德国 | car/moto | 3649 m | 3.671 km | -0.60% | 已核对 | 有 |
+| sandown | 桑当赛道 / Sandown Raceway | 澳大利亚 | car | 3154 m | 3.104 km | +1.61% | 已核对 | 无 |
+| sebring | 赛百灵赛道 / Sebring International Raceway | 美国 | car | 5866 m | 6.019 km | -2.55% | 待核 | 无 |
+| sonoma | 索诺玛赛道 / Sonoma Raceway | 美国 | car | 4095 m | 4.056 km | +0.95% | 已核对 | 无 |
+| sugo | 菅生赛道 / Sportsland Sugo | 日本 | car | 3581 m | 3.704 km | -3.33% | 已核对 | 无 |
+| termas | 里奥翁多温泉赛道 / Autódromo Termas de Río Hondo | 阿根廷 | car | 4504 m | 4.805 km | -6.26% | 待核 | 无 |
+| thruxton | 斯拉克斯顿赛道 / Thruxton Circuit | 英国 | car/moto | 3767 m | 3.793 km | -0.69% | 已核对 | 无 |
+| thunderhill | 雷霆山赛道 / Thunderhill Raceway Park | 美国 | car | 4609 m | 4.612 km | -0.07% | 已核对 | 无 |
+| tokachi | 十胜赛道 / Tokachi International Speedway | 日本 | car | 5088 m | 5.091 km | -0.06% | 已核对 | 无 |
+| vallelunga | 瓦莱伦加赛道 / Vallelunga Circuit (Historic International Circuit) | 意大利 | car | 3229 m | 3.222 km | +0.23% | 已核对 | 有 |
+| vir | 弗吉尼亚国际赛道 / Virginia International Raceway | 美国 | car/moto | 5254 m | 5.262 km | -0.15% | 已核对 | 无 |
+| willow_springs | 柳泉国际赛道 / Willow Springs International Raceway | 美国 | car | 3944 m | 4.023 km | -1.97% | 已核对 | 无 |
+| winton | 温顿赛道 / Winton Motor Raceway | 澳大利亚 | car | 3001 m | 3.0 km | +0.03% | 已核对 | 无 |
+| kart_osm_108771044 | 路环卡丁车场 / Coloane Karting Track | 中国 | kart | 1216 m | 待核 | — | 待核 | 无 |
+| kart_osm_75490872 | 南加尔达卡丁车场 / South Garda Karting | 意大利 | kart | 1178 m | 待核 | — | 待核 | 无 |
+| kart_osm_643206090 | 那不勒斯国际赛道（萨尔诺）卡丁车道 / Circuito Internazionale Napoli Kart Circuit | 意大利 | kart | 1647 m | 待核 | — | 待核 | 无 |
+| kart_osm_87888593 | 克里斯蒂安斯塔德卡丁车场 / Kristianstad Karting (Åsum ring) | 瑞典 | kart | 1240 m | 待核 | — | 待核 | 无 |
+| kart_osm_94517023 | 法涅卡丁车场（马里昂堡） / Karting des Fagnes | 比利时 | kart | 1363 m | 待核 | — | 待核 | 无 |
+| kart_osm_67660672 | 亨克卡丁车场 / Karting Genk | 比利时 | kart | 1317 m | 1.36 km | — | 已核对 | 无 |
+
+### 现有包补 kinds（103 条，包版本 +1，几何不动）
+
+- 卡丁车 85 条：`kinds: ["kart"]`（sourceDetail 均为 sport=karting）。
+- 汽车 + 摩托 18 条：斯帕、铃鹿、拉古纳塞卡、美洲赛道、雪邦国际赛车场、巴塞罗那-加泰罗尼亚赛道、红牛环、银石赛道、卢赛尔国际赛道、阿尔加维国际赛道、布加迪赛道、埃斯托里尔赛道、穆杰洛赛道、赫雷斯赛道、马尼库尔赛道、保罗·里卡德赛道、多宁顿公园、东望洋赛道。
+
+### 未收录（28 条）
+
+- 安格尔西赛道（Anglesey Circuit）：OSM 拼出的回路与公布长度偏差 >20%，几何疑似错段，弃用
+- 阿拉贡赛道（MotorLand Aragón）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 巴伯赛车公园（Barber Motorsports Park）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 布宜诺斯艾利斯赛道（Autódromo Oscar y Juan Gálvez）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 克拉克国际赛道（Clark International Speedway）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 克罗夫特赛道（Croft Circuit）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 汉普顿唐斯赛道（Hampton Downs Motorsport Park）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 伊戈拉赛道（Igora Drive）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- PFI 卡丁车场（PF International）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 劳西茨赛道（Lausitzring）：OSM 拼出的回路与公布长度偏差 >20%，几何疑似错段，弃用
+- 曼达利卡赛道（Mandalika International Street Circuit）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 蒙特布兰科赛道（Circuito Monteblanco）：OSM 回路长度与公布长度偏差 -13.35%（>10%），不收
+- 冈山国际赛车场（Okayama International Circuit）：与现有包 aida（TI 赛道 Aida，即冈山国际赛车场旧名）为同一赛道，去重
+- 大鹏湾国际赛车场（Penbay International Circuit）：Wikipedia 布局年份 2011–2019，且 OSM 节点标注停业，不收已停用赛道
+- 匹兹堡国际赛车场（Pittsburgh International Race Complex）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 昆士兰赛道（Queensland Raceway）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 里卡多·托莫赛道（Circuit Ricardo Tormo）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 美国之路赛道（Road America）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 亚特兰大公路赛道（Road Atlanta）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 萨尔茨堡赛道（Salzburgring）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 森图尔国际赛道（Sentul International Circuit）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 斯洛伐克赛道（Slovakia Ring）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 斯内特顿赛道（Snetterton Circuit）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 悉尼赛车公园（Sydney Motorsport Park）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 陶波赛道（Taupo International Motorsport Park）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- The Bend 赛车场（The Bend Motorsport Park）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
+- 筑波赛道（Tsukuba Circuit）：OSM 回路长度与公布长度偏差 -18.01%（>10%），不收
+- 犹他赛车园（Utah Motorsports Campus）：OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）
