@@ -1,0 +1,2083 @@
+{
+  "dataVersion": "V1.4.0",
+  "updatedAt": "2026-11-24",
+  "rules": "几何只取 OpenStreetMap（ODbL）；公布长度取英文维基百科信息框（记 revision），仅作校验；偏差 ≤10% 且无大缺口为已核对，其余待核；>10% 不收；起终点只用 OSM 关系 role=start 节点，否则留空；分段点一律留空；kinds 依据维基信息框当前赛事或 OSM sport=karting。",
+  "added": [
+    {
+      "id": "assen",
+      "nameCn": "阿森赛道",
+      "nameEn": "TT Circuit Assen",
+      "region": "荷兰",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：146537706、359172905）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.555,
+        "layout": "Grand Prix Circuit (2006–present)",
+        "turns": 18,
+        "source": "https://en.wikipedia.org/w/index.php?title=TT_Circuit_Assen&oldid=1383882055"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Grand Prix motorcycle racing Dutch TT (1949–2019, 2021–present) World SBK (1992–2019, 2021–present) Sidecar World Championship (1955–2003, 2005–2008, 2013–2019, 2021–present) BSB (2012–2019, 2025–present) Supercar Challenge (2001–present) ",
+      "computedLengthM": 4547,
+      "deviationPct": -0.17,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        146537706,
+        359172905
+      ]
+    },
+    {
+      "id": "autopolis",
+      "nameCn": "Autopolis 赛道",
+      "nameEn": "Autopolis",
+      "region": "日本",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：115069063）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.673,
+        "layout": "Full Circuit (1990–present)",
+        "turns": 19,
+        "source": "https://en.wikipedia.org/w/index.php?title=Autopolis&oldid=1383752706"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Super GT (1999, 2003–2009, 2011–2015, 2017–2019, 2021–present) Super Formula (1991–1992, 2006, 2009–present) Super Taikyu (2012–present) MFJ Superbike (2002–2015, 2017–present) ",
+      "computedLengthM": 4633,
+      "deviationPct": -0.86,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        115069063
+      ]
+    },
+    {
+      "id": "bilster_berg",
+      "nameCn": "比尔斯特贝格赛道",
+      "nameEn": "Bilster Berg",
+      "region": "德国",
+      "geometry": "OSM highway=raceway 多段拼接（中心线节点所在 OSM way：638187916、638604433）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.274,
+        "layout": "Full Circuit (2013–present)",
+        "turns": 19,
+        "source": "https://en.wikipedia.org/w/index.php?title=Bilster_Berg&oldid=1356195389"
+      },
+      "kinds": [],
+      "kindsEvidence": null,
+      "computedLengthM": 4186,
+      "deviationPct": -2.07,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        638187916,
+        638604433
+      ]
+    },
+    {
+      "id": "brno",
+      "nameCn": "布尔诺赛道",
+      "nameEn": "Brno Circuit",
+      "region": "捷克",
+      "geometry": "OSM highway=raceway 多段拼接（中心线节点所在 OSM way：8585804、8585805）（© OpenStreetMap contributors，ODbL）；场地定位取 Wikipedia 坐标",
+      "publishedLength": {
+        "km": 5.403,
+        "layout": "Permanent Grand Prix Circuit (1987–present)",
+        "turns": 14,
+        "source": "https://en.wikipedia.org/w/index.php?title=Brno_Circuit&oldid=1386503241"
+      },
+      "kinds": [],
+      "kindsEvidence": null,
+      "computedLengthM": 5401,
+      "deviationPct": -0.03,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        8585804,
+        8585805
+      ]
+    },
+    {
+      "id": "buriram",
+      "nameCn": "武里南国际赛道",
+      "nameEn": "Chang International Circuit",
+      "region": "泰国",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：400713789）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.554,
+        "layout": "Grand Prix Circuit (2014–present)",
+        "turns": 12,
+        "source": "https://en.wikipedia.org/w/index.php?title=Buriram_International_Circuit&oldid=1383953098"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Grand Prix motorcycle racing Thailand motorcycle Grand Prix (2018–2019, 2022–present) Asia Road Racing Championship (2014–2019, 2022–present) ",
+      "computedLengthM": 4567,
+      "deviationPct": 0.29,
+      "verification": "pending",
+      "start": null,
+      "osmWays": [
+        400713789
+      ]
+    },
+    {
+      "id": "cadwell_park",
+      "nameCn": "卡德威尔公园",
+      "nameEn": "Cadwell Park",
+      "region": "英国",
+      "geometry": "OSM highway=raceway 多段拼接（中心线节点所在 OSM way：117987847、396423006、396423007、396423008、396423009、396423011、396423012、396423013、396423014、396423015、396423016、396423017、396423018、396423019、396423020、396424044）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.502,
+        "layout": "Full Circuit (1961–present)",
+        "turns": 18,
+        "source": "https://en.wikipedia.org/w/index.php?title=Cadwell_Park&oldid=1372437966"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：BSB (1995–2019, 2021–present) ",
+      "computedLengthM": 3490,
+      "deviationPct": -0.33,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        117987847,
+        396423006,
+        396423007,
+        396423008,
+        396423009,
+        396423011,
+        396423012,
+        396423013,
+        396423014,
+        396423015,
+        396423016,
+        396423017,
+        396423018,
+        396423019,
+        396423020,
+        396424044
+      ]
+    },
+    {
+      "id": "dubai_autodrome",
+      "nameCn": "迪拜赛车场",
+      "nameEn": "Dubai Autodrome",
+      "region": "阿联酋",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：87277405）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 5.39,
+        "layout": "Grand Prix Circuit (2004–present)",
+        "turns": 17,
+        "source": "https://en.wikipedia.org/w/index.php?title=Dubai_Autodrome&oldid=1383749964"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：24H Series Middle East Dubai 24 Hour (2006–2026) Asian Le Mans Series 4 Hours of Dubai (2021–2026) FR Middle East (2023–present) ",
+      "computedLengthM": 5406,
+      "deviationPct": 0.29,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        87277405
+      ]
+    },
+    {
+      "id": "inje",
+      "nameCn": "麟蹄赛道",
+      "nameEn": "Inje Speedium",
+      "region": "韩国",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：651693293）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.908,
+        "layout": "Full Circuit (2013–present)",
+        "turns": 20,
+        "source": "https://en.wikipedia.org/w/index.php?title=Inje_Speedium&oldid=1386270885"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：TCR World Tour (2025–present) TCR Asia Tour (2025–present) Lamborghini Super Trofeo Asia (2023–present) Superrace Championship (2015–present) ",
+      "computedLengthM": 3947,
+      "deviationPct": 1.01,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        651693293
+      ]
+    },
+    {
+      "id": "knockhill",
+      "nameCn": "诺克希尔赛道",
+      "nameEn": "Knockhill Racing Circuit",
+      "region": "英国",
+      "geometry": "OSM circuit 21243594（type=circuit，name=Knockhill International Circuit，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 2.0389,
+        "layout": "Clockwise International Circuit (1974–present)",
+        "turns": 9,
+        "source": "https://en.wikipedia.org/w/index.php?title=Knockhill&oldid=1360438186"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：BTCC (1992–2002, 2004–present) BSB (1996–2019, 2021–present) ",
+      "computedLengthM": 2071,
+      "deviationPct": 1.58,
+      "verification": "verified",
+      "start": null
+    },
+    {
+      "id": "knutstorp",
+      "nameCn": "克努茨托普赛道",
+      "nameEn": "Ring Knutstorp",
+      "region": "瑞典",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：229220546）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 2.079,
+        "layout": "Full Circuit (1980–present)",
+        "turns": 14,
+        "source": "https://en.wikipedia.org/w/index.php?title=Ring_Knutstorp&oldid=1375675151"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Radical Cup Scandinavia (2019–present) ",
+      "computedLengthM": 2064,
+      "deviationPct": -0.72,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        229220546
+      ]
+    },
+    {
+      "id": "kymiring",
+      "nameCn": "屈米环",
+      "nameEn": "KymiRing",
+      "region": "芬兰",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：660550893）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.65,
+        "layout": "Main Circuit (2019–present)",
+        "turns": 18,
+        "source": "https://en.wikipedia.org/w/index.php?title=Kymi_Ring&oldid=1341128126"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：",
+      "computedLengthM": 4497,
+      "deviationPct": -3.3,
+      "verification": "pending",
+      "start": null,
+      "osmWays": [
+        660550893
+      ]
+    },
+    {
+      "id": "ledenon",
+      "nameCn": "莱德农赛道",
+      "nameEn": "Circuit de Lédenon",
+      "region": "法国",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：43165485）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.151,
+        "layout": "Full Circuit (1973–present)",
+        "turns": 13,
+        "source": "https://en.wikipedia.org/w/index.php?title=Circuit_de_L%C3%A9denon&oldid=1383754347"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：French F4 (2011–2013, 2015–2016, 2019, 2021–present) ",
+      "computedLengthM": 3149,
+      "deviationPct": -0.07,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        43165485
+      ]
+    },
+    {
+      "id": "lihpao",
+      "nameCn": "丽宝国际赛车场",
+      "nameEn": "Lihpao International Circuit",
+      "region": "中国",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：779852386）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.5,
+        "layout": "G2 Circuit (2018–present)",
+        "turns": 23,
+        "source": "https://en.wikipedia.org/w/index.php?title=Lihpao_Racing_Park&oldid=1368228544"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：STS (2022–present) TCR Taiwan (2022–present)",
+      "computedLengthM": 3561,
+      "deviationPct": 1.74,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        779852386
+      ]
+    },
+    {
+      "id": "lime_rock",
+      "nameCn": "莱姆罗克公园",
+      "nameEn": "Lime Rock Park",
+      "region": "美国",
+      "geometry": "OSM circuit 6429257（type=circuit，name=Lime Rock Park (with Chicane)，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 2.462,
+        "layout": "Grand Prix Circuit (1957–present)",
+        "turns": 7,
+        "source": "https://en.wikipedia.org/w/index.php?title=Lime_Rock_Park&oldid=1384683679"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Trans-Am Series Trans Am Memorial Day Classic (1967–1974, 1981, 1985–1989, 1992–1993, 1995–1999, 2002–2003, 2010, 2012–2015, 2019, 2021–present)  NASCAR Truck Series LiUNA! 150 (2025–present) ARCA Menards Series Lime Rock Park 100 (2025–present) ",
+      "computedLengthM": 2390,
+      "deviationPct": -2.92,
+      "verification": "verified",
+      "start": null
+    },
+    {
+      "id": "madras",
+      "nameCn": "马德拉斯国际赛道",
+      "nameEn": "Madras International Circuit",
+      "region": "印度",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：25671471）（© OpenStreetMap contributors，ODbL）；场地定位取 Wikipedia 坐标",
+      "publishedLength": {
+        "km": 3.717,
+        "layout": "Full Circuit (1990–present)",
+        "turns": 17,
+        "source": "https://en.wikipedia.org/w/index.php?title=Madras_International_Circuit&oldid=1386218832"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Indian Racing League (2022–present) F4 India (2023–present) MRF Formula 2000 (2013–2020, 2022–present) ",
+      "computedLengthM": 3724,
+      "deviationPct": 0.19,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        25671471
+      ]
+    },
+    {
+      "id": "mid_ohio",
+      "nameCn": "中俄亥俄赛道",
+      "nameEn": "Mid-Ohio Sports Car Course",
+      "region": "美国",
+      "geometry": "OSM highway=raceway 多起点拼接（中心线节点所在 OSM way：444205375、1315957513、1315957514、1315957515）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.634,
+        "layout": "Second Road Course (1990–present)",
+        "turns": 13,
+        "source": "https://en.wikipedia.org/w/index.php?title=Mid-Ohio_Sports_Car_Course&oldid=1381712451"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：IndyCar Series Indy 200 at Mid-Ohio (2007–present) MotoAmerica (1983–2014, 2024–present) ",
+      "computedLengthM": 3539,
+      "deviationPct": -2.62,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        444205375,
+        1315957513,
+        1315957514,
+        1315957515
+      ]
+    },
+    {
+      "id": "misano",
+      "nameCn": "米萨诺赛道",
+      "nameEn": "Misano World Circuit Marco Simoncelli",
+      "region": "意大利",
+      "geometry": "OSM circuit 8671383（type=circuit，name=Misano World Circuit，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.226,
+        "layout": "Grand Prix Circuit (2008–present)",
+        "turns": 16,
+        "source": "https://en.wikipedia.org/w/index.php?title=Misano_World_Circuit&oldid=1377872764"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Grand Prix motorcycle racing Italian motorcycle Grand Prix (1980, 1982, 1984, 1989–1991, 1993) San Marino motorcycle Grand Prix (1985–1987, 2007–present) Emilia Romagna motorcycle Grand Prix (2020–2021, 2024) World SBK (1991, 1993–2012, 2014–2019, 2021–present) TCR World Tour (2026) GT World Challen",
+      "computedLengthM": 4218,
+      "deviationPct": -0.18,
+      "verification": "verified",
+      "start": "OSM role=start 节点"
+    },
+    {
+      "id": "most",
+      "nameCn": "莫斯特赛道",
+      "nameEn": "Autodrom Most",
+      "region": "捷克",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：60905520）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.212,
+        "layout": "Full Circuit (2005–present)",
+        "turns": 21,
+        "source": "https://en.wikipedia.org/w/index.php?title=Autodrom_Most&oldid=1386503073"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：World SBK (2021–present) FIA European Truck Racing Czech Truck Prix (1993–present) NASCAR Euro Series (2019, 2021–present) TCR Eastern Europe (2022–present) Formula 4 CEZ Championship (2023–present) ",
+      "computedLengthM": 4208,
+      "deviationPct": -0.09,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        60905520
+      ]
+    },
+    {
+      "id": "motegi",
+      "nameCn": "茂木赛道",
+      "nameEn": "Mobility Resort Motegi",
+      "region": "日本",
+      "geometry": "OSM highway=raceway 多起点拼接（中心线节点所在 OSM way：28213529、28213530）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.801,
+        "layout": "Road Course (1997–present)",
+        "turns": 14,
+        "source": "https://en.wikipedia.org/w/index.php?title=Motegi_Circuit&oldid=1386943875"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Grand Prix motorcycle racing Japanese motorcycle Grand Prix (1999, 2004–2019, 2022–present) Super GT (1998–present) Super Formula (1997–present) Asia Road Racing Championship (2024–present) ",
+      "computedLengthM": 4812,
+      "deviationPct": 0.22,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        28213529,
+        28213530
+      ]
+    },
+    {
+      "id": "navarra",
+      "nameCn": "纳瓦拉赛道",
+      "nameEn": "Circuito de Navarra",
+      "region": "西班牙",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：103746067、103746068）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.313,
+        "layout": "Full Circuit (September 2024–present)",
+        "turns": 16,
+        "source": "https://en.wikipedia.org/w/index.php?title=Circuito_de_Navarra&oldid=1381061411"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Ultimate Cup (2022–2023, 2026) ",
+      "computedLengthM": 4296,
+      "deviationPct": -0.39,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        103746067,
+        103746068
+      ]
+    },
+    {
+      "id": "nogaro",
+      "nameCn": "诺加罗赛道",
+      "nameEn": "Circuit Paul Armagnac",
+      "region": "法国",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：95798633）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.636,
+        "layout": "Grand Prix Circuit (1989–present)",
+        "turns": 14,
+        "source": "https://en.wikipedia.org/w/index.php?title=Circuit_Paul_Armagnac&oldid=1377874410"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：{{ill|Coupes de Pâques de Nogaro|fr|Coupes de Pâques}} (1968–present) FFSA GT (1997–2011, 2014, 2016–present) TC France Series (2021–present) Alpine Elf Cup (2019–present) ",
+      "computedLengthM": 3514,
+      "deviationPct": -3.36,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        95798633
+      ]
+    },
+    {
+      "id": "nola",
+      "nameCn": "新奥尔良赛车场",
+      "nameEn": "NOLA Motorsports Park",
+      "region": "美国",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：298904865、901764367）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.423,
+        "layout": "A Course (2011–present)",
+        "turns": 17,
+        "source": "https://en.wikipedia.org/w/index.php?title=NOLA_Motorsports_Park&oldid=1383955605"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：FR Americas (2018, 2022–present) 24 Hours of Lemons (2018–2019, 2021–present) ",
+      "computedLengthM": 4442,
+      "deviationPct": 0.44,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        298904865,
+        901764367
+      ]
+    },
+    {
+      "id": "oschersleben",
+      "nameCn": "奥舍斯莱本赛道",
+      "nameEn": "Motorsport Arena Oschersleben",
+      "region": "德国",
+      "geometry": "OSM circuit 8635829（type=circuit，name=Oschersleben Circuit，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.668,
+        "layout": "Motorcycle \"A\" Circuit (1997–present)",
+        "turns": null,
+        "source": "https://en.wikipedia.org/w/index.php?title=Motorsport_Arena_Oschersleben&oldid=1386945932"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Sidecar World Championship (1998, 2000–2003, 2011–2019, 2021–present) DTM (2000–2001, 2004–2015, 2023–present) ",
+      "computedLengthM": 3664,
+      "deviationPct": -0.11,
+      "verification": "verified",
+      "start": null
+    },
+    {
+      "id": "oulton_park",
+      "nameCn": "奥尔顿公园",
+      "nameEn": "Oulton Park",
+      "region": "英国",
+      "geometry": "OSM circuit 11249453（type=circuit，name=Oulton Park International，空 role 成员）（© OpenStreetMap contributors，ODbL）；场地定位取 Wikipedia 坐标",
+      "publishedLength": {
+        "km": 4.307,
+        "layout": "International Circuit (2003–present)",
+        "turns": 17,
+        "source": "https://en.wikipedia.org/w/index.php?title=Oulton_Park&oldid=1383746533"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：BTCC (1960–1972, 1974–1985, 1987–present) BSB (1991–present) British GT (1993–2004, 2006–present) TCR UK (2018–present) ",
+      "computedLengthM": 4317,
+      "deviationPct": 0.23,
+      "verification": "verified",
+      "start": null
+    },
+    {
+      "id": "phillip_island",
+      "nameCn": "菲利普岛赛道",
+      "nameEn": "Phillip Island Grand Prix Circuit",
+      "region": "澳大利亚",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：43598473）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.448,
+        "layout": "Modern Grand Prix Circuit (1988–present)",
+        "turns": 12,
+        "source": "https://en.wikipedia.org/w/index.php?title=Phillip_Island_Grand_Prix_Circuit&oldid=1381853462"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Grand Prix motorcycle racing Australian motorcycle Grand Prix (1989–1990, 1997–2019, 2022–2026) World SBK (1990–1992, 1994–2020, 2022–2027) ",
+      "computedLengthM": 4454,
+      "deviationPct": 0.13,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        43598473
+      ]
+    },
+    {
+      "id": "poznan",
+      "nameCn": "波兹南赛道",
+      "nameEn": "Tor Poznań",
+      "region": "波兰",
+      "geometry": "OSM circuit 3155703（type=circuit，name=Tor Poznań，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.083,
+        "layout": "Full Circuit (1977–present)",
+        "turns": 14,
+        "source": "https://en.wikipedia.org/w/index.php?title=Pozna%C5%84_Circuit&oldid=1383954923"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Porsche Sprint Challenge Central Europe (2019, 2021, 2023–2026) ",
+      "computedLengthM": 4073,
+      "deviationPct": -0.24,
+      "verification": "verified",
+      "start": "OSM role=start 节点"
+    },
+    {
+      "id": "sachsenring",
+      "nameCn": "萨克森林赛道",
+      "nameEn": "Sachsenring",
+      "region": "德国",
+      "geometry": "OSM circuit 2148312（type=circuit，name=Sachsenring，空 role 成员）（© OpenStreetMap contributors，ODbL）；场地定位取 Wikipedia 坐标",
+      "publishedLength": {
+        "km": 3.671,
+        "layout": "Circuit A Grand Prix Circuit (2003–present)",
+        "turns": 13,
+        "source": "https://en.wikipedia.org/w/index.php?title=Sachsenring&oldid=1378911013"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Grand Prix motorcycle racing German motorcycle Grand Prix (1998–2019, 2021–present) East German motorcycle Grand Prix (1961–1972) DTM (2000–2002, 2023–present) ",
+      "computedLengthM": 3649,
+      "deviationPct": -0.6,
+      "verification": "verified",
+      "start": "OSM role=start 节点"
+    },
+    {
+      "id": "sandown",
+      "nameCn": "桑当赛道",
+      "nameEn": "Sandown Raceway",
+      "region": "澳大利亚",
+      "geometry": "OSM highway=raceway 多段拼接（中心线节点所在 OSM way：25927060、770953497、770953498）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.104,
+        "layout": "National Circuit (1984–present)",
+        "turns": 13,
+        "source": "https://en.wikipedia.org/w/index.php?title=Sandown_Raceway&oldid=1385551834"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Supercars Championship Sandown 500 (1964–1965, 1968–1998, 2001–2007, 2012–2019, 2023–2024) Sandown SuperSprint (1965, 1970–1974, 1976–1989, 1991–1992, 1994–2002, 2008–2011, 2021–2022, 2025–present) Grand Finale (2001–2002) Trans-Am Australia (2022–present) ",
+      "computedLengthM": 3154,
+      "deviationPct": 1.61,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        25927060,
+        770953497,
+        770953498
+      ]
+    },
+    {
+      "id": "sebring",
+      "nameCn": "赛百灵赛道",
+      "nameEn": "Sebring International Raceway",
+      "region": "美国",
+      "geometry": "OSM circuit 7003292（type=circuit，name=Sebring International Raceway，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 6.019,
+        "layout": "GP Road Course (8th variation) (1999–present)",
+        "turns": 17,
+        "source": "https://en.wikipedia.org/w/index.php?title=Sebring_International_Raceway&oldid=1377122006"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：IMSA WeatherTech SportsCar Championship 12 Hours of Sebring (1950–present) GT World Challenge America (2001–2009, 2021–2026) Trans-Am Series (1966–1968, 1999–2001, 2011, 2013–present) Ferrari Challenge North America (2019–2020, 2026) ",
+      "computedLengthM": 5866,
+      "deviationPct": -2.55,
+      "verification": "pending",
+      "start": null
+    },
+    {
+      "id": "sonoma",
+      "nameCn": "索诺玛赛道",
+      "nameEn": "Sonoma Raceway",
+      "region": "美国",
+      "geometry": "OSM route 7377687（type=route，name=Sonoma Road Course，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.056,
+        "layout": "Long Circuit (2002–present)",
+        "turns": 12,
+        "source": "https://en.wikipedia.org/w/index.php?title=Sonoma_Raceway&oldid=1386315187"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：NASCAR Cup Series Toyota/Save Mart 350 (1989–2019, 2021–present) NASCAR O'Reilly Auto Parts Series Sonoma 250 (2023–present) GT World Challenge America (1990–1993, 1995–1996, 2000–2001, 2003–2006, 2011–2017, 2019–present) Trans-Am Series (1969, 1978, 1981–1993, 1995, 2001, 2003–2004, 2022, 2025–pres",
+      "computedLengthM": 4095,
+      "deviationPct": 0.95,
+      "verification": "verified",
+      "start": null
+    },
+    {
+      "id": "sugo",
+      "nameCn": "菅生赛道",
+      "nameEn": "Sportsland Sugo",
+      "region": "日本",
+      "geometry": "OSM highway=raceway 多段拼接（中心线节点所在 OSM way：107580358、107580877、107581031、107581644）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.704,
+        "layout": "International Car Circuit (1987–present)",
+        "turns": 12,
+        "source": "https://en.wikipedia.org/w/index.php?title=Sportsland_Sugo&oldid=1381839823"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Super GT (1994–2019, 2021–present) Super Formula (1987–present) Super Taikyu (????–present) Japan Cup Series (2022, 2024–2026) FR Japan (2020–present) ",
+      "computedLengthM": 3581,
+      "deviationPct": -3.33,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        107580358,
+        107580877,
+        107581031,
+        107581644
+      ]
+    },
+    {
+      "id": "termas",
+      "nameCn": "里奥翁多温泉赛道",
+      "nameEn": "Autódromo Termas de Río Hondo",
+      "region": "阿根廷",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：170936090）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.805,
+        "layout": "Grand Prix Circuit (2013–present)",
+        "turns": 14,
+        "source": "https://en.wikipedia.org/w/index.php?title=Aut%C3%B3dromo_Termas_de_R%C3%ADo_Hondo&oldid=1366022558"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Turismo Carretera (2008–2019, 2022–present) Turismo Nacional (2009, 2011, 2013–2019, 2022, 2024–present) ",
+      "computedLengthM": 4504,
+      "deviationPct": -6.26,
+      "verification": "pending",
+      "start": null,
+      "osmWays": [
+        170936090
+      ]
+    },
+    {
+      "id": "thruxton",
+      "nameCn": "斯拉克斯顿赛道",
+      "nameEn": "Thruxton Circuit",
+      "region": "英国",
+      "geometry": "OSM circuit 18259935（type=circuit，name=Thruxton Circuit，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.793,
+        "layout": "Main Circuit (1968–present)",
+        "turns": 12,
+        "source": "https://en.wikipedia.org/w/index.php?title=Thruxton_Circuit&oldid=1383954814"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：BTCC (1979–present) BSB (1990, 1996–2019, 2021–present) ",
+      "computedLengthM": 3767,
+      "deviationPct": -0.69,
+      "verification": "verified",
+      "start": null
+    },
+    {
+      "id": "thunderhill",
+      "nameCn": "雷霆山赛道",
+      "nameEn": "Thunderhill Raceway Park",
+      "region": "美国",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：28825115、892530996）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.612,
+        "layout": "Thunderhill East Circuit (1997–present)",
+        "turns": 16,
+        "source": "https://en.wikipedia.org/w/index.php?title=Thunderhill_Raceway_Park&oldid=1386427679"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：",
+      "computedLengthM": 4609,
+      "deviationPct": -0.07,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        28825115,
+        892530996
+      ]
+    },
+    {
+      "id": "tokachi",
+      "nameCn": "十胜赛道",
+      "nameEn": "Tokachi International Speedway",
+      "region": "日本",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：187997126）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 5.091,
+        "layout": "Grand Prix Course (1993–present)",
+        "turns": 15,
+        "source": "https://en.wikipedia.org/w/index.php?title=Tokachi_International_Speedway&oldid=1351253641"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：",
+      "computedLengthM": 5088,
+      "deviationPct": -0.06,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        187997126
+      ]
+    },
+    {
+      "id": "vallelunga",
+      "nameCn": "瓦莱伦加赛道",
+      "nameEn": "Vallelunga Circuit (Historic International Circuit)",
+      "region": "意大利",
+      "geometry": "OSM circuit 8672706（type=circuit，name=Circuito Maggiore Vallelunga，空 role 成员）（© OpenStreetMap contributors，ODbL）；场地定位取 Wikipedia 坐标",
+      "publishedLength": {
+        "km": 3.222,
+        "layout": "Historic International Circuit (2005–present) International Circuit (1971–2004)",
+        "turns": 13,
+        "source": "https://en.wikipedia.org/w/index.php?title=Vallelunga_Circuit&oldid=1379719095"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：NASCAR Euro Series (2020–present) ",
+      "computedLengthM": 3229,
+      "deviationPct": 0.23,
+      "verification": "verified",
+      "start": "OSM role=start 节点"
+    },
+    {
+      "id": "vir",
+      "nameCn": "弗吉尼亚国际赛道",
+      "nameEn": "Virginia International Raceway",
+      "region": "美国",
+      "geometry": "OSM route 15765486（type=route，name=VIRginia International Raceway Full Course with Pit Lane，空 role 成员）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 5.262,
+        "layout": "Full Course (1957–1974, 2000–present)",
+        "turns": 17,
+        "source": "https://en.wikipedia.org/w/index.php?title=Virginia_International_Raceway&oldid=1376982982"
+      },
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：IMSA SportsCar Championship Michelin GT Challenge at VIR  (1957–1964, 1971–1972, 2002–present) Trans-Am Series  (1966, 2002, 2009–2011, 2013–present) MotoAmerica (2001–2010, 2015–2019, 2021–2022, 2025–present) ",
+      "computedLengthM": 5254,
+      "deviationPct": -0.15,
+      "verification": "verified",
+      "start": null
+    },
+    {
+      "id": "willow_springs",
+      "nameCn": "柳泉国际赛道",
+      "nameEn": "Willow Springs International Raceway",
+      "region": "美国",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：10440074）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 4.023,
+        "layout": "Big Willow (1953–present)",
+        "turns": 9,
+        "source": "https://en.wikipedia.org/w/index.php?title=Willow_Springs_International_Motorsports_Park&oldid=1372671948"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：",
+      "computedLengthM": 3944,
+      "deviationPct": -1.97,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        10440074
+      ]
+    },
+    {
+      "id": "winton",
+      "nameCn": "温顿赛道",
+      "nameEn": "Winton Motor Raceway",
+      "region": "澳大利亚",
+      "geometry": "OSM highway=raceway 单条闭合 way（中心线节点所在 OSM way：60238255）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 3.0,
+        "layout": "National Circuit (1997–present)",
+        "turns": 12,
+        "source": "https://en.wikipedia.org/w/index.php?title=Winton_Motor_Raceway&oldid=1353013352"
+      },
+      "kinds": [
+        "car"
+      ],
+      "kindsEvidence": "Wikipedia 信息框 events 字段：Australian Formula Ford Championship (1971, 1983–1994, 1998–1999, 2002–2004, 2007, 2009–2019, 2021–present) AU4 Championship (2018, 2026) ",
+      "computedLengthM": 3001,
+      "deviationPct": 0.03,
+      "verification": "verified",
+      "start": null,
+      "osmWays": [
+        60238255
+      ]
+    },
+    {
+      "id": "kart_osm_108771044",
+      "nameCn": "路环卡丁车场",
+      "nameEn": "Coloane Karting Track",
+      "region": "中国",
+      "geometry": "OSM way 108771044（highway=raceway，name=卡丁車賽道 Kartódromo，name:en=Karting Track，sport=motor；位于 way 192095904 路環小型賽車場 Kartódromo de Coloane）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": null,
+      "kinds": [
+        "kart"
+      ],
+      "kindsEvidence": "OSM sport=karting / 卡丁车场名称",
+      "computedLengthM": 1216,
+      "verification": "pending",
+      "start": null
+    },
+    {
+      "id": "kart_osm_75490872",
+      "nameCn": "南加尔达卡丁车场",
+      "nameEn": "South Garda Karting",
+      "region": "意大利",
+      "geometry": "OSM way 75490872（highway=raceway，sport=karting；位于 way 75490936 South Garda Karting，Lonato del Garda）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": null,
+      "kinds": [
+        "kart"
+      ],
+      "kindsEvidence": "OSM sport=karting / 卡丁车场名称",
+      "computedLengthM": 1178,
+      "verification": "pending",
+      "start": null
+    },
+    {
+      "id": "kart_osm_643206090",
+      "nameCn": "那不勒斯国际赛道（萨尔诺）卡丁车道",
+      "nameEn": "Circuito Internazionale Napoli Kart Circuit",
+      "region": "意大利",
+      "geometry": "OSM way 643206090（highway=raceway，name=Layout Kartodromo，name:en=Kart Circuit Layout，sport=karting；位于 relation 20633491 Circuito Internazionale Napoli，Sarno）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": null,
+      "kinds": [
+        "kart"
+      ],
+      "kindsEvidence": "OSM sport=karting / 卡丁车场名称",
+      "computedLengthM": 1647,
+      "verification": "pending",
+      "start": null
+    },
+    {
+      "id": "kart_osm_87888593",
+      "nameCn": "克里斯蒂安斯塔德卡丁车场",
+      "nameEn": "Kristianstad Karting (Åsum ring)",
+      "region": "瑞典",
+      "geometry": "OSM way 87888593（highway=raceway，name=Åsum ring，sport=karting；位于 way 1319599506 Kristianstad Karting）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": null,
+      "kinds": [
+        "kart"
+      ],
+      "kindsEvidence": "OSM sport=karting / 卡丁车场名称",
+      "computedLengthM": 1240,
+      "verification": "pending",
+      "start": null
+    },
+    {
+      "id": "kart_osm_94517023",
+      "nameCn": "法涅卡丁车场（马里昂堡）",
+      "nameEn": "Karting des Fagnes",
+      "region": "比利时",
+      "geometry": "OSM way 94517023（highway=raceway；位于 way 94522368 Karting des Fagnes，Mariembourg）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": null,
+      "kinds": [
+        "kart"
+      ],
+      "kindsEvidence": "OSM sport=karting / 卡丁车场名称",
+      "computedLengthM": 1363,
+      "verification": "pending",
+      "start": null
+    },
+    {
+      "id": "kart_osm_67660672",
+      "nameCn": "亨克卡丁车场",
+      "nameEn": "Karting Genk",
+      "region": "比利时",
+      "geometry": "OSM way 67660672（highway=raceway，name=Pro Circuit karting，sport=karting；位于 way 881881200 Karting Genk Horensbergdam）（© OpenStreetMap contributors，ODbL）",
+      "publishedLength": {
+        "km": 1.36,
+        "source": "https://en.wikipedia.org/w/index.php?title=Karting_Genk&oldid=1355383694"
+      },
+      "kinds": [
+        "kart"
+      ],
+      "kindsEvidence": "OSM sport=karting / 卡丁车场名称",
+      "computedLengthM": 1317,
+      "verification": "verified",
+      "start": null
+    }
+  ],
+  "kindsUpdated": [
+    {
+      "id": "kart_osm_691951920",
+      "nameCn": "南岸卡丁车乐园",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1203970946",
+      "nameCn": "金华市卡丁车赛道（OSM 1203970946）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1362459380",
+      "nameCn": "杭州市卡丁车赛道（OSM 1362459380）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1246419977",
+      "nameCn": "杭州市卡丁车赛道（OSM 1246419977）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1355324138",
+      "nameCn": "杭州市卡丁车赛道（OSM 1355324138）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_892243324",
+      "nameCn": "宁波市卡丁车赛道（OSM 892243324）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1531417329",
+      "nameCn": "幻想岛乐园即刻追光卡丁车",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1554826456",
+      "nameCn": "昌平区卡丁车赛道（OSM 1554826456）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_899873983",
+      "nameCn": "朝阳区卡丁车赛道（OSM 899873983）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1171462665",
+      "nameCn": "大兴区卡丁车赛道（OSM 1171462665）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1346175915",
+      "nameCn": "房山区卡丁车赛道（OSM 1346175915）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_793006894",
+      "nameCn": "福州市卡丁车赛道（OSM 793006894）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1383030673",
+      "nameCn": "福州市卡丁车赛道（OSM 1383030673）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1337068996",
+      "nameCn": "泉州市卡丁车赛道（OSM 1337068996）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1556515179",
+      "nameCn": "泉州市卡丁车赛道（OSM 1556515179）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1491283899",
+      "nameCn": "漳州市卡丁车赛道（OSM 1491283899）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1483866203",
+      "nameCn": "兰州市卡丁车赛道（OSM 1483866203）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1310659255",
+      "nameCn": "庆阳市卡丁车赛道（OSM 1310659255）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_948040035",
+      "nameCn": "烨斌劲速卡丁车赛车场",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1528576919",
+      "nameCn": "湛江市卡丁车赛道（OSM 1528576919）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1421325950",
+      "nameCn": "肇庆市卡丁车赛道（OSM 1421325950）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1421328579",
+      "nameCn": "肇庆市卡丁车赛道（OSM 1421328579）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_839756371",
+      "nameCn": "南宁市卡丁车赛道（OSM 839756371）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1514429570",
+      "nameCn": "保定市卡丁车赛道（OSM 1514429570）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1501795913",
+      "nameCn": "廊坊市卡丁车赛道（OSM 1501795913）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1032966989",
+      "nameCn": "秦皇岛市卡丁车赛道（OSM 1032966989）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1392059790",
+      "nameCn": "漯河市卡丁车赛道（OSM 1392059790）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1509518161",
+      "nameCn": "商丘市卡丁车赛道（OSM 1509518161）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1576984416",
+      "nameCn": "商丘市卡丁车赛道（OSM 1576984416）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1374661264",
+      "nameCn": "思念果岭国际卡丁赛车场",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1374953629",
+      "nameCn": "郑州正赛国际卡丁车公园",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1380709361",
+      "nameCn": "郑州市卡丁车赛道（OSM 1380709361）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1540817924",
+      "nameCn": "天门市卡丁车赛道（OSM 1540817924）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1258373721",
+      "nameCn": "武汉市卡丁车赛道（OSM 1258373721）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1281885421",
+      "nameCn": "武汉市卡丁车赛道（OSM 1281885421）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_814899970",
+      "nameCn": "襄阳市卡丁车赛道（OSM 814899970）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1318320446",
+      "nameCn": "永州市卡丁车赛道（OSM 1318320446）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1422834041",
+      "nameCn": "淮安市卡丁车赛道（OSM 1422834041）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1564623485",
+      "nameCn": "淮安市卡丁车赛道（OSM 1564623485）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_538371045",
+      "nameCn": "苏州市卡丁车赛道（OSM 538371045）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1373747378",
+      "nameCn": "宿迁市卡丁车赛道（OSM 1373747378）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_699323261",
+      "nameCn": "无锡市卡丁车赛道（OSM 699323261）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_801017896",
+      "nameCn": "无锡市卡丁车赛道（OSM 801017896）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1423873851",
+      "nameCn": "徐州市卡丁车赛道（OSM 1423873851）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1310870951",
+      "nameCn": "赣州市卡丁车赛道（OSM 1310870951）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1537282237",
+      "nameCn": "南昌市卡丁车赛道（OSM 1537282237）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1574352323",
+      "nameCn": "南昌市卡丁车赛道（OSM 1574352323）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1578352714",
+      "nameCn": "南昌市卡丁车赛道（OSM 1578352714）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1455960182",
+      "nameCn": "大连市卡丁车赛道（OSM 1455960182）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1225889904",
+      "nameCn": "包头市卡丁车赛道（OSM 1225889904）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_609579156",
+      "nameCn": "鄂尔多斯市卡丁车赛道（OSM 609579156）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1338871879",
+      "nameCn": "吴忠市卡丁车赛道（OSM 1338871879）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_411195293",
+      "nameCn": "临沂市卡丁车赛道（OSM 411195293）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1217338596",
+      "nameCn": "孟良崮卡丁车赛场",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1447851690",
+      "nameCn": "上海市卡丁车赛道（OSM 1447851690）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1425401016",
+      "nameCn": "虹口区卡丁车赛道（OSM 1425401016）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1353298170",
+      "nameCn": "闵行区卡丁车赛道（OSM 1353298170）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1212155696",
+      "nameCn": "浦东新区卡丁车赛道（OSM 1212155696）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1565168224",
+      "nameCn": "赛卡联盟赛道",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1565341679",
+      "nameCn": "浦东新区卡丁车赛道（OSM 1565341679）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_975550013",
+      "nameCn": "青浦区卡丁车赛道（OSM 975550013）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1464069300",
+      "nameCn": "极烽赛车PeakRacing",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1019801634",
+      "nameCn": "阿坝藏族羌族自治州卡丁车赛道（OSM 1019801634）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1273370757",
+      "nameCn": "中基·引擎木马摩托车俱乐部",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1288845471",
+      "nameCn": "成都市卡丁车赛道（OSM 1288845471）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1323527090",
+      "nameCn": "成都市卡丁车赛道（OSM 1323527090）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1433547672",
+      "nameCn": "成都市卡丁车赛道（OSM 1433547672）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1515985617",
+      "nameCn": "成都市卡丁车赛道（OSM 1515985617）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1454502202",
+      "nameCn": "达州市卡丁车赛道（OSM 1454502202）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_444644976",
+      "nameCn": "桃园市卡丁车赛道（OSM 444644976）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_669663588",
+      "nameCn": "台中市卡丁车赛道（OSM 669663588）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1078398626",
+      "nameCn": "屏东县卡丁车赛道（OSM 1078398626）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1154828174",
+      "nameCn": "屏东县卡丁车赛道（OSM 1154828174）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1216938631",
+      "nameCn": "屏东县卡丁车赛道（OSM 1216938631）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1348080570",
+      "nameCn": "高雄市卡丁车赛道（OSM 1348080570）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1418340703",
+      "nameCn": "屏东县卡丁车赛道（OSM 1418340703）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1010349424",
+      "nameCn": "昌都市卡丁车赛道（OSM 1010349424）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1152885593",
+      "nameCn": "昆明市卡丁车赛道（OSM 1152885593）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1160115905",
+      "nameCn": "丽江市卡丁车赛道（OSM 1160115905）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1421514205",
+      "nameCn": "金华市卡丁车赛道（OSM 1421514205）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1453469821",
+      "nameCn": "金华市卡丁车赛道（OSM 1453469821）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1474437369",
+      "nameCn": "宁波市卡丁车赛道（OSM 1474437369）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1189857783",
+      "nameCn": "绍兴市卡丁车赛道（OSM 1189857783）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1315459879",
+      "nameCn": "温州市卡丁车赛道（OSM 1315459879）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "kart_osm_1418371355",
+      "nameCn": "綦江区卡丁车赛道（OSM 1418371355）",
+      "kinds": [
+        "kart"
+      ],
+      "evidence": "OSM sport=karting（见 sourceDetail）"
+    },
+    {
+      "id": "spa",
+      "nameCn": "斯帕",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Circuit de Spa-Francorchamps」信息框 events 当前赛事含摩托赛事（revision 1386513903）"
+    },
+    {
+      "id": "suzuka",
+      "nameCn": "铃鹿",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Suzuka Circuit」信息框 events 当前赛事含摩托赛事（revision 1385953632）"
+    },
+    {
+      "id": "laguna_seca",
+      "nameCn": "拉古纳塞卡",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Laguna Seca」信息框 events 当前赛事含摩托赛事（revision 1385048599）"
+    },
+    {
+      "id": "cota",
+      "nameCn": "美洲赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Circuit of the Americas」信息框 events 当前赛事含摩托赛事（revision 1386513915）"
+    },
+    {
+      "id": "sepang",
+      "nameCn": "雪邦国际赛车场",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Sepang International Circuit」信息框 events 当前赛事含摩托赛事（revision 1386269528）"
+    },
+    {
+      "id": "catalunya",
+      "nameCn": "巴塞罗那-加泰罗尼亚赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Circuit de Barcelona-Catalunya」信息框 events 当前赛事含摩托赛事（revision 1387091170）"
+    },
+    {
+      "id": "red_bull_ring",
+      "nameCn": "红牛环",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Red Bull Ring」信息框 events 当前赛事含摩托赛事（revision 1386171865）"
+    },
+    {
+      "id": "silverstone",
+      "nameCn": "银石赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Silverstone Circuit」信息框 events 当前赛事含摩托赛事（revision 1386171369）"
+    },
+    {
+      "id": "lusail",
+      "nameCn": "卢赛尔国际赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Lusail International Circuit」信息框 events 当前赛事含摩托赛事（revision 1385586119）"
+    },
+    {
+      "id": "algarve",
+      "nameCn": "阿尔加维国际赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Algarve International Circuit」信息框 events 当前赛事含摩托赛事（revision 1383758299）"
+    },
+    {
+      "id": "bugatti",
+      "nameCn": "布加迪赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Circuit de la Sarthe」信息框 events 当前赛事含摩托赛事（revision 1386646550）"
+    },
+    {
+      "id": "estoril",
+      "nameCn": "埃斯托里尔赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Circuito do Estoril」信息框 events 当前赛事含摩托赛事（revision 1383952048）"
+    },
+    {
+      "id": "mugello",
+      "nameCn": "穆杰洛赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Mugello Circuit」信息框 events 当前赛事含摩托赛事（revision 1385058296）"
+    },
+    {
+      "id": "jerez",
+      "nameCn": "赫雷斯赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Circuito de Jerez」信息框 events 当前赛事含摩托赛事（revision 1383734809）"
+    },
+    {
+      "id": "magny_cours",
+      "nameCn": "马尼库尔赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Circuit de Nevers Magny-Cours」信息框 events 当前赛事含摩托赛事（revision 1377871819）"
+    },
+    {
+      "id": "paul_ricard",
+      "nameCn": "保罗·里卡德赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Circuit Paul Ricard」信息框 events 当前赛事含摩托赛事（revision 1385863685）"
+    },
+    {
+      "id": "donington",
+      "nameCn": "多宁顿公园",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Donington Park」信息框 events 当前赛事含摩托赛事（revision 1382192680）"
+    },
+    {
+      "id": "guia",
+      "nameCn": "东望洋赛道",
+      "kinds": [
+        "car",
+        "moto"
+      ],
+      "evidence": "Wikipedia「Guia Circuit」信息框 events 当前赛事含摩托赛事（revision 1387065452）"
+    }
+  ],
+  "notAdded": [
+    {
+      "id": "anglesey",
+      "nameCn": "安格尔西赛道",
+      "nameEn": "Anglesey Circuit",
+      "reason": "OSM 拼出的回路与公布长度偏差 >20%，几何疑似错段，弃用",
+      "source": "https://en.wikipedia.org/w/index.php?title=Anglesey_Circuit&oldid=1351977049"
+    },
+    {
+      "id": "aragon",
+      "nameCn": "阿拉贡赛道",
+      "nameEn": "MotorLand Aragón",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=MotorLand_Arag%C3%B3n&oldid=1375438933"
+    },
+    {
+      "id": "barber",
+      "nameCn": "巴伯赛车公园",
+      "nameEn": "Barber Motorsports Park",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Barber_Motorsports_Park&oldid=1384278823"
+    },
+    {
+      "id": "buenos_aires",
+      "nameCn": "布宜诺斯艾利斯赛道",
+      "nameEn": "Autódromo Oscar y Juan Gálvez",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Aut%C3%B3dromo_Oscar_y_Juan_G%C3%A1lvez&oldid=1372403954"
+    },
+    {
+      "id": "clark",
+      "nameCn": "克拉克国际赛道",
+      "nameEn": "Clark International Speedway",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Clark_International_Speedway&oldid=1379477688"
+    },
+    {
+      "id": "croft",
+      "nameCn": "克罗夫特赛道",
+      "nameEn": "Croft Circuit",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Croft_Circuit&oldid=1376716213"
+    },
+    {
+      "id": "hampton_downs",
+      "nameCn": "汉普顿唐斯赛道",
+      "nameEn": "Hampton Downs Motorsport Park",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Hampton_Downs_Motorsport_Park&oldid=1386310616"
+    },
+    {
+      "id": "igora",
+      "nameCn": "伊戈拉赛道",
+      "nameEn": "Igora Drive",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Igora_Drive&oldid=1383760190"
+    },
+    {
+      "id": "kart_pfi",
+      "nameCn": "PFI 卡丁车场",
+      "nameEn": "PF International",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=PF_International_Kart_Circuit&oldid=1363092485"
+    },
+    {
+      "id": "lausitzring",
+      "nameCn": "劳西茨赛道",
+      "nameEn": "Lausitzring",
+      "reason": "OSM 拼出的回路与公布长度偏差 >20%，几何疑似错段，弃用",
+      "source": "https://en.wikipedia.org/w/index.php?title=Lausitzring&oldid=1375119632"
+    },
+    {
+      "id": "mandalika",
+      "nameCn": "曼达利卡赛道",
+      "nameEn": "Mandalika International Street Circuit",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Mandalika_International_Street_Circuit&oldid=1381497614"
+    },
+    {
+      "id": "motorland_monteblanco",
+      "nameCn": "蒙特布兰科赛道",
+      "nameEn": "Circuito Monteblanco",
+      "reason": "OSM 回路长度与公布长度偏差 -13.35%（>10%），不收",
+      "source": "https://en.wikipedia.org/w/index.php?title=Circuito_Monteblanco&oldid=1346388516"
+    },
+    {
+      "id": "okayama",
+      "nameCn": "冈山国际赛车场",
+      "nameEn": "Okayama International Circuit",
+      "reason": "与现有包 aida（TI 赛道 Aida，即冈山国际赛车场旧名）为同一赛道，去重",
+      "source": "https://en.wikipedia.org/w/index.php?title=Okayama_International_Circuit&oldid=1379915344"
+    },
+    {
+      "id": "penbay",
+      "nameCn": "大鹏湾国际赛车场",
+      "nameEn": "Penbay International Circuit",
+      "reason": "Wikipedia 布局年份 2011–2019，且 OSM 节点标注停业，不收已停用赛道",
+      "source": "https://en.wikipedia.org/w/index.php?title=Penbay_International_Circuit&oldid=1333252255"
+    },
+    {
+      "id": "pitt_race",
+      "nameCn": "匹兹堡国际赛车场",
+      "nameEn": "Pittsburgh International Race Complex",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Pittsburgh_International_Race_Complex&oldid=1386699259"
+    },
+    {
+      "id": "queensland",
+      "nameCn": "昆士兰赛道",
+      "nameEn": "Queensland Raceway",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Queensland_Raceway&oldid=1383954072"
+    },
+    {
+      "id": "ricardo_tormo",
+      "nameCn": "里卡多·托莫赛道",
+      "nameEn": "Circuit Ricardo Tormo",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Circuit_Ricardo_Tormo&oldid=1385742772"
+    },
+    {
+      "id": "road_america",
+      "nameCn": "美国之路赛道",
+      "nameEn": "Road America",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Road_America&oldid=1385048776"
+    },
+    {
+      "id": "road_atlanta",
+      "nameCn": "亚特兰大公路赛道",
+      "nameEn": "Road Atlanta",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Road_Atlanta&oldid=1381323964"
+    },
+    {
+      "id": "salzburgring",
+      "nameCn": "萨尔茨堡赛道",
+      "nameEn": "Salzburgring",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Salzburgring&oldid=1383954145"
+    },
+    {
+      "id": "sentul",
+      "nameCn": "森图尔国际赛道",
+      "nameEn": "Sentul International Circuit",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Sentul_International_Circuit&oldid=1370987037"
+    },
+    {
+      "id": "slovakiaring",
+      "nameCn": "斯洛伐克赛道",
+      "nameEn": "Slovakia Ring",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Slovakia_Ring&oldid=1383952530"
+    },
+    {
+      "id": "snetterton",
+      "nameCn": "斯内特顿赛道",
+      "nameEn": "Snetterton Circuit",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Snetterton_Circuit&oldid=1383955138"
+    },
+    {
+      "id": "sydney_msp",
+      "nameCn": "悉尼赛车公园",
+      "nameEn": "Sydney Motorsport Park",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Sydney_Motorsport_Park&oldid=1385790747"
+    },
+    {
+      "id": "taupo",
+      "nameCn": "陶波赛道",
+      "nameEn": "Taupo International Motorsport Park",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Taupo_International_Motorsport_Park&oldid=1386203800"
+    },
+    {
+      "id": "the_bend",
+      "nameCn": "The Bend 赛车场",
+      "nameEn": "The Bend Motorsport Park",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=The_Bend_Motorsport_Park&oldid=1376829088"
+    },
+    {
+      "id": "tsukuba",
+      "nameCn": "筑波赛道",
+      "nameEn": "Tsukuba Circuit",
+      "reason": "OSM 回路长度与公布长度偏差 -18.01%（>10%），不收",
+      "source": "https://en.wikipedia.org/w/index.php?title=Tsukuba_Circuit&oldid=1351255146"
+    },
+    {
+      "id": "utah_mc",
+      "nameCn": "犹他赛车园",
+      "nameEn": "Utah Motorsports Campus",
+      "reason": "OSM 中没有能核实的闭合赛道中心线（无匹配 circuit 关系，raceway 也拼不成闭合回路）",
+      "source": "https://en.wikipedia.org/w/index.php?title=Utah_Motorsports_Campus&oldid=1386299218"
+    }
+  ]
+}

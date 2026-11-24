@@ -1,12 +1,12 @@
 {
-  "dataVersion": "V1.3.0",
-  "updatedAt": "2026-11-16",
+  "dataVersion": "V1.4.0",
+  "updatedAt": "2026-11-24",
   "attribution": "© OpenStreetMap contributors，ODbL（http://osm.org/copyright）",
   "packages": [
     {
       "id": "kart_osm_691951920",
       "nameCn": "南岸卡丁车乐园",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_691951920.json",
       "source": "osm",
       "verification": "pending"
@@ -14,7 +14,7 @@
     {
       "id": "kart_osm_1203970946",
       "nameCn": "金华市卡丁车赛道（OSM 1203970946）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1203970946.json",
       "source": "osm",
       "verification": "pending"
@@ -22,7 +22,7 @@
     {
       "id": "kart_osm_1362459380",
       "nameCn": "杭州市卡丁车赛道（OSM 1362459380）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1362459380.json",
       "source": "osm",
       "verification": "pending"
@@ -30,7 +30,7 @@
     {
       "id": "kart_osm_1246419977",
       "nameCn": "杭州市卡丁车赛道（OSM 1246419977）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1246419977.json",
       "source": "osm",
       "verification": "pending"
@@ -38,7 +38,7 @@
     {
       "id": "kart_osm_1355324138",
       "nameCn": "杭州市卡丁车赛道（OSM 1355324138）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1355324138.json",
       "source": "osm",
       "verification": "pending"
@@ -46,7 +46,7 @@
     {
       "id": "kart_osm_892243324",
       "nameCn": "宁波市卡丁车赛道（OSM 892243324）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_892243324.json",
       "source": "osm",
       "verification": "pending"
@@ -54,7 +54,7 @@
     {
       "id": "kart_osm_1531417329",
       "nameCn": "幻想岛乐园即刻追光卡丁车",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1531417329.json",
       "source": "osm",
       "verification": "pending"
@@ -78,7 +78,7 @@
     {
       "id": "kart_osm_1554826456",
       "nameCn": "昌平区卡丁车赛道（OSM 1554826456）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1554826456.json",
       "source": "osm",
       "verification": "pending"
@@ -86,7 +86,7 @@
     {
       "id": "kart_osm_899873983",
       "nameCn": "朝阳区卡丁车赛道（OSM 899873983）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_899873983.json",
       "source": "osm",
       "verification": "pending"
@@ -94,7 +94,7 @@
     {
       "id": "kart_osm_1171462665",
       "nameCn": "大兴区卡丁车赛道（OSM 1171462665）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1171462665.json",
       "source": "osm",
       "verification": "pending"
@@ -102,7 +102,7 @@
     {
       "id": "kart_osm_1346175915",
       "nameCn": "房山区卡丁车赛道（OSM 1346175915）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1346175915.json",
       "source": "osm",
       "verification": "pending"
@@ -110,7 +110,7 @@
     {
       "id": "kart_osm_793006894",
       "nameCn": "福州市卡丁车赛道（OSM 793006894）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_793006894.json",
       "source": "osm",
       "verification": "pending"
@@ -118,7 +118,7 @@
     {
       "id": "kart_osm_1383030673",
       "nameCn": "福州市卡丁车赛道（OSM 1383030673）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1383030673.json",
       "source": "osm",
       "verification": "pending"
@@ -126,7 +126,7 @@
     {
       "id": "kart_osm_1337068996",
       "nameCn": "泉州市卡丁车赛道（OSM 1337068996）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1337068996.json",
       "source": "osm",
       "verification": "pending"
@@ -134,7 +134,7 @@
     {
       "id": "kart_osm_1556515179",
       "nameCn": "泉州市卡丁车赛道（OSM 1556515179）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1556515179.json",
       "source": "osm",
       "verification": "pending"
@@ -142,7 +142,7 @@
     {
       "id": "kart_osm_1491283899",
       "nameCn": "漳州市卡丁车赛道（OSM 1491283899）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1491283899.json",
       "source": "osm",
       "verification": "pending"
@@ -150,7 +150,7 @@
     {
       "id": "kart_osm_1483866203",
       "nameCn": "兰州市卡丁车赛道（OSM 1483866203）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1483866203.json",
       "source": "osm",
       "verification": "pending"
@@ -158,7 +158,7 @@
     {
       "id": "kart_osm_1310659255",
       "nameCn": "庆阳市卡丁车赛道（OSM 1310659255）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1310659255.json",
       "source": "osm",
       "verification": "pending"
@@ -166,7 +166,7 @@
     {
       "id": "kart_osm_948040035",
       "nameCn": "烨斌劲速卡丁车赛车场",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_948040035.json",
       "source": "osm",
       "verification": "pending"
@@ -174,7 +174,7 @@
     {
       "id": "kart_osm_1528576919",
       "nameCn": "湛江市卡丁车赛道（OSM 1528576919）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1528576919.json",
       "source": "osm",
       "verification": "pending"
@@ -182,7 +182,7 @@
     {
       "id": "kart_osm_1421325950",
       "nameCn": "肇庆市卡丁车赛道（OSM 1421325950）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1421325950.json",
       "source": "osm",
       "verification": "pending"
@@ -190,7 +190,7 @@
     {
       "id": "kart_osm_1421328579",
       "nameCn": "肇庆市卡丁车赛道（OSM 1421328579）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1421328579.json",
       "source": "osm",
       "verification": "pending"
@@ -198,7 +198,7 @@
     {
       "id": "kart_osm_839756371",
       "nameCn": "南宁市卡丁车赛道（OSM 839756371）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_839756371.json",
       "source": "osm",
       "verification": "pending"
@@ -206,7 +206,7 @@
     {
       "id": "kart_osm_1514429570",
       "nameCn": "保定市卡丁车赛道（OSM 1514429570）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1514429570.json",
       "source": "osm",
       "verification": "pending"
@@ -214,7 +214,7 @@
     {
       "id": "kart_osm_1501795913",
       "nameCn": "廊坊市卡丁车赛道（OSM 1501795913）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1501795913.json",
       "source": "osm",
       "verification": "pending"
@@ -222,7 +222,7 @@
     {
       "id": "kart_osm_1032966989",
       "nameCn": "秦皇岛市卡丁车赛道（OSM 1032966989）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1032966989.json",
       "source": "osm",
       "verification": "pending"
@@ -230,7 +230,7 @@
     {
       "id": "kart_osm_1392059790",
       "nameCn": "漯河市卡丁车赛道（OSM 1392059790）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1392059790.json",
       "source": "osm",
       "verification": "pending"
@@ -238,7 +238,7 @@
     {
       "id": "kart_osm_1509518161",
       "nameCn": "商丘市卡丁车赛道（OSM 1509518161）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1509518161.json",
       "source": "osm",
       "verification": "pending"
@@ -246,7 +246,7 @@
     {
       "id": "kart_osm_1576984416",
       "nameCn": "商丘市卡丁车赛道（OSM 1576984416）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1576984416.json",
       "source": "osm",
       "verification": "pending"
@@ -254,7 +254,7 @@
     {
       "id": "kart_osm_1374661264",
       "nameCn": "思念果岭国际卡丁赛车场",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1374661264.json",
       "source": "osm",
       "verification": "pending"
@@ -262,7 +262,7 @@
     {
       "id": "kart_osm_1374953629",
       "nameCn": "郑州正赛国际卡丁车公园",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1374953629.json",
       "source": "osm",
       "verification": "pending"
@@ -270,7 +270,7 @@
     {
       "id": "kart_osm_1380709361",
       "nameCn": "郑州市卡丁车赛道（OSM 1380709361）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1380709361.json",
       "source": "osm",
       "verification": "pending"
@@ -278,7 +278,7 @@
     {
       "id": "kart_osm_1540817924",
       "nameCn": "天门市卡丁车赛道（OSM 1540817924）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1540817924.json",
       "source": "osm",
       "verification": "pending"
@@ -286,7 +286,7 @@
     {
       "id": "kart_osm_1258373721",
       "nameCn": "武汉市卡丁车赛道（OSM 1258373721）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1258373721.json",
       "source": "osm",
       "verification": "pending"
@@ -294,7 +294,7 @@
     {
       "id": "kart_osm_1281885421",
       "nameCn": "武汉市卡丁车赛道（OSM 1281885421）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1281885421.json",
       "source": "osm",
       "verification": "pending"
@@ -302,7 +302,7 @@
     {
       "id": "kart_osm_814899970",
       "nameCn": "襄阳市卡丁车赛道（OSM 814899970）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_814899970.json",
       "source": "osm",
       "verification": "pending"
@@ -310,7 +310,7 @@
     {
       "id": "kart_osm_1318320446",
       "nameCn": "永州市卡丁车赛道（OSM 1318320446）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1318320446.json",
       "source": "osm",
       "verification": "pending"
@@ -318,7 +318,7 @@
     {
       "id": "kart_osm_1422834041",
       "nameCn": "淮安市卡丁车赛道（OSM 1422834041）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1422834041.json",
       "source": "osm",
       "verification": "pending"
@@ -326,7 +326,7 @@
     {
       "id": "kart_osm_1564623485",
       "nameCn": "淮安市卡丁车赛道（OSM 1564623485）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1564623485.json",
       "source": "osm",
       "verification": "pending"
@@ -334,7 +334,7 @@
     {
       "id": "kart_osm_538371045",
       "nameCn": "苏州市卡丁车赛道（OSM 538371045）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_538371045.json",
       "source": "osm",
       "verification": "pending"
@@ -342,7 +342,7 @@
     {
       "id": "kart_osm_1373747378",
       "nameCn": "宿迁市卡丁车赛道（OSM 1373747378）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1373747378.json",
       "source": "osm",
       "verification": "pending"
@@ -350,7 +350,7 @@
     {
       "id": "kart_osm_699323261",
       "nameCn": "无锡市卡丁车赛道（OSM 699323261）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_699323261.json",
       "source": "osm",
       "verification": "pending"
@@ -358,7 +358,7 @@
     {
       "id": "kart_osm_801017896",
       "nameCn": "无锡市卡丁车赛道（OSM 801017896）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_801017896.json",
       "source": "osm",
       "verification": "pending"
@@ -366,7 +366,7 @@
     {
       "id": "kart_osm_1423873851",
       "nameCn": "徐州市卡丁车赛道（OSM 1423873851）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1423873851.json",
       "source": "osm",
       "verification": "pending"
@@ -374,7 +374,7 @@
     {
       "id": "kart_osm_1310870951",
       "nameCn": "赣州市卡丁车赛道（OSM 1310870951）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1310870951.json",
       "source": "osm",
       "verification": "pending"
@@ -382,7 +382,7 @@
     {
       "id": "kart_osm_1537282237",
       "nameCn": "南昌市卡丁车赛道（OSM 1537282237）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1537282237.json",
       "source": "osm",
       "verification": "pending"
@@ -390,7 +390,7 @@
     {
       "id": "kart_osm_1574352323",
       "nameCn": "南昌市卡丁车赛道（OSM 1574352323）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1574352323.json",
       "source": "osm",
       "verification": "pending"
@@ -398,7 +398,7 @@
     {
       "id": "kart_osm_1578352714",
       "nameCn": "南昌市卡丁车赛道（OSM 1578352714）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1578352714.json",
       "source": "osm",
       "verification": "pending"
@@ -406,7 +406,7 @@
     {
       "id": "kart_osm_1455960182",
       "nameCn": "大连市卡丁车赛道（OSM 1455960182）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1455960182.json",
       "source": "osm",
       "verification": "pending"
@@ -414,7 +414,7 @@
     {
       "id": "kart_osm_1225889904",
       "nameCn": "包头市卡丁车赛道（OSM 1225889904）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1225889904.json",
       "source": "osm",
       "verification": "pending"
@@ -422,7 +422,7 @@
     {
       "id": "kart_osm_609579156",
       "nameCn": "鄂尔多斯市卡丁车赛道（OSM 609579156）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_609579156.json",
       "source": "osm",
       "verification": "pending"
@@ -430,7 +430,7 @@
     {
       "id": "kart_osm_1338871879",
       "nameCn": "吴忠市卡丁车赛道（OSM 1338871879）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1338871879.json",
       "source": "osm",
       "verification": "pending"
@@ -438,7 +438,7 @@
     {
       "id": "kart_osm_411195293",
       "nameCn": "临沂市卡丁车赛道（OSM 411195293）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_411195293.json",
       "source": "osm",
       "verification": "pending"
@@ -446,7 +446,7 @@
     {
       "id": "kart_osm_1217338596",
       "nameCn": "孟良崮卡丁车赛场",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1217338596.json",
       "source": "osm",
       "verification": "pending"
@@ -454,7 +454,7 @@
     {
       "id": "kart_osm_1447851690",
       "nameCn": "上海市卡丁车赛道（OSM 1447851690）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1447851690.json",
       "source": "osm",
       "verification": "pending"
@@ -462,7 +462,7 @@
     {
       "id": "kart_osm_1425401016",
       "nameCn": "虹口区卡丁车赛道（OSM 1425401016）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1425401016.json",
       "source": "osm",
       "verification": "pending"
@@ -470,7 +470,7 @@
     {
       "id": "kart_osm_1353298170",
       "nameCn": "闵行区卡丁车赛道（OSM 1353298170）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1353298170.json",
       "source": "osm",
       "verification": "pending"
@@ -478,7 +478,7 @@
     {
       "id": "kart_osm_1212155696",
       "nameCn": "浦东新区卡丁车赛道（OSM 1212155696）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1212155696.json",
       "source": "osm",
       "verification": "pending"
@@ -486,7 +486,7 @@
     {
       "id": "kart_osm_1565168224",
       "nameCn": "赛卡联盟赛道",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1565168224.json",
       "source": "osm",
       "verification": "pending"
@@ -494,7 +494,7 @@
     {
       "id": "kart_osm_1565341679",
       "nameCn": "浦东新区卡丁车赛道（OSM 1565341679）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1565341679.json",
       "source": "osm",
       "verification": "pending"
@@ -502,7 +502,7 @@
     {
       "id": "kart_osm_975550013",
       "nameCn": "青浦区卡丁车赛道（OSM 975550013）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_975550013.json",
       "source": "osm",
       "verification": "pending"
@@ -510,7 +510,7 @@
     {
       "id": "kart_osm_1464069300",
       "nameCn": "极烽赛车PeakRacing",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1464069300.json",
       "source": "osm",
       "verification": "pending"
@@ -518,7 +518,7 @@
     {
       "id": "kart_osm_1019801634",
       "nameCn": "阿坝藏族羌族自治州卡丁车赛道（OSM 1019801634）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1019801634.json",
       "source": "osm",
       "verification": "pending"
@@ -526,7 +526,7 @@
     {
       "id": "kart_osm_1273370757",
       "nameCn": "中基·引擎木马摩托车俱乐部",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1273370757.json",
       "source": "osm",
       "verification": "pending"
@@ -534,7 +534,7 @@
     {
       "id": "kart_osm_1288845471",
       "nameCn": "成都市卡丁车赛道（OSM 1288845471）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1288845471.json",
       "source": "osm",
       "verification": "pending"
@@ -542,7 +542,7 @@
     {
       "id": "kart_osm_1323527090",
       "nameCn": "成都市卡丁车赛道（OSM 1323527090）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1323527090.json",
       "source": "osm",
       "verification": "pending"
@@ -550,7 +550,7 @@
     {
       "id": "kart_osm_1433547672",
       "nameCn": "成都市卡丁车赛道（OSM 1433547672）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1433547672.json",
       "source": "osm",
       "verification": "pending"
@@ -558,7 +558,7 @@
     {
       "id": "kart_osm_1515985617",
       "nameCn": "成都市卡丁车赛道（OSM 1515985617）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1515985617.json",
       "source": "osm",
       "verification": "pending"
@@ -566,7 +566,7 @@
     {
       "id": "kart_osm_1454502202",
       "nameCn": "达州市卡丁车赛道（OSM 1454502202）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1454502202.json",
       "source": "osm",
       "verification": "pending"
@@ -574,7 +574,7 @@
     {
       "id": "kart_osm_444644976",
       "nameCn": "桃园市卡丁车赛道（OSM 444644976）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_444644976.json",
       "source": "osm",
       "verification": "pending"
@@ -582,7 +582,7 @@
     {
       "id": "kart_osm_669663588",
       "nameCn": "台中市卡丁车赛道（OSM 669663588）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_669663588.json",
       "source": "osm",
       "verification": "pending"
@@ -590,7 +590,7 @@
     {
       "id": "kart_osm_1078398626",
       "nameCn": "屏东县卡丁车赛道（OSM 1078398626）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1078398626.json",
       "source": "osm",
       "verification": "pending"
@@ -598,7 +598,7 @@
     {
       "id": "kart_osm_1154828174",
       "nameCn": "屏东县卡丁车赛道（OSM 1154828174）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1154828174.json",
       "source": "osm",
       "verification": "pending"
@@ -606,7 +606,7 @@
     {
       "id": "kart_osm_1216938631",
       "nameCn": "屏东县卡丁车赛道（OSM 1216938631）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1216938631.json",
       "source": "osm",
       "verification": "pending"
@@ -614,7 +614,7 @@
     {
       "id": "kart_osm_1348080570",
       "nameCn": "高雄市卡丁车赛道（OSM 1348080570）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1348080570.json",
       "source": "osm",
       "verification": "pending"
@@ -622,7 +622,7 @@
     {
       "id": "kart_osm_1418340703",
       "nameCn": "屏东县卡丁车赛道（OSM 1418340703）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1418340703.json",
       "source": "osm",
       "verification": "pending"
@@ -630,7 +630,7 @@
     {
       "id": "kart_osm_1010349424",
       "nameCn": "昌都市卡丁车赛道（OSM 1010349424）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1010349424.json",
       "source": "osm",
       "verification": "pending"
@@ -638,7 +638,7 @@
     {
       "id": "kart_osm_1152885593",
       "nameCn": "昆明市卡丁车赛道（OSM 1152885593）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1152885593.json",
       "source": "osm",
       "verification": "pending"
@@ -646,7 +646,7 @@
     {
       "id": "kart_osm_1160115905",
       "nameCn": "丽江市卡丁车赛道（OSM 1160115905）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1160115905.json",
       "source": "osm",
       "verification": "pending"
@@ -654,7 +654,7 @@
     {
       "id": "kart_osm_1421514205",
       "nameCn": "金华市卡丁车赛道（OSM 1421514205）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1421514205.json",
       "source": "osm",
       "verification": "pending"
@@ -662,7 +662,7 @@
     {
       "id": "kart_osm_1453469821",
       "nameCn": "金华市卡丁车赛道（OSM 1453469821）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1453469821.json",
       "source": "osm",
       "verification": "pending"
@@ -670,7 +670,7 @@
     {
       "id": "kart_osm_1474437369",
       "nameCn": "宁波市卡丁车赛道（OSM 1474437369）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1474437369.json",
       "source": "osm",
       "verification": "pending"
@@ -678,7 +678,7 @@
     {
       "id": "kart_osm_1189857783",
       "nameCn": "绍兴市卡丁车赛道（OSM 1189857783）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1189857783.json",
       "source": "osm",
       "verification": "pending"
@@ -686,7 +686,7 @@
     {
       "id": "kart_osm_1315459879",
       "nameCn": "温州市卡丁车赛道（OSM 1315459879）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1315459879.json",
       "source": "osm",
       "verification": "pending"
@@ -694,7 +694,7 @@
     {
       "id": "kart_osm_1418371355",
       "nameCn": "綦江区卡丁车赛道（OSM 1418371355）",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_1418371355.json",
       "source": "osm",
       "verification": "pending"
@@ -758,7 +758,7 @@
     {
       "id": "spa",
       "nameCn": "斯帕",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/spa.json",
       "source": "osm",
       "verification": "verified"
@@ -774,7 +774,7 @@
     {
       "id": "suzuka",
       "nameCn": "铃鹿",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/suzuka.json",
       "source": "osm",
       "verification": "verified"
@@ -782,7 +782,7 @@
     {
       "id": "laguna_seca",
       "nameCn": "拉古纳塞卡",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/laguna_seca.json",
       "source": "osm",
       "verification": "verified"
@@ -790,7 +790,7 @@
     {
       "id": "cota",
       "nameCn": "美洲赛道",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/cota.json",
       "source": "osm",
       "verification": "verified"
@@ -838,7 +838,7 @@
     {
       "id": "sepang",
       "nameCn": "雪邦国际赛车场",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/sepang.json",
       "source": "osm",
       "verification": "verified"
@@ -862,7 +862,7 @@
     {
       "id": "catalunya",
       "nameCn": "巴塞罗那-加泰罗尼亚赛道",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/catalunya.json",
       "source": "osm",
       "verification": "verified"
@@ -894,7 +894,7 @@
     {
       "id": "red_bull_ring",
       "nameCn": "红牛环",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/red_bull_ring.json",
       "source": "osm",
       "verification": "verified"
@@ -902,7 +902,7 @@
     {
       "id": "silverstone",
       "nameCn": "银石赛道",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/silverstone.json",
       "source": "osm",
       "verification": "verified"
@@ -942,7 +942,7 @@
     {
       "id": "lusail",
       "nameCn": "卢赛尔国际赛道",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/lusail.json",
       "source": "osm",
       "verification": "verified"
@@ -990,7 +990,7 @@
     {
       "id": "algarve",
       "nameCn": "阿尔加维国际赛道",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/algarve.json",
       "source": "osm",
       "verification": "verified"
@@ -1022,7 +1022,7 @@
     {
       "id": "bugatti",
       "nameCn": "布加迪赛道",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/bugatti.json",
       "source": "osm",
       "verification": "verified"
@@ -1030,7 +1030,7 @@
     {
       "id": "estoril",
       "nameCn": "埃斯托里尔赛道",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/estoril.json",
       "source": "osm",
       "verification": "verified"
@@ -1046,7 +1046,7 @@
     {
       "id": "mugello",
       "nameCn": "穆杰洛赛道",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/mugello.json",
       "source": "osm",
       "verification": "verified"
@@ -1070,7 +1070,7 @@
     {
       "id": "jerez",
       "nameCn": "赫雷斯赛道",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/jerez.json",
       "source": "osm",
       "verification": "verified"
@@ -1078,7 +1078,7 @@
     {
       "id": "magny_cours",
       "nameCn": "马尼库尔赛道",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/magny_cours.json",
       "source": "osm",
       "verification": "verified"
@@ -1094,7 +1094,7 @@
     {
       "id": "paul_ricard",
       "nameCn": "保罗·里卡德赛道",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/paul_ricard.json",
       "source": "osm",
       "verification": "verified"
@@ -1110,7 +1110,7 @@
     {
       "id": "donington",
       "nameCn": "多宁顿公园",
-      "version": 2,
+      "version": 3,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/donington.json",
       "source": "osm",
       "verification": "verified"
@@ -1246,7 +1246,7 @@
     {
       "id": "guia",
       "nameCn": "东望洋赛道",
-      "version": 1,
+      "version": 2,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/guia.json",
       "source": "osm",
       "verification": "verified"
@@ -1320,6 +1320,366 @@
       "nameCn": "郑州国际赛车场",
       "version": 1,
       "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/zhengzhou.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "assen",
+      "nameCn": "阿森赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/assen.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "autopolis",
+      "nameCn": "Autopolis 赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/autopolis.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "bilster_berg",
+      "nameCn": "比尔斯特贝格赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/bilster_berg.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "brno",
+      "nameCn": "布尔诺赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/brno.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "buriram",
+      "nameCn": "武里南国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/buriram.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "cadwell_park",
+      "nameCn": "卡德威尔公园",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/cadwell_park.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "dubai_autodrome",
+      "nameCn": "迪拜赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/dubai_autodrome.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "inje",
+      "nameCn": "麟蹄赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/inje.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "knockhill",
+      "nameCn": "诺克希尔赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/knockhill.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "knutstorp",
+      "nameCn": "克努茨托普赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/knutstorp.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "kymiring",
+      "nameCn": "屈米环",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kymiring.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "ledenon",
+      "nameCn": "莱德农赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/ledenon.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "lihpao",
+      "nameCn": "丽宝国际赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/lihpao.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "lime_rock",
+      "nameCn": "莱姆罗克公园",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/lime_rock.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "madras",
+      "nameCn": "马德拉斯国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/madras.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "mid_ohio",
+      "nameCn": "中俄亥俄赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/mid_ohio.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "misano",
+      "nameCn": "米萨诺赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/misano.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "most",
+      "nameCn": "莫斯特赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/most.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "motegi",
+      "nameCn": "茂木赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/motegi.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "navarra",
+      "nameCn": "纳瓦拉赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/navarra.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "nogaro",
+      "nameCn": "诺加罗赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/nogaro.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "nola",
+      "nameCn": "新奥尔良赛车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/nola.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "oschersleben",
+      "nameCn": "奥舍斯莱本赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/oschersleben.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "oulton_park",
+      "nameCn": "奥尔顿公园",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/oulton_park.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "phillip_island",
+      "nameCn": "菲利普岛赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/phillip_island.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "poznan",
+      "nameCn": "波兹南赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/poznan.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "sachsenring",
+      "nameCn": "萨克森林赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/sachsenring.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "sandown",
+      "nameCn": "桑当赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/sandown.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "sebring",
+      "nameCn": "赛百灵赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/sebring.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "sonoma",
+      "nameCn": "索诺玛赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/sonoma.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "sugo",
+      "nameCn": "菅生赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/sugo.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "termas",
+      "nameCn": "里奥翁多温泉赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/termas.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "thruxton",
+      "nameCn": "斯拉克斯顿赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/thruxton.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "thunderhill",
+      "nameCn": "雷霆山赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/thunderhill.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "tokachi",
+      "nameCn": "十胜赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/tokachi.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "vallelunga",
+      "nameCn": "瓦莱伦加赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/vallelunga.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "vir",
+      "nameCn": "弗吉尼亚国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/vir.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "willow_springs",
+      "nameCn": "柳泉国际赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/willow_springs.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "winton",
+      "nameCn": "温顿赛道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/winton.json",
+      "source": "osm",
+      "verification": "verified"
+    },
+    {
+      "id": "kart_osm_108771044",
+      "nameCn": "路环卡丁车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_108771044.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_75490872",
+      "nameCn": "南加尔达卡丁车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_75490872.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_643206090",
+      "nameCn": "那不勒斯国际赛道（萨尔诺）卡丁车道",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_643206090.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_87888593",
+      "nameCn": "克里斯蒂安斯塔德卡丁车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_87888593.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_94517023",
+      "nameCn": "法涅卡丁车场（马里昂堡）",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_94517023.json",
+      "source": "osm",
+      "verification": "pending"
+    },
+    {
+      "id": "kart_osm_67660672",
+      "nameCn": "亨克卡丁车场",
+      "version": 1,
+      "url": "https://raw.githubusercontent.com/Toryphoto77/drive-track/main/data/packages/kart_osm_67660672.json",
       "source": "osm",
       "verification": "verified"
     }
