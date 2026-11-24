@@ -962,6 +962,7 @@ class _HomePageState extends State<HomePage>
               fix.bearingDeg ?? rec.curHeading,
               DateTime.now().millisecondsSinceEpoch,
               altM: fix.altitudeM,
+              hAcc: fix.hAcc,
             );
             fedExternalFix = true;
           }
@@ -983,6 +984,7 @@ class _HomePageState extends State<HomePage>
               fix.bearingDeg ?? rec.curHeading,
               DateTime.now().millisecondsSinceEpoch,
               altM: fix.altitudeM,
+              hAcc: fix.hAcc,
             );
             fedExternalFix = true;
           }

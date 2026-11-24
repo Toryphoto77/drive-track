@@ -592,28 +592,32 @@ class Recorder extends ChangeNotifier {
   }
 
   /// v0.1.3 外接 GPS（BleDIY 等）注入的轨迹点。
-  /// G 值取当前 1 秒聚合桶均值；hAcc 无可靠米值时传 999（界面显示 —）。
+  /// G 值取当前 1 秒聚合桶均值。
   /// v0.1.7：[altM] 为 GGA 海拔（平均海平面以上米数），null 表示
   /// 该路无海拔（RMC 单独定位时），此时 alt 存占位 0 但 altValid=false，
   /// 绝不画进剖面图、绝不计入爬升；旧版恒写 alt: 0 且无标记是 bug。
-  void onExternalFix(double lat, double lon, double speed, double bearing, int timeMs, {double? altM}) {
+  /// v0.1.8：[hAcc] 可选米级精度（通常是 HDOP × UERE 换算值），
+  /// 传入后 UI 徽标、精度圆、跳变门槛都按真实值走；null 时回退 999
+  /// （徽标显示“—”，跳变门槛按封顶 30m 计，落点写 999）。
+  void onExternalFix(double lat, double lon, double speed, double bearing, int timeMs, {double? altM, double? hAcc}) {
     // 0,0 是无定位占位符（与 onLocation 的守卫镜像）：绝不进轨迹、
     // 绝不移动显示。外置源断线/无效时调用方负责回落手机 GPS。
     if (lat == 0 && lon == 0) return;
+    final acc = hAcc ?? 999.0;
     // 街道 GPS 精度处理：锁方向 / 跳变过滤 / 停车定点 / 贴路
-    // （外接源无可靠 hAcc，跳变门槛按封顶 30m 计）。
     final fix = _processLiveFix(
       lat: lat,
       lon: lon,
       speed: speed,
       bearing: bearing,
       timeMs: timeMs,
-      hAcc: 999,
+      hAcc: acc,
     );
     curLat = fix.lat;
     curLon = fix.lon;
     curSpeed = speed;
     curHeading = fix.bearing;
+    curHAcc = acc;
     _lastFixMs = timeMs;
     // 赛道自动暂停节拍（赛道模式专用；街道模式开关关着，不跑）。
     trackAutoPauseTick(speedMs: speed, nowMs: timeMs);
@@ -624,7 +628,7 @@ class Recorder extends ChangeNotifier {
     final n = _bucketCount > 0 ? _bucketCount : 1;
     _noteFix(TrackPoint(
       timeMs: timeMs, lat: fix.lat, lon: fix.lon, alt: altM ?? 0, altValid: altM != null, speed: speed, bearing: fix.bearing,
-      hAcc: 999, vAcc: 999, speedAcc: 999, provider: 'external',
+      hAcc: acc, vAcc: 999, speedAcc: 999, provider: 'external',
       longG: _sumLong / n, latG: _sumLat / n, vertG: _sumVert / n,
       pitch: pitchDeg, roll: rollDeg, heading: fix.bearing, pressureHpa: _latestPressure,
       calibrated: calibrated, powerW: powerW, powerEstimated: powerEstimated,

@@ -57,10 +57,19 @@ class ExternalGpsFix {
   /// 外接路无海拔的根因。
   final double? altitudeM;
 
-  /// 水平精度因子（HDOP，无量纲）。注意：HDOP 不是米，
-  /// 绝不能直接当作米级精度用，因此 [hAcc] 恒为 null。
+  /// 水平精度因子（HDOP，无量纲）。HDOP 不是米，不能直接当精度用；
+  /// App 侧用 [hAcc] 做米级精度显示与跳变过滤。
   final double? hdop;
-  double? get hAcc => null;
+
+  /// 由 HDOP 换算的米级水平精度（估算值）。
+  ///
+  /// NMEA 标准里没有米级精度字段；HDOP × UERE 是唯一可用口径。
+  /// 消费级 GNSS（u-blox NEO-M9N 等）UERE 典型值 2.5 m，
+  /// 换算后大约 HDOP 0.4 → 1 m、HDOP 1.0 → 2.5 m。
+  /// 若设备为 RTK 固定解，真实精度会好于此估算值，但 App 暂时
+  /// 无法区分（NMEA 不输出 UERE），按保守值走；后续可扩展
+  /// 通过 GGA fixQuality=4（RTK 固定）调低系数。
+  double? get hAcc => hdop != null ? hdop! * 2.5 : null;
 
   /// RMC 提供的 UTC 时间（无日期/时间字段的语句则为 null）。
   final DateTime? timestampUtc;
