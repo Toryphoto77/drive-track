@@ -287,7 +287,17 @@ class TrajectoryPainter extends CustomPainter {
   bool shouldRepaint(covariant TrajectoryPainter old) => true;
 }
 
-// ---------- G 值圆 ----------
+// ---------- G 值圆盘 ----------
+//
+// 设计口径（v1.6 G 表盘改版）：
+// - 圆心大数字 = 合成 G（√(纵向²+横向²)），一眼看出当前用掉多少抓地力；
+// - 圆盘四边 = 本趟四向峰值（上加速 / 下刹车 / 右 / 左），是“你自己的
+//   数据”，与参考图不同：参考图只放量程刻度，我们把本次行程的极值
+//   直接标在四个方向，跑完一圈就知道哪个方向最狠；
+// - 外圈细环 + 十字轴刻度保留专业摩擦圆语义，满圈 1.0g；
+// - 颜色沿用 App 既有阈值：<0.3g 绿、<0.5g 黄、否则红；
+// - 5 秒拖尾保留，便于看矢量移动轨迹。
+// 未标定时不画圆盘（上层直接显示“未标定”），绝不编造数值。
 class GCirlce extends StatelessWidget {
   final double longG, latG;
   final List<GSample> trail; // 最近 5 秒，车体坐标
@@ -296,6 +306,14 @@ class GCirlce extends StatelessWidget {
   final double size;
   final double? peakLong;
   final double? peakLat;
+
+  /// 本趟四向峰值（非负）。不传则由 [peakLong] / [peakLat] 的符号推导，
+  /// 只有本方向存在极值时才有读数，另一侧显示 “—”。
+  final double? maxAccelG;
+  final double? maxBrakeG;
+  final double? maxRightG;
+  final double? maxLeftG;
+
   const GCirlce({
     super.key,
     required this.longG,
@@ -306,6 +324,10 @@ class GCirlce extends StatelessWidget {
     this.size = 120,
     this.peakLong,
     this.peakLat,
+    this.maxAccelG,
+    this.maxBrakeG,
+    this.maxRightG,
+    this.maxLeftG,
   });
 
   @override
@@ -318,6 +340,15 @@ class GCirlce extends StatelessWidget {
             : mag < 0.5
                 ? const Color(0xFFEAB308)
                 : const Color(0xFFEF4444);
+    // 四向读数：优先用 Recorder 的四向峰值，缺省时按带符号峰值推导。
+    final accel = maxAccelG ??
+        (peakLong != null && peakLong! > 0 ? peakLong : null);
+    final brake = maxBrakeG ??
+        (peakLong != null && peakLong! < 0 ? -peakLong! : null);
+    final right =
+        maxRightG ?? (peakLat != null && peakLat! > 0 ? peakLat : null);
+    final left =
+        maxLeftG ?? (peakLat != null && peakLat! < 0 ? -peakLat! : null);
     return Column(mainAxisSize: MainAxisSize.min, children: [
       CustomPaint(
         size: Size(size, size),
@@ -330,6 +361,10 @@ class GCirlce extends StatelessWidget {
           color,
           peakLong: peakLong,
           peakLat: peakLat,
+          maxAccelG: accel,
+          maxBrakeG: brake,
+          maxRightG: right,
+          maxLeftG: left,
         ),
       ),
       const SizedBox(height: 4),
@@ -354,69 +389,211 @@ class GCirlcePainter extends CustomPainter {
   final Color color;
   final double? peakLong;
   final double? peakLat;
-  GCirlcePainter(this.longG, this.latG, this.trail, this.threshold, this.calibrated, this.color,
-      {this.peakLong, this.peakLat});
+  final double? maxAccelG;
+  final double? maxBrakeG;
+  final double? maxRightG;
+  final double? maxLeftG;
+
+  /// 满圈 = 1.0g；超量程时圆点钳在圆边，数值本身不钳制。
+  static const double _fullScaleG = 1.0;
+
+  GCirlcePainter(
+    this.longG,
+    this.latG,
+    this.trail,
+    this.threshold,
+    this.calibrated,
+    this.color, {
+    this.peakLong,
+    this.peakLat,
+    this.maxAccelG,
+    this.maxBrakeG,
+    this.maxRightG,
+    this.maxLeftG,
+  });
+
+  double _clamp(double v) => v.clamp(-_fullScaleG, _fullScaleG);
+
+  Offset _pt(double lat, double lg, Offset c, double r, Size size) => Offset(
+        (c.dx + _clamp(lat) / _fullScaleG * r).clamp(2.0, size.width - 2),
+        (c.dy - _clamp(lg) / _fullScaleG * r).clamp(2.0, size.height - 2),
+      );
+
+  void _text(Canvas canvas, String text, Offset center, TextStyle style) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2 - 4;
-    // 刻度圈：0.25g 一档，满圈 1.0g
-    for (var i = 1; i <= 4; i++) {
-      canvas.drawCircle(
-          c,
-          r * i / 4,
-          Paint()
-            ..color = Colors.white.withValues(alpha: 0.15)
-            ..style = PaintingStyle.stroke);
-    }
-    // 阈值虚线圈
-    final tp = Paint()
-      ..color = Colors.orange.withValues(alpha: 0.7)
+    final r = size.width / 2;
+    final innerR = r - 6;
+
+    // 深色底盘 + 细边：与职业计时页的 HUD 底子一致。
+    canvas.drawCircle(c, r - 1, Paint()..color = const Color(0xFF15171B));
+    canvas.drawCircle(
+      c,
+      r - 1,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.08)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    // 外圈按当前合成 G 上色（细环，不抢读数）。
+    canvas.drawCircle(
+      c,
+      r - 2,
+      Paint()
+        ..color = color.withValues(alpha: 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+
+    // 摩擦圆：1/3、2/3 辅助环 + 十字轴。
+    final ringPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.10)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    final dashPath = Path();
-    for (var a = 0.0; a < math.pi * 2; a += 0.35) {
-      dashPath.addArc(Rect.fromCircle(center: c, radius: r * threshold.clamp(0.1, 1.0)), a, 0.18);
-    }
-    canvas.drawPath(dashPath, tp);
-    canvas.drawLine(Offset(c.dx - r, c.dy), Offset(c.dx + r, c.dy), Paint()..color = Colors.white24);
-    canvas.drawLine(Offset(c.dx, c.dy - r), Offset(c.dx, c.dy + r), Paint()..color = Colors.white24);
-    if (!calibrated) return;
-    // 本节峰值刻度：横向在横轴，纵向在竖轴（上为正）。满圈仍是 1g。
-    final peakPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.7)
-      ..strokeWidth = 2
+    canvas.drawCircle(c, innerR / 3, ringPaint);
+    canvas.drawCircle(c, innerR * 2 / 3, ringPaint);
+    final axisPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.08)
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(c.dx - innerR, c.dy),
+        Offset(c.dx + innerR, c.dy), axisPaint);
+    canvas.drawLine(Offset(c.dx, c.dy - innerR),
+        Offset(c.dx, c.dy + innerR), axisPaint);
+
+    // 轴向刻度：0.45 / 0.65 / 0.85 各一档，给圆心大数字让位。
+    final tickPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.30)
+      ..strokeWidth = 1.2
       ..strokeCap = StrokeCap.round;
-    if (peakLong != null) {
-      final y = c.dy - peakLong!.clamp(-1.0, 1.0) * r;
-      canvas.drawLine(Offset(c.dx - 5, y), Offset(c.dx + 5, y), peakPaint);
+    for (final g in const [0.45, 0.65, 0.85]) {
+      final d = g * innerR;
+      final t = (size.width * 0.02).clamp(2.0, 4.0);
+      canvas.drawLine(Offset(c.dx - t, c.dy - d), Offset(c.dx + t, c.dy - d), tickPaint);
+      canvas.drawLine(Offset(c.dx - t, c.dy + d), Offset(c.dx + t, c.dy + d), tickPaint);
+      canvas.drawLine(Offset(c.dx - d, c.dy - t), Offset(c.dx - d, c.dy + t), tickPaint);
+      canvas.drawLine(Offset(c.dx + d, c.dy - t), Offset(c.dx + d, c.dy + t), tickPaint);
     }
-    if (peakLat != null) {
-      final x = c.dx + peakLat!.clamp(-1.0, 1.0) * r;
-      canvas.drawLine(Offset(x, c.dy - 5), Offset(x, c.dy + 5), peakPaint);
+
+    // 急弯阈值提示：极淡的虚线环，保留原有语义但不抢读数。
+    final thrR = threshold.clamp(0.1, 1.0) * innerR;
+    final thrPaint = Paint()
+      ..color = const Color(0xFFF59E0B).withValues(alpha: 0.28)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (var a = 0.0; a < math.pi * 2; a += 0.4) {
+      canvas.drawArc(
+          Rect.fromCircle(center: c, radius: thrR), a, 0.2, false, thrPaint);
     }
-    // 5 秒拖尾
+
+    if (!calibrated) return;
+
+    // 5 秒拖尾（矢量移动轨迹）。
     if (trail.length > 1) {
       for (var i = 1; i < trail.length; i++) {
         final a = trail[i - 1];
         final b = trail[i];
         canvas.drawLine(
-          Offset(c.dx + a.latG * r, c.dy - a.longG * r),
-          Offset(c.dx + b.latG * r, c.dy - b.longG * r),
+          _pt(a.latG, a.longG, c, innerR, size),
+          _pt(b.latG, b.longG, c, innerR, size),
           Paint()
-            ..color = color.withValues(alpha: 0.2 + 0.8 * i / trail.length)
-            ..strokeWidth = 2,
+            ..color = color.withValues(alpha: 0.10 + 0.45 * i / trail.length)
+            ..strokeWidth = 1.6
+            ..strokeCap = StrokeCap.round,
         );
       }
     }
-    final dot = Offset((c.dx + latG * r).clamp(0, size.width), (c.dy - longG * r).clamp(0, size.height));
-    canvas.drawCircle(dot, 10, Paint()..color = color.withValues(alpha: 0.3));
-    canvas.drawCircle(dot, 5, Paint()..color = color);
+
+    // 四边本趟峰值：上加速 / 下刹车 / 右 / 左，无数据显 “—”。
+    final edgeSize = (size.width * 0.075).clamp(7.5, 22.0);
+    final edgeStyle = TextStyle(
+      color: Colors.white.withValues(alpha: 0.55),
+      fontSize: edgeSize,
+      fontWeight: FontWeight.w500,
+      height: 1.0,
+    );
+    String fmt(double? v) {
+      if (v == null || v < 0.005) return '—';
+      return v.toStringAsFixed(1);
+    }
+    final off = innerR * 0.80;
+    _text(canvas, fmt(maxAccelG), c + Offset(0, -off), edgeStyle);
+    _text(canvas, fmt(maxBrakeG), c + Offset(0, off), edgeStyle);
+    _text(canvas, fmt(maxRightG), c + Offset(off, 0), edgeStyle);
+    _text(canvas, fmt(maxLeftG), c + Offset(-off, 0), edgeStyle);
+
+    // 圆心：合成 G 大数字（2 位小数）+ 小 g + “合成”标注。
+    final mag = math.sqrt(longG * longG + latG * latG);
+    final numSize = size.width * 0.19;
+    final tp = TextPainter(
+      text: TextSpan(children: [
+        TextSpan(
+          text: mag.toStringAsFixed(2),
+          style: TextStyle(
+            color: color,
+            fontSize: numSize,
+            fontWeight: FontWeight.w800,
+            height: 1.0,
+          ),
+        ),
+        TextSpan(
+          text: 'g',
+          style: TextStyle(
+            color: color.withValues(alpha: 0.65),
+            fontSize: numSize * 0.42,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ]),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(c.dx - tp.width / 2, c.dy - tp.height / 2 - size.width * 0.03));
+    _text(
+      canvas,
+      '合成',
+      c + Offset(0, size.width * 0.105),
+      TextStyle(
+        color: Colors.white.withValues(alpha: 0.32),
+        fontSize: (size.width * 0.062).clamp(6.5, 15.0),
+        height: 1.0,
+      ),
+    );
+
+    // 当前矢量圆点：白色描边 + 阈值色填充，超量程钳在圆边。
+    final dot = _pt(latG, longG, c, innerR - 4, size);
+    canvas.drawCircle(dot, 9, Paint()..color = color.withValues(alpha: 0.20));
+    canvas.drawCircle(dot, 5.5, Paint()..color = color);
+    canvas.drawCircle(
+      dot,
+      5.5,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.85)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant GCirlcePainter old) => true;
+  bool shouldRepaint(covariant GCirlcePainter old) =>
+      old.longG != longG ||
+      old.latG != latG ||
+      old.calibrated != calibrated ||
+      old.color != color ||
+      old.threshold != threshold ||
+      old.peakLong != peakLong ||
+      old.peakLat != peakLat ||
+      old.maxAccelG != maxAccelG ||
+      old.maxBrakeG != maxBrakeG ||
+      old.maxRightG != maxRightG ||
+      old.maxLeftG != maxLeftG ||
+      old.trail.length != trail.length;
 }
 
 // ---------- G 波形（最近 60 秒） ----------

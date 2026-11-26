@@ -205,6 +205,11 @@ class Recorder extends ChangeNotifier {
   double curGyroX = 0, curGyroY = 0, curGyroZ = 0;
   double smoothLong = 0, smoothLat = 0;
   double peakHoldLong = 0, peakHoldLat = 0;
+  // 本趟四向峰值（G 表盘四边读数）：加速 / 刹车 / 右 / 左，均为非负值。
+  // tripPeakLong / tripPeakLat 仍保留（带符号的绝对值最大者），
+  // 此处按方向拆分，供 G 圆四边标签使用。
+  double tripMaxAccelG = 0, tripMaxBrakeG = 0;
+  double tripMaxRightG = 0, tripMaxLeftG = 0;
   int _peakHoldMs = 0;
   double tripPeakLong = 0, tripPeakLat = 0;
   double pitchDeg = 0, rollDeg = 0; // 相对标定姿态：俯仰 / 横滚（摩托=压弯角）
@@ -349,6 +354,11 @@ class Recorder extends ChangeNotifier {
     if (smoothLat.abs() > peakHoldLat.abs()) peakHoldLat = smoothLat;
     tripPeakLong = tripPeakLong.abs() > lg.abs() ? tripPeakLong : lg;
     tripPeakLat = tripPeakLat.abs() > tg.abs() ? tripPeakLat : tg;
+    // 四向峰值：只增不减，按方向拆分（供 G 表盘四边读数）。
+    if (lg > tripMaxAccelG) tripMaxAccelG = lg;
+    if (-lg > tripMaxBrakeG) tripMaxBrakeG = -lg;
+    if (tg > tripMaxRightG) tripMaxRightG = tg;
+    if (-tg > tripMaxLeftG) tripMaxLeftG = -tg;
     if (state == RecState.recording) {
       _sumLong += lg;
       _sumLat += tg;
@@ -687,6 +697,10 @@ class Recorder extends ChangeNotifier {
     obdSamples.clear();
     tripPeakLong = 0;
     tripPeakLat = 0;
+    tripMaxAccelG = 0;
+    tripMaxBrakeG = 0;
+    tripMaxRightG = 0;
+    tripMaxLeftG = 0;
     startMs = DateTime.now().millisecondsSinceEpoch;
     pausedTotalMs = 0;
     state = RecState.recording;
