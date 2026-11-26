@@ -5841,6 +5841,17 @@ class _GPageState extends State<GPage> {
               maxLeftG: rec.tripMaxLeftG,
               size: 260,
             ),
+            const SizedBox(height: 8),
+            // 图例：四边数字是本次行程各方向峰值，不是量程刻度。
+            // 放在表盘正下方，避免用户把它误解成固定刻度。
+            Text(
+              s.t(
+                '四边数字 = 本趟各方向峰值（上加速 · 下刹车 · 右右转 · 左左转）',
+                'Edge numbers = session peaks (top accel · bottom brake · right · left)',
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
             const SizedBox(height: 12),
             Text(
               s.t(

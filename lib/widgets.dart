@@ -294,6 +294,9 @@ class TrajectoryPainter extends CustomPainter {
 // - 圆盘四边 = 本趟四向峰值（上加速 / 下刹车 / 右 / 左），是“你自己的
 //   数据”，与参考图不同：参考图只放量程刻度，我们把本次行程的极值
 //   直接标在四个方向，跑完一圈就知道哪个方向最狠；
+// - 四边读数只在 ≥150px 的详情页表盘显示；记录页 110px 只保留圆心
+//   合成值 + 矢量点，避免小字开车时看不清反而干扰。圆心始终标注
+//   “合成”，防止大数字被误读成纵向或横向。
 // - 外圈细环 + 十字轴刻度保留专业摩擦圆语义，满圈 1.0g；
 // - 颜色沿用 App 既有阈值：<0.3g 绿、<0.5g 黄、否则红；
 // - 5 秒拖尾保留，便于看矢量移动轨迹。
@@ -511,23 +514,28 @@ class GCirlcePainter extends CustomPainter {
       }
     }
 
-    // 四边本趟峰值：上加速 / 下刹车 / 右 / 左，无数据显 “—”。
-    final edgeSize = (size.width * 0.075).clamp(7.5, 22.0);
-    final edgeStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.55),
-      fontSize: edgeSize,
-      fontWeight: FontWeight.w500,
-      height: 1.0,
-    );
-    String fmt(double? v) {
-      if (v == null || v < 0.005) return '—';
-      return v.toStringAsFixed(1);
+    // 四边本趟峰值：只在大表盘（详情页）显示。记录页 110px 放 4 个
+    // 8px 小字，开车时既看不清又抢圆心读数，故小尺寸直接省略。
+    final showPeaks = size.width >= 150;
+    if (showPeaks) {
+      final edgeSize = (size.width * 0.075).clamp(7.5, 22.0);
+      final edgeStyle = TextStyle(
+        color: Colors.white.withValues(alpha: 0.55),
+        fontSize: edgeSize,
+        fontWeight: FontWeight.w500,
+        height: 1.0,
+      );
+      String fmt(double? v) {
+        if (v == null || v < 0.005) return '—';
+        return v.toStringAsFixed(1);
+      }
+
+      final off = innerR * 0.80;
+      _text(canvas, fmt(maxAccelG), c + Offset(0, -off), edgeStyle);
+      _text(canvas, fmt(maxBrakeG), c + Offset(0, off), edgeStyle);
+      _text(canvas, fmt(maxRightG), c + Offset(off, 0), edgeStyle);
+      _text(canvas, fmt(maxLeftG), c + Offset(-off, 0), edgeStyle);
     }
-    final off = innerR * 0.80;
-    _text(canvas, fmt(maxAccelG), c + Offset(0, -off), edgeStyle);
-    _text(canvas, fmt(maxBrakeG), c + Offset(0, off), edgeStyle);
-    _text(canvas, fmt(maxRightG), c + Offset(off, 0), edgeStyle);
-    _text(canvas, fmt(maxLeftG), c + Offset(-off, 0), edgeStyle);
 
     // 圆心：合成 G 大数字（2 位小数）+ 小 g + “合成”标注。
     final mag = math.sqrt(longG * longG + latG * latG);
@@ -554,14 +562,19 @@ class GCirlcePainter extends CustomPainter {
       ]),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(canvas, Offset(c.dx - tp.width / 2, c.dy - tp.height / 2 - size.width * 0.03));
+    // 数字统一上移一点，给“合成”标注让位（小盘同样标注，防误读）。
+    tp.paint(
+      canvas,
+      Offset(c.dx - tp.width / 2,
+          c.dy - tp.height / 2 - size.width * 0.03),
+    );
     _text(
       canvas,
       '合成',
-      c + Offset(0, size.width * 0.105),
+      c + Offset(0, size.width * 0.115),
       TextStyle(
         color: Colors.white.withValues(alpha: 0.32),
-        fontSize: (size.width * 0.062).clamp(6.5, 15.0),
+        fontSize: (size.width * 0.062).clamp(7.0, 15.0),
         height: 1.0,
       ),
     );
